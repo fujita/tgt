@@ -2,8 +2,6 @@
 # Makefile for the Linux kernel device drivers.
 #
 
-#KERNELSRC := /home/fujita/working/linux-2.6.12-rc2
-
 EXTRA_CFLAGS += -I$(obj) -I$(obj)/../include -DNETLINK_STGT=12
 
 ifneq ($(KERNELRELEASE),)
