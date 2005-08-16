@@ -201,7 +201,7 @@ EXPORT_SYMBOL(stgt_session_destroy);
 
 struct stgt_cmnd *stgt_cmnd_create(struct stgt_session *session)
 {
-	static uint64_t cid = 100;
+	static uint64_t cid = 0;
 	struct stgt_cmnd *cmnd;
 	unsigned long flags;
 
