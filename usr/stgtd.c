@@ -8,6 +8,7 @@
  */
 
 #include <errno.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -152,7 +153,7 @@ static int execute_cmnd(int fd, char *recvbuf, char *sendbuf)
 	uint8_t *scb;
 
 	scb = recvbuf + sizeof(*ev);
-	eprintf("%llu %x\n", ev->u.msg_scsi_cmnd.cid, scb[0]);
+	eprintf("%" PRIu64 " %x\n", ev->u.msg_scsi_cmnd.cid, scb[0]);
 
 	if ((err = disk_execute_cmnd(scb, sendbuf)) < 0)
 		return err;
