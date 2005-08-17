@@ -101,7 +101,7 @@ static inline void __dbg_simulate_header_digest_error(struct iscsi_cmnd *cmnd)
 		printk("\tcmnd: 0x%x, itt 0x%x, sn 0x%x\n",
 		       cmnd_opcode(cmnd),
 		       be32_to_cpu(cmnd->pdu.bhs.itt),
-		       be32_to_cpu(cmnd->pdu.bhs.sn));
+		       be32_to_cpu(cmnd->pdu.bhs.statsn));
 		cmnd->hdigest = ~cmnd->hdigest;
 		/* make things even worse by manipulating header fields */
 		cmnd->pdu.datasize += 8;
@@ -146,7 +146,7 @@ static inline void __dbg_simulate_data_digest_error(struct iscsi_cmnd *cmnd)
 		printk("\tcmnd 0x%x, itt 0x%x, sn 0x%x\n",
 		       cmnd_opcode(cmnd),
 		       be32_to_cpu(cmnd->pdu.bhs.itt),
-		       be32_to_cpu(cmnd->pdu.bhs.sn));
+		       be32_to_cpu(cmnd->pdu.bhs.statsn));
 		cmnd->ddigest = ~cmnd->ddigest;
 		num_errs++;
 		num_cmnds = 0;

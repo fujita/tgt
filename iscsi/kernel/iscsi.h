@@ -13,7 +13,7 @@
 #include <linux/crypto.h>
 #include <net/sock.h>
 
-#include "iscsi_hdr.h"
+#include "iscsi_proto.h"
 #include "iet_u.h"
 
 struct iscsi_sess_param {
@@ -261,34 +261,21 @@ extern void event_exit(void);
 
 static inline void iscsi_cmnd_get_length(struct iscsi_pdu *pdu)
 {
-#if defined(__BIG_ENDIAN)
-	pdu->ahssize = pdu->bhs.length.ahslength * 4;
-	pdu->datasize = pdu->bhs.length.datalength;
-#elif defined(__LITTLE_ENDIAN)
-	pdu->ahssize = (pdu->bhs.length & 0xff) * 4;
-	pdu->datasize = be32_to_cpu(pdu->bhs.length & ~0xff);
-#else
-#error
-#endif
+	pdu->ahssize = pdu->bhs.hlength * 4;
+	pdu->datasize = ntoh24(pdu->bhs.dlength);
 }
 
 static inline void iscsi_cmnd_set_length(struct iscsi_pdu *pdu)
 {
-#if defined(__BIG_ENDIAN)
-	pdu->bhs.length.ahslength = pdu->ahssize / 4;
-	pdu->bhs.length.datalength = pdu->datasize;
-#elif defined(__LITTLE_ENDIAN)
-	pdu->bhs.length = cpu_to_be32(pdu->datasize) | (pdu->ahssize / 4);
-#else
-#error
-#endif
+	pdu->bhs.hlength = pdu->ahssize / 4;
+	hton24(pdu->bhs.dlength, pdu->datasize);
 }
 
-#define cmnd_hdr(cmnd) ((struct iscsi_scsi_cmd_hdr *) (&((cmnd)->pdu.bhs)))
+#define cmnd_hdr(cmnd) ((struct iscsi_cmd *) (&((cmnd)->pdu.bhs)))
 #define cmnd_ttt(cmnd) cpu_to_be32((cmnd)->pdu.bhs.ttt)
 #define cmnd_itt(cmnd) cpu_to_be32((cmnd)->pdu.bhs.itt)
 #define cmnd_opcode(cmnd) ((cmnd)->pdu.bhs.opcode & ISCSI_OPCODE_MASK)
-#define cmnd_scsicode(cmnd) cmnd_hdr(cmnd)->scb[0]
+#define cmnd_scsicode(cmnd) cmnd_hdr(cmnd)->cdb[0]
 
 #define	SECTOR_SIZE_BITS	9
 
