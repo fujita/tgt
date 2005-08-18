@@ -78,6 +78,23 @@ struct stgt_work {
 	struct list_head list;
 };
 
+static struct stgt_work * stgt_init_work(struct stgt_session *session,
+					 void (*fn)(void *), void *arg)
+{
+	struct stgt_work *work;
+	mempool_t *pool = session->work_pool;
+
+	work = mempool_alloc(pool, GFP_ATOMIC);
+	if (!work)
+		return NULL;
+
+	work->fn = fn;
+	work->arg = arg;
+	work->pool = pool;
+
+	return work;
+}
+
 static void stgt_worker(void *data)
 {
 	struct stgt_target *target = (struct stgt_target *) data;
@@ -410,13 +427,10 @@ void stgt_cmnd_alloc_buffer(struct stgt_cmnd *cmnd, void (*done)(struct stgt_cmn
 	assert(list_empty(&cmnd->clist));
 
 	if (done) {
-		struct stgt_work *work;
 		struct stgt_session *session = cmnd->session;
+		struct stgt_work *work;
 
-		work = mempool_alloc(session->work_pool, GFP_ATOMIC);
-		work->fn = alloc_buffer;
-		work->arg = cmnd;
-		work->pool = session->work_pool;
+		work = stgt_init_work(session, alloc_buffer, cmnd);
 		stgt_queue_work(session->target, work);
 		return;
 	};
@@ -514,11 +528,9 @@ int stgt_cmnd_queue(struct stgt_cmnd *cmnd, void (*done)(struct stgt_cmnd *))
 		return -EINVAL;
 	}
 
-	work = mempool_alloc(session->work_pool, GFP_ATOMIC);
-	work->fn = virtual_disk_handler;
-	work->arg = cmnd;
-	work->pool =session->work_pool;
-
+	work = stgt_init_work(session, virtual_disk_handler, cmnd);
+	if (!work)
+		return -ENOMEM;
 	stgt_queue_work(session->target, work);
 
 	return 0;
