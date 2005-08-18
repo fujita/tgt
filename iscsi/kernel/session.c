@@ -59,7 +59,7 @@ static int iet_session_alloc(struct iscsi_target *target, struct session_info *i
 
 	list_add(&session->list, &target->session_list);
 
-	session->sts = stgt_session_create(target->stt, NULL, 64);
+	session->sts = stgt_session_create(target->stt, 64, NULL, NULL);
 
 	return 0;
 err:
