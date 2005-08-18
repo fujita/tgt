@@ -54,8 +54,10 @@ struct stgt_cmnd {
 extern struct stgt_target *stgt_target_create(void);
 extern int stgt_target_destroy(struct stgt_target *target);
 
-extern struct stgt_session *stgt_session_create(struct stgt_target *target,
-						void (*done)(void *), int nr);
+extern struct stgt_session *
+stgt_session_create(struct stgt_target *target,
+		    int max_cmnds,
+		    void (*done)(void *, struct stgt_session *), void *arg);
 extern int stgt_session_destroy(struct stgt_session *session);
 
 extern struct stgt_cmnd *stgt_cmnd_create(struct stgt_session *session);

@@ -46,6 +46,12 @@ MODULE_LICENSE("GPL");
 static spinlock_t all_targets_lock;
 static LIST_HEAD(all_targets);
 
+static void session_init_handler(void *data);
+static spinlock_t atomic_sessions_lock;
+static LIST_HEAD(atomic_sessions);
+static DECLARE_WORK(atomic_session_work, session_init_handler,
+		    &atomic_sessions);
+
 static int daemon_pid;
 static struct sock *nls;
 
@@ -56,6 +62,14 @@ static spinlock_t cmnd_hash_lock;
 #define STGT_HASH_ORDER		8
 #define	cmnd_hashfn(key)	hash_long((key), STGT_HASH_ORDER)
 static struct list_head cmnd_hash[1 << STGT_HASH_ORDER];
+
+struct atomic_session_args {
+	struct stgt_session *session;
+	void (*done) (void *, struct stgt_session *);
+	int max_cmnds;
+	void *arg;
+	struct list_head list;
+};
 
 struct stgt_work {
 	void (*fn) (void *);
@@ -140,25 +154,10 @@ int stgt_target_destroy(struct stgt_target *target)
 }
 EXPORT_SYMBOL(stgt_target_destroy);
 
-struct stgt_session *stgt_session_create(struct stgt_target *target,
-					 void (*done)(void *), int max_cmnds)
+static int session_init(struct stgt_session *session, int max_cmnds)
 {
-	struct stgt_session *session;
+	struct stgt_target *target = session->target;
 	unsigned long flags;
-
-	if (!target) {
-		eprintk("%s\n", "Null target pointer!");
-		return NULL;
-	}
-
-	dprintk("%p %d\n", target, max_cmnds);
-	session = kmalloc(sizeof(*session), GFP_KERNEL);
-	if (!session)
-		return NULL;
-
-	memset(session, 0, sizeof(*session));
-	session->target = target;
-	INIT_LIST_HEAD(&session->slist);
 
 	session->cmnd_pool = mempool_create(max_cmnds, mempool_alloc_slab,
 					    mempool_free_slab, cmnd_slab);
@@ -174,8 +173,7 @@ struct stgt_session *stgt_session_create(struct stgt_target *target,
 	list_add(&session->slist, &target->session_list);
 	spin_unlock_irqrestore(&target->lock, flags);
 
-	return session;
-
+	return 0;
 out:
 	if (session->cmnd_pool)
 		mempool_destroy(session->cmnd_pool);
@@ -183,8 +181,97 @@ out:
 	if (session->work_pool)
 		mempool_destroy(session->work_pool);
 
-	kfree(session);
+	return -ENOMEM;
+}
 
+static void session_init_handler(void *data)
+{
+	struct list_head *head = (struct list_head *) data;
+	struct atomic_session_args *ssa = NULL;
+	unsigned long flags;
+	int err;
+
+	spin_lock_irqsave(&atomic_sessions_lock, flags);
+	if (!list_empty(&atomic_sessions)) {
+		ssa = list_entry(head->next, struct atomic_session_args, list);
+		list_del(&ssa->list);
+	}
+	spin_unlock_irqrestore(&atomic_sessions_lock, flags);
+
+	if (!ssa)
+		return;
+
+	err = session_init(ssa->session, ssa->max_cmnds);
+	if (err)
+		kfree(ssa->session);
+
+	ssa->done(ssa->arg, err ? NULL : ssa->session);
+
+	kfree(ssa);
+}
+
+static int session_atomic_init(struct stgt_session *session,
+			       int max_cmnds,
+			       void (*done) (void *, struct stgt_session *),
+			       int *arg)
+{
+	struct atomic_session_args *ssa;
+	unsigned long flags;
+
+	ssa = kmalloc(sizeof(*ssa), GFP_ATOMIC);
+	if (!ssa)
+		return -ENOMEM;
+
+	ssa->session = session;
+	ssa->max_cmnds = max_cmnds;
+	ssa->arg = arg;
+
+	spin_lock_irqsave(&atomic_sessions_lock, flags);
+	list_add(&ssa->list, &atomic_sessions);
+	spin_unlock_irqrestore(&atomic_sessions_lock, flags);
+
+	schedule_work(&atomic_session_work);
+
+	return 0;
+}
+
+struct stgt_session *
+stgt_session_create(struct stgt_target *target,
+		    int max_cmnds,
+		    void (*done)(void *, struct stgt_session *),
+		    void *arg)
+{
+	struct stgt_session *session;
+
+	if (!target) {
+		eprintk("%s\n", "Null target pointer!");
+		return NULL;
+	}
+
+	dprintk("%p %d\n", target, max_cmnds);
+
+	session = kmalloc(sizeof(*session), done ? GFP_ATOMIC : GFP_KERNEL);
+	if (!session)
+		return NULL;
+
+	memset(session, 0, sizeof(*session));
+	session->target = target;
+	INIT_LIST_HEAD(&session->slist);
+
+	if (done) {
+		if (session_atomic_init(session, max_cmnds, done, arg) < 0)
+			goto out;
+
+		return session;
+	}
+
+	if (session_init(session, max_cmnds) < 0)
+		goto out;
+
+	return session;
+
+out:
+	kfree(session);
 	return NULL;
 }
 EXPORT_SYMBOL(stgt_session_create);
@@ -539,6 +626,7 @@ static int __init stgt_init(void)
 	int i, err = -ENOMEM;
 
 	spin_lock_init(&all_targets_lock);
+	spin_lock_init(&atomic_sessions_lock);
 	spin_lock_init(&cmnd_hash_lock);
 
 	cmnd_slab = kmem_cache_create("stgt_cmnd", sizeof(struct stgt_cmnd), 0,
