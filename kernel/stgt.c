@@ -248,6 +248,11 @@ stgt_session_create(struct stgt_target *target,
 		return NULL;
 	}
 
+	if (done && !arg) {
+		eprintk("%s\n", "Need arg !");
+		return NULL;
+	}
+
 	dprintk("%p %d\n", target, max_cmnds);
 
 	session = kmalloc(sizeof(*session), done ? GFP_ATOMIC : GFP_KERNEL);
