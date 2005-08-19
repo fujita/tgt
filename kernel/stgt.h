@@ -9,11 +9,12 @@
 #include <scsi/scsi_cmnd.h>
 
 struct stgt_target {
-	spinlock_t lock; /* session_list, work_list */
+	/* Protects session_list, work_list, device_list */
+	spinlock_t lock;
 
 	struct list_head tlist;
 
-	struct list_head lu_list;
+	struct list_head device_list;
 	struct list_head session_list;
 
 	struct work_struct work;
@@ -51,6 +52,16 @@ struct stgt_cmnd {
 	void *private;
 };
 
+struct stgt_device {
+	char *path;
+	uint32_t lun;
+	uint32_t blk_shift;
+	uint64_t blk_count;
+
+	struct stgt_target *target;
+	struct list_head dlist;
+};
+
 extern struct stgt_target *stgt_target_create(void);
 extern int stgt_target_destroy(struct stgt_target *target);
 
@@ -62,10 +73,14 @@ extern int stgt_session_destroy(struct stgt_session *session);
 
 extern struct stgt_cmnd *stgt_cmnd_create(struct stgt_session *session);
 extern void stgt_cmnd_destroy(struct stgt_cmnd *cmnd);
-
 extern void stgt_cmnd_alloc_buffer(struct stgt_cmnd *cmnd,
 				  void (*done)(struct stgt_cmnd *));
 extern int stgt_cmnd_queue(struct stgt_cmnd *cmnd,
 			   void (*done)(struct stgt_cmnd *));
+
+extern struct stgt_device*
+stgt_device_create(struct stgt_target *target, char *path, uint32_t lun,
+		   unsigned long dflags);
+extern int stgt_device_destroy(struct stgt_device *device);
 
 #endif

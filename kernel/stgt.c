@@ -146,7 +146,7 @@ struct stgt_target *stgt_target_create(void)
 	spin_lock_init(&target->lock);
 
 	INIT_LIST_HEAD(&target->session_list);
-	INIT_LIST_HEAD(&target->lu_list);
+	INIT_LIST_HEAD(&target->device_list);
 	INIT_LIST_HEAD(&target->work_list);
 
 	INIT_WORK(&target->work, stgt_worker, target);
@@ -307,6 +307,61 @@ int stgt_session_destroy(struct stgt_session *session)
 	return 0;
 }
 EXPORT_SYMBOL(stgt_session_destroy);
+
+struct stgt_device *
+stgt_device_create(struct stgt_target *target, char *path, uint32_t lun,
+		   unsigned long dflags)
+{
+	struct stgt_device *device;
+	unsigned long flags;
+
+	if (!target)
+		return NULL;
+
+	device = kmalloc(sizeof(*device), GFP_KERNEL);
+	if (!device)
+		return NULL;
+
+	memset(device, 0, sizeof(*device));
+
+	device->lun = lun;
+	device->path = kmalloc(strlen(path) + 1, GFP_KERNEL);
+	if (!device->path)
+		goto out;
+	strcpy(device->path, path);
+	device->path[strlen(path)] = '\0';
+
+	spin_lock_irqsave(&target->lock, flags);
+	list_add(&device->dlist, &target->device_list);
+	spin_unlock_irqrestore(&target->lock, flags);
+
+	return device;
+out:
+	if (device)
+		kfree(device->path);
+	kfree(device);
+	return NULL;
+}
+EXPORT_SYMBOL(stgt_device_create);
+
+int stgt_device_destroy(struct stgt_device *device)
+{
+	struct stgt_target *target = device->target;
+	unsigned long flags;
+
+	if (!device)
+		return -EINVAL;
+
+	spin_lock_irqsave(&target->lock, flags);
+	list_del(&device->dlist);
+	spin_unlock_irqrestore(&target->lock, flags);
+
+	kfree(device->path);
+	kfree(device);
+
+	return 0;
+}
+EXPORT_SYMBOL(stgt_device_destroy);
 
 struct stgt_cmnd *stgt_cmnd_create(struct stgt_session *session)
 {
