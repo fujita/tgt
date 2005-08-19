@@ -114,7 +114,7 @@ static int nl_open(void)
 	iov.iov_base = &ev;
 	iov.iov_len = sizeof(ev);
 
-	if ((res = nl_write(nl_fd, STGT_KEVENT_START, &iov, 1)) < 0) {
+	if ((res = nl_write(nl_fd, STGT_UEVENT_START, &iov, 1)) < 0) {
 		return res;
 	}
 
@@ -166,7 +166,7 @@ static int execute_cmnd(int fd, char *recvbuf, char *sendbuf)
 	iov[1].iov_base = sendbuf;
 	iov[1].iov_len = err;
 
-	err = nl_write(fd, STGT_KEVENT_SCSI_CMND_RES, iov, err ? 2 : 1);
+	err = nl_write(fd, STGT_UEVENT_SCSI_CMND_RES, iov, err ? 2 : 1);
 
 	return 0;
 }
@@ -201,7 +201,7 @@ retry:
 	}
 
 	switch (nlh->nlmsg_type) {
-	case STGT_UEVENT_SCSI_CMND_REQ:
+	case STGT_KEVENT_SCSI_CMND_REQ:
 		memset(sendbuf, 0, sizeof(sendbuf));
 		execute_cmnd(fd, recvbuf, sendbuf);
 		break;

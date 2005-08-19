@@ -7,10 +7,12 @@
 #define __SCSI_TARGET_IF_H
 
 enum stgt_event_type {
-	STGT_KEVENT_START = 10,
-	STGT_UEVENT_SCSI_CMND_REQ,
+	/* user -> kernel */
+	STGT_UEVENT_START,
+	STGT_UEVENT_SCSI_CMND_RES,
 
-	STGT_KEVENT_SCSI_CMND_RES,
+	/* user <- kernel */
+	STGT_KEVENT_SCSI_CMND_REQ,
 };
 
 struct stgt_event {

@@ -452,7 +452,7 @@ static int uspace_cmnd_send(struct stgt_cmnd *cmnd)
 
 	dprintk("%d %Zd %Zd\n", len, sizeof(*ev), sizeof(cmnd->scb));
 	nlh = __nlmsg_put(skb, daemon_pid, 0,
-			  STGT_UEVENT_SCSI_CMND_REQ, len - sizeof(*nlh), 0);
+			  STGT_KEVENT_SCSI_CMND_REQ, len - sizeof(*nlh), 0);
 	ev = NLMSG_DATA(nlh);
 	memset(ev, 0, sizeof(*ev));
 
@@ -569,10 +569,10 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 	dprintk("%d %d\n", daemon_pid, nlh->nlmsg_type);
 
 	switch (nlh->nlmsg_type) {
-	case STGT_KEVENT_START:
+	case STGT_UEVENT_START:
 		dprintk("start %d\n", daemon_pid);
 		break;
-	case STGT_KEVENT_SCSI_CMND_RES:
+	case STGT_UEVENT_SCSI_CMND_RES:
 		dprintk("start %llu\n", ev->u.msg_scsi_cmnd.cid);
 		cmnd = find_cmnd_by_id(ev->u.msg_scsi_cmnd.cid);
 		if (cmnd)
