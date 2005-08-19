@@ -412,7 +412,7 @@ static void alloc_buffer(void *data)
 
 	set_offset_and_length(cmnd->scb, &offset, &len);
 
-	dprintk("%x %llu %u", cmnd->scb[0], offset, len);
+	dprintk("%x %llu %u\n", cmnd->scb[0], offset, len);
 	__alloc_buffer(cmnd, len, offset);
 
 	if (cmnd->done) {
@@ -479,9 +479,11 @@ static void uspace_cmnd_done(struct stgt_cmnd *cmnd, char *data, uint32_t datasi
 
 	dprintk("%x %u\n", cmnd->scb[0], datasize);
 
-	__alloc_buffer(cmnd, datasize, 0);
-	/* FIXEM: multiple pages */
-	memcpy(page_address(cmnd->sg[0].page), data, datasize);
+	if (datasize) {
+		__alloc_buffer(cmnd, datasize, 0);
+		/* FIXEM: multiple pages */
+		memcpy(page_address(cmnd->sg[0].page), data, datasize);
+	}
 
 	cmnd_done(cmnd);
 }
