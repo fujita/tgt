@@ -170,8 +170,7 @@ static int add_volume(struct iscsi_target *target, unsigned long ptr)
 	if ((err = copy_from_user(&info, (void *) ptr, sizeof(info))) < 0)
 		return err;
 
-	return 0;
-/* 	return volume_add(target, &info); */
+	return volume_add(target, &info);
 }
 
 static int del_volume(struct iscsi_target *target, unsigned long ptr)
@@ -182,8 +181,7 @@ static int del_volume(struct iscsi_target *target, unsigned long ptr)
 	if ((err = copy_from_user(&info, (void *) ptr, sizeof(info))) < 0)
 		return err;
 
-	return 0;
-/* 	return iscsi_volume_del(target, &info); */
+	return volume_del(target, &info);
 }
 
 static int iscsi_param_config(struct iscsi_target *target, unsigned long ptr, int set)

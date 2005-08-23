@@ -11,6 +11,7 @@
 #include <iscsi_dbg.h>
 #include <stgt.h>
 #include <stgt_target.h>
+#include <stgt_device.h>
 
 #define	MAX_NR_TARGETS	(1UL << 30)
 
@@ -151,6 +152,7 @@ static int iscsi_target_create(struct target_info *info, u32 tid)
 	init_MUTEX(&target->target_sem);
 
 	INIT_LIST_HEAD(&target->session_list);
+	INIT_LIST_HEAD(&target->device_list);
 	list_add(&target->t_list, &target_list);
 
 	nthread_init(target);
@@ -275,5 +277,83 @@ int iet_info_show(struct seq_file *seq, iet_show_info_t *func)
 
 	up(&target_list_sem);
 
+	return 0;
+}
+
+/*
+ * Temporary device code
+ */
+
+struct iscsi_device {
+	uint64_t lun;
+	struct list_head list;
+	struct stgt_device *sd;
+};
+
+struct iscsi_device *volume_lookup(struct iscsi_target *target, u32 lun)
+{
+	struct iscsi_device *device;
+	list_for_each_entry(device, &target->device_list, list) {
+		if (device->lun == lun)
+			return device;
+	}
+	return NULL;
+}
+
+int volume_add(struct iscsi_target *target, struct volume_info *info)
+{
+	char key_path[] = "Path=", key_type[] = "Type=";
+	char *p, *path = NULL, *type = NULL;
+	struct iscsi_device *device;
+	struct stgt_device *sd;
+	char *args = info->args;
+
+	while ((p = strsep(&args, ",")) != NULL) {
+		if (!*p) continue;
+
+		if (!strncmp(p, key_path, strlen(key_path)))
+			path = p + strlen(key_path);
+		else if (!strncmp(p, key_type, strlen(key_type)))
+			type = p + strlen(key_type);
+	}
+
+	if (volume_lookup(target, info->lun)) {
+		eprintk("%u\n", info->lun);
+		return -EEXIST;
+	}
+
+	if (!path)
+		return -EINVAL;
+
+	device = kmalloc(sizeof(*device), GFP_KERNEL);
+	if (!device)
+		return -ENOMEM;
+
+	eprintk("%u %s %s\n", info->lun, path, type);
+	sd = stgt_device_create(target->stt, type ? : "stgt_sd",
+				path, info->lun, 0);
+	if (!sd)
+		goto out;
+
+	device->sd = sd;
+	device->lun = info->lun;
+	list_add(&device->list, &target->device_list);
+	return 0;
+out:
+	kfree(device);
+	return -EINVAL;
+}
+
+int volume_del(struct iscsi_target *target, struct volume_info *info)
+{
+	struct iscsi_device *device;
+
+	device = volume_lookup(target, info->lun);
+	if (!device)
+		return -ENOENT;
+
+	stgt_device_destroy(device->sd);
+	list_del(&device->list);
+	kfree(device);
 	return 0;
 }
