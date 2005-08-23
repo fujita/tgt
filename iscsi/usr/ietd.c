@@ -103,7 +103,7 @@ static void create_listen_socket(struct pollfd *array)
 	int i, sock, opt;
 
 	memset(servname, 0, sizeof(servname));
-	snprintf(servname, sizeof(servname), "%d", ISCSI_TARGET_DEFAULT_PORT);
+	snprintf(servname, sizeof(servname), "%d", ISCSI_LISTEN_PORT);
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_socktype = SOCK_STREAM;
@@ -265,10 +265,10 @@ void event_loop(void)
 				switch (conn->iostate) {
 				case IOSTATE_READ_BHS:
 					conn->iostate = IOSTATE_READ_AHS_DATA;
-					conn->req.ahssize = conn->req.bhs.ahslength * 4;
-					conn->req.datasize = ((conn->req.bhs.datalength[0] << 16) +
-							      (conn->req.bhs.datalength[1] << 8) +
-							      conn->req.bhs.datalength[2]);
+					conn->req.ahssize =
+						conn->req.bhs.hlength * 4;
+					conn->req.datasize =
+						ntoh24(conn->req.bhs.dlength);
 					conn->rwsize = (conn->req.ahssize + conn->req.datasize + 3) & -4;
 					if (conn->rwsize) {
 						if (!conn->req_buffer)
@@ -466,7 +466,7 @@ int main(int argc, char **argv)
 
 	if (use_isns) {
 		if (initialize_iet_isns(isns_ip,
-					ISCSI_TARGET_DEFAULT_PORT) < 0)
+					ISCSI_LISTEN_PORT) < 0)
 			use_isns = 0;
 	}
 

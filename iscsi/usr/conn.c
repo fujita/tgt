@@ -46,7 +46,7 @@ int conn_test(struct connection *conn)
 	int err = -ENOENT, find = 0;
 
 	t_tid = conn->tid;
-	t_sid = conn->session->sid.id64;
+	t_sid = sid64(conn->session->isid, conn->session->tsih);
 	t_cid = conn->cid;
 
 	if ((f = fopen(PROC_SESSION, "r")) == NULL) {
@@ -104,12 +104,14 @@ out:
 void conn_take_fd(struct connection *conn, int fd)
 {
 	int err;
+	uint64_t sid = sid64(conn->isid, conn->tsih);
+
 	log_debug(1, "conn_take_fd: %d %u %u %u %" PRIx64,
-		  fd, conn->cid, conn->stat_sn, conn->exp_stat_sn, conn->sid.id64);
+		  fd, conn->cid, conn->stat_sn, conn->exp_stat_sn, sid);
 
 	conn->session->conn_cnt++;
 
-	err = ki->conn_create(conn->tid, conn->session->sid.id64, conn->cid,
+	err = ki->conn_create(conn->tid, sid, conn->cid,
 			      conn->stat_sn, conn->exp_stat_sn, fd,
 			      conn->session_param[key_header_digest].val,
 			      conn->session_param[key_data_digest].val);

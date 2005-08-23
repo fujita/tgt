@@ -34,7 +34,7 @@ static struct session *session_alloc(u32 tid)
 	return session;
 }
 
-struct session *session_find_name(u32 tid, const char *iname, union iscsi_sid sid)
+struct session *session_find_name(u32 tid, const char *iname, uint8_t *isid)
 {
 	struct session *session;
 	struct target *target;
@@ -42,9 +42,10 @@ struct session *session_find_name(u32 tid, const char *iname, union iscsi_sid si
 	if (!(target = target_find_by_id(tid)))
 		return NULL;
 
-	log_debug(1, "session_find_name: %s %#" PRIx64, iname, sid.id64);
+	log_debug(1, "session_find_name: %s %x %x %x %x %x %x", iname,
+		  isid[0], isid[1], isid[2], isid[3], isid[4], isid[5]);
 	list_for_each_entry(session, &target->sessions_list, slist) {
-		if (!memcmp(sid.id.isid, session->sid.id.isid, 6) &&
+		if (!memcmp(isid, session->isid, sizeof(session->isid)) &&
 		    !strcmp(iname, session->initiator))
 			return session;
 	}
@@ -62,7 +63,7 @@ struct session *session_find_id(u32 tid, u64 sid)
 
 	log_debug(1, "session_find_id: %#" PRIx64, sid);
 	list_for_each_entry(session, &target->sessions_list, slist) {
-		if (session->sid.id64 == sid)
+		if (sid64(session->isid, session->tsih) == sid)
 			return session;
 	}
 
@@ -120,41 +121,45 @@ out:
 void session_create(struct connection *conn)
 {
 	struct session *session;
+	uint64_t sid;
 	static u16 tsih = 1;
 
 	if (!(session = session_alloc(conn->tid)))
 		return;
 
-	session->sid = conn->sid;
-	session->sid.id.tsih = tsih;
+	memcpy(session->isid, conn->isid, sizeof(session->isid));
+	session->tsih = tsih;
 
 	while (1) {
-		int err = session_test(conn->tid, session->sid.id64);
+		sid = sid64(session->isid, session->tsih);
+		int err = session_test(conn->tid, sid);
 
 		if (err == -ENOENT)
 			break;
 		else if (err < 0)
 			return;
-		session->sid.id.tsih++;
+		session->tsih++;
 	}
-	tsih = session->sid.id.tsih + 1;
+	tsih = session->tsih + 1;
 
 	conn->session = session;
 	conn->session->initiator = strdup(conn->initiator);
 
-	log_debug(1, "session_create: %#" PRIx64, session->sid.id64);
+	log_debug(1, "session_create: %#" PRIx64, sid);
 
-	ki->session_create(conn->tid, session->sid.id64, conn->exp_cmd_sn,
+	ki->session_create(conn->tid, sid, conn->exp_cmd_sn,
 			   conn->max_cmd_sn, session->initiator);
-	ki->param_set(conn->tid, session->sid.id64, key_session, 0, conn->session_param);
+	ki->param_set(conn->tid, sid, key_session, 0, conn->session_param);
 }
 
 void session_remove(struct session *session)
 {
-	log_debug(1, "session_remove: %#"  PRIx64, session->sid.id64);
+	uint64_t sid = sid64(session->isid, session->tsih);
 
-	if (!session->sid.id.tsih)
-		ki->session_destroy(session->target->tid, session->sid.id64);
+	log_debug(1, "session_remove: %#"  PRIx64, sid);
+
+	if (!session->tsih)
+		ki->session_destroy(session->target->tid, sid);
 
 	if (session->target) {
 		remque(&session->slist);

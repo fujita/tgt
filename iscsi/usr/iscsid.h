@@ -11,15 +11,21 @@
 #include <sys/types.h>
 
 #include "types.h"
-#include "iscsi_hdr.h"
 #include "iet_u.h"
 #include "param.h"
 #include "config.h"
 #include "misc.h"
-
-#define ISCSI_TARGET_DEFAULT_PORT	3260
+#include <iscsi_proto.h>
 
 #define PROC_SESSION	"/proc/net/iet/session"
+
+#define sid64(isid, tsih)					\
+({								\
+	(uint64_t) isid[0] <<  0 | (uint64_t) isid[1] <<  8 |	\
+	(uint64_t) isid[2] << 16 | (uint64_t) isid[3] << 24 |	\
+	(uint64_t) isid[4] << 32 | (uint64_t) isid[5] << 40 |	\
+	(uint64_t) tsih << 48;					\
+})
 
 struct PDU {
 	struct iscsi_hdr bhs;
@@ -38,7 +44,8 @@ struct session {
 
 	char *initiator;
 	struct target *target;
-	union iscsi_sid sid;
+	uint8_t isid[6];
+	uint16_t tsih;
 
 	int conn_cnt;
 };
@@ -54,7 +61,8 @@ struct connection {
 	struct iscsi_param session_param[session_key_last];
 
 	char *initiator;
-	union iscsi_sid sid;
+	uint8_t isid[6];
+	uint16_t tsih;
 	u16 cid;
 	u16 pad;
 	int session_type;
@@ -175,7 +183,7 @@ extern void log_debug(int level, const char *fmt, ...)
 extern void log_pdu(int level, struct PDU *pdu);
 
 /* session.c */
-extern struct session *session_find_name(u32 tid, const char *iname, union iscsi_sid sid);
+extern struct session *session_find_name(u32 tid, const char *iname, uint8_t *isid);
 extern struct session *session_find_id(u32 tid, u64 sid);
 extern void session_create(struct connection *conn);
 extern void session_remove(struct session *session);
