@@ -8,19 +8,6 @@
 
 #include <scsi/scsi_cmnd.h>
 
-struct stgt_target {
-	/* Protects session_list, work_list, device_list */
-	spinlock_t lock;
-
-	struct list_head tlist;
-
-	struct list_head device_list;
-	struct list_head session_list;
-
-	struct work_struct work;
-	struct list_head work_list;
-};
-
 struct stgt_session {
 	struct stgt_target *target;
 	struct list_head slist;
@@ -52,19 +39,6 @@ struct stgt_cmnd {
 	void *private;
 };
 
-struct stgt_device {
-	char *path;
-	uint32_t lun;
-	uint32_t blk_shift;
-	uint64_t blk_count;
-
-	struct stgt_target *target;
-	struct list_head dlist;
-};
-
-extern struct stgt_target *stgt_target_create(void);
-extern int stgt_target_destroy(struct stgt_target *target);
-
 extern struct stgt_session *
 stgt_session_create(struct stgt_target *target,
 		    int max_cmnds,
@@ -77,10 +51,6 @@ extern void stgt_cmnd_alloc_buffer(struct stgt_cmnd *cmnd,
 				  void (*done)(struct stgt_cmnd *));
 extern int stgt_cmnd_queue(struct stgt_cmnd *cmnd,
 			   void (*done)(struct stgt_cmnd *));
-
-extern struct stgt_device*
-stgt_device_create(struct stgt_target *target, char *path, uint32_t lun,
-		   unsigned long dflags);
-extern int stgt_device_destroy(struct stgt_device *device);
-
+extern int stgt_sysfs_init(void);
+extern void stgt_sysfs_exit(void);
 #endif

@@ -112,7 +112,7 @@ struct iet_event {
 #define	MIN_NR_QUEUED_CMNDS	1
 #define	MAX_NR_QUEUED_CMNDS	256
 
-#define NETLINK_IET	11
+#define NETLINK_IET	21
 
 #define ADD_TARGET _IOW('i', 0, struct target_info)
 #define DEL_TARGET _IOW('i', 1, struct target_info)

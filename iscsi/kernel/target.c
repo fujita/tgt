@@ -10,6 +10,7 @@
 #include <digest.h>
 #include <iscsi_dbg.h>
 #include <stgt.h>
+#include <stgt_target.h>
 
 #define	MAX_NR_TARGETS	(1UL << 30)
 
@@ -111,6 +112,11 @@ static void target_thread_stop(struct iscsi_target *target)
 	nthread_stop(target);
 }
 
+static struct stgt_target_template iet_stgt_target_template = {
+	.name = "iet",
+	.queued_cmnds = DEFAULT_NR_QUEUED_CMNDS,
+};
+
 static int iscsi_target_create(struct target_info *info, u32 tid)
 {
 	int err = -EINVAL, len;
@@ -154,7 +160,7 @@ static int iscsi_target_create(struct target_info *info, u32 tid)
 		goto out;
 	}
 
-	target->stt = stgt_target_create();
+	target->stt = stgt_target_create(&iet_stgt_target_template);
 	assert(target->stt);
 
 	return 0;

@@ -2,6 +2,7 @@
  * SCSI Targets Framework
  *
  * (C) 2005 FUJITA Tomonori <tomof@acm.org>
+ * (C) 2005 Mike Christie <michaelc@cs.wisc.edu>
  * This code is licenced under the GPL.
  */
 
@@ -17,6 +18,8 @@
 #include <scsi/scsi.h>
 
 #include <stgt.h>
+#include <stgt_target.h>
+#include <stgt_device.h>
 #include <stgt_if.h>
 
 #define DEBUG_STGT
@@ -45,6 +48,9 @@ MODULE_LICENSE("GPL");
 
 static spinlock_t all_targets_lock;
 static LIST_HEAD(all_targets);
+
+static spinlock_t device_tmpl_lock;
+static LIST_HEAD(device_tmpl_list);
 
 static void session_init_handler(void *data);
 static spinlock_t atomic_sessions_lock;
@@ -127,7 +133,7 @@ static void stgt_queue_work(struct stgt_target *target, struct stgt_work *work)
 	schedule_work(&target->work);
 }
 
-struct stgt_target *stgt_target_create(void)
+struct stgt_target *stgt_target_create(struct stgt_target_template *stt)
 {
 	struct stgt_target *target;
 
@@ -150,6 +156,13 @@ struct stgt_target *stgt_target_create(void)
 	INIT_LIST_HEAD(&target->work_list);
 
 	INIT_WORK(&target->work, stgt_worker, target);
+	target->stt = stt;
+	target->queued_cmnds = stt->queued_cmnds;
+
+	if (stgt_sysfs_register_target(target)) {
+		kfree(target);
+		return NULL;
+	}
 
 	spin_lock(&all_targets_lock);
 	list_add(&target->tlist, &all_targets);
@@ -165,7 +178,7 @@ int stgt_target_destroy(struct stgt_target *target)
 	list_del(&target->tlist);
 	spin_unlock(&all_targets_lock);
 
-	kfree(target);
+	stgt_sysfs_unregister_target(target);
 
 	return 0;
 }
@@ -308,9 +321,77 @@ int stgt_session_destroy(struct stgt_session *session)
 }
 EXPORT_SYMBOL(stgt_session_destroy);
 
-struct stgt_device *
-stgt_device_create(struct stgt_target *target, char *path, uint32_t lun,
-		   unsigned long dflags)
+struct device_type_internal {
+	struct stgt_device_template *sdt;
+	struct list_head list;
+};
+
+static struct stgt_device_template *device_template_get(const char *name)
+{
+	unsigned long flags;
+	struct device_type_internal *ti;
+
+	spin_lock_irqsave(&device_tmpl_lock, flags);
+
+	list_for_each_entry(ti, &device_tmpl_list, list)
+		if (!strcmp(name, ti->sdt->name)) {
+			if (!try_module_get(ti->sdt->module))
+				ti = NULL;
+			spin_unlock_irqrestore(&device_tmpl_lock, flags);
+			return ti ? ti->sdt : NULL;
+		}
+
+	spin_unlock_irqrestore(&device_tmpl_lock, flags);
+
+	return NULL;
+}
+
+static void device_template_put(struct stgt_device_template *sdt)
+{
+	module_put(sdt->module);
+}
+
+int stgt_device_template_register(struct stgt_device_template *sdt)
+{
+	unsigned long flags;
+	struct device_type_internal *ti;
+
+	ti = kmalloc(sizeof(*ti), GFP_KERNEL);
+	if (!ti)
+		return -ENOMEM;
+	memset(ti, 0, sizeof(*ti));
+	INIT_LIST_HEAD(&ti->list);
+	ti->sdt = sdt;
+
+	spin_lock_irqsave(&device_tmpl_lock, flags);
+	list_add_tail(&ti->list, &device_tmpl_list);
+	spin_unlock_irqrestore(&device_tmpl_lock, flags);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(stgt_device_template_register);
+
+void stgt_device_template_unregister(struct stgt_device_template *sdt)
+{
+	unsigned long flags;
+	struct device_type_internal *ti;
+
+	spin_lock_irqsave(&device_tmpl_lock, flags);
+
+	list_for_each_entry(ti, &device_tmpl_list, list)
+		if (ti->sdt == sdt) {
+			list_del(&ti->list);
+			kfree(ti);
+			break;
+		}
+
+	spin_unlock_irqrestore(&device_tmpl_lock, flags);
+}
+EXPORT_SYMBOL_GPL(stgt_device_template_unregister);
+
+struct stgt_device *stgt_device_create(struct stgt_target *target,
+				       char *device_type, char *path,
+				       uint32_t lun, unsigned long dflags)
 {
 	struct stgt_device *device;
 	unsigned long flags;
@@ -325,20 +406,43 @@ stgt_device_create(struct stgt_target *target, char *path, uint32_t lun,
 	memset(device, 0, sizeof(*device));
 
 	device->lun = lun;
-	device->path = kmalloc(strlen(path) + 1, GFP_KERNEL);
+	device->target = target;
+	device->path = kstrdup(path, GFP_KERNEL);
 	if (!device->path)
-		goto out;
-	strcpy(device->path, path);
-	device->path[strlen(path)] = '\0';
+		goto free_device;
+
+	device->sdt = device_template_get(device_type);
+	if (!device->sdt)
+		goto free_path;
+
+	device->sdt_data = kmalloc(sizeof(device->sdt->priv_data_size),
+				   GFP_KERNEL);
+	if (!device->sdt_data)
+		goto put_template;
+
+	if (device->sdt->create)
+		if (device->sdt->create(device))
+			goto free_priv_sdt_data;
+
+	if (stgt_sysfs_register_device(device))
+		goto sdt_destroy;
 
 	spin_lock_irqsave(&target->lock, flags);
 	list_add(&device->dlist, &target->device_list);
 	spin_unlock_irqrestore(&target->lock, flags);
 
 	return device;
-out:
-	if (device)
-		kfree(device->path);
+
+sdt_destroy:
+	if (device->sdt->destroy)
+		device->sdt->destroy(device);
+free_priv_sdt_data:
+	kfree(device->sdt_data);
+put_template:
+	device_template_put(device->sdt);
+free_path:
+	kfree(device->path);
+free_device:
 	kfree(device);
 	return NULL;
 }
@@ -356,8 +460,11 @@ int stgt_device_destroy(struct stgt_device *device)
 	list_del(&device->dlist);
 	spin_unlock_irqrestore(&target->lock, flags);
 
-	kfree(device->path);
-	kfree(device);
+	if (device->sdt->destroy)
+		device->sdt->destroy(device);
+
+	device_template_put(device->sdt);
+	stgt_sysfs_unregister_device(device);
 
 	return 0;
 }
@@ -543,12 +650,19 @@ static void uspace_cmnd_done(struct stgt_cmnd *cmnd, char *data, uint32_t datasi
 	cmnd_done(cmnd);
 }
 
-static void virtual_disk_handler(void *data)
+static void queuecommand(void *data)
 {
 	struct stgt_cmnd *cmnd = (struct stgt_cmnd *) data;
 
 	dprintk("%x\n", cmnd->scb[0]);
 
+	/*
+	 * seperate vsd (virtual disk from sd (real sd))
+	 * call scsi_device_temaplte->prepcommand to see if they want it
+	 * and allow them to setup.
+	 *
+	 * Then call queuecommand
+	 */
 	switch (cmnd->scb[0]) {
 	case READ_6:
 	case READ_10:
@@ -585,7 +699,7 @@ int stgt_cmnd_queue(struct stgt_cmnd *cmnd, void (*done)(struct stgt_cmnd *))
 		return -EINVAL;
 	}
 
-	work = stgt_init_work(session, virtual_disk_handler, cmnd);
+	work = stgt_init_work(session, queuecommand, cmnd);
 	if (!work)
 		return -ENOMEM;
 	stgt_queue_work(session->target, work);
@@ -693,6 +807,8 @@ static void __exit stgt_exit(void)
 
 	if (nls)
 		sock_release(nls->sk_socket);
+
+	stgt_sysfs_exit();
 }
 
 static int __init stgt_init(void)
@@ -702,6 +818,11 @@ static int __init stgt_init(void)
 	spin_lock_init(&all_targets_lock);
 	spin_lock_init(&atomic_sessions_lock);
 	spin_lock_init(&cmnd_hash_lock);
+	spin_lock_init(&device_tmpl_lock);
+
+	err = stgt_sysfs_init();
+	if (err)
+		return err;
 
 	cmnd_slab = kmem_cache_create("stgt_cmnd", sizeof(struct stgt_cmnd), 0,
 				      SLAB_HWCACHE_ALIGN | SLAB_NO_REAP,

@@ -2,10 +2,13 @@
 # Makefile for the Linux kernel device drivers.
 #
 
-EXTRA_CFLAGS += -I$(obj) -I$(obj)/../include -DNETLINK_STGT=12
+EXTRA_CFLAGS += -I$(obj) -I$(obj)/../include -DNETLINK_STGT=20
 
 ifneq ($(KERNELRELEASE),)
-obj-m		+= stgt.o
+obj-m		+= stgt_core.o
+stgt_core-objs	:= stgt_sysfs.o stgt.o
+
+obj-m		+= stgt_sd.o
 else
 
 ifeq ($(KERNELSRC),)

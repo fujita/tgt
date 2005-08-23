@@ -56,6 +56,7 @@ struct network_thread_info {
 };
 
 struct iscsi_cmnd;
+struct stgt_target;
 
 enum iscsi_device_state {
 	IDEV_RUNNING,
