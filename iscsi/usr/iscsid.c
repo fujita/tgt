@@ -683,9 +683,7 @@ int cmnd_execute(struct connection *conn)
 		break;
 	case ISCSI_OP_TEXT:
 		//if conn->state != STATE_FULL -> reject
-		printf("%s %d %u\n", __FUNCTION__, __LINE__, conn->req.datasize);
 		cmnd_exec_text(conn);
-		printf("%s %d %u\n", __FUNCTION__, __LINE__, conn->rsp.datasize);
 		conn->rsp.bhs.hlength = conn->rsp.ahssize / 4;
 		hton24(conn->rsp.bhs.dlength, conn->rsp.datasize);
 		log_pdu(2, &conn->rsp);
