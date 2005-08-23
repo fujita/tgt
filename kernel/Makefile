@@ -8,7 +8,7 @@ ifneq ($(KERNELRELEASE),)
 obj-m		+= stgt_core.o
 stgt_core-objs	:= stgt_sysfs.o stgt.o
 
-obj-m		+= stgt_sd.o
+obj-m		+= stgt_sd.o stgt_vsd.o
 else
 
 ifeq ($(KERNELSRC),)
