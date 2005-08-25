@@ -135,6 +135,7 @@ static void stgt_queue_work(struct stgt_target *target, struct stgt_work *work)
 
 struct stgt_target *stgt_target_create(struct stgt_target_template *stt)
 {
+	static int target_id;
 	struct stgt_target *target;
 
 	if (!daemon_pid) {
@@ -149,6 +150,7 @@ struct stgt_target *stgt_target_create(struct stgt_target_template *stt)
 	dprintk("%p\n", target);
 
 	memset(target, 0, sizeof(*target));
+	target->tid = target_id++;
 	spin_lock_init(&target->lock);
 
 	INIT_LIST_HEAD(&target->session_list);

@@ -22,6 +22,7 @@ struct stgt_target_template {
 };
 
 struct stgt_target {
+	int tid;
 	struct stgt_target_template *stt;
 	struct class_device cdev;
 

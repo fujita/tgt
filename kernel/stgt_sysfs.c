@@ -41,12 +41,6 @@ static struct class stgt_target_class = {
 	.release = stgt_target_class_release,
 };
 
-/*
- * Tmp: used for unique class_id names. For software we could
- * push the naming to userspace
- */
-static int stgt_target_num = 0;
-
 static struct class_device_attribute *class_attr_overridden(
 				struct class_device_attribute **attrs,
 				struct class_device_attribute *attr)
@@ -89,9 +83,9 @@ int stgt_sysfs_register_target(struct stgt_target *target)
 {
 	struct class_device *cdev = &target->cdev;
 	int err, i;
-	
+
 	cdev->class = &stgt_target_class;
-	snprintf(cdev->class_id, BUS_ID_SIZE, "target%d", stgt_target_num);
+	snprintf(cdev->class_id, BUS_ID_SIZE, "target%d", target->tid);
 
 	err = class_device_register(cdev);
 	if (err)
@@ -174,7 +168,8 @@ int stgt_sysfs_register_device(struct stgt_device *device)
 	int err, i;
 
 	cdev->class = &stgt_device_class;
-	snprintf(cdev->class_id, BUS_ID_SIZE, "device%d", device->lun);
+	snprintf(cdev->class_id, BUS_ID_SIZE, "device%d:%d",
+		 target->tid, device->lun);
 	err = class_device_register(cdev);
 	if (err)
 		return err;
