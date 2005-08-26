@@ -11,19 +11,27 @@ enum stgt_event_type {
 	STGT_UEVENT_START,
 	STGT_UEVENT_SCSI_CMND_RES,
 
-	/* user <- kernel */
+	/* kernel -> user */
 	STGT_KEVENT_SCSI_CMND_REQ,
 };
 
 struct stgt_event {
+	/* user-> kernel */
 	union {
 		struct {
-			uint64_t tid;
-			uint32_t lun;
 			uint64_t cid;
 			uint32_t size;
-		} msg_scsi_cmnd;
+		} cmnd_res;
 	} u;
+
+	/* kernel -> user */
+	union {
+		struct {
+			uint64_t cid;
+			int32_t tid;
+			uint32_t lun;
+		} cmnd_req;
+	} k;
 };
 
 #endif

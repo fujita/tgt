@@ -153,16 +153,16 @@ static int execute_cmnd(int fd, char *recvbuf, char *sendbuf)
 	uint8_t *scb;
 
 	scb = recvbuf + sizeof(*ev);
-	eprintf("%" PRIu64 " %x\n", ev->u.msg_scsi_cmnd.cid, scb[0]);
+	eprintf("%" PRIu64 " %x\n", ev->k.cmnd_req.cid, scb[0]);
 
-	err = disk_execute_cmnd(ev->u.msg_scsi_cmnd.tid,
-				ev->u.msg_scsi_cmnd.lun,
+	err = disk_execute_cmnd(ev->k.cmnd_req.tid,
+				ev->k.cmnd_req.lun,
 				scb, sendbuf);
 	if (err < 0)
 		return err;
 
-	uev.u.msg_scsi_cmnd.size = err;
-	uev.u.msg_scsi_cmnd.cid = ev->u.msg_scsi_cmnd.cid;
+	uev.u.cmnd_res.cid = ev->k.cmnd_req.cid;
+	uev.u.cmnd_res.size = err;
 
 	iov[0].iov_base = (void *) &uev;
 	iov[0].iov_len = sizeof(uev);

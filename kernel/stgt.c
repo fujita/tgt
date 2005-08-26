@@ -621,9 +621,9 @@ static int uspace_cmnd_send(struct stgt_cmnd *cmnd)
 	memset(ev, 0, sizeof(*ev));
 
 	pdu = (char *) ev + sizeof(*ev);
-	ev->u.msg_scsi_cmnd.tid = cmnd->session->target->tid;
-	ev->u.msg_scsi_cmnd.lun = cmnd->lun;
-	ev->u.msg_scsi_cmnd.cid = cmnd->cid;
+	ev->k.cmnd_req.tid = cmnd->session->target->tid;
+	ev->k.cmnd_req.lun = cmnd->lun;
+	ev->k.cmnd_req.cid = cmnd->cid;
 
 	memcpy(pdu, cmnd->scb, sizeof(cmnd->scb));
 
@@ -772,13 +772,13 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 		dprintk("start %d\n", daemon_pid);
 		break;
 	case STGT_UEVENT_SCSI_CMND_RES:
-		dprintk("start %llu\n", ev->u.msg_scsi_cmnd.cid);
-		cmnd = find_cmnd_by_id(ev->u.msg_scsi_cmnd.cid);
+		uint64_t cid = ev->u.cmnd_req.cid;
+		cmnd = find_cmnd_by_id(cid);
 		if (cmnd)
 			uspace_cmnd_done(cmnd, (char *) ev + sizeof(*ev),
-					 ev->u.msg_scsi_cmnd.size);
+					 ev->u.cmnd_req.size);
 		else {
-			eprintk("cannot found %llu\n", ev->u.msg_scsi_cmnd.cid);
+			eprintk("cannot found %llu\n", cid);
 			err = -EEXIST;
 		}
 		break;
