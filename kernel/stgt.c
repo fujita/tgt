@@ -621,6 +621,8 @@ static int uspace_cmnd_send(struct stgt_cmnd *cmnd)
 	memset(ev, 0, sizeof(*ev));
 
 	pdu = (char *) ev + sizeof(*ev);
+	ev->u.msg_scsi_cmnd.tid = cmnd->session->target->tid;
+	ev->u.msg_scsi_cmnd.lun = cmnd->lun;
 	ev->u.msg_scsi_cmnd.cid = cmnd->cid;
 
 	memcpy(pdu, cmnd->scb, sizeof(cmnd->scb));
@@ -687,7 +689,28 @@ static void queuecommand(void *data)
 	}
 }
 
-int stgt_cmnd_queue(struct stgt_cmnd *cmnd, void (*done)(struct stgt_cmnd *))
+static uint32_t translate_lun(uint8_t *p, int size)
+{
+	uint32_t lun = ~0U;
+
+	switch (*p >> 6) {
+	case 0:
+		lun = p[1];
+		break;
+	case 1:
+		lun = (0x3f & p[0]) << 8 | p[1];
+		break;
+	case 2:
+	case 3:
+	default:
+		break;
+	}
+
+	return lun;
+}
+
+int stgt_cmnd_queue(struct stgt_cmnd *cmnd, uint8_t *lun, int lun_size,
+		    void (*done)(struct stgt_cmnd *))
 {
 	struct stgt_work *work;
 	struct stgt_session *session = cmnd->session;
@@ -704,6 +727,9 @@ int stgt_cmnd_queue(struct stgt_cmnd *cmnd, void (*done)(struct stgt_cmnd *))
 	work = stgt_init_work(session, queuecommand, cmnd);
 	if (!work)
 		return -ENOMEM;
+
+	cmnd->lun = translate_lun(lun, lun_size);
+
 	stgt_queue_work(session->target, work);
 
 	return 0;

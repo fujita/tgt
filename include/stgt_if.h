@@ -18,6 +18,8 @@ enum stgt_event_type {
 struct stgt_event {
 	union {
 		struct {
+			uint64_t tid;
+			uint32_t lun;
 			uint64_t cid;
 			uint32_t size;
 		} msg_scsi_cmnd;

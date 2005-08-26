@@ -11,8 +11,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <dirent.h>
+#include <unistd.h>
 #include <scsi/scsi.h>
 #include <asm/byteorder.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 
 #define cpu_to_be32 __cpu_to_be32
 #define be32_to_cpu __be32_to_cpu
@@ -27,7 +32,6 @@
 #endif
 
 static uint32_t blk_shift = 9;
-static uint64_t blk_cnt = 1 << 20;
 
 #define eprintf(fmt, args...)						\
 do {									\
@@ -50,6 +54,23 @@ do {									\
 	({ type __x = (x); type __y = (y); __x < __y ? __x: __y; })
 #define max_t(type,x,y) \
 	({ type __x = (x); type __y = (y); __x > __y ? __x: __y; })
+
+static int device_info(int tid, uint32_t lun, uint64_t *size)
+{
+	int fd, err;
+	char path[PATH_MAX], buf[128];
+
+	sprintf(path, "/sys/class/stgt_device/device%d:%u/size", tid, lun);
+
+	fd = open(path, O_RDONLY);
+	if (fd < 0)
+		return fd;
+	err = read(fd, buf, sizeof(buf));
+	if (err < 0)
+		return err;
+	*size = strtoull(buf, NULL, 10);
+	return 0;
+}
 
 static int insert_disconnect_pg(uint8_t *ptr)
 {
@@ -112,18 +133,22 @@ static int insert_geo_m_pg(uint8_t *ptr, uint64_t sec)
 	return sizeof(geo_m_pg);
 }
 
-static int build_mode_sense_response(uint8_t *scb, uint8_t *data)
+static int mode_sense(int tid, uint32_t lun, uint8_t *scb, uint8_t *data)
 {
 	int len = 4, err = 0;
 	uint8_t pcode = scb[2] & 0x3f;
+	uint64_t size;
+
+	device_info(tid, lun, &size);
+	size >>= blk_shift;
 
 	if ((scb[1] & 0x8))
 		data[3] = 0;
 	else {
 		data[3] = 8;
 		len += 8;
-		*(uint32_t *)(data + 4) = (blk_cnt >> 32) ?
-			cpu_to_be32(0xffffffff) : cpu_to_be32(blk_cnt);
+		*(uint32_t *)(data + 4) = (size >> 32) ?
+			cpu_to_be32(0xffffffff) : cpu_to_be32(size);
 		*(uint32_t *)(data + 8) = cpu_to_be32(1 << blk_shift);
 	}
 
@@ -137,7 +162,7 @@ static int build_mode_sense_response(uint8_t *scb, uint8_t *data)
 		len += insert_format_m_pg(data + len);
 		break;
 	case 0x4:
-		len += insert_geo_m_pg(data + len, blk_cnt);
+		len += insert_geo_m_pg(data + len, size);
 		break;
 	case 0x8:
 		len += insert_caching_pg(data + len);
@@ -151,7 +176,7 @@ static int build_mode_sense_response(uint8_t *scb, uint8_t *data)
 	case 0x3f:
 		len += insert_disconnect_pg(data + len);
 		len += insert_format_m_pg(data + len);
-		len += insert_geo_m_pg(data + len, blk_cnt);
+		len += insert_geo_m_pg(data + len, size);
 		len += insert_caching_pg(data + len);
 		len += insert_ctrl_m_pg(data + len);
 		len += insert_iec_m_pg(data + len);
@@ -169,7 +194,7 @@ static int build_mode_sense_response(uint8_t *scb, uint8_t *data)
 #define PRODUCT_ID	"VIRTUAL-DISK"
 #define PRODUCT_REV	"0"
 
-static int build_inquiry_response(uint8_t *scb, uint8_t *data)
+static int inquiry(int tid, uint32_t lun, uint8_t *scb, uint8_t *data)
 {
 	int err = -1;
 	int len = 0;
@@ -229,7 +254,8 @@ static int build_inquiry_response(uint8_t *scb, uint8_t *data)
 			data[4] = 0x1;
 			data[5] = 0x1;
 			data[7] = tmp;
-			memcpy(data + 8, "deadbeaf", tmp);
+			if (lun != ~0UL)
+				sprintf(data + 8, "deadbeaf%d:%u", tid, lun);
 			len = tmp + 8;
 			err = 0;
 		}
@@ -237,41 +263,75 @@ static int build_inquiry_response(uint8_t *scb, uint8_t *data)
 
 	len = min_t(int, len, scb[4]);
 
-/* 	if (!cmnd->lun) */
-/* 		data[0] = TYPE_NO_LUN; */
+	if (lun == ~0UL)
+		data[0] = TYPE_NO_LUN;
 
 	return len;
 }
 
-static int build_report_luns_response(uint8_t *scb, uint8_t *p)
+static int report_luns(int tid, uint32_t unused, uint8_t *scb, uint8_t *p)
 {
-	uint32_t size, len, lun = 0;
+	uint32_t lun;
 	uint32_t *data = (uint32_t *) p;
+	int idx, alen, oalen, rbuflen, nr_luns;
+	DIR *dir;
+	struct dirent *ent;
+	char buf[128];
 
-	size = be32_to_cpu(*(uint32_t *)&scb[6]);
-	if (size < 16)
+	dir = opendir("/sys/class/stgt_device");
+	if (!dir)
 		return -1;
 
-	len = 8;
-	size = min(size & ~(8 - 1), len + 8);
+	alen = be32_to_cpu(*(uint32_t *)&scb[6]);
+	if (alen < 16)
+		return -1;
 
-	*data++ = cpu_to_be32(len);
-	*data++ = 0;
+	alen &= ~(8 - 1);
+	oalen = alen;
 
-	*data++ = cpu_to_be32((0x3ff & lun) << 16 |
-			      (lun > 0xff) ? (0x1 << 30) : 0);
-	*data++ = 0;
+	/* We'll set data[0] later. */
+	data[1] = 0;
 
-	return size;
+	alen -= 8;
+	rbuflen = 8192 - 8; /* FIXME */
+	idx = 2;
+	nr_luns = 0;
+
+	sprintf(buf, "device%d:", tid);
+	while ((ent = readdir(dir))) {
+		if (!strncmp(ent->d_name, buf, strlen(buf))) {
+			sscanf(ent->d_name, "device%d:%u", &tid, &lun);
+			data[idx++] = cpu_to_be32((0x3ff & lun) << 16 |
+						  ((lun > 0xff) ? (0x1 << 30) : 0));
+			data[idx++] = 0;
+			if (!(alen -= 8))
+				break;
+			if (!(rbuflen -= 8)) {
+				fprintf(stderr, "FIXME: too many luns\n");
+				exit(-1);
+			}
+			nr_luns++;
+		}
+	}
+
+	data[0] = cpu_to_be32(nr_luns * 8);
+
+	closedir(dir);
+
+	return min(oalen, nr_luns * 8 + 8);
 }
 
-static int build_read_capacity_response(uint8_t *scb, uint8_t *p)
+static int read_capacity(int tid, uint32_t lun, uint8_t *scb, uint8_t *p)
 {
 	int len;
 	uint32_t *data = (uint32_t *) p;
+	uint64_t size;
 
-	data[0] = (blk_cnt >> 32) ?
-		cpu_to_be32(0xffffffff) : cpu_to_be32(blk_cnt - 1);
+	device_info(tid, lun, &size);
+	size >>= blk_shift;
+
+	data[0] = (size >> 32) ?
+		cpu_to_be32(0xffffffff) : cpu_to_be32(size - 1);
 	data[1] = cpu_to_be32(1U << blk_shift);
 
 	len = 8;
@@ -279,7 +339,7 @@ static int build_read_capacity_response(uint8_t *scb, uint8_t *p)
 	return len;
 }
 
-static int build_request_sense_response(uint8_t *scb, uint8_t *data)
+static int request_sense(int tid, uint32_t lun, uint8_t *scb, uint8_t *data)
 {
 	int len;
 
@@ -293,14 +353,17 @@ static int build_request_sense_response(uint8_t *scb, uint8_t *data)
 	return len;
 }
 
-static int build_sevice_action_response(uint8_t *scb, uint8_t *p)
+static int sevice_action(int tid, uint32_t lun, uint8_t *scb, uint8_t *p)
 {
 	int len;
 	uint32_t *data = (uint32_t *) p;
-	uint64_t *data64;
+	uint64_t *data64, size;
+
+	device_info(tid, lun, &size);
+	size >>= blk_shift;
 
 	data64 = (uint64_t *) data;
-	data64[0] = cpu_to_be64(blk_cnt - 1);
+	data64[0] = cpu_to_be64(size - 1);
 	data[2] = cpu_to_be32(1UL << blk_shift);
 
 	len = 32;
@@ -308,7 +371,7 @@ static int build_sevice_action_response(uint8_t *scb, uint8_t *p)
 	return len;
 }
 
-int disk_execute_cmnd(uint8_t *scb, uint8_t *data)
+int disk_execute_cmnd(int tid, uint32_t lun, uint8_t *scb, uint8_t *data)
 {
 	int len = -1;
 
@@ -316,22 +379,22 @@ int disk_execute_cmnd(uint8_t *scb, uint8_t *data)
 
 	switch (scb[0]) {
 	case INQUIRY:
-		len = build_inquiry_response(scb, data);
+		len = inquiry(tid, lun, scb, data);
 		break;
 	case REPORT_LUNS:
-		len = build_report_luns_response(scb, data);
+		len = report_luns(tid, lun, scb, data);
 		break;
 	case READ_CAPACITY:
-		len = build_read_capacity_response(scb, data);
+		len = read_capacity(tid, lun, scb, data);
 		break;
 	case MODE_SENSE:
-		len = build_mode_sense_response(scb, data);
+		len = mode_sense(tid, lun, scb, data);
 		break;
 	case REQUEST_SENSE:
-		len = build_request_sense_response(scb, data);
+		len = request_sense(tid, lun, scb, data);
 		break;
 	case SERVICE_ACTION_IN:
-		len = build_sevice_action_response(scb, data);
+		len = sevice_action(tid, lun, scb, data);
 		break;
 	case START_STOP:
 	case TEST_UNIT_READY:

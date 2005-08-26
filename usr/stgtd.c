@@ -27,7 +27,7 @@ do {									\
 	fprintf(stderr, "%s(%d) " fmt, __FUNCTION__, __LINE__, args);	\
 } while (0)
 
-extern int disk_execute_cmnd(char *scb, char *data);
+extern int disk_execute_cmnd(int tid, uint32_t lun, char *scb, char *data);
 
 static struct sockaddr_nl src_addr, dest_addr;
 static void *nlm_recvbuf;
@@ -155,7 +155,10 @@ static int execute_cmnd(int fd, char *recvbuf, char *sendbuf)
 	scb = recvbuf + sizeof(*ev);
 	eprintf("%" PRIu64 " %x\n", ev->u.msg_scsi_cmnd.cid, scb[0]);
 
-	if ((err = disk_execute_cmnd(scb, sendbuf)) < 0)
+	err = disk_execute_cmnd(ev->u.msg_scsi_cmnd.tid,
+				ev->u.msg_scsi_cmnd.lun,
+				scb, sendbuf);
+	if (err < 0)
 		return err;
 
 	uev.u.msg_scsi_cmnd.size = err;

@@ -50,6 +50,7 @@ extern void stgt_cmnd_destroy(struct stgt_cmnd *cmnd);
 extern void stgt_cmnd_alloc_buffer(struct stgt_cmnd *cmnd,
 				  void (*done)(struct stgt_cmnd *));
 extern int stgt_cmnd_queue(struct stgt_cmnd *cmnd,
+			   uint8_t *lun, int lun_len,
 			   void (*done)(struct stgt_cmnd *));
 extern int stgt_sysfs_init(void);
 extern void stgt_sysfs_exit(void);

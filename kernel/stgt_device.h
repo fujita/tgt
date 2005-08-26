@@ -39,7 +39,7 @@ struct stgt_device {
         char *path;
         uint32_t lun;
         uint32_t blk_shift;
-        uint64_t blk_count;
+        uint64_t size;
 
         struct stgt_target *target;
         struct list_head dlist;

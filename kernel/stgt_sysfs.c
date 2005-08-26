@@ -138,10 +138,12 @@ show_##field (struct class_device *cdev, char *buf)			\
 static CLASS_DEVICE_ATTR(field, S_IRUGO, show_##field, NULL);
 
 stgt_device_rd_attr(path, "%s\n");
+stgt_device_rd_attr(size, "%llu\n");
 
 static struct class_device_attribute *stgt_device_attrs[] = {
 	&class_device_attr_path,
-	NULL
+	&class_device_attr_size,
+	NULL,
 };
 
 

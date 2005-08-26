@@ -62,6 +62,7 @@ static int stgt_vsd_create(struct stgt_device *device)
 		goto out;
 	}
 
+	device->size = inode->i_size;
 	printk("%s %llu\n", device->path, inode->i_size >> 9);
 
 	return 0;

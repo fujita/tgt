@@ -720,7 +720,8 @@ static void scsi_cmnd_exec(struct iscsi_cmnd *cmnd)
 	} else {
 		set_cmnd_waitio(cmnd);
 		cmnd->stc->private = cmnd;
-		stgt_cmnd_queue(cmnd->stc, scsi_cmnd_done);
+		stgt_cmnd_queue(cmnd->stc, cmnd_hdr(cmnd)->lun,
+				sizeof(cmnd_hdr(cmnd)->lun), scsi_cmnd_done);
 	}
 }
 

@@ -79,6 +79,8 @@ static int stgt_sd_create(struct stgt_device *device)
 	if (err)
 		return err;
 
+	device->size = sddev->bdev->bd_block_size;
+
 	return 0;
 }
 
