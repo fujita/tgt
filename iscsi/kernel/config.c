@@ -162,28 +162,6 @@ static int del_session(struct iscsi_target *target, unsigned long ptr)
 	return session_del(target, info.sid);
 }
 
-static int add_volume(struct iscsi_target *target, unsigned long ptr)
-{
-	int err;
-	struct volume_info info;
-
-	if ((err = copy_from_user(&info, (void *) ptr, sizeof(info))) < 0)
-		return err;
-
-	return volume_add(target, &info);
-}
-
-static int del_volume(struct iscsi_target *target, unsigned long ptr)
-{
-	int err;
-	struct volume_info info;
-
-	if ((err = copy_from_user(&info, (void *) ptr, sizeof(info))) < 0)
-		return err;
-
-	return volume_del(target, &info);
-}
-
 static int iscsi_param_config(struct iscsi_target *target, unsigned long ptr, int set)
 {
 	int err;
@@ -230,18 +208,11 @@ static long ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		goto done;
 	}
 
-	target = target_lookup_by_id(id);
-
-	if (cmd == ADD_TARGET)
-		if (target) {
-			err = -EEXIST;
-			eprintk("Target %u already exist!\n", id);
-			goto done;
-		}
+	if (cmd != ADD_TARGET)
+		target = target_lookup_by_id(id);
 
 	switch (cmd) {
 	case ADD_TARGET:
-		assert(!target);
 		err = add_target(arg);
 		goto done;
 	}
@@ -258,14 +229,6 @@ static long ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	}
 
 	switch (cmd) {
-	case ADD_VOLUME:
-		err = add_volume(target, arg);
-		break;
-
-	case DEL_VOLUME:
-		err = del_volume(target, arg);
-		break;
-
 	case ADD_SESSION:
 		err = add_session(target, arg);
 		break;

@@ -10,10 +10,13 @@
 #include <errno.h>
 #include <netdb.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
+#include <sys/un.h>
+#include <linux/netlink.h>
 
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -21,6 +24,7 @@
 #include <arpa/inet.h>
 
 #include "iscsid.h"
+#include "stgt_if.h"
 
 #define BUFSIZE		4096
 #define CONFIG_FILE	"/etc/ietd.conf"
@@ -108,10 +112,10 @@ static int plain_account_init(char *filename)
 			continue;
 
 		if (!strcasecmp(p, "Target")) {
-			tid = 0;
 			if (!(p = target_sep_string(&q)))
 				continue;
-			tid = target_find_by_name(p);
+			if (target_find_by_name(p, &tid) < 0)
+				continue;
 		} else if (!((idx = param_index_by_name(p, user_keys)) < 0)) {
 			char *name, *pass;
 			name = target_sep_string(&q);
@@ -374,7 +378,7 @@ static int __initiator_match(int fd, char *str)
 
 static int initiator_match(u32 tid, int fd, char *filename)
 {
-	int err = 0;
+	int err = 0, tmp;
 	FILE *fp;
 	char buf[BUFSIZE], *p;
 
@@ -398,7 +402,7 @@ static int initiator_match(u32 tid, int fd, char *filename)
 			continue;
 		*(p++) = '\0';
 
-		if (target_find_by_name(buf) != tid)
+		if (target_find_by_name(buf, &tmp) < 0)
 			continue;
 
 		err = __initiator_match(fd, p);
@@ -424,15 +428,7 @@ static int plain_initiator_access(u32 tid, int fd)
 
 static int __plain_target_create(u32 *tid, char *name, int update)
 {
-	int err;
-
-	if ((err = target_add(tid, name)) < 0)
-		return err;
-
-	if (update)
-		; /* Update the config file here. */
-
-	return err;
+	return target_add(tid, name);
 }
 
 static int plain_target_create(u32 *tid, char *name)
@@ -451,27 +447,119 @@ static int plain_target_destroy(u32 tid)
 	return err;
 }
 
-static int __plain_lunit_create(u32 tid, u32 lun, char *args, int update)
+#define STGT_IPC_NAMESPACE "STGT_IPC_ABSTRACT_NAMESPACE"
+
+static int ipc_connect(void)
 {
-	int err;
+	int fd, err;
+	struct sockaddr_un addr;
 
-	if ((err = ki->lunit_create(tid, lun, args)) < 0)
-		return err;
+	fd = socket(AF_LOCAL, SOCK_STREAM, 0);
+	if (fd < 0)
+		return fd;
 
-	if (update)
-		;
+	memset(&addr, 0, sizeof(addr));
+	addr.sun_family = AF_LOCAL;
+	memcpy((char *) &addr.sun_path + 1, STGT_IPC_NAMESPACE,
+	       strlen(STGT_IPC_NAMESPACE));
 
-	return err;
+	if ((err = connect(fd, (struct sockaddr *) &addr, sizeof(addr))) < 0)
+		fd = err;
+
+	return fd;
 }
 
 static int plain_lunit_create(u32 tid, u32 lun, char *args)
 {
-	return __plain_lunit_create(tid, lun, args, 1);
+	int fd, err;
+	char nlm_ev[8912], *p, *q, *type = NULL, *path = NULL;
+	char dtype[] = "stgt_vsd";
+	struct stgt_event *ev;
+	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
+
+	fprintf(stderr, "%s %d %s\n", __FUNCTION__, __LINE__, args);
+
+	fd = ipc_connect();
+	if (fd < 0) {
+		fprintf(stderr, "%s %d %d\n", __FUNCTION__, __LINE__, fd);
+		return fd;
+	}
+
+	if (isspace(*args))
+		args++;
+	if ((p = strchr(args, '\n')))
+		*p = '\0';
+
+	while ((p = strsep(&args, ","))) {
+		if (!p)
+			continue;
+
+		if (!(q = strchr(p, '=')))
+			continue;
+		*q++ = '\0';
+
+		if (!strcmp(p, "Path"))
+			path = q;
+		else if (!strcmp(p, "Type"))
+			type = q;
+	}
+
+	if (!type)
+		type = dtype;
+	if (!path) {
+		fprintf(stderr, "%s %d NULL path\n", __FUNCTION__, __LINE__);
+		return -EINVAL;
+	}
+
+	fprintf(stderr, "%s %d %s %s %d %d\n",
+		__FUNCTION__, __LINE__, type, path, strlen(path), sizeof(*ev));
+
+	memset(nlm_ev, 0, sizeof(nlm_ev));
+	nlh->nlmsg_len = NLMSG_SPACE(sizeof(*ev) + strlen(path));
+	nlh->nlmsg_type = STGT_UEVENT_DEVICE_CREATE;
+	nlh->nlmsg_flags = 0;
+	nlh->nlmsg_pid = getpid();
+
+	ev = NLMSG_DATA(nlh);
+	ev->u.c_device.tid = tid;
+	ev->u.c_device.lun = lun;
+	strncpy(ev->u.c_device.type, type, sizeof(ev->u.c_device.type));
+	memcpy((char *) ev + sizeof(*ev), path, strlen(path));
+
+	err = write(fd, nlm_ev, nlh->nlmsg_len);
+	if (err < 0)
+		fprintf(stderr, "%s %d %d\n", __FUNCTION__, __LINE__, err);
+
+	return err;
 }
 
 static int plain_lunit_destroy(u32 tid, u32 lun)
 {
-	return ki->lunit_destroy(tid, lun);
+	int fd, err;
+	char nlm_ev[8912];
+	struct stgt_event *ev;
+	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
+
+	fd = ipc_connect();
+	if (fd < 0) {
+		fprintf(stderr, "%s %d %d\n", __FUNCTION__, __LINE__, fd);
+		return fd;
+	}
+
+	memset(nlm_ev, 0, sizeof(nlm_ev));
+
+	nlh->nlmsg_len = NLMSG_SPACE(sizeof(*ev));
+	nlh->nlmsg_type = STGT_UEVENT_DEVICE_CREATE;
+	nlh->nlmsg_flags = 0;
+	nlh->nlmsg_pid = getpid();
+
+	ev = NLMSG_DATA(nlh);
+	ev->u.d_device.tid = tid;
+	ev->u.d_device.lun = lun;
+
+	err = write(fd, nlm_ev, nlh->nlmsg_len);
+
+	return err;
 }
 
 static int __plain_param_set(u32 tid, u64 sid, int type,
@@ -515,13 +603,13 @@ static int plain_main_init(char *filename)
 	FILE *config;
 	char buf[BUFSIZE];
 	char *p, *q;
-	int idx;
-	u32 tid, val;
+	int idx, tid;
+	u32 val;
 
 	if (!(config = fopen(filename, "r")))
 		return -errno;
 
-	tid = 0;
+	tid = -1;
 	while (fgets(buf, BUFSIZE, config)) {
 		q = buf;
 		p = target_sep_string(&q);
@@ -531,21 +619,22 @@ static int plain_main_init(char *filename)
 			tid = 0;
 			if (!(p = target_sep_string(&q)))
 				continue;
-			if (__plain_target_create(&tid, p, 0))
-				log_debug(1, "creaing target %s", p);
-		} else if (!strcasecmp(p, "Alias") && tid) {
+			log_debug(1, "creaing target %s", p);
+			if (__plain_target_create(&tid, p, 0) < 0)
+				tid = -1;
+		} else if (!strcasecmp(p, "Alias") && tid >= 0) {
 			;
-		} else if (!strcasecmp(p, "MaxSessions") && tid) {
+		} else if (!strcasecmp(p, "MaxSessions") && tid >= 0) {
 			/* target->max_sessions = strtol(q, &q, 0); */
-		} else if (!strcasecmp(p, "Lun") && tid) {
+		} else if (!strcasecmp(p, "Lun") && tid >= 0) {
 			u32 lun = strtol(q, &q, 10);
-			__plain_lunit_create(tid, lun, q, 0);
-		} else if (!((idx = param_index_by_name(p, target_keys)) < 0) && tid) {
+			plain_lunit_create(tid, lun, q);
+		} else if (!((idx = param_index_by_name(p, target_keys)) < 0) && tid >= 0) {
 			val = strtol(q, &q, 0);
 			if (param_check_val(target_keys, idx, &val) < 0)
 				log_warning("%s, %u\n", target_keys[idx].name, val);
 			iscsi_param_partial_set(tid, 0, key_target, idx, val);
-		} else if (!((idx = param_index_by_name(p, session_keys)) < 0) && tid) {
+		} else if (!((idx = param_index_by_name(p, session_keys)) < 0) && tid >= 0) {
 			char *str = target_sep_string(&q);
 			if (param_str_to_val(session_keys, idx, str, &val) < 0)
 				continue;

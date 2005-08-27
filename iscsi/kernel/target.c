@@ -17,7 +17,6 @@
 
 static LIST_HEAD(target_list);
 static DECLARE_MUTEX(target_list_sem);
-static u32 next_target_id;
 static u32 nr_targets;
 
 static struct iscsi_sess_param default_session_param = {
@@ -118,21 +117,21 @@ static struct stgt_target_template iet_stgt_target_template = {
 	.queued_cmnds = DEFAULT_NR_QUEUED_CMNDS,
 };
 
-static int iscsi_target_create(struct target_info *info, u32 tid)
+static int iscsi_target_create(struct target_info *info)
 {
 	int err = -EINVAL, len;
 	char *name = info->name;
 	struct iscsi_target *target;
 
-	dprintk(D_SETUP, "%u %s\n", tid, name);
+	dprintk(D_SETUP, "%s\n", name);
 
 	if (!(len = strlen(name))) {
-		eprintk("The length of the target name is zero %u\n", tid);
+		eprintk("%s", "The length of the target name is zero");
 		return err;
 	}
 
 	if (!try_module_get(THIS_MODULE)) {
-		eprintk("Fail to get module %u\n", tid);
+		eprintk("%s\n", "Fail to get module");
 		return err;
 	}
 
@@ -141,8 +140,6 @@ static int iscsi_target_create(struct target_info *info, u32 tid)
 		goto out;
 	}
 	memset(target, 0, sizeof(*target));
-
-	target->tid = info->tid = tid;
 
 	memcpy(&target->sess_param, &default_session_param, sizeof(default_session_param));
 	memcpy(&target->trgt_param, &default_target_param, sizeof(default_target_param));
@@ -165,6 +162,9 @@ static int iscsi_target_create(struct target_info *info, u32 tid)
 	target->stt = stgt_target_create(&iet_stgt_target_template);
 	assert(target->stt);
 
+	/* FIXME: We shouldn't access stt inside. */
+	target->tid = info->tid = target->stt->tid;
+
 	return 0;
 out:
 	kfree(target);
@@ -176,7 +176,6 @@ out:
 int target_add(struct target_info *info)
 {
 	int err = -EEXIST;
-	u32 tid = info->tid;
 
 	down(&target_list_sem);
 
@@ -188,19 +187,10 @@ int target_add(struct target_info *info)
 	if (__target_lookup_by_name(info->name))
 		goto out;
 
-	if (tid && __target_lookup_by_id(tid))
+	if (info->tid)
 		goto out;
 
-	if (!tid) {
-		do {
-			if (!++next_target_id)
-				++next_target_id;
-		} while (__target_lookup_by_id(next_target_id));
-
-		tid = next_target_id;
-	}
-
-	if (!(err = iscsi_target_create(info, tid)))
+	if (!(err = iscsi_target_create(info)))
 		nr_targets++;
 out:
 	up(&target_list_sem);
@@ -277,83 +267,5 @@ int iet_info_show(struct seq_file *seq, iet_show_info_t *func)
 
 	up(&target_list_sem);
 
-	return 0;
-}
-
-/*
- * Temporary device code
- */
-
-struct iscsi_device {
-	uint64_t lun;
-	struct list_head list;
-	struct stgt_device *sd;
-};
-
-struct iscsi_device *volume_lookup(struct iscsi_target *target, u32 lun)
-{
-	struct iscsi_device *device;
-	list_for_each_entry(device, &target->device_list, list) {
-		if (device->lun == lun)
-			return device;
-	}
-	return NULL;
-}
-
-int volume_add(struct iscsi_target *target, struct volume_info *info)
-{
-	char key_path[] = "Path=", key_type[] = "Type=";
-	char *p, *path = NULL, *type = NULL;
-	struct iscsi_device *device;
-	struct stgt_device *sd;
-	char *args = info->args;
-
-	while ((p = strsep(&args, ",")) != NULL) {
-		if (!*p) continue;
-
-		if (!strncmp(p, key_path, strlen(key_path)))
-			path = p + strlen(key_path);
-		else if (!strncmp(p, key_type, strlen(key_type)))
-			type = p + strlen(key_type);
-	}
-
-	if (volume_lookup(target, info->lun)) {
-		eprintk("%u\n", info->lun);
-		return -EEXIST;
-	}
-
-	if (!path)
-		return -EINVAL;
-
-	device = kmalloc(sizeof(*device), GFP_KERNEL);
-	if (!device)
-		return -ENOMEM;
-
-	eprintk("%u %s %s\n", info->lun, path, type);
-	sd = stgt_device_create(target->stt, type ? : "stgt_sd",
-				path, info->lun, 0);
-	if (!sd)
-		goto out;
-
-	device->sd = sd;
-	device->lun = info->lun;
-	list_add(&device->list, &target->device_list);
-	return 0;
-out:
-	kfree(device);
-	return -EINVAL;
-}
-
-int volume_del(struct iscsi_target *target, struct volume_info *info)
-{
-	struct iscsi_device *device;
-
-	device = volume_lookup(target, info->lun);
-	if (!device)
-		return -ENOENT;
-
-	stgt_device_destroy(device->sd);
-	list_del(&device->list);
-	kfree(device);
 	return 0;
 }

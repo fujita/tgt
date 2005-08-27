@@ -1,4 +1,4 @@
-CFLAGS += -O2 -fno-inline -Wall -Wstrict-prototypes -g -I../include
+CFLAGS += -O2 -fno-inline -Wall -Wstrict-prototypes -g -I../include -I../../include
 PROGRAMS = ietd ietadm
 LIBS = -lcrypto
 

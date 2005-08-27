@@ -15,13 +15,6 @@ struct target_info {
 	char name[ISCSI_NAME_LEN];
 };
 
-struct volume_info {
-	u32 tid;
-
-	u32 lun;
-	char args[ISCSI_ARGS_LEN]; /* FIXME */
-};
-
 struct session_info {
 	u32 tid;
 
@@ -118,8 +111,6 @@ struct iet_event {
 #define DEL_TARGET _IOW('i', 1, struct target_info)
 #define START_TARGET _IO('i', 2)
 #define STOP_TARGET _IO('i', 3)
-#define ADD_VOLUME _IOW('i', 4, struct volume_info)
-#define DEL_VOLUME _IOW('i', 5, struct volume_info)
 #define ADD_SESSION _IOW('i', 6, struct session_info)
 #define DEL_SESSION _IOW('i', 7, struct session_info)
 #define GET_SESSION_INFO _IOWR('i', 8, struct session_info)

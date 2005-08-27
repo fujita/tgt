@@ -356,7 +356,7 @@ static void login_start(struct connection *conn)
 			return;
 		}
 
-		if (!(conn->tid = target_find_by_name(target_name)) ||
+		if (target_find_by_name(target_name, &conn->tid) < 0 ||
 		    cops->initiator_access(conn->tid, conn->fd) < 0) {
 			rsp->status_class = ISCSI_STATUS_CLS_INITIATOR_ERR;
 			rsp->status_detail = ISCSI_LOGIN_STATUS_TGT_NOT_FOUND;

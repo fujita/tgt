@@ -103,45 +103,6 @@ static int iscsi_target_destroy(u32 tid)
 	return ioctl(ctrl_fd, DEL_TARGET, &info);
 }
 
-static int iscsi_lunit_create(u32 tid, u32 lun, char *args)
-{
-	int err;
-	struct volume_info info;
-	char *p;
-
-	memset(&info, 0, sizeof(info));
-
-	info.tid = tid;
-	info.lun = lun;
-
-	while (isspace(*args))
-		args++;
-	if ((p = strchr(args, '\n')))
-		*p = '\0';
-
-	strncpy(info.args, args, sizeof(info.args) - 1);
-
-	if ((err = ioctl(ctrl_fd, ADD_VOLUME, &info)) < 0)
-		fprintf(stderr, "%s %d %d", __FUNCTION__, errno, err);
-
-	return err;
-}
-
-static int iscsi_lunit_destroy(u32 tid, u32 lun)
-{
-	int err;
-	struct volume_info info;
-
-	memset(&info, 0, sizeof(info));
-	info.tid = tid;
-	info.lun = lun;
-
-	if ((err = ioctl(ctrl_fd, DEL_VOLUME, &info)) < 0)
-		fprintf(stderr, "%s %d %d", __FUNCTION__, errno, err);
-
-	return err;
-}
-
 static int iscsi_conn_destroy(u32 tid, u64 sid, u32 cid)
 {
 	int err;
@@ -371,8 +332,6 @@ static int iscsi_conn_create(u32 tid, u64 sid, u32 cid, u32 stat_sn, u32 exp_sta
 
 struct iscsi_kernel_interface ioctl_ki = {
 	.ctldev_open = ctrdev_open,
-	.lunit_create = iscsi_lunit_create,
-	.lunit_destroy = iscsi_lunit_destroy,
 	.param_get = iscsi_param_get,
 	.param_set = iscsi_param_set,
 	.target_create = iscsi_target_create,

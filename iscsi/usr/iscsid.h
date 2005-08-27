@@ -191,7 +191,7 @@ extern void session_remove(struct session *session);
 /* target.c */
 extern int target_add(u32 *, char *);
 extern int target_del(u32);
-extern u32 target_find_by_name(const char *name);
+extern int target_find_by_name(const char *name, u32 *tid);
 struct target * target_find_by_id(u32);
 extern void target_list_build(struct connection *, char *, char *);
 
@@ -202,8 +202,6 @@ extern int ietadm_request_handle(int accept_fd);
 /* ctldev.c */
 struct iscsi_kernel_interface {
 	int (*ctldev_open) (void);
-	int (*lunit_create) (u32 tid, u32 lun, char *args);
-	int (*lunit_destroy) (u32 tid, u32 lun);
 	int (*param_get) (u32, u64, struct iscsi_param *);
 	int (*param_set) (u32, u64, int, u32, struct iscsi_param *);
 	int (*target_create) (u32 *, char *);

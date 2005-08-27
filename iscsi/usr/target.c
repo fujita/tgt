@@ -31,16 +31,18 @@ void target_list_build(struct connection *conn, char *addr, char *name)
 	}
 }
 
-u32 target_find_by_name(const char *name)
+int target_find_by_name(const char *name, u32 *tid)
 {
 	struct target *target;
 
 	list_for_each_entry(target, &targets_list, tlist) {
-		if (!strcmp(target->name, name))
-			return target->tid;
+		if (!strcmp(target->name, name)) {
+			*tid = target->tid;
+			return 0;
+		}
 	}
 
-	return 0;
+	return -ENOENT;
 }
 
 struct target* target_find_by_id(u32 tid)
