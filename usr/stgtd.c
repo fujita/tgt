@@ -28,10 +28,14 @@ do {									\
 } while (0)
 
 extern int disk_execute_cmnd(int tid, uint32_t lun, char *scb, char *data);
+extern int ipc_recv(int accept_fd);
+extern int ipc_listen(void);
 
 static struct sockaddr_nl src_addr, dest_addr;
 static void *nlm_recvbuf;
 static void *nlm_sendbuf;
+
+int nl_fd, ipc_fd;
 
 static int nl_write(int fd, int type, struct iovec *iovp, int count)
 {
@@ -69,7 +73,7 @@ static int nl_write(int fd, int type, struct iovec *iovp, int count)
 	return sendmsg(fd, &msg, 0);
 }
 
-static int nl_read(int ctrl_fd, char *data, int size, int flags)
+static int nl_read(int ctrl_fd, void *data, int size, int flags)
 {
 	int rc;
 	struct iovec iov;
@@ -89,9 +93,27 @@ static int nl_read(int ctrl_fd, char *data, int size, int flags)
 	return rc;
 }
 
+int request_execute(int fd, int type, struct iovec *iovp, int count, int *res)
+{
+	int err;
+	struct stgt_event *ev;
+	char nlm_ev[NLMSG_SPACE(sizeof(*ev))];
+
+	err = nl_write(fd, type, iovp, count);
+	if (err < 0)
+		return err;
+
+	err = nl_read(fd, nlm_ev, sizeof(nlm_ev), 0);
+
+	ev = (struct stgt_event *) NLMSG_DATA(nlm_ev);
+	*res = ev->k.event_res.err;
+
+	return err;
+}
+
 static int nl_open(void)
 {
-	int nl_fd, res;
+	int nl_fd, err, res;
 	struct stgt_event ev;
 	struct iovec iov;
 
@@ -114,9 +136,7 @@ static int nl_open(void)
 	iov.iov_base = &ev;
 	iov.iov_len = sizeof(ev);
 
-	if ((res = nl_write(nl_fd, STGT_UEVENT_START, &iov, 1)) < 0) {
-		return res;
-	}
+	err = request_execute(nl_fd, STGT_UEVENT_START, &iov, 1, &res);
 
 	return nl_fd;
 }
@@ -214,26 +234,35 @@ retry:
 	}
 }
 
-#define POLL_CTRL 0
+enum {
+	POLL_NL,
+	POLL_IPC,
+	POLL_MAX,
+};
 
 int main(int argc, char **argv)
 {
-	static struct pollfd poll_array[POLL_CTRL + 1];
-	int fd, err;
+	static struct pollfd poll_array[POLL_IPC + 1];
+	int err;
 
 	nlm_sendbuf = malloc(8192);
 	nlm_recvbuf = malloc(8192);
 
 	memset(poll_array, 0, sizeof(poll_array));
 
-	if ((fd = nl_open()) < 0)
-		exit(fd);
+	if ((nl_fd = nl_open()) < 0)
+		exit(nl_fd);
 
-	poll_array[POLL_CTRL].fd = fd;
-	poll_array[POLL_CTRL].events = POLLIN;
+	if ((ipc_fd = ipc_listen()) < 0)
+		exit(ipc_fd);
+
+	poll_array[POLL_NL].fd = nl_fd;
+	poll_array[POLL_NL].events = POLLIN;
+	poll_array[POLL_IPC].fd = ipc_fd;
+	poll_array[POLL_IPC].events = POLLIN;
 
 	while (1) {
-		if ((err = poll(poll_array, 1, -1)) < 0) {
+		if ((err = poll(poll_array, POLL_MAX, -1)) < 0) {
 			if (errno != EINTR) {
 				eprintf("%d %d\n", err, errno);
 				exit(1);
@@ -241,8 +270,11 @@ int main(int argc, char **argv)
 			continue;
 		}
 
-		if (poll_array[POLL_CTRL].revents)
-			handle_events(fd);
+		if (poll_array[POLL_NL].revents)
+			handle_events(nl_fd);
+
+		if (poll_array[POLL_IPC].revents)
+			ipc_recv(ipc_fd);
 	}
 
 	return 0;

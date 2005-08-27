@@ -133,6 +133,20 @@ static void stgt_queue_work(struct stgt_target *target, struct stgt_work *work)
 	schedule_work(&target->work);
 }
 
+static struct stgt_target *target_find(int tid)
+{
+	struct stgt_target *target;
+
+	spin_lock(&all_targets_lock);
+	list_for_each_entry(target, &all_targets, tlist)
+		if (target->tid == tid)
+			goto found;
+	spin_unlock(&all_targets_lock);
+	target = NULL;
+found:
+	return target;
+}
+
 struct stgt_target *stgt_target_create(struct stgt_target_template *stt)
 {
 	static int target_id;
@@ -391,19 +405,22 @@ void stgt_device_template_unregister(struct stgt_device_template *sdt)
 }
 EXPORT_SYMBOL_GPL(stgt_device_template_unregister);
 
-struct stgt_device *stgt_device_create(struct stgt_target *target,
-				       char *device_type, char *path,
-				       uint32_t lun, unsigned long dflags)
+static int stgt_device_create(int tid, uint32_t lun, char *device_type, char *path,
+			      unsigned long dflags)
 {
+	struct stgt_target *target;
 	struct stgt_device *device;
 	unsigned long flags;
 
+	dprintk("%d %u %s %s\n", tid, lun, device_type, path);
+
+	target = target_find(tid);
 	if (!target)
-		return NULL;
+		return -EINVAL;
 
 	device = kmalloc(sizeof(*device), GFP_KERNEL);
 	if (!device)
-		return NULL;
+		return -ENOMEM;
 
 	memset(device, 0, sizeof(*device));
 
@@ -433,7 +450,7 @@ struct stgt_device *stgt_device_create(struct stgt_target *target,
 	list_add(&device->dlist, &target->device_list);
 	spin_unlock_irqrestore(&target->lock, flags);
 
-	return device;
+	return 0;
 
 sdt_destroy:
 	if (device->sdt->destroy)
@@ -446,22 +463,29 @@ free_path:
 	kfree(device->path);
 free_device:
 	kfree(device);
-	return NULL;
+	return -EINVAL;
 }
-EXPORT_SYMBOL(stgt_device_create);
 
-int stgt_device_destroy(struct stgt_device *device)
+static int stgt_device_destroy(int tid, uint32_t lun)
 {
+	struct stgt_device *device;
 	struct stgt_target *target = device->target;
 	unsigned long flags;
 
-	if (!device)
-		return -EINVAL;
+	target = target_find(tid);
+	if (!target)
+		return -ENOENT;
 
 	spin_lock_irqsave(&target->lock, flags);
-	list_del(&device->dlist);
+	list_for_each_entry(device, &target->device_list, dlist)
+		if (device->lun == lun) {
+			list_del(&device->dlist);
+			goto found;
+		}
 	spin_unlock_irqrestore(&target->lock, flags);
 
+	return -EINVAL;
+found:
 	if (device->sdt->destroy)
 		device->sdt->destroy(device);
 
@@ -470,7 +494,6 @@ int stgt_device_destroy(struct stgt_device *device)
 
 	return 0;
 }
-EXPORT_SYMBOL(stgt_device_destroy);
 
 struct stgt_cmnd *stgt_cmnd_create(struct stgt_session *session)
 {
@@ -771,14 +794,24 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 	case STGT_UEVENT_START:
 		dprintk("start %d\n", daemon_pid);
 		break;
+	case STGT_UEVENT_DEVICE_CREATE:
+		err = stgt_device_create(ev->u.c_device.tid,
+					 ev->u.c_device.lun,
+					 ev->u.c_device.type,
+					 (char *) ev + sizeof(*ev),
+					 ev->u.c_device.flags);
+		break;
+	case STGT_UEVENT_DEVICE_DESTROY:
+		err = stgt_device_destroy(ev->u.d_device.tid,
+					  ev->u.d_device.lun);
+		break;
 	case STGT_UEVENT_SCSI_CMND_RES:
-		uint64_t cid = ev->u.cmnd_req.cid;
-		cmnd = find_cmnd_by_id(cid);
+		cmnd = find_cmnd_by_id(ev->u.cmnd_res.cid);
 		if (cmnd)
 			uspace_cmnd_done(cmnd, (char *) ev + sizeof(*ev),
-					 ev->u.cmnd_req.size);
+					 ev->u.cmnd_res.size);
 		else {
-			eprintk("cannot found %llu\n", cid);
+			eprintk("cannot found %llu\n", ev->u.cmnd_res.cid);
 			err = -EEXIST;
 		}
 		break;
@@ -790,24 +823,42 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 	return err;
 }
 
+static int send_event_res(uint32_t pid, uint16_t type, void *data, uint32_t size)
+{
+	struct nlmsghdr *nlh;
+	struct sk_buff *skb;
+	uint32_t len = NLMSG_SPACE(size);
+
+	skb = alloc_skb(len, GFP_KERNEL | __GFP_NOFAIL);
+	nlh = __nlmsg_put(skb, pid, 0, type, size, 0);
+	memcpy(NLMSG_DATA(nlh), data, size);
+
+	return netlink_unicast(nls, skb, pid, 0);
+}
+
 static int event_recv_skb(struct sk_buff *skb)
 {
 	int err;
+	uint32_t rlen;
 	struct nlmsghdr	*nlh;
-	u32 rlen;
+	struct stgt_event *ev;
 
 	while (skb->len >= NLMSG_SPACE(0)) {
-		nlh = (struct nlmsghdr *)skb->data;
+		nlh = (struct nlmsghdr *) skb->data;
 		if (nlh->nlmsg_len < sizeof(*nlh) || skb->len < nlh->nlmsg_len)
 			return 0;
+		ev = NLMSG_DATA(nlh);
 		rlen = NLMSG_ALIGN(nlh->nlmsg_len);
 		if (rlen > skb->len)
 			rlen = skb->len;
 		err = event_recv_msg(skb, nlh);
-		if (err)
-			netlink_ack(skb, nlh, -err);
-		else if (nlh->nlmsg_flags & NLM_F_ACK)
-			netlink_ack(skb, nlh, 0);
+
+		printk("%d %d\n", nlh->nlmsg_type, err);
+		ev->k.event_res.err = err;
+		if (nlh->nlmsg_type != STGT_UEVENT_SCSI_CMND_RES)
+			send_event_res(NETLINK_CREDS(skb)->pid,
+				       STGT_KEVENT_RESPONSE,
+				       ev, sizeof(*ev));
 		skb_pull(skb, rlen);
 	}
 	return 0;

@@ -48,11 +48,6 @@ struct stgt_device {
 #define cdev_to_stgt_device(cdev) \
         container_of(cdev, struct stgt_device, cdev)
 
-extern struct stgt_device* stgt_device_create(struct stgt_target *target,
-					      char *device_type, char *path,
-					      uint32_t lun,
-					      unsigned long dflags);
-extern int stgt_device_destroy(struct stgt_device *device);
 extern int stgt_sysfs_register_device(struct stgt_device *device);
 extern void stgt_sysfs_unregister_device(struct stgt_device *device);
 extern int stgt_device_template_register(struct stgt_device_template *sdt);
