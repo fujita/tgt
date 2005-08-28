@@ -1,4 +1,6 @@
 /*
+ * Unix domain socket for ipc
+ *
  * (C) 2005 FUJITA Tomonori <tomof@acm.org>
  *
  * This code is licenced under the GPL.
@@ -17,49 +19,9 @@
 #include <linux/netlink.h>
 
 #include <stgt_if.h>
+#include "stgtd.h"
 
-extern int nl_fd;
-extern int request_execute(int fd, int type, struct iovec *iovp, int count, int *res);
-
-#define STGT_IPC_NAMESPACE "STGT_IPC_ABSTRACT_NAMESPACE"
-
-int ipc_listen(void)
-{
-	int fd, err;
-	struct sockaddr_un addr;
-
-	fd = socket(AF_LOCAL, SOCK_STREAM, 0);
-	if (fd < 0)
-		return fd;
-
-	memset(&addr, 0, sizeof(addr));
-	addr.sun_family = AF_LOCAL;
-	memcpy((char *) &addr.sun_path + 1, STGT_IPC_NAMESPACE,
-	       strlen(STGT_IPC_NAMESPACE));
-
-	if ((err = bind(fd, (struct sockaddr *) &addr, sizeof(addr))) < 0)
-		return err;
-
-	if ((err = listen(fd, 32)) < 0)
-		return err;
-
-	return fd;
-}
-
-static int ipc_exec(struct nlmsghdr *nlh, char *data, int len, int *res)
-{
-	int err;
-	struct iovec iov;
-
-	iov.iov_base = data;
-	iov.iov_len = len;
-
-	err = request_execute(nl_fd, nlh->nlmsg_type, &iov, 1, res);
-
-	return err;
-}
-
-int ipc_recv(int accept_fd)
+void ipc_event_handle(int accept_fd)
 {
 	struct sockaddr addr;
 	struct ucred cred;
@@ -71,7 +33,7 @@ int ipc_recv(int accept_fd)
 	struct iovec iov;
 	struct msghdr msg;
 
-	printf("%s %d\n", __FUNCTION__, __LINE__);
+	dprintf("%s %d\n", __FUNCTION__, __LINE__);
 
 	len = sizeof(addr);
 	if ((fd = accept(accept_fd, (struct sockaddr *) &addr, &len)) < 0) {
@@ -116,10 +78,11 @@ int ipc_recv(int accept_fd)
 		goto out;
 	data = NLMSG_DATA(nlh);
 
-	err = ipc_exec(nlh, data,
-		       nlh->nlmsg_len - NLMSG_ALIGN(sizeof(struct nlmsghdr)), &res);
+	err = nl_cmnd_call(nl_fd, nlh->nlmsg_type, data,
+			   nlh->nlmsg_len - NLMSG_ALIGN(sizeof(struct nlmsghdr)),
+			   &res);
 
-	printf("%s %d %d %d\n", __FUNCTION__, __LINE__, err, res);
+	dprintf("%s %d %d %d\n", __FUNCTION__, __LINE__, err, res);
 
 send:
 	nlh->nlmsg_len = NLMSG_SPACE(sizeof(*ev));
@@ -134,5 +97,27 @@ send:
 out:
 	if (fd > 0)
 		close(fd);
-	return err;
+}
+
+int ipc_open(void)
+{
+	int fd, err;
+	struct sockaddr_un addr;
+
+	fd = socket(AF_LOCAL, SOCK_STREAM, 0);
+	if (fd < 0)
+		return fd;
+
+	memset(&addr, 0, sizeof(addr));
+	addr.sun_family = AF_LOCAL;
+	memcpy((char *) &addr.sun_path + 1, STGT_IPC_NAMESPACE,
+	       strlen(STGT_IPC_NAMESPACE));
+
+	if ((err = bind(fd, (struct sockaddr *) &addr, sizeof(addr))) < 0)
+		return err;
+
+	if ((err = listen(fd, 32)) < 0)
+		return err;
+
+	return fd;
 }

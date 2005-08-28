@@ -1,4 +1,6 @@
 /*
+ * SCSI command processing
+ *
  * (C) 2004 - 2005 FUJITA Tomonori <tomof@acm.org>
  * This code is licenced under the GPL.
  *
@@ -18,6 +20,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include "stgtd.h"
 
 #define cpu_to_be32 __cpu_to_be32
 #define be32_to_cpu __be32_to_cpu
@@ -32,11 +35,6 @@
 #endif
 
 static uint32_t blk_shift = 9;
-
-#define eprintf(fmt, args...)						\
-do {									\
-	fprintf(stderr, "%s(%d) " fmt, __FUNCTION__, __LINE__, args);	\
-} while (0)
 
 #define min(x,y) ({ \
 	typeof(x) _x = (x);	\
@@ -371,11 +369,11 @@ static int sevice_action(int tid, uint32_t lun, uint8_t *scb, uint8_t *p)
 	return len;
 }
 
-int disk_execute_cmnd(int tid, uint32_t lun, uint8_t *scb, uint8_t *data)
+int scsi_cmnd_process(int tid, uint32_t lun, uint8_t *scb, uint8_t *data)
 {
-	int len = -1;
+	int len = 0;
 
-	eprintf("%x\n", scb[0]);
+	dprintf("%x\n", scb[0]);
 
 	switch (scb[0]) {
 	case INQUIRY:

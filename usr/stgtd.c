@@ -1,242 +1,31 @@
 /*
- * Event notification code.
- * (C) 2005 FUJITA Tomonori <tomof@acm.org>
- * This code is licenced under the GPL.
+ * SCSI target framework user-space daemon
  *
- * Netlink functions are taken from open-iscsi code
- * written by Dmitry Yusupov and Alex Aizman.
+ * (C) 2005 FUJITA Tomonori <tomof@acm.org>
+ *
+ * This code is licenced under the GPL.
  */
 
 #include <errno.h>
+#include <fcntl.h>
+#include <getopt.h>
 #include <inttypes.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <signal.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
-#include <signal.h>
-#include <sys/signal.h>
-#include <sys/poll.h>
-#include <sys/socket.h>
 #include <asm/types.h>
-#include <linux/netlink.h>
+#include <sys/poll.h>
+#include <sys/signal.h>
+#include <sys/stat.h>
 
 #include <stgt_if.h>
-
-#define eprintf(fmt, args...)						\
-do {									\
-	fprintf(stderr, "%s(%d) " fmt, __FUNCTION__, __LINE__, args);	\
-} while (0)
-
-extern int disk_execute_cmnd(int tid, uint32_t lun, char *scb, char *data);
-extern int ipc_recv(int accept_fd);
-extern int ipc_listen(void);
-
-static struct sockaddr_nl src_addr, dest_addr;
-static void *nlm_recvbuf;
-static void *nlm_sendbuf;
+#include "stgtd.h"
 
 int nl_fd, ipc_fd;
-
-static int nl_write(int fd, int type, struct iovec *iovp, int count)
-{
-	int i, datalen;
-	struct iovec iov;
-	struct msghdr msg;
-	struct nlmsghdr *nlh;
-
-	for (datalen = 0, i = 0; i < count; i++)
-		datalen += iovp[i].iov_len;
-
-	nlh = nlm_sendbuf;
-	memset(nlh, 0, NLMSG_SPACE(datalen));
-
-	nlh->nlmsg_len = NLMSG_SPACE(datalen);
-	nlh->nlmsg_type = type;
-	nlh->nlmsg_flags = 0;
-	nlh->nlmsg_pid = getpid();
-
-	for (datalen = 0, i = 0; i < count; i++) {
-		memcpy(NLMSG_DATA(nlh) + datalen, iovp[i].iov_base,
-		       iovp[i].iov_len);
-		datalen += iovp[i].iov_len;
-	}
-
-	iov.iov_base = (void *) nlh;
-	iov.iov_len = nlh->nlmsg_len;
-
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_name= (void*) &dest_addr;
-	msg.msg_namelen = sizeof(dest_addr);
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-
-	return sendmsg(fd, &msg, 0);
-}
-
-static int nl_read(int ctrl_fd, void *data, int size, int flags)
-{
-	int rc;
-	struct iovec iov;
-	struct msghdr msg;
-
-	iov.iov_base = data;
-	iov.iov_len = size;
-
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_name= (void*)&src_addr;
-	msg.msg_namelen = sizeof(src_addr);
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-
-	rc = recvmsg(ctrl_fd, &msg, flags);
-
-	return rc;
-}
-
-int request_execute(int fd, int type, struct iovec *iovp, int count, int *res)
-{
-	int err;
-	struct stgt_event *ev;
-	char nlm_ev[NLMSG_SPACE(sizeof(*ev))];
-
-	err = nl_write(fd, type, iovp, count);
-	if (err < 0)
-		return err;
-
-	err = nl_read(fd, nlm_ev, sizeof(nlm_ev), 0);
-
-	ev = (struct stgt_event *) NLMSG_DATA(nlm_ev);
-	*res = ev->k.event_res.err;
-
-	return err;
-}
-
-static int nl_open(void)
-{
-	int nl_fd, err, res;
-	struct stgt_event ev;
-	struct iovec iov;
-
-	if (!(nl_fd = socket(PF_NETLINK, SOCK_RAW, NETLINK_STGT)))
-		return -1;
-
-	memset(&src_addr, 0, sizeof(src_addr));
-	src_addr.nl_family = AF_NETLINK;
-	src_addr.nl_pid = getpid();
-	src_addr.nl_groups = 0; /* not in mcast groups */
-	if (bind(nl_fd, (struct sockaddr *)&src_addr, sizeof(src_addr))) {
-		return -1;
-	}
-
-	memset(&dest_addr, 0, sizeof(dest_addr));
-	dest_addr.nl_family = AF_NETLINK;
-	dest_addr.nl_pid = 0; /* kernel */
-	dest_addr.nl_groups = 0; /* unicast */
-
-	iov.iov_base = &ev;
-	iov.iov_len = sizeof(ev);
-
-	err = request_execute(nl_fd, STGT_UEVENT_START, &iov, 1, &res);
-
-	return nl_fd;
-}
-
-static int
-nlpayload_read(int ctrl_fd, char *data, int count, int flags)
-{
-	int rc;
-	struct iovec iov;
-	struct msghdr msg;
-
-	iov.iov_base = nlm_recvbuf;
-	iov.iov_len = NLMSG_SPACE(count);
-	memset(iov.iov_base, 0, iov.iov_len);
-
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_name= (void*)&src_addr;
-	msg.msg_namelen = sizeof(src_addr);
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-
-	rc = recvmsg(ctrl_fd, &msg, flags);
-
-	memcpy(data, NLMSG_DATA(iov.iov_base), count);
-
-	return rc;
-}
-
-static int execute_cmnd(int fd, char *recvbuf, char *sendbuf)
-{
-	int err;
-	struct iovec iov[2];
-	struct stgt_event uev, *ev = (struct stgt_event *) recvbuf;
-	uint8_t *scb;
-
-	scb = recvbuf + sizeof(*ev);
-	eprintf("%" PRIu64 " %x\n", ev->k.cmnd_req.cid, scb[0]);
-
-	err = disk_execute_cmnd(ev->k.cmnd_req.tid,
-				ev->k.cmnd_req.lun,
-				scb, sendbuf);
-	if (err < 0)
-		return err;
-
-	uev.u.cmnd_res.cid = ev->k.cmnd_req.cid;
-	uev.u.cmnd_res.size = err;
-
-	iov[0].iov_base = (void *) &uev;
-	iov[0].iov_len = sizeof(uev);
-	iov[1].iov_base = sendbuf;
-	iov[1].iov_len = err;
-
-	err = nl_write(fd, STGT_UEVENT_SCSI_CMND_RES, iov, err ? 2 : 1);
-
-	return 0;
-}
-
-static void handle_events(int fd)
-{
-	struct nlmsghdr *nlh;
-	struct stgt_event *ev;
-	char nlm_ev[NLMSG_SPACE(sizeof(*ev))];
-	int err, ev_size;
-	char recvbuf[4096], sendbuf[4096];
-
-retry:
-	if ((err = nl_read(fd, nlm_ev, NLMSG_SPACE(sizeof(*ev)), MSG_PEEK)) < 0) {
-		if (errno == EAGAIN)
-			return;
-		if (errno == EINTR)
-			goto retry;
-
-		eprintf("%d\n", err);
-		return;
-	}
-
-	nlh = (struct nlmsghdr *) nlm_ev;
-	ev = (struct stgt_event *) NLMSG_DATA(nlm_ev);
-
-	ev_size = nlh->nlmsg_len - NLMSG_ALIGN(sizeof(struct nlmsghdr));
-
-	eprintf("%d %d\n", nlh->nlmsg_type, ev_size);
-
-	if ((err = nlpayload_read(fd, recvbuf, ev_size, 0)) < 0) {
-		eprintf("%d\n", err);
-		exit(err);
-	}
-
-	switch (nlh->nlmsg_type) {
-	case STGT_KEVENT_SCSI_CMND_REQ:
-		memset(sendbuf, 0, sizeof(sendbuf));
-		execute_cmnd(fd, recvbuf, sendbuf);
-		break;
-	default:
-		eprintf("unknown %u\n", nlh->nlmsg_type);
-		exit(-1);
-		break;
-	}
-}
+uint32_t stgtd_debug = 1;
 
 enum {
 	POLL_NL,
@@ -244,40 +33,68 @@ enum {
 	POLL_MAX,
 };
 
-static void catch_signal(int signo) {
+static struct option const long_options[] =
+{
+	{"foreground", no_argument, 0, 'f'},
+	{"debug", required_argument, 0, 'd'},
+	{"version", no_argument, 0, 'v'},
+	{"help", no_argument, 0, 'h'},
+	{0, 0, 0, 0},
+};
+
+static char program_name[] = "stgtd";
+
+static void usage(int status)
+{
+	if (status != 0)
+		fprintf(stderr, "Try `%s --help' for more information.\n", program_name);
+	else {
+		printf("Usage: %s [OPTION]\n", program_name);
+		printf("\
+SCSI target daemon.\n\
+  -f, --foreground        make the program run in the foreground\n\
+  -d, --debug debuglevel  print debugging information\n\
+  -h, --help              display this help and exit\n\
+");
+	}
+	exit(1);
 }
 
-int main(int argc, char **argv)
+static void signal_catch(int signo) {
+}
+
+static void init(void)
 {
-	static struct pollfd poll_array[POLL_IPC + 1];
-	int err;
-
-	nlm_sendbuf = malloc(8192);
-	nlm_recvbuf = malloc(8192);
-
+	int fd;
+	char path[64];
 	struct sigaction sa_old;
 	struct sigaction sa_new;
 
 	/* do not allow ctrl-c for now... */
-	sa_new.sa_handler = catch_signal;
+	sa_new.sa_handler = signal_catch;
 	sigemptyset(&sa_new.sa_mask);
 	sa_new.sa_flags = 0;
 	sigaction(SIGINT, &sa_new, &sa_old );
 	sigaction(SIGPIPE, &sa_new, &sa_old );
 	sigaction(SIGTERM, &sa_new, &sa_old );
 
-	memset(poll_array, 0, sizeof(poll_array));
+	/* Should we use RT stuff? */
+	nice(-20);
 
-	if ((nl_fd = nl_open()) < 0)
-		exit(nl_fd);
+	/* Avoid oom-killer */
+	sprintf(path, "/proc/%d/oom_adj", getpid());
+	fd = open(path, O_WRONLY);
+	if (fd < 0) {
+		eprintf("can not adjust oom-killer's pardon %s\n", path);
+		return;
+	}
+	write(fd, "-17\n", 4);
+	close(fd);
+}
 
-	if ((ipc_fd = ipc_listen()) < 0)
-		exit(ipc_fd);
-
-	poll_array[POLL_NL].fd = nl_fd;
-	poll_array[POLL_NL].events = POLLIN;
-	poll_array[POLL_IPC].fd = ipc_fd;
-	poll_array[POLL_IPC].events = POLLIN;
+static void event_loop(struct pollfd *poll_array)
+{
+	int err;
 
 	while (1) {
 		if ((err = poll(poll_array, POLL_MAX, -1)) < 0) {
@@ -289,11 +106,55 @@ int main(int argc, char **argv)
 		}
 
 		if (poll_array[POLL_NL].revents)
-			handle_events(nl_fd);
+			nl_event_handle(nl_fd);
 
 		if (poll_array[POLL_IPC].revents)
-			ipc_recv(ipc_fd);
+			ipc_event_handle(ipc_fd);
 	}
+}
+
+int main(int argc, char **argv)
+{
+	int ch, longindex;
+	struct pollfd poll_array[POLL_MAX + 1];
+
+	while ((ch = getopt_long(argc, argv, "fd:vh", long_options, &longindex)) >= 0) {
+		switch (ch) {
+		case 'f':
+			break;
+		case 'd':
+			stgtd_debug = atoi(optarg);
+			break;
+		case 'v':
+			exit(0);
+			break;
+		case 'h':
+			usage(0);
+			break;
+		default:
+			usage(1);
+			break;
+		}
+	}
+
+	init();
+
+	memset(poll_array, 0, sizeof(poll_array));
+
+	nl_fd = nl_open();
+	if (nl_fd < 0)
+		exit(nl_fd);
+
+	ipc_fd = ipc_open();
+	if (ipc_fd < 0)
+		exit(ipc_fd);
+
+	poll_array[POLL_NL].fd = nl_fd;
+	poll_array[POLL_NL].events = POLLIN;
+	poll_array[POLL_IPC].fd = ipc_fd;
+	poll_array[POLL_IPC].events = POLLIN;
+
+	event_loop(poll_array);
 
 	return 0;
 }

@@ -349,7 +349,6 @@ static int iscsi_conn_create(u32 tid, u64 sid, u32 cid, u32 stat_sn, u32 exp_sta
 }
 
 /* Temporary stgt glue */
-#define STGT_IPC_NAMESPACE "STGT_IPC_ABSTRACT_NAMESPACE"
 
 static int ipc_cmnd_execute(char *data, int len)
 {

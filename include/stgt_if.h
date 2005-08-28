@@ -6,6 +6,8 @@
 #ifndef __SCSI_TARGET_IF_H
 #define __SCSI_TARGET_IF_H
 
+#define STGT_IPC_NAMESPACE "STGT_IPC_ABSTRACT_NAMESPACE"
+
 enum stgt_event_type {
 	/* user -> kernel */
 	STGT_UEVENT_START,
@@ -34,6 +36,7 @@ struct stgt_event {
 		struct {
 			uint64_t cid;
 			uint32_t size;
+			int err;
 		} cmnd_res;
 	} u;
 
