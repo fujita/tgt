@@ -138,9 +138,10 @@ static struct stgt_target *target_find(int tid)
 	struct stgt_target *target;
 
 	spin_lock(&all_targets_lock);
-	list_for_each_entry(target, &all_targets, tlist)
+	list_for_each_entry(target, &all_targets, tlist) {
 		if (target->tid == tid)
 			goto found;
+	}
 	spin_unlock(&all_targets_lock);
 	target = NULL;
 found:
@@ -190,6 +191,8 @@ EXPORT_SYMBOL(stgt_target_create);
 
 int stgt_target_destroy(struct stgt_target *target)
 {
+	dprintk("%p\n", target);
+
 	spin_lock(&all_targets_lock);
 	list_del(&target->tlist);
 	spin_unlock(&all_targets_lock);
@@ -469,7 +472,7 @@ free_device:
 static int stgt_device_destroy(int tid, uint32_t lun)
 {
 	struct stgt_device *device;
-	struct stgt_target *target = device->target;
+	struct stgt_target *target;
 	unsigned long flags;
 
 	target = target_find(tid);
@@ -795,6 +798,10 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 		dprintk("start %d\n", daemon_pid);
 		break;
 	case STGT_UEVENT_DEVICE_CREATE:
+		if (nlh->nlmsg_len <= NLMSG_SPACE(sizeof(*ev))) {
+			err = -EINVAL;
+			break;
+		}
 		err = stgt_device_create(ev->u.c_device.tid,
 					 ev->u.c_device.lun,
 					 ev->u.c_device.type,
@@ -853,7 +860,7 @@ static int event_recv_skb(struct sk_buff *skb)
 			rlen = skb->len;
 		err = event_recv_msg(skb, nlh);
 
-		printk("%d %d\n", nlh->nlmsg_type, err);
+		eprintk("%d %d\n", nlh->nlmsg_type, err);
 		ev->k.event_res.err = err;
 		if (nlh->nlmsg_type != STGT_UEVENT_SCSI_CMND_RES)
 			send_event_res(NETLINK_CREDS(skb)->pid,

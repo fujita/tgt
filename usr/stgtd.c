@@ -14,10 +14,11 @@
 #include <string.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <signal.h>
+#include <sys/signal.h>
 #include <sys/poll.h>
-
-#include <asm/types.h>
 #include <sys/socket.h>
+#include <asm/types.h>
 #include <linux/netlink.h>
 
 #include <stgt_if.h>
@@ -208,7 +209,9 @@ retry:
 			return;
 		if (errno == EINTR)
 			goto retry;
-		exit(1);
+
+		eprintf("%d\n", err);
+		return;
 	}
 
 	nlh = (struct nlmsghdr *) nlm_ev;
@@ -229,6 +232,7 @@ retry:
 		execute_cmnd(fd, recvbuf, sendbuf);
 		break;
 	default:
+		eprintf("unknown %u\n", nlh->nlmsg_type);
 		exit(-1);
 		break;
 	}
@@ -240,6 +244,9 @@ enum {
 	POLL_MAX,
 };
 
+static void catch_signal(int signo) {
+}
+
 int main(int argc, char **argv)
 {
 	static struct pollfd poll_array[POLL_IPC + 1];
@@ -247,6 +254,17 @@ int main(int argc, char **argv)
 
 	nlm_sendbuf = malloc(8192);
 	nlm_recvbuf = malloc(8192);
+
+	struct sigaction sa_old;
+	struct sigaction sa_new;
+
+	/* do not allow ctrl-c for now... */
+	sa_new.sa_handler = catch_signal;
+	sigemptyset(&sa_new.sa_mask);
+	sa_new.sa_flags = 0;
+	sigaction(SIGINT, &sa_new, &sa_old );
+	sigaction(SIGPIPE, &sa_new, &sa_old );
+	sigaction(SIGTERM, &sa_new, &sa_old );
 
 	memset(poll_array, 0, sizeof(poll_array));
 

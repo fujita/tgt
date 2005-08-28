@@ -462,7 +462,7 @@ int main(int argc, char **argv)
 {
 	int ch, longindex;
 	int err = -EINVAL, op = -1;
-	u32 tid = 0, cid = 0, lun = 0, set = 0;
+	u32 tid = -1, cid = 0, lun = 0, set = 0;
 	u64 sid = 0;
 	char *params = NULL;
 

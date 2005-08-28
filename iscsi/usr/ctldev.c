@@ -10,12 +10,17 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <dirent.h>
 
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <linux/netlink.h>
 
 #include "iscsid.h"
+#include "stgt_if.h"
 
 #define CTL_DEVICE	"/dev/ietctl"
 
@@ -123,11 +128,6 @@ static int __conn_close(int fd, u32 tid, u64 sid, u32 cid, void *arg)
 	return ki->conn_destroy(tid, sid, cid);
 }
 
-static int __target_del(int fd, u32 tid, void *arg)
-{
-	return ki->target_destroy(tid);
-}
-
 static int proc_session_parse(int fd, struct session_file_operations *ops, void *arg)
 {
 	FILE *f;
@@ -195,18 +195,36 @@ struct session_file_operations shutdown_wait_ops = {
 	.connection_op = conn_retry,
 };
 
-struct session_file_operations target_del_ops = {
-	.target_op = __target_del,
-};
-
 int server_stop(void)
 {
-	proc_session_parse(ctrl_fd, &conn_close_ops, NULL);
+	DIR *dir;
+	struct dirent *ent;
+	int tid, err;
+	int32_t lun;
 
-	while (proc_session_parse(ctrl_fd, &shutdown_wait_ops, NULL) < 0)
-		sleep(1);
+	dir = opendir("/sys/class/stgt_device");
+	if (!dir)
+		return errno;
 
-	proc_session_parse(ctrl_fd, &target_del_ops, NULL);
+	while ((ent = readdir(dir))) {
+		err = sscanf(ent->d_name, "device%d:%u", &tid, &lun);
+		if (err == 2)
+			err = cops->lunit_del(tid, lun);
+	}
+
+	closedir(dir);
+
+	dir = opendir("/sys/class/stgt_target");
+	if (!dir)
+		return errno;
+
+	while ((ent = readdir(dir))) {
+		err = sscanf(ent->d_name, "target%d", &tid);
+		if (err == 1)
+			err = cops->target_del(tid);
+	}
+
+	closedir(dir);
 
 	return 0;
 }
@@ -330,8 +348,138 @@ static int iscsi_conn_create(u32 tid, u64 sid, u32 cid, u32 stat_sn, u32 exp_sta
 	return ioctl(ctrl_fd, ADD_CONN, &info);
 }
 
+/* Temporary stgt glue */
+#define STGT_IPC_NAMESPACE "STGT_IPC_ABSTRACT_NAMESPACE"
+
+static int ipc_cmnd_execute(char *data, int len)
+{
+	int fd, err;
+	struct sockaddr_un addr;
+	char nlm_ev[NLMSG_SPACE(sizeof(struct stgt_event))];
+	struct stgt_event *ev;
+	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
+
+	fd = socket(AF_LOCAL, SOCK_STREAM, 0);
+	if (fd < 0)
+		return fd;
+
+	memset(&addr, 0, sizeof(addr));
+	addr.sun_family = AF_LOCAL;
+	memcpy((char *) &addr.sun_path + 1, STGT_IPC_NAMESPACE,
+	       strlen(STGT_IPC_NAMESPACE));
+
+	err = connect(fd, (struct sockaddr *) &addr, sizeof(addr));
+	if (err < 0)
+		return err;
+
+	err = write(fd, data, len);
+	if (err < 0)
+		goto out;
+
+	err = read(fd, nlm_ev, sizeof(nlm_ev));
+	if (err < 0)
+		goto out;
+
+	ev = NLMSG_DATA(nlh);
+	err = ev->k.event_res.err;
+
+out:
+	if (fd > 0)
+		close(fd);
+
+	return fd;
+}
+
+static void nlmsg_init(struct nlmsghdr *nlh, u32 pid, u32 seq, int type,
+		       int len, int flags)
+{
+	nlh->nlmsg_pid = pid;
+	nlh->nlmsg_len = len;
+	nlh->nlmsg_flags = 0;
+	nlh->nlmsg_type = type;
+	nlh->nlmsg_seq = seq;
+}
+
+static int iscsi_lunit_create(u32 tid, u32 lun, char *args)
+{
+	int err;
+	char nlm_ev[8912], *p, *q, *type = NULL, *path = NULL;
+	char dtype[] = "stgt_vsd";
+	struct stgt_event *ev;
+	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
+
+	fprintf(stderr, "%s %d %s\n", __FUNCTION__, __LINE__, args);
+
+	if (isspace(*args))
+		args++;
+	if ((p = strchr(args, '\n')))
+		*p = '\0';
+
+	while ((p = strsep(&args, ","))) {
+		if (!p)
+			continue;
+
+		if (!(q = strchr(p, '=')))
+			continue;
+		*q++ = '\0';
+
+		if (!strcmp(p, "Path"))
+			path = q;
+		else if (!strcmp(p, "Type"))
+			type = q;
+	}
+
+	if (!type)
+		type = dtype;
+	if (!path) {
+		fprintf(stderr, "%s %d NULL path\n", __FUNCTION__, __LINE__);
+		return -EINVAL;
+	}
+
+	fprintf(stderr, "%s %d %s %s %d %d\n",
+		__FUNCTION__, __LINE__, type, path, strlen(path), sizeof(*ev));
+
+	memset(nlm_ev, 0, sizeof(nlm_ev));
+	nlmsg_init(nlh, getpid(), 0, STGT_UEVENT_DEVICE_CREATE,
+		   NLMSG_SPACE(sizeof(*ev) + strlen(path)), 0);
+
+	ev = NLMSG_DATA(nlh);
+	ev->u.c_device.tid = tid;
+	ev->u.c_device.lun = lun;
+	strncpy(ev->u.c_device.type, type, sizeof(ev->u.c_device.type));
+	memcpy((char *) ev + sizeof(*ev), path, strlen(path));
+
+	err = ipc_cmnd_execute(nlm_ev, nlh->nlmsg_len);
+
+	return err;
+}
+
+static int iscsi_lunit_destroy(u32 tid, u32 lun)
+{
+	int err;
+	char nlm_ev[8912];
+	struct stgt_event *ev;
+	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
+
+	fprintf(stderr, "%s %d %d %u\n", __FUNCTION__, __LINE__, tid, lun);
+
+	memset(nlm_ev, 0, sizeof(nlm_ev));
+	nlmsg_init(nlh, getpid(), 0, STGT_UEVENT_DEVICE_DESTROY,
+		   NLMSG_SPACE(sizeof(*ev)), 0);
+
+	ev = NLMSG_DATA(nlh);
+	ev->u.d_device.tid = tid;
+	ev->u.d_device.lun = lun;
+
+	err = ipc_cmnd_execute(nlm_ev, nlh->nlmsg_len);
+
+	return err;
+}
+
 struct iscsi_kernel_interface ioctl_ki = {
 	.ctldev_open = ctrdev_open,
+	.lunit_create = iscsi_lunit_create,
+	.lunit_destroy = iscsi_lunit_destroy,
 	.param_get = iscsi_param_get,
 	.param_set = iscsi_param_set,
 	.target_create = iscsi_target_create,

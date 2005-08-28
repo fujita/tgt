@@ -24,7 +24,6 @@
 #include <arpa/inet.h>
 
 #include "iscsid.h"
-#include "stgt_if.h"
 
 #define BUFSIZE		4096
 #define CONFIG_FILE	"/etc/ietd.conf"
@@ -447,119 +446,14 @@ static int plain_target_destroy(u32 tid)
 	return err;
 }
 
-#define STGT_IPC_NAMESPACE "STGT_IPC_ABSTRACT_NAMESPACE"
-
-static int ipc_connect(void)
-{
-	int fd, err;
-	struct sockaddr_un addr;
-
-	fd = socket(AF_LOCAL, SOCK_STREAM, 0);
-	if (fd < 0)
-		return fd;
-
-	memset(&addr, 0, sizeof(addr));
-	addr.sun_family = AF_LOCAL;
-	memcpy((char *) &addr.sun_path + 1, STGT_IPC_NAMESPACE,
-	       strlen(STGT_IPC_NAMESPACE));
-
-	if ((err = connect(fd, (struct sockaddr *) &addr, sizeof(addr))) < 0)
-		fd = err;
-
-	return fd;
-}
-
 static int plain_lunit_create(u32 tid, u32 lun, char *args)
 {
-	int fd, err;
-	char nlm_ev[8912], *p, *q, *type = NULL, *path = NULL;
-	char dtype[] = "stgt_vsd";
-	struct stgt_event *ev;
-	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
-
-	fprintf(stderr, "%s %d %s\n", __FUNCTION__, __LINE__, args);
-
-	fd = ipc_connect();
-	if (fd < 0) {
-		fprintf(stderr, "%s %d %d\n", __FUNCTION__, __LINE__, fd);
-		return fd;
-	}
-
-	if (isspace(*args))
-		args++;
-	if ((p = strchr(args, '\n')))
-		*p = '\0';
-
-	while ((p = strsep(&args, ","))) {
-		if (!p)
-			continue;
-
-		if (!(q = strchr(p, '=')))
-			continue;
-		*q++ = '\0';
-
-		if (!strcmp(p, "Path"))
-			path = q;
-		else if (!strcmp(p, "Type"))
-			type = q;
-	}
-
-	if (!type)
-		type = dtype;
-	if (!path) {
-		fprintf(stderr, "%s %d NULL path\n", __FUNCTION__, __LINE__);
-		return -EINVAL;
-	}
-
-	fprintf(stderr, "%s %d %s %s %d %d\n",
-		__FUNCTION__, __LINE__, type, path, strlen(path), sizeof(*ev));
-
-	memset(nlm_ev, 0, sizeof(nlm_ev));
-	nlh->nlmsg_len = NLMSG_SPACE(sizeof(*ev) + strlen(path));
-	nlh->nlmsg_type = STGT_UEVENT_DEVICE_CREATE;
-	nlh->nlmsg_flags = 0;
-	nlh->nlmsg_pid = getpid();
-
-	ev = NLMSG_DATA(nlh);
-	ev->u.c_device.tid = tid;
-	ev->u.c_device.lun = lun;
-	strncpy(ev->u.c_device.type, type, sizeof(ev->u.c_device.type));
-	memcpy((char *) ev + sizeof(*ev), path, strlen(path));
-
-	err = write(fd, nlm_ev, nlh->nlmsg_len);
-	if (err < 0)
-		fprintf(stderr, "%s %d %d\n", __FUNCTION__, __LINE__, err);
-
-	return err;
+	return ki->lunit_create(tid, lun, args);
 }
 
 static int plain_lunit_destroy(u32 tid, u32 lun)
 {
-	int fd, err;
-	char nlm_ev[8912];
-	struct stgt_event *ev;
-	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
-
-	fd = ipc_connect();
-	if (fd < 0) {
-		fprintf(stderr, "%s %d %d\n", __FUNCTION__, __LINE__, fd);
-		return fd;
-	}
-
-	memset(nlm_ev, 0, sizeof(nlm_ev));
-
-	nlh->nlmsg_len = NLMSG_SPACE(sizeof(*ev));
-	nlh->nlmsg_type = STGT_UEVENT_DEVICE_CREATE;
-	nlh->nlmsg_flags = 0;
-	nlh->nlmsg_pid = getpid();
-
-	ev = NLMSG_DATA(nlh);
-	ev->u.d_device.tid = tid;
-	ev->u.d_device.lun = lun;
-
-	err = write(fd, nlm_ev, nlh->nlmsg_len);
-
-	return err;
+	return ki->lunit_destroy(tid, lun);
 }
 
 static int __plain_param_set(u32 tid, u64 sid, int type,
