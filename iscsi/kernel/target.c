@@ -75,17 +75,6 @@ static struct iscsi_target *__target_lookup_by_id(u32 id)
 	return NULL;
 }
 
-static struct iscsi_target *__target_lookup_by_name(char *name)
-{
-	struct iscsi_target *target;
-
-	list_for_each_entry(target, &target_list, t_list) {
-		if (!strcmp(target->name, name))
-			return target;
-	}
-	return NULL;
-}
-
 struct iscsi_target *target_lookup_by_id(u32 id)
 {
 	struct iscsi_target *target;
@@ -114,16 +103,8 @@ static void target_thread_stop(struct iscsi_target *target)
 
 static int iscsi_target_create(struct target_info *info)
 {
-	int err = -EINVAL, len;
-	char *name = info->name;
+	int err = -EINVAL;
 	struct iscsi_target *target;
-
-	dprintk(D_SETUP, "%s\n", name);
-
-	if (!(len = strlen(name))) {
-		eprintk("%s", "The length of the target name is zero");
-		return err;
-	}
 
 	if (!(target = kmalloc(sizeof(*target), GFP_KERNEL))) {
 		err = -ENOMEM;
@@ -133,8 +114,6 @@ static int iscsi_target_create(struct target_info *info)
 
 	memcpy(&target->sess_param, &default_session_param, sizeof(default_session_param));
 	memcpy(&target->trgt_param, &default_target_param, sizeof(default_target_param));
-
-	strncpy(target->name, name, sizeof(target->name) - 1);
 
 	init_MUTEX(&target->target_sem);
 
@@ -150,7 +129,6 @@ static int iscsi_target_create(struct target_info *info)
 
 	target->stt = stgt_target_create("iet", DEFAULT_NR_QUEUED_CMNDS);
 
-	/* FIXME: We shouldn't access stt inside. */
 	target->tid = info->tid = target->stt->tid;
 
 	return 0;
@@ -170,9 +148,6 @@ int target_add(struct target_info *info)
 		err = -EBUSY;
 		goto out;
 	}
-
-	if (__target_lookup_by_name(info->name))
-		goto out;
 
 	if (info->tid)
 		goto out;
@@ -240,7 +215,7 @@ int iet_info_show(struct seq_file *seq, iet_show_info_t *func)
 		return err;
 
 	list_for_each_entry(target, &target_list, t_list) {
-		seq_printf(seq, "tid:%u name:%s\n", target->tid, target->name);
+		seq_printf(seq, "tid:%u\n", target->tid);
 
 		if ((err = target_lock(target, 1)) < 0)
 			break;

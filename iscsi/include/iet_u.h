@@ -11,8 +11,7 @@
 #define SCSI_ID_LEN	24
 
 struct target_info {
-	u32 tid;
-	char name[ISCSI_NAME_LEN];
+	int tid;
 };
 
 struct session_info {

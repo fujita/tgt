@@ -89,7 +89,6 @@ static int iscsi_target_create(u32 *tid, char *name)
 
 	memset(&info, 0, sizeof(info));
 
-	memcpy(info.name, name, sizeof(info.name) - 1);
 	info.tid = *tid;
 	if ((err = ioctl(ctrl_fd, ADD_TARGET, &info)) < 0)
 		log_warning("can't create a target %d %u\n", errno, info.tid);

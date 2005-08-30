@@ -64,10 +64,8 @@ enum iscsi_device_state {
 };
 
 struct iscsi_target {
+	int tid;
 	struct list_head t_list;
-	u32 tid;
-
-	char name[ISCSI_NAME_LEN];
 
 	struct iscsi_sess_param sess_param;
 	struct iscsi_trgt_param trgt_param;
