@@ -485,7 +485,8 @@ void stgt_device_template_unregister(struct stgt_device_template *sdt)
 }
 EXPORT_SYMBOL_GPL(stgt_device_template_unregister);
 
-static struct stgt_device *device_find(struct stgt_target *target, uint32_t lun)
+static struct stgt_device *
+stgt_device_find_nolock(struct stgt_target *target, uint32_t lun)
 {
 	struct stgt_device *device;
 
@@ -494,6 +495,19 @@ static struct stgt_device *device_find(struct stgt_target *target, uint32_t lun)
 			return device;
 
 	return NULL;
+}
+
+static struct stgt_device *
+stgt_device_find(struct stgt_target *target, uint32_t lun)
+{
+	static struct stgt_device *device;
+	unsigned long flags;
+
+	spin_lock_irqsave(&target->lock, flags);
+	device = stgt_device_find_nolock(target, lun);
+	spin_unlock_irqrestore(&target->lock, flags);
+
+	return device;
 }
 
 static int stgt_device_create(int tid, uint32_t lun, char *device_type, char *path,
@@ -568,7 +582,7 @@ static int stgt_device_destroy(int tid, uint32_t lun)
 		return -ENOENT;
 
 	spin_lock_irqsave(&target->lock, flags);
-	device = device_find(target, lun);
+	device = stgt_device_find_nolock(target, lun);
 	if (device) {
 		list_del(&device->dlist);
 		goto found;
@@ -772,7 +786,6 @@ static void queuecommand(void *data)
 {
 	int err;
 	enum stgt_cmnd_type type = STGT_CMND_USPACE;
-	unsigned long flags;
 	struct stgt_cmnd *cmnd = (struct stgt_cmnd *) data;
 	struct stgt_target *target = cmnd->session->target;
 	struct stgt_device *device;
@@ -780,9 +793,7 @@ static void queuecommand(void *data)
 	dprintk("%x\n", cmnd->scb[0]);
 
 	/* Should we do this earlier? */
-	spin_lock_irqsave(&target->lock, flags);
-	device = device_find(target, cmnd->lun);
-	spin_unlock_irqrestore(&target->lock, flags);
+	device = stgt_device_find(target, cmnd->lun);
 
 	/*
 	 * seperate vsd (virtual disk from sd (real sd))
