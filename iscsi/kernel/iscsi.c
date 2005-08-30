@@ -13,6 +13,7 @@
 #include <iscsi.h>
 #include <iscsi_dbg.h>
 #include <stgt.h>
+#include <stgt_target.h>
 
 unsigned long debug_enable_flags;
 
@@ -1533,6 +1534,11 @@ void cmnd_rx_end(struct iscsi_cmnd *cmnd)
 	}
 }
 
+static struct stgt_target_template iet_stgt_target_template = {
+	.name = "iet",
+	.module = THIS_MODULE,
+};
+
 static void iscsi_exit(void)
 {
 	unregister_chrdev(ctr_major, ctr_name);
@@ -1541,12 +1547,10 @@ static void iscsi_exit(void)
 
 	event_exit();
 
-/* 	tio_exit(); */
-
-/* 	iotype_exit(); */
-
 	if (iscsi_cmnd_cache)
 		kmem_cache_destroy(iscsi_cmnd_cache);
+
+	stgt_target_template_unregister(&iet_stgt_target_template);
 }
 
 static int iscsi_init(void)
@@ -1571,11 +1575,9 @@ static int iscsi_init(void)
 	if (!iscsi_cmnd_cache)
 		goto err;
 
-/* 	if ((err = tio_init()) < 0) */
-/* 		goto err; */
-
-/* 	if ((err = iotype_init()) < 0) */
-/* 		goto err; */
+	err = stgt_target_template_register(&iet_stgt_target_template);
+	if (err < 0)
+		goto err;
 
 	return 0;
 

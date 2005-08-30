@@ -49,6 +49,9 @@ MODULE_LICENSE("GPL");
 static spinlock_t all_targets_lock;
 static LIST_HEAD(all_targets);
 
+static spinlock_t target_tmpl_lock;
+static LIST_HEAD(target_tmpl_list);
+
 static spinlock_t device_tmpl_lock;
 static LIST_HEAD(device_tmpl_list);
 
@@ -133,6 +136,74 @@ static void stgt_queue_work(struct stgt_target *target, struct stgt_work *work)
 	schedule_work(&target->work);
 }
 
+struct target_type_internal {
+	struct list_head list;
+	struct stgt_target_template *stt;
+};
+
+static struct stgt_target_template *target_template_get(const char *name)
+{
+	unsigned long flags;
+	struct target_type_internal *ti;
+
+	spin_lock_irqsave(&target_tmpl_lock, flags);
+
+	list_for_each_entry(ti, &target_tmpl_list, list)
+		if (!strcmp(name, ti->stt->name)) {
+			if (!try_module_get(ti->stt->module))
+				ti = NULL;
+			spin_unlock_irqrestore(&target_tmpl_lock, flags);
+			return ti ? ti->stt : NULL;
+		}
+
+	spin_unlock_irqrestore(&target_tmpl_lock, flags);
+
+	return NULL;
+}
+
+static void target_template_put(struct stgt_target_template *stt)
+{
+	module_put(stt->module);
+}
+
+int stgt_target_template_register(struct stgt_target_template *stt)
+{
+	unsigned long flags;
+	struct target_type_internal *ti;
+
+	ti = kmalloc(sizeof(*ti), GFP_KERNEL);
+	if (!ti)
+		return -ENOMEM;
+	memset(ti, 0, sizeof(*ti));
+	INIT_LIST_HEAD(&ti->list);
+	ti->stt = stt;
+
+	spin_lock_irqsave(&target_tmpl_lock, flags);
+	list_add_tail(&ti->list, &target_tmpl_list);
+	spin_unlock_irqrestore(&target_tmpl_lock, flags);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(stgt_target_template_register);
+
+void stgt_target_template_unregister(struct stgt_target_template *stt)
+{
+	unsigned long flags;
+	struct target_type_internal *ti;
+
+	spin_lock_irqsave(&target_tmpl_lock, flags);
+
+	list_for_each_entry(ti, &target_tmpl_list, list)
+		if (ti->stt == stt) {
+			list_del(&ti->list);
+			kfree(ti);
+			break;
+		}
+
+	spin_unlock_irqrestore(&target_tmpl_lock, flags);
+}
+EXPORT_SYMBOL_GPL(stgt_target_template_unregister);
+
 static struct stgt_target *target_find(int tid)
 {
 	struct stgt_target *target;
@@ -148,7 +219,7 @@ found:
 	return target;
 }
 
-struct stgt_target *stgt_target_create(struct stgt_target_template *stt)
+struct stgt_target *stgt_target_create(char *target_type, int queued_cmnds)
 {
 	static int target_id;
 	struct stgt_target *target;
@@ -161,10 +232,13 @@ struct stgt_target *stgt_target_create(struct stgt_target_template *stt)
 	target = kmalloc(sizeof(*target), GFP_KERNEL);
 	if (!target)
 		return NULL;
-
 	dprintk("%p\n", target);
-
 	memset(target, 0, sizeof(*target));
+
+	target->stt = target_template_get(target_type);
+	if (!target->stt)
+		goto free_target;
+
 	target->tid = target_id++;
 	spin_lock_init(&target->lock);
 
@@ -173,19 +247,21 @@ struct stgt_target *stgt_target_create(struct stgt_target_template *stt)
 	INIT_LIST_HEAD(&target->work_list);
 
 	INIT_WORK(&target->work, stgt_worker, target);
-	target->stt = stt;
-	target->queued_cmnds = stt->queued_cmnds;
+	target->queued_cmnds = queued_cmnds;
 
-	if (stgt_sysfs_register_target(target)) {
-		kfree(target);
-		return NULL;
-	}
+	if (stgt_sysfs_register_target(target))
+		goto put_template;
 
 	spin_lock(&all_targets_lock);
 	list_add(&target->tlist, &all_targets);
 	spin_unlock(&all_targets_lock);
-
 	return target;
+
+put_template:
+	target_template_put(target->stt);
+free_target:
+	kfree(target);
+	return NULL;
 }
 EXPORT_SYMBOL(stgt_target_create);
 
@@ -197,6 +273,7 @@ int stgt_target_destroy(struct stgt_target *target)
 	list_del(&target->tlist);
 	spin_unlock(&all_targets_lock);
 
+	target_template_put(target->stt);
 	stgt_sysfs_unregister_target(target);
 
 	return 0;
@@ -904,6 +981,7 @@ static int __init stgt_init(void)
 	spin_lock_init(&all_targets_lock);
 	spin_lock_init(&atomic_sessions_lock);
 	spin_lock_init(&cmnd_hash_lock);
+	spin_lock_init(&target_tmpl_lock);
 	spin_lock_init(&device_tmpl_lock);
 
 	err = stgt_sysfs_init();

@@ -73,7 +73,6 @@ struct iscsi_target {
 	struct iscsi_trgt_param trgt_param;
 
 	struct list_head session_list;
-	struct list_head device_list;
 
 	struct network_thread_info nthread_info;
 

@@ -10,8 +10,8 @@
 #include <digest.h>
 #include <iscsi_dbg.h>
 #include <stgt.h>
-#include <stgt_target.h>
 #include <stgt_device.h>
+#include <stgt_target.h>
 
 #define	MAX_NR_TARGETS	(1UL << 30)
 
@@ -112,11 +112,6 @@ static void target_thread_stop(struct iscsi_target *target)
 	nthread_stop(target);
 }
 
-static struct stgt_target_template iet_stgt_target_template = {
-	.name = "iet",
-	.queued_cmnds = DEFAULT_NR_QUEUED_CMNDS,
-};
-
 static int iscsi_target_create(struct target_info *info)
 {
 	int err = -EINVAL, len;
@@ -127,11 +122,6 @@ static int iscsi_target_create(struct target_info *info)
 
 	if (!(len = strlen(name))) {
 		eprintk("%s", "The length of the target name is zero");
-		return err;
-	}
-
-	if (!try_module_get(THIS_MODULE)) {
-		eprintk("%s\n", "Fail to get module");
 		return err;
 	}
 
@@ -149,7 +139,6 @@ static int iscsi_target_create(struct target_info *info)
 	init_MUTEX(&target->target_sem);
 
 	INIT_LIST_HEAD(&target->session_list);
-	INIT_LIST_HEAD(&target->device_list);
 	list_add(&target->t_list, &target_list);
 
 	nthread_init(target);
@@ -159,8 +148,7 @@ static int iscsi_target_create(struct target_info *info)
 		goto out;
 	}
 
-	target->stt = stgt_target_create(&iet_stgt_target_template);
-	assert(target->stt);
+	target->stt = stgt_target_create("iet", DEFAULT_NR_QUEUED_CMNDS);
 
 	/* FIXME: We shouldn't access stt inside. */
 	target->tid = info->tid = target->stt->tid;
@@ -168,7 +156,6 @@ static int iscsi_target_create(struct target_info *info)
 	return 0;
 out:
 	kfree(target);
-	module_put(THIS_MODULE);
 
 	return err;
 }
@@ -207,8 +194,6 @@ static void target_destroy(struct iscsi_target *target)
 	target_thread_stop(target);
 
 	kfree(target);
-
-	module_put(THIS_MODULE);
 }
 
 int target_del(u32 id)

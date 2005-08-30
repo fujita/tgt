@@ -13,8 +13,8 @@
 
 struct stgt_target_template {
 	const char *name;
+	struct module *module;
 
-	int queued_cmnds;
 	/*
 	 * Pointer to the sysfs class properties for this host, NULL terminated.
 	 */
@@ -43,9 +43,11 @@ struct stgt_target {
 #define cdev_to_stgt_target(cdev) \
 	container_of(cdev, struct stgt_target, cdev)
 
-extern struct stgt_target *stgt_target_create(struct stgt_target_template *stt);
+extern struct stgt_target *stgt_target_create(char *target_type, int nr_cmnds);
 extern int stgt_target_destroy(struct stgt_target *target);
 extern int stgt_sysfs_register_target(struct stgt_target *target);
 extern void stgt_sysfs_unregister_target(struct stgt_target *target);
+extern int stgt_target_template_register(struct stgt_target_template *stt);
+extern void stgt_target_template_unregister(struct stgt_target_template *stt);
 
 #endif
