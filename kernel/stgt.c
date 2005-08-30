@@ -485,6 +485,17 @@ void stgt_device_template_unregister(struct stgt_device_template *sdt)
 }
 EXPORT_SYMBOL_GPL(stgt_device_template_unregister);
 
+static struct stgt_device *device_find(struct stgt_target *target, uint32_t lun)
+{
+	struct stgt_device *device;
+
+	list_for_each_entry(device, &target->device_list, dlist)
+		if (device->lun == lun)
+			return device;
+
+	return NULL;
+}
+
 static int stgt_device_create(int tid, uint32_t lun, char *device_type, char *path,
 			      unsigned long dflags)
 {
@@ -557,11 +568,11 @@ static int stgt_device_destroy(int tid, uint32_t lun)
 		return -ENOENT;
 
 	spin_lock_irqsave(&target->lock, flags);
-	list_for_each_entry(device, &target->device_list, dlist)
-		if (device->lun == lun) {
-			list_del(&device->dlist);
-			goto found;
-		}
+	device = device_find(target, lun);
+	if (device) {
+		list_del(&device->dlist);
+		goto found;
+	}
 	spin_unlock_irqrestore(&target->lock, flags);
 
 	return -EINVAL;
@@ -759,9 +770,19 @@ static void uspace_cmnd_done(struct stgt_cmnd *cmnd, char *data, uint32_t datasi
 
 static void queuecommand(void *data)
 {
+	int err;
+	enum stgt_cmnd_type type = STGT_CMND_USPACE;
+	unsigned long flags;
 	struct stgt_cmnd *cmnd = (struct stgt_cmnd *) data;
+	struct stgt_target *target = cmnd->session->target;
+	struct stgt_device *device;
 
 	dprintk("%x\n", cmnd->scb[0]);
+
+	/* Should we do this earlier? */
+	spin_lock_irqsave(&target->lock, flags);
+	device = device_find(target, cmnd->lun);
+	spin_unlock_irqrestore(&target->lock, flags);
 
 	/*
 	 * seperate vsd (virtual disk from sd (real sd))
@@ -770,24 +791,24 @@ static void queuecommand(void *data)
 	 *
 	 * Then call queuecommand
 	 */
-	switch (cmnd->scb[0]) {
-	case READ_6:
-	case READ_10:
-	case READ_16:
-	case WRITE_6:
-	case WRITE_10:
-	case WRITE_16:
-	case WRITE_VERIFY:
-	case RESERVE:
-	case RELEASE:
-	case RESERVE_10:
-	case RELEASE_10:
-		/* TODO */
+
+	if (device)
+		dprintk("found %u\n", cmnd->lun);
+
+	if (device && device->sdt->prepcommand)
+		type = device->sdt->prepcommand(device, cmnd);
+
+	dprintk("type %u\n", type);
+
+	switch (type) {
+	case STGT_CMND_KSPACE:
+		err = device->sdt->queuecommand(device, cmnd);
 		cmnd_done(cmnd);
 		break;
+	case STGT_CMND_USPACE:
+		err = uspace_cmnd_send(cmnd);
+		break;
 	default:
-		if (uspace_cmnd_send(cmnd) < 0)
-			assert(0);
 		break;
 	}
 }

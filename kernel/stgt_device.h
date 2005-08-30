@@ -14,6 +14,12 @@
 struct stgt_device;
 struct stgt_cmnd;
 
+enum stgt_cmnd_type {
+	STGT_CMND_UNKNOWN,
+	STGT_CMND_KSPACE,
+	STGT_CMND_USPACE,
+};
+
 struct stgt_device_template {
 	const char *name;
 	struct module *module;

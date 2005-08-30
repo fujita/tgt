@@ -9,7 +9,11 @@
 #include <linux/types.h>
 #include <linux/blkdev.h>
 #include <linux/namei.h>
+#include <linux/uio.h>
+#include <linux/fs.h>
+#include <scsi/scsi.h>
 
+#include <stgt.h>
 #include <stgt_device.h>
 
 struct stgt_vsd_dev {
@@ -71,14 +75,117 @@ out:
 	return err;
 }
 
+static loff_t translate_offset(uint8_t *scb)
+{
+	loff_t off = 0;
+
+	switch (scb[0]) {
+	case READ_6:
+	case WRITE_6:
+		off = ((scb[1] & 0x1f) << 16) + (scb[2] << 8) + scb[3];
+		break;
+	case READ_10:
+	case WRITE_10:
+	case WRITE_VERIFY:
+		off = be32_to_cpu(*(u32 *)&scb[2]);
+		break;
+	case READ_16:
+	case WRITE_16:
+		off = be64_to_cpu(*(u64 *)&scb[2]);
+		break;
+	default:
+		BUG();
+	}
+
+	return off << 9;
+}
+
+static struct iovec* sg_to_iovec(struct scatterlist *sg, int sg_count)
+{
+	struct iovec* iov;
+	int i;
+
+	iov = kmalloc(sizeof(struct iovec) * sg_count, GFP_KERNEL);
+	if (!iov) {
+		printk("%s %d ENOMEM %d\n", __FUNCTION__, __LINE__, sg_count);
+		return NULL;
+	}
+
+	for (i = 0; i < sg_count; i++) {
+		iov[i].iov_base = page_address(sg[i].page) + sg[i].offset;
+		iov[i].iov_len = sg[i].length;
+	}
+
+	return iov;
+}
+
 static int stgt_vsd_queue(struct stgt_device *device, struct stgt_cmnd *cmnd)
 {
+	struct stgt_vsd_dev *vsddev = device->sdt_data;
+	loff_t pos = translate_offset(cmnd->scb);
+	ssize_t size;
+	struct iovec *iov = NULL;
+	int err = 0;
+
+	switch (cmnd->scb[0]) {
+	case READ_6:
+	case READ_10:
+	case READ_16:
+		iov = sg_to_iovec(cmnd->sg, cmnd->sg_count);
+		if (!iov)
+			goto out;
+		size = generic_file_readv(vsddev->filp, iov, cmnd->sg_count, &pos);
+		kfree(iov);
+		break;
+	case WRITE_6:
+	case WRITE_10:
+	case WRITE_16:
+	case WRITE_VERIFY:
+		iov = sg_to_iovec(cmnd->sg, cmnd->sg_count);
+		if (!iov)
+			goto out;
+		iov = sg_to_iovec(cmnd->sg, cmnd->sg_count);
+		err = generic_file_writev(vsddev->filp, iov, cmnd->sg_count, &pos);
+		kfree(iov);
+		break;
+	case RESERVE:
+	case RELEASE:
+	case RESERVE_10:
+	case RELEASE_10:
+		break;
+	default:
+		BUG();
+	}
+
+	if (err < 0)
+		printk("%s %d: %d %llu\n", __FUNCTION__, __LINE__, err, pos);
+out:
 	return 0;
 }
 
 static int stgt_vsd_prep(struct stgt_device *device, struct stgt_cmnd *cmnd)
 {
-	return 0;
+	enum stgt_cmnd_type type;
+
+	switch (cmnd->scb[0]) {
+	case READ_6:
+	case READ_10:
+	case READ_16:
+	case WRITE_6:
+	case WRITE_10:
+	case WRITE_16:
+	case WRITE_VERIFY:
+	case RESERVE:
+	case RELEASE:
+	case RESERVE_10:
+	case RELEASE_10:
+		type = STGT_CMND_KSPACE;
+		break;
+	default:
+		type = STGT_CMND_USPACE;
+	}
+
+	return type;
 }
 
 static struct stgt_device_template stgt_vsd = {
