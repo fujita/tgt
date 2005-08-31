@@ -410,8 +410,8 @@ int scsi_cmnd_process(int tid, uint32_t lun, uint8_t *scb, uint8_t *data)
 	case RESERVE_10:
 	case RELEASE_10:
 	default:
-		eprintf("kernel module bug %d\n", scb[0]);
-		exit(-1);
+		dprintf("FIXME: access to nonexistent lun %u\n", lun);
+		len = 0;
 		break;
 	}
 
