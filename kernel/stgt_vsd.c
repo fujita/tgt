@@ -144,7 +144,6 @@ static int stgt_vsd_queue(struct stgt_device *device, struct stgt_cmnd *cmnd)
 		iov = sg_to_iovec(cmnd->sg, cmnd->sg_count);
 		if (!iov)
 			goto out;
-		iov = sg_to_iovec(cmnd->sg, cmnd->sg_count);
 		err = generic_file_writev(vsddev->filp, iov, cmnd->sg_count, &pos);
 		kfree(iov);
 		break;
