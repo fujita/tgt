@@ -794,7 +794,18 @@ static void queuecommand(void *data)
 
 	/* Should we do this earlier? */
 	device = stgt_device_find(target, cmnd->lun);
-
+	if (!device) {
+		switch (cmnd->scb[0]) {
+		case INQUIRY:
+		case REPORT_LUNS:
+			break;
+		default:
+			eprintk("FIXME: access to nonexistent lun %u\n",
+				cmnd->lun);
+			cmnd_done(cmnd);
+			break;
+		}
+	}
 	/*
 	 * seperate vsd (virtual disk from sd (real sd))
 	 * call scsi_device_temaplte->prepcommand to see if they want it
@@ -808,8 +819,6 @@ static void queuecommand(void *data)
 
 	if (device && device->sdt->prepcommand)
 		type = device->sdt->prepcommand(device, cmnd);
-
-	dprintk("type %u\n", type);
 
 	switch (type) {
 	case STGT_CMND_KSPACE:
