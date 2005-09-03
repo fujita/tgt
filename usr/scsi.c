@@ -67,6 +67,8 @@ static int device_info(int tid, uint32_t lun, uint64_t *size)
 	if (err < 0)
 		return err;
 	*size = strtoull(buf, NULL, 10);
+
+	close(fd);
 	return 0;
 }
 
