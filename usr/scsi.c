@@ -34,14 +34,8 @@
 #define SERVICE_ACTION_IN     0x9e
 #endif
 
-/* Additional Sense Code (SAM3) */
-#define	SAM_ASC_LOGICAL_UNIT_NOT_SUPPORTED	0x25
-#define	SAM_ASC_INVALID_FIELD_IN_CDB		0x24
-#define	SAM_ASC_NO_ADDITIONAL_SENSE_INFORMATION	0x00
-
 #define SAM_STAT_GOOD            0x00
 #define SAM_STAT_CHECK_CONDITION 0x02
-
 
 static uint32_t blk_shift = 9;
 
@@ -164,7 +158,7 @@ static int mode_sense(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int *l
 
 	if (device_info(tid, lun, &size) < 0) {
 		*len = sense_data_build(data, 0xf0, ILLEGAL_REQUEST,
-					SAM_ASC_LOGICAL_UNIT_NOT_SUPPORTED, 0);
+					0x25, 0);
 		return SAM_STAT_CHECK_CONDITION;
 	}
 
@@ -213,7 +207,7 @@ static int mode_sense(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int *l
 	default:
 		result = SAM_STAT_CHECK_CONDITION;
 		*len = sense_data_build(data, 0xf0, ILLEGAL_REQUEST,
-					SAM_ASC_INVALID_FIELD_IN_CDB, 0);
+					0x24, 0);
 	}
 
 	data[0] = *len - 1;
@@ -303,7 +297,7 @@ static int inquiry(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int *len)
 
 err:
 	*len = sense_data_build(data, 0xf0, ILLEGAL_REQUEST,
-				SAM_ASC_INVALID_FIELD_IN_CDB, 0);
+				0x24, 0);
 	return SAM_STAT_CHECK_CONDITION;
 }
 
@@ -326,7 +320,7 @@ static int report_luns(int tid, uint32_t unused, uint8_t *scb, uint8_t *p, int *
 	alen = be32_to_cpu(*(uint32_t *)&scb[6]);
 	if (alen < 16) {
 		*len = sense_data_build(p, 0xf0, ILLEGAL_REQUEST,
-					SAM_ASC_INVALID_FIELD_IN_CDB, 0);
+					0x24, 0);
 		result = SAM_STAT_CHECK_CONDITION;
 		goto out;
 	}
@@ -373,13 +367,13 @@ static int read_capacity(int tid, uint32_t lun, uint8_t *scb, uint8_t *p, int *l
 
 	if (!(scb[8] & 0x1) & (scb[2] | scb[3] | scb[4] | scb[5])) {
 		*len = sense_data_build(p, 0xf0, ILLEGAL_REQUEST,
-					SAM_ASC_INVALID_FIELD_IN_CDB, 0);
+					0x24, 0);
 		return SAM_STAT_CHECK_CONDITION;
 	}
 
 	if (device_info(tid, lun, &size) < 0) {
 		*len = sense_data_build(p, 0xf0, ILLEGAL_REQUEST,
-					SAM_ASC_LOGICAL_UNIT_NOT_SUPPORTED, 0);
+					0x25, 0);
 		return SAM_STAT_CHECK_CONDITION;
 	}
 
@@ -398,8 +392,7 @@ static int read_capacity(int tid, uint32_t lun, uint8_t *scb, uint8_t *p, int *l
  */
 static int request_sense(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int* len)
 {
-	*len = sense_data_build(data, 0xf0, NO_SENSE,
-				SAM_ASC_NO_ADDITIONAL_SENSE_INFORMATION, 0);
+	*len = sense_data_build(data, 0xf0, NO_SENSE, 0, 0);
 
 	return SAM_STAT_GOOD;
 }
@@ -411,7 +404,7 @@ static int sevice_action(int tid, uint32_t lun, uint8_t *scb, uint8_t *p, int *l
 
 	if (device_info(tid, lun, &size) < 0) {
 		*len = sense_data_build(p, 0xf0, ILLEGAL_REQUEST,
-					SAM_ASC_LOGICAL_UNIT_NOT_SUPPORTED, 0);
+					0x25, 0);
 		return SAM_STAT_CHECK_CONDITION;
 	}
 	size >>= blk_shift;
@@ -439,7 +432,7 @@ int scsi_cmnd_process(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int *l
 			break;
 		default:
 			*len = sense_data_build(data, 0xf0, ILLEGAL_REQUEST,
-						SAM_ASC_LOGICAL_UNIT_NOT_SUPPORTED, 0);
+						0x25, 0);
 			result = SAM_STAT_CHECK_CONDITION;
 			goto out;
 		}
