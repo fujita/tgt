@@ -796,24 +796,25 @@ static void uspace_cmnd_done(struct stgt_cmnd *cmnd, char *data,
 static int sense_data_build(struct stgt_cmnd *cmnd, uint8_t key,
 			    uint8_t ascode, uint8_t ascodeq)
 {
-	int i, len = 6;
-	char *data;
+	int i, len = 8, alen = 6;
+	uint8_t *data;
 
 	/* It works, however, dirty. */
 	for (i = 0; i < cmnd->sg_count; i++)
 		__free_page(cmnd->sg[i].page);
 	kfree(cmnd->sg);
 
-	__alloc_buffer(cmnd, len, 0);
+	__alloc_buffer(cmnd, len + alen, 0);
 	data = page_address(cmnd->sg[0].page);
+	clear_page(data);
 
-	data[0] = 0xf0 | 1U << 7;
+	data[0] = 0x70 | 1U << 7;
 	data[2] = key;
-	data[7] = len;
+	data[7] = alen;
 	data[12] = ascode;
 	data[13] = ascodeq;
 
-	return len;
+	return len + alen;
 }
 
 /* TODO: better error handling

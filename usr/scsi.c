@@ -86,7 +86,7 @@ static int sense_data_build(uint8_t *data, uint8_t res_code, uint8_t key,
 	data[12] = ascode;
 	data[13] = ascodeq;
 
-	return len;
+	return len + 8;
 }
 
 static int insert_disconnect_pg(uint8_t *ptr)
@@ -157,7 +157,7 @@ static int mode_sense(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int *l
 	uint64_t size;
 
 	if (device_info(tid, lun, &size) < 0) {
-		*len = sense_data_build(data, 0xf0, ILLEGAL_REQUEST,
+		*len = sense_data_build(data, 0x70, ILLEGAL_REQUEST,
 					0x25, 0);
 		return SAM_STAT_CHECK_CONDITION;
 	}
@@ -206,7 +206,7 @@ static int mode_sense(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int *l
 		break;
 	default:
 		result = SAM_STAT_CHECK_CONDITION;
-		*len = sense_data_build(data, 0xf0, ILLEGAL_REQUEST,
+		*len = sense_data_build(data, 0x70, ILLEGAL_REQUEST,
 					0x24, 0);
 	}
 
@@ -296,7 +296,7 @@ static int inquiry(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int *len)
 	return SAM_STAT_GOOD;
 
 err:
-	*len = sense_data_build(data, 0xf0, ILLEGAL_REQUEST,
+	*len = sense_data_build(data, 0x70, ILLEGAL_REQUEST,
 				0x24, 0);
 	return SAM_STAT_CHECK_CONDITION;
 }
@@ -319,7 +319,7 @@ static int report_luns(int tid, uint32_t unused, uint8_t *scb, uint8_t *p, int *
 
 	alen = be32_to_cpu(*(uint32_t *)&scb[6]);
 	if (alen < 16) {
-		*len = sense_data_build(p, 0xf0, ILLEGAL_REQUEST,
+		*len = sense_data_build(p, 0x70, ILLEGAL_REQUEST,
 					0x24, 0);
 		result = SAM_STAT_CHECK_CONDITION;
 		goto out;
@@ -366,13 +366,13 @@ static int read_capacity(int tid, uint32_t lun, uint8_t *scb, uint8_t *p, int *l
 	uint64_t size;
 
 	if (!(scb[8] & 0x1) & (scb[2] | scb[3] | scb[4] | scb[5])) {
-		*len = sense_data_build(p, 0xf0, ILLEGAL_REQUEST,
+		*len = sense_data_build(p, 0x70, ILLEGAL_REQUEST,
 					0x24, 0);
 		return SAM_STAT_CHECK_CONDITION;
 	}
 
 	if (device_info(tid, lun, &size) < 0) {
-		*len = sense_data_build(p, 0xf0, ILLEGAL_REQUEST,
+		*len = sense_data_build(p, 0x70, ILLEGAL_REQUEST,
 					0x25, 0);
 		return SAM_STAT_CHECK_CONDITION;
 	}
@@ -392,7 +392,7 @@ static int read_capacity(int tid, uint32_t lun, uint8_t *scb, uint8_t *p, int *l
  */
 static int request_sense(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int* len)
 {
-	*len = sense_data_build(data, 0xf0, NO_SENSE, 0, 0);
+	*len = sense_data_build(data, 0x70, NO_SENSE, 0, 0);
 
 	return SAM_STAT_GOOD;
 }
@@ -403,7 +403,7 @@ static int sevice_action(int tid, uint32_t lun, uint8_t *scb, uint8_t *p, int *l
 	uint64_t *data64, size;
 
 	if (device_info(tid, lun, &size) < 0) {
-		*len = sense_data_build(p, 0xf0, ILLEGAL_REQUEST,
+		*len = sense_data_build(p, 0x70, ILLEGAL_REQUEST,
 					0x25, 0);
 		return SAM_STAT_CHECK_CONDITION;
 	}
@@ -431,7 +431,7 @@ int scsi_cmnd_process(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int *l
 		case REPORT_LUNS:
 			break;
 		default:
-			*len = sense_data_build(data, 0xf0, ILLEGAL_REQUEST,
+			*len = sense_data_build(data, 0x70, ILLEGAL_REQUEST,
 						0x25, 0);
 			result = SAM_STAT_CHECK_CONDITION;
 			goto out;
