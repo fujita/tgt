@@ -256,53 +256,82 @@ void send_scsi_rsp(struct iscsi_cmnd *req)
 	iscsi_cmnd_init_write(rsp);
 }
 
-static struct iscsi_cmnd *create_sense_rsp(struct iscsi_cmnd *req,
-					   u8 sense_key, u8 asc, u8 ascq)
+struct iscsi_sense_data {
+	u16 length;
+	u8  data[0];
+} __packed;
+
+static struct iscsi_cmnd *do_create_sense_rsp(struct iscsi_cmnd *req)
 {
 	struct iscsi_cmnd *rsp;
-/* 	struct iscsi_scsi_rsp_hdr *rsp_hdr; */
-/* 	struct tio *tio; */
-/* 	struct iscsi_sense_data *sense; */
+	struct iscsi_cmd_rsp *rsp_hdr;
+	struct iscsi_sense_data *sense;
+	struct scatterlist *sg = req->stc->sg;
 
-	rsp = NULL;
-	assert(0);
+	rsp = iscsi_cmnd_create_rsp_cmnd(req, 1);
 
-/* 	rsp = iscsi_cmnd_create_rsp_cmnd(req, 1); */
+	rsp_hdr = (struct iscsi_cmd_rsp *)&rsp->pdu.bhs;
+	rsp_hdr->opcode = ISCSI_OP_SCSI_CMD_RSP;
+	rsp_hdr->flags = ISCSI_FLAG_CMD_FINAL;
+	rsp_hdr->response = ISCSI_STATUS_CMD_COMPLETED;
+	rsp_hdr->cmd_status = SAM_STAT_CHECK_CONDITION;
+	rsp_hdr->itt = cmnd_hdr(req)->itt;
 
-/* 	rsp_hdr = (struct iscsi_scsi_rsp_hdr *)&rsp->pdu.bhs; */
-/* 	rsp_hdr->opcode = ISCSI_OP_SCSI_RSP; */
-/* 	rsp_hdr->flags = ISCSI_FLG_FINAL; */
-/* 	rsp_hdr->response = ISCSI_RESPONSE_COMMAND_COMPLETED; */
-/* 	rsp_hdr->cmd_status = SAM_STAT_CHECK_CONDITION; */
-/* 	rsp_hdr->itt = cmnd_hdr(req)->itt; */
+	sense = (struct iscsi_sense_data *) page_address(sg[0].page);
+	memmove(sense->data, sense, req->stc->bufflen);
+	sense->length = cpu_to_be16(req->stc->bufflen);
 
-/* 	tio = rsp->tio = tio_alloc(1); */
-/* 	sense = (struct iscsi_sense_data *) page_address(tio->pvec[0]); */
-/* 	assert(sense); */
-/* 	clear_page(sense); */
-/* 	sense->length = cpu_to_be16(14); */
-/* 	sense->data[0] = 0xf0; */
-/* 	sense->data[2] = sense_key; */
-/* 	sense->data[7] = 6;	// Additional sense length */
-/* 	sense->data[12] = asc; */
-/* 	sense->data[13] = ascq; */
-
-/* 	rsp->pdu.datasize = sizeof(struct iscsi_sense_data) + 14; */
-/* 	tio->size = (rsp->pdu.datasize + 3) & -4; */
-/* 	tio->offset = 0; */
+	req->stc->bufflen += sizeof(struct iscsi_sense_data);
+	sg->length = req->stc->bufflen;
+	rsp->pdu.datasize = sg->length;
+	rsp->sg = sg;
 
 	return rsp;
 }
 
-void send_data_rsp(struct iscsi_cmnd *req, int (*func)(struct iscsi_cmnd *))
+static struct iscsi_cmnd *create_sense_rsp(struct iscsi_cmnd *req,
+					   u8 sense_key, u8 asc, u8 ascq)
 {
 	struct iscsi_cmnd *rsp;
+	struct iscsi_cmd_rsp *rsp_hdr;
+	struct iscsi_sense_data *sense;
+	struct scatterlist *sg;
 
-	if (func(req) < 0) {
-		rsp = create_sense_rsp(req, ILLEGAL_REQUEST, 0x24, 0x0);
-		iscsi_cmnd_init_write(rsp);
-	} else
-		do_send_data_rsp(req);
+	rsp = iscsi_cmnd_create_rsp_cmnd(req, 1);
+
+	rsp_hdr = (struct iscsi_cmd_rsp *)&rsp->pdu.bhs;
+	rsp_hdr->opcode = ISCSI_OP_SCSI_CMD_RSP;
+	rsp_hdr->flags = ISCSI_FLAG_CMD_FINAL;
+	rsp_hdr->response = ISCSI_STATUS_CMD_COMPLETED;
+	rsp_hdr->cmd_status = SAM_STAT_CHECK_CONDITION;
+	rsp_hdr->itt = cmnd_hdr(req)->itt;
+
+	assert(req->stc);
+	assert(!req->stc->sg);
+
+	/* TODO: really needs cleanups. */
+	req->stc->bufflen = sizeof(struct iscsi_sense_data) + 14;
+	req->stc->sg_count = 1;
+	req->stc->sg = sg =
+		kmalloc(sizeof(struct scatterlist *), __GFP_NOFAIL | GFP_KERNEL);
+
+	sg->page = alloc_page(__GFP_NOFAIL | GFP_KERNEL);
+	sg->offset = 0;
+	sg->length = req->stc->bufflen;
+
+	sense = (struct iscsi_sense_data *) page_address(sg[0].page);
+	clear_page(sense);
+	sense->length = cpu_to_be16(14);
+	sense->data[0] = 0xf0;
+	sense->data[2] = sense_key;
+	sense->data[7] = 6;	// Additional sense length
+	sense->data[12] = asc;
+	sense->data[13] = ascq;
+
+	rsp->pdu.datasize = sizeof(struct iscsi_sense_data) + 14;
+	rsp->sg = sg;
+
+	return rsp;
 }
 
 /**
@@ -679,6 +708,15 @@ static void scsi_cmnd_done(struct stgt_cmnd *stc)
 {
 	struct iscsi_cmnd *cmnd = (struct iscsi_cmnd *) stc->private;
 	struct iscsi_cmd *req = cmnd_hdr(cmnd);
+
+	if (stc->result != SAM_STAT_GOOD) {
+		struct iscsi_cmnd *rsp;
+
+		eprintk("%p %d %x\n", stc, stc->result, stc->scb[0]);
+		rsp = do_create_sense_rsp(cmnd);
+		iscsi_cmnd_init_write(rsp);
+		return;
+	}
 
 	switch (req->cdb[0]) {
 	case INQUIRY:
@@ -1225,7 +1263,6 @@ static void cmnd_send_pdu(struct iscsi_conn *conn, struct iscsi_cmnd *cmnd)
 
 	size = (cmnd->pdu.datasize + 3) & -4;
 	assert(cmnd->sg);
-/* 	assert(tio->size == size); */
 	__cmnd_send_pdu(conn, cmnd->sg, 0, size);
 }
 

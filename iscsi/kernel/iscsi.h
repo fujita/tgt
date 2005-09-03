@@ -206,7 +206,6 @@ extern void cmnd_rx_end(struct iscsi_cmnd *);
 extern void cmnd_tx_start(struct iscsi_cmnd *);
 extern void cmnd_tx_end(struct iscsi_cmnd *);
 extern void cmnd_release(struct iscsi_cmnd *, int);
-extern void send_data_rsp(struct iscsi_cmnd *, int (*)(struct iscsi_cmnd *));
 extern void send_scsi_rsp(struct iscsi_cmnd *);
 
 /* conn.c */

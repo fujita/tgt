@@ -294,7 +294,6 @@ static int write_data(struct iscsi_conn *conn)
 	struct socket *sock;
 	ssize_t (*sendpage)(struct socket *, struct page *, int, size_t, int);
 	struct scatterlist *sg;
-/* 	struct tio *tio; */
 	struct iovec *iop;
 	int saved_size, size, sendsize;
 	int offset, idx;
