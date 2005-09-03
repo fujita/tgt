@@ -107,7 +107,7 @@ int nl_cmnd_call(int fd, int type, char *data, int size, int *res)
 
 static int scsi_cmnd_queue(int fd, char *reqbuf, char *resbuf)
 {
-	int size;
+	int result, len;
 	struct iovec iov[2];
 	struct stgt_event *ev = (struct stgt_event *) reqbuf;
 	uint64_t cid = ev->k.cmnd_req.cid;
@@ -117,21 +117,20 @@ static int scsi_cmnd_queue(int fd, char *reqbuf, char *resbuf)
 	scb = reqbuf + sizeof(*ev);
 	dprintf("%" PRIu64 " %x\n", cid, scb[0]);
 
-	size = scsi_cmnd_process(ev->k.cmnd_req.tid, ev->k.cmnd_req.lun,
-				scb, resbuf);
+	result = scsi_cmnd_process(ev->k.cmnd_req.tid, ev->k.cmnd_req.lun,
+				scb, resbuf, &len);
 
-	/* TODO: error handling */
 	memset(ev, 0, sizeof(*ev));
 	ev->u.cmnd_res.cid = cid;
-	ev->u.cmnd_res.size = size;
-	ev->u.cmnd_res.err = 0;
+	ev->u.cmnd_res.len = len;
+	ev->u.cmnd_res.result = result;
 
 	iov[0].iov_base = ev;
 	iov[0].iov_len = sizeof(*ev);
 	iov[1].iov_base = resbuf;
-	iov[1].iov_len = size;
+	iov[1].iov_len = len;
 
-	return nl_write(fd, STGT_UEVENT_SCSI_CMND_RES, iov, size ? 2 : 1);
+	return nl_write(fd, STGT_UEVENT_SCSI_CMND_RES, iov, len ? 2 : 1);
 }
 
 void nl_event_handle(int fd)

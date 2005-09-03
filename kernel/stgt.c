@@ -767,18 +767,28 @@ static void cmnd_done(struct stgt_cmnd *cmnd)
 	done(cmnd);
 }
 
-static void uspace_cmnd_done(struct stgt_cmnd *cmnd, char *data, uint32_t datasize)
+static void uspace_cmnd_done(struct stgt_cmnd *cmnd, char *data,
+			     int result, uint32_t len)
 {
+	int i;
 	assert(cmnd->done);
 
-	dprintk("%x %u\n", cmnd->scb[0], datasize);
+	dprintk("%x %u\n", cmnd->scb[0], len);
 
-	if (datasize) {
-		__alloc_buffer(cmnd, datasize, 0);
-		/* FIXEM: multiple pages */
-		memcpy(page_address(cmnd->sg[0].page), data, datasize);
+	if (len) {
+		__alloc_buffer(cmnd, len, 0);
+
+		for (i = 0; i < cmnd->sg_count; i++) {
+			uint32_t copy = min_t(uint32_t, len, PAGE_CACHE_SIZE);
+			char *p = data;
+
+			memcpy(page_address(cmnd->sg[i].page), p, copy);
+			p += copy;
+			len -= copy;
+		}
 	}
 
+	cmnd->result = result;
 	cmnd_done(cmnd);
 }
 
@@ -922,7 +932,8 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 		cmnd = find_cmnd_by_id(ev->u.cmnd_res.cid);
 		if (cmnd)
 			uspace_cmnd_done(cmnd, (char *) ev + sizeof(*ev),
-					 ev->u.cmnd_res.size);
+					 ev->u.cmnd_res.result,
+					 ev->u.cmnd_res.len);
 		else {
 			eprintk("cannot found %llu\n", ev->u.cmnd_res.cid);
 			err = -EEXIST;

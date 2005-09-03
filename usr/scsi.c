@@ -34,6 +34,15 @@
 #define SERVICE_ACTION_IN     0x9e
 #endif
 
+/* Additional Sense Code (SAM3) */
+#define	SAM_ASC_LOGICAL_UNIT_NOT_SUPPORTED	0x25
+#define	SAM_ASC_INVALID_FIELD_IN_CDB		0x24
+#define	SAM_ASC_NO_ADDITIONAL_SENSE_INFORMATION	0x00
+
+#define SAM_STAT_GOOD            0x00
+#define SAM_STAT_CHECK_CONDITION 0x02
+
+
 static uint32_t blk_shift = 9;
 
 #define min(x,y) ({ \
@@ -70,6 +79,20 @@ static int device_info(int tid, uint32_t lun, uint64_t *size)
 
 	close(fd);
 	return 0;
+}
+
+static int sense_data_build(uint8_t *data, uint8_t res_code, uint8_t key,
+		      uint8_t ascode, uint8_t ascodeq)
+{
+	int len = 6;
+
+	data[0] = res_code | 1U << 7;
+	data[2] = key;
+	data[7] = len;
+	data[12] = ascode;
+	data[13] = ascodeq;
+
+	return len;
 }
 
 static int insert_disconnect_pg(uint8_t *ptr)
@@ -133,20 +156,26 @@ static int insert_geo_m_pg(uint8_t *ptr, uint64_t sec)
 	return sizeof(geo_m_pg);
 }
 
-static int mode_sense(int tid, uint32_t lun, uint8_t *scb, uint8_t *data)
+static int mode_sense(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int *len)
 {
-	int len = 4, err = 0;
+	int result = SAM_STAT_GOOD;
 	uint8_t pcode = scb[2] & 0x3f;
 	uint64_t size;
 
-	device_info(tid, lun, &size);
+	if (device_info(tid, lun, &size) < 0) {
+		*len = sense_data_build(data, 0xf0, ILLEGAL_REQUEST,
+					SAM_ASC_LOGICAL_UNIT_NOT_SUPPORTED, 0);
+		return SAM_STAT_CHECK_CONDITION;
+	}
+
+	*len = 4;
 	size >>= blk_shift;
 
 	if ((scb[1] & 0x8))
 		data[3] = 0;
 	else {
 		data[3] = 8;
-		len += 8;
+		*len += 8;
 		*(uint32_t *)(data + 4) = (size >> 32) ?
 			cpu_to_be32(0xffffffff) : cpu_to_be32(size);
 		*(uint32_t *)(data + 8) = cpu_to_be32(1 << blk_shift);
@@ -156,51 +185,52 @@ static int mode_sense(int tid, uint32_t lun, uint8_t *scb, uint8_t *data)
 	case 0x0:
 		break;
 	case 0x2:
-		len += insert_disconnect_pg(data + len);
+		*len += insert_disconnect_pg(data + *len);
 		break;
 	case 0x3:
-		len += insert_format_m_pg(data + len);
+		*len += insert_format_m_pg(data + *len);
 		break;
 	case 0x4:
-		len += insert_geo_m_pg(data + len, size);
+		*len += insert_geo_m_pg(data + *len, size);
 		break;
 	case 0x8:
-		len += insert_caching_pg(data + len);
+		*len += insert_caching_pg(data + *len);
 		break;
 	case 0xa:
-		len += insert_ctrl_m_pg(data + len);
+		*len += insert_ctrl_m_pg(data + *len);
 		break;
 	case 0x1c:
-		len += insert_iec_m_pg(data + len);
+		*len += insert_iec_m_pg(data + *len);
 		break;
 	case 0x3f:
-		len += insert_disconnect_pg(data + len);
-		len += insert_format_m_pg(data + len);
-		len += insert_geo_m_pg(data + len, size);
-		len += insert_caching_pg(data + len);
-		len += insert_ctrl_m_pg(data + len);
-		len += insert_iec_m_pg(data + len);
+		*len += insert_disconnect_pg(data + *len);
+		*len += insert_format_m_pg(data + *len);
+		*len += insert_geo_m_pg(data + *len, size);
+		*len += insert_caching_pg(data + *len);
+		*len += insert_ctrl_m_pg(data + *len);
+		*len += insert_iec_m_pg(data + *len);
 		break;
 	default:
-		err = -1;
+		result = SAM_STAT_CHECK_CONDITION;
+		*len = sense_data_build(data, 0xf0, ILLEGAL_REQUEST,
+					SAM_ASC_INVALID_FIELD_IN_CDB, 0);
 	}
 
-	data[0] = len - 1;
+	data[0] = *len - 1;
 
-	return len;
+	return result;
 }
 
 #define VENDOR_ID	"IET"
 #define PRODUCT_ID	"VIRTUAL-DISK"
 #define PRODUCT_REV	"0"
 
-static int inquiry(int tid, uint32_t lun, uint8_t *scb, uint8_t *data)
+static int inquiry(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int *len)
 {
-	int err = -1;
-	int len = 0;
+	int result = SAM_STAT_CHECK_CONDITION;
 
 	if (((scb[1] & 0x3) == 0x3) || (!(scb[1] & 0x3) && scb[2]))
-		return err;
+		goto err;
 
 	if (!(scb[1] & 0x3)) {
 		data[2] = 4;
@@ -220,15 +250,15 @@ static int inquiry(int tid, uint32_t lun, uint8_t *scb, uint8_t *data)
 		data[61] = 0x60;
 		data[62] = 0x03;
 		data[63] = 0x00;
-		len = 64;
-		err = 0;
+		*len = 64;
+		result = SAM_STAT_GOOD;
 	} else if (scb[1] & 0x2) {
 		/* CmdDt bit is set */
 		/* We do not support it now. */
 		data[1] = 0x1;
 		data[5] = 0;
-		len = 6;
-		err = 0;
+		*len = 6;
+		result = SAM_STAT_GOOD;
 	} else if (scb[1] & 0x1) {
 		/* EVPD bit set */
 		if (scb[2] == 0x0) {
@@ -237,14 +267,14 @@ static int inquiry(int tid, uint32_t lun, uint8_t *scb, uint8_t *data)
 			data[4] = 0x0;
 			data[5] = 0x80;
 			data[6] = 0x83;
-			len = 7;
-			err = 0;
+			*len = 7;
+			result = SAM_STAT_GOOD;
 		} else if (scb[2] == 0x80) {
 			data[1] = 0x80;
 			data[3] = 4;
 			memset(data + 4, 0x20, 4);
-			len = 8;
-			err = 0;
+			*len = 8;
+			result = SAM_STAT_GOOD;
 		} else if (scb[2] == 0x83) {
 #define SCSI_ID_LEN	24
 			uint32_t tmp = SCSI_ID_LEN * sizeof(uint8_t);
@@ -256,20 +286,28 @@ static int inquiry(int tid, uint32_t lun, uint8_t *scb, uint8_t *data)
 			data[7] = tmp;
 			if (lun != ~0UL)
 				sprintf(data + 8, "deadbeaf%d:%u", tid, lun);
-			len = tmp + 8;
-			err = 0;
+			*len = tmp + 8;
+			result = SAM_STAT_GOOD;
 		}
 	}
 
-	len = min_t(int, len, scb[4]);
+	if (result != SAM_STAT_GOOD)
+		goto err;
+
+	*len = min_t(int, *len, scb[4]);
 
 	if (lun == ~0UL)
 		data[0] = TYPE_NO_LUN;
 
-	return len;
+	return SAM_STAT_GOOD;
+
+err:
+	*len = sense_data_build(data, 0xf0, ILLEGAL_REQUEST,
+				SAM_ASC_INVALID_FIELD_IN_CDB, 0);
+	return SAM_STAT_CHECK_CONDITION;
 }
 
-static int report_luns(int tid, uint32_t unused, uint8_t *scb, uint8_t *p)
+static int report_luns(int tid, uint32_t unused, uint8_t *scb, uint8_t *p, int *len)
 {
 	uint32_t lun;
 	uint32_t *data = (uint32_t *) p;
@@ -277,14 +315,21 @@ static int report_luns(int tid, uint32_t unused, uint8_t *scb, uint8_t *p)
 	DIR *dir;
 	struct dirent *ent;
 	char buf[128];
+	int result = SAM_STAT_GOOD;
 
 	dir = opendir("/sys/class/stgt_device");
-	if (!dir)
-		return -1;
+	if (!dir) {
+		perror("can't open /sys/class/stgt_device\n");
+		exit(0);
+	}
 
 	alen = be32_to_cpu(*(uint32_t *)&scb[6]);
-	if (alen < 16)
-		return -1;
+	if (alen < 16) {
+		*len = sense_data_build(p, 0xf0, ILLEGAL_REQUEST,
+					SAM_ASC_INVALID_FIELD_IN_CDB, 0);
+		result = SAM_STAT_CHECK_CONDITION;
+		goto out;
+	}
 
 	alen &= ~(8 - 1);
 	oalen = alen;
@@ -315,92 +360,114 @@ static int report_luns(int tid, uint32_t unused, uint8_t *scb, uint8_t *p)
 	}
 
 	data[0] = cpu_to_be32(nr_luns * 8);
-
+	*len = min(oalen, nr_luns * 8 + 8);
+out:
 	closedir(dir);
-
-	return min(oalen, nr_luns * 8 + 8);
+	return result;
 }
 
-static int read_capacity(int tid, uint32_t lun, uint8_t *scb, uint8_t *p)
+static int read_capacity(int tid, uint32_t lun, uint8_t *scb, uint8_t *p, int *len)
 {
-	int len;
 	uint32_t *data = (uint32_t *) p;
 	uint64_t size;
 
-	device_info(tid, lun, &size);
+	if (!(scb[8] & 0x1) & (scb[2] | scb[3] | scb[4] | scb[5])) {
+		*len = sense_data_build(p, 0xf0, ILLEGAL_REQUEST,
+					SAM_ASC_INVALID_FIELD_IN_CDB, 0);
+		return SAM_STAT_CHECK_CONDITION;
+	}
+
+	if (device_info(tid, lun, &size) < 0) {
+		*len = sense_data_build(p, 0xf0, ILLEGAL_REQUEST,
+					SAM_ASC_LOGICAL_UNIT_NOT_SUPPORTED, 0);
+		return SAM_STAT_CHECK_CONDITION;
+	}
+
 	size >>= blk_shift;
 
 	data[0] = (size >> 32) ?
 		cpu_to_be32(0xffffffff) : cpu_to_be32(size - 1);
 	data[1] = cpu_to_be32(1U << blk_shift);
+	*len = 8;
 
-	len = 8;
-
-	return len;
+	return SAM_STAT_GOOD;
 }
 
-static int request_sense(int tid, uint32_t lun, uint8_t *scb, uint8_t *data)
+/*
+ * TODO: We always assume autosense.
+ */
+static int request_sense(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int* len)
 {
-	int len;
+	*len = sense_data_build(data, 0xf0, NO_SENSE,
+				SAM_ASC_NO_ADDITIONAL_SENSE_INFORMATION, 0);
 
-	data[0] = 0xf0;
-	data[1] = 0;
-	data[2] = NO_SENSE;
-	data[7] = 10;
-
-	len = 18;
-
-	return len;
+	return SAM_STAT_GOOD;
 }
 
-static int sevice_action(int tid, uint32_t lun, uint8_t *scb, uint8_t *p)
+static int sevice_action(int tid, uint32_t lun, uint8_t *scb, uint8_t *p, int *len)
 {
-	int len;
 	uint32_t *data = (uint32_t *) p;
 	uint64_t *data64, size;
 
-	device_info(tid, lun, &size);
+	if (device_info(tid, lun, &size) < 0) {
+		*len = sense_data_build(p, 0xf0, ILLEGAL_REQUEST,
+					SAM_ASC_LOGICAL_UNIT_NOT_SUPPORTED, 0);
+		return SAM_STAT_CHECK_CONDITION;
+	}
 	size >>= blk_shift;
 
 	data64 = (uint64_t *) data;
 	data64[0] = cpu_to_be64(size - 1);
 	data[2] = cpu_to_be32(1UL << blk_shift);
 
-	len = 32;
+	*len = 32;
 
-	return len;
+	return SAM_STAT_GOOD;
 }
 
-int scsi_cmnd_process(int tid, uint32_t lun, uint8_t *scb, uint8_t *data)
+int scsi_cmnd_process(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int *len)
 {
-	int len = 0;
+	int result = SAM_STAT_GOOD;
 
 	dprintf("%x\n", scb[0]);
 
+	if (lun == ~0UL)
+		switch (scb[0]) {
+		case REQUEST_SENSE:
+		case INQUIRY:
+		case REPORT_LUNS:
+			break;
+		default:
+			*len = sense_data_build(data, 0xf0, ILLEGAL_REQUEST,
+						SAM_ASC_LOGICAL_UNIT_NOT_SUPPORTED, 0);
+			result = SAM_STAT_CHECK_CONDITION;
+			goto out;
+		}
+
 	switch (scb[0]) {
 	case INQUIRY:
-		len = inquiry(tid, lun, scb, data);
+		result = inquiry(tid, lun, scb, data, len);
 		break;
 	case REPORT_LUNS:
-		len = report_luns(tid, lun, scb, data);
+		result = report_luns(tid, lun, scb, data, len);
 		break;
 	case READ_CAPACITY:
-		len = read_capacity(tid, lun, scb, data);
+		result = read_capacity(tid, lun, scb, data, len);
 		break;
 	case MODE_SENSE:
-		len = mode_sense(tid, lun, scb, data);
+		result = mode_sense(tid, lun, scb, data, len);
 		break;
 	case REQUEST_SENSE:
-		len = request_sense(tid, lun, scb, data);
+		result = request_sense(tid, lun, scb, data, len);
 		break;
 	case SERVICE_ACTION_IN:
-		len = sevice_action(tid, lun, scb, data);
+		result = sevice_action(tid, lun, scb, data, len);
 		break;
 	case START_STOP:
 	case TEST_UNIT_READY:
 	case SYNCHRONIZE_CACHE:
 	case VERIFY:
-		len = 0;
+		*len = 0;
 		break;
 	case READ_6:
 	case READ_10:
@@ -412,10 +479,11 @@ int scsi_cmnd_process(int tid, uint32_t lun, uint8_t *scb, uint8_t *data)
 	case RESERVE_10:
 	case RELEASE_10:
 	default:
-		dprintf("FIXME: access to nonexistent lun %u\n", lun);
-		len = 0;
+		dprintf("BUG? %u %u\n", scb[0], lun);
+		*len = 0;
 		break;
 	}
 
-	return len;
+out:
+	return result;
 }

@@ -34,7 +34,7 @@ struct stgt_cmnd {
 	struct scatterlist *sg;
 	uint32_t bufflen;
 
-	uint8_t sense_buffer[SCSI_SENSE_BUFFERSIZE];
+	int result;
 
 	void *private;
 };

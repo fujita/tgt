@@ -35,8 +35,8 @@ struct stgt_event {
 		} d_device;
 		struct {
 			uint64_t cid;
-			uint32_t size;
-			int err;
+			uint32_t len;
+			int result;
 		} cmnd_res;
 	} u;
 
