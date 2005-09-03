@@ -583,14 +583,11 @@ static int stgt_device_destroy(int tid, uint32_t lun)
 
 	spin_lock_irqsave(&target->lock, flags);
 	device = stgt_device_find_nolock(target, lun);
-	if (device) {
-		list_del(&device->dlist);
-		goto found;
-	}
 	spin_unlock_irqrestore(&target->lock, flags);
+	if (!device)
+		return -EINVAL;
 
-	return -EINVAL;
-found:
+	list_del(&device->dlist);
 	if (device->sdt->destroy)
 		device->sdt->destroy(device);
 
