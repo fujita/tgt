@@ -213,9 +213,10 @@ static struct stgt_target *target_find(int tid)
 		if (target->tid == tid)
 			goto found;
 	}
-	spin_unlock(&all_targets_lock);
 	target = NULL;
 found:
+	spin_unlock(&all_targets_lock);
+
 	return target;
 }
 
