@@ -11,6 +11,7 @@
 #include <linux/namei.h>
 #include <linux/uio.h>
 #include <linux/fs.h>
+#include <linux/writeback.h>
 #include <scsi/scsi.h>
 
 #include <stgt.h>
@@ -106,10 +107,8 @@ static struct iovec* sg_to_iovec(struct scatterlist *sg, int sg_count)
 	int i;
 
 	iov = kmalloc(sizeof(struct iovec) * sg_count, GFP_KERNEL);
-	if (!iov) {
-		printk("%s %d ENOMEM %d\n", __FUNCTION__, __LINE__, sg_count);
+	if (!iov)
 		return NULL;
-	}
 
 	for (i = 0; i < sg_count; i++) {
 		iov[i].iov_base = page_address(sg[i].page) + sg[i].offset;
@@ -119,47 +118,72 @@ static struct iovec* sg_to_iovec(struct scatterlist *sg, int sg_count)
 	return iov;
 }
 
+static int vfs_io(struct stgt_device *device, struct stgt_cmnd *cmnd, int rw, int sync)
+{
+	struct stgt_vsd_dev *vsddev = device->sdt_data;
+	struct inode *inode = vsddev->filp->f_dentry->d_inode;
+	ssize_t size;
+	struct iovec *iov;
+	loff_t pos = translate_offset(cmnd->scb);
+	int err = 0;
+
+	if (cmnd->bufflen + pos > device->size)
+		return -EOVERFLOW;
+
+	iov = sg_to_iovec(cmnd->sg, cmnd->sg_count);
+	if (!iov)
+		return -ENOMEM;
+
+	if (rw == READ)
+		size = generic_file_readv(vsddev->filp, iov, cmnd->sg_count, &pos);
+	else
+		size = generic_file_writev(vsddev->filp, iov, cmnd->sg_count, &pos);
+
+	kfree(iov);
+
+	if (sync)
+		err = sync_page_range(inode, inode->i_mapping, pos,
+				      (size_t) cmnd->bufflen);
+
+	if ((size != cmnd->bufflen) || err)
+		return -EIO;
+	else
+		return 0;
+}
+
 static int stgt_vsd_queue(struct stgt_device *device, struct stgt_cmnd *cmnd)
 {
 	struct stgt_vsd_dev *vsddev = device->sdt_data;
-	loff_t pos = translate_offset(cmnd->scb);
-	ssize_t size;
-	struct iovec *iov = NULL;
+	struct inode *inode = vsddev->filp->f_dentry->d_inode;
 	int err = 0;
 
 	switch (cmnd->scb[0]) {
 	case READ_6:
 	case READ_10:
 	case READ_16:
-		iov = sg_to_iovec(cmnd->sg, cmnd->sg_count);
-		if (!iov)
-			goto out;
-		size = generic_file_readv(vsddev->filp, iov, cmnd->sg_count, &pos);
-		kfree(iov);
+		err = vfs_io(device, cmnd, READ, 0);
 		break;
 	case WRITE_6:
 	case WRITE_10:
 	case WRITE_16:
 	case WRITE_VERIFY:
-		iov = sg_to_iovec(cmnd->sg, cmnd->sg_count);
-		if (!iov)
-			goto out;
-		err = generic_file_writev(vsddev->filp, iov, cmnd->sg_count, &pos);
-		kfree(iov);
+		err = vfs_io(device, cmnd, WRITE, 0);
 		break;
 	case RESERVE:
 	case RELEASE:
 	case RESERVE_10:
 	case RELEASE_10:
 		break;
+	case SYNCHRONIZE_CACHE:
+		err = sync_page_range(inode, inode->i_mapping, 0, device->size);
+		break;
 	default:
 		BUG();
 	}
 
 	if (err < 0)
-		printk("%s %d: %d %llu\n", __FUNCTION__, __LINE__, err, pos);
-out:
-	return 0;
+		printk("%s %d: %x %d\n", __FUNCTION__, __LINE__, cmnd->scb[0], err);
+	return err;
 }
 
 static int stgt_vsd_prep(struct stgt_device *device, struct stgt_cmnd *cmnd)
@@ -178,6 +202,7 @@ static int stgt_vsd_prep(struct stgt_device *device, struct stgt_cmnd *cmnd)
 	case RELEASE:
 	case RESERVE_10:
 	case RELEASE_10:
+	case SYNCHRONIZE_CACHE:
 		type = STGT_CMND_KSPACE;
 		break;
 	default:

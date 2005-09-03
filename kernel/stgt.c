@@ -737,8 +737,9 @@ static int uspace_cmnd_send(struct stgt_cmnd *cmnd)
 	struct nlmsghdr *nlh;
 	struct stgt_event *ev;
 	char *pdu;
-	int len = NLMSG_SPACE(sizeof(*ev) + sizeof(cmnd->scb));
+	int len;
 
+	len = NLMSG_SPACE(sizeof(*ev) + sizeof(cmnd->scb));
 	if (!(skb = alloc_skb(NLMSG_SPACE(len), GFP_KERNEL)))
 		return -ENOMEM;
 
@@ -758,10 +759,11 @@ static int uspace_cmnd_send(struct stgt_cmnd *cmnd)
 	return netlink_unicast(nls, skb, daemon_pid, 0);
 }
 
-static void cmnd_done(struct stgt_cmnd *cmnd)
+static void cmnd_done(struct stgt_cmnd *cmnd, int result)
 {
 	void (*done)(struct stgt_cmnd *);
 
+	cmnd->result = result;
 	done = cmnd->done;
 	cmnd->done = NULL;
 	done(cmnd);
@@ -788,27 +790,64 @@ static void uspace_cmnd_done(struct stgt_cmnd *cmnd, char *data,
 		}
 	}
 
-	cmnd->result = result;
-	cmnd_done(cmnd);
+	cmnd_done(cmnd, result);
+}
+
+static int sense_data_build(struct stgt_cmnd *cmnd, uint8_t key,
+			    uint8_t ascode, uint8_t ascodeq)
+{
+	int i, len = 6;
+	char *data;
+
+	/* It works, however, dirty. */
+	for (i = 0; i < cmnd->sg_count; i++)
+		__free_page(cmnd->sg[i].page);
+	kfree(cmnd->sg);
+
+	__alloc_buffer(cmnd, len, 0);
+	data = page_address(cmnd->sg[0].page);
+
+	data[0] = 0xf0 | 1U << 7;
+	data[2] = key;
+	data[7] = len;
+	data[12] = ascode;
+	data[13] = ascodeq;
+
+	return len;
+}
+
+/* TODO: better error handling
+ * We should get ASC and ASCQ from the device code.
+ */
+static uint8_t error_to_sense_key(int err)
+{
+	uint8_t key;
+
+	switch (err) {
+	case -ENOMEM:
+		key = ABORTED_COMMAND;
+		break;
+	case -EOVERFLOW:
+		key = HARDWARE_ERROR;
+		break;
+	default:
+		key = HARDWARE_ERROR;
+		break;
+	}
+
+	return key;
 }
 
 static void queuecommand(void *data)
 {
 	int err;
+	uint8_t key;
 	enum stgt_cmnd_type type = STGT_CMND_USPACE;
 	struct stgt_cmnd *cmnd = (struct stgt_cmnd *) data;
 	struct stgt_target *target = cmnd->session->target;
 	struct stgt_device *device;
 
 	dprintk("%x\n", cmnd->scb[0]);
-
-	/*
-	 * seperate vsd (virtual disk from sd (real sd))
-	 * call scsi_device_temaplte->prepcommand to see if they want it
-	 * and allow them to setup.
-	 *
-	 * Then call queuecommand
-	 */
 
 	/* Should we do this earlier? */
 	device = stgt_device_find(target, cmnd->lun);
@@ -821,14 +860,30 @@ static void queuecommand(void *data)
 	switch (type) {
 	case STGT_CMND_KSPACE:
 		err = device->sdt->queuecommand(device, cmnd);
-		cmnd_done(cmnd);
+		if (err < 0)
+			goto failed_cmnd;
+		else
+			cmnd_done(cmnd, SAM_STAT_GOOD);
 		break;
 	case STGT_CMND_USPACE:
 		err = uspace_cmnd_send(cmnd);
+		if (err < 0)
+			goto failed_cmnd;
 		break;
 	default:
+		eprintk("%u %d\n", cmnd->scb[0], type);
+		assert(0);
 		break;
 	}
+
+	return;
+
+failed_cmnd:
+	eprintk("failed cmnd %llu %u %d %d\n",
+		cmnd->cid, cmnd->scb[0], err, type);
+	key = error_to_sense_key(err);
+	sense_data_build(cmnd, key, 0, 0);
+	cmnd_done(cmnd, SAM_STAT_CHECK_CONDITION);
 }
 
 static uint32_t translate_lun(uint8_t *p, int size)
