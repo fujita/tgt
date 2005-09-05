@@ -21,6 +21,7 @@
 #include <stgt_target.h>
 #include <stgt_device.h>
 #include <stgt_if.h>
+#include <tgt_protocol.h>
 
 #define DEBUG_STGT
 
@@ -139,9 +140,10 @@ static void stgt_queue_work(struct stgt_target *target, struct stgt_work *work)
 struct target_type_internal {
 	struct list_head list;
 	struct stgt_target_template *stt;
+	struct tgt_protocol *proto;
 };
 
-static struct stgt_target_template *target_template_get(const char *name)
+static struct target_type_internal *target_template_get(const char *name)
 {
 	unsigned long flags;
 	struct target_type_internal *ti;
@@ -153,7 +155,7 @@ static struct stgt_target_template *target_template_get(const char *name)
 			if (!try_module_get(ti->stt->module))
 				ti = NULL;
 			spin_unlock_irqrestore(&target_tmpl_lock, flags);
-			return ti ? ti->stt : NULL;
+			return ti;
 		}
 
 	spin_unlock_irqrestore(&target_tmpl_lock, flags);
@@ -178,6 +180,13 @@ int stgt_target_template_register(struct stgt_target_template *stt)
 	INIT_LIST_HEAD(&ti->list);
 	ti->stt = stt;
 
+	ti->proto = tgt_protocol_get(stt->protocol);
+	if (!ti->proto) {
+		eprintk("Could not find %s protocol\n", stt->protocol);
+		kfree(ti);
+		return -EINVAL;
+	}
+
 	spin_lock_irqsave(&target_tmpl_lock, flags);
 	list_add_tail(&ti->list, &target_tmpl_list);
 	spin_unlock_irqrestore(&target_tmpl_lock, flags);
@@ -196,6 +205,7 @@ void stgt_target_template_unregister(struct stgt_target_template *stt)
 	list_for_each_entry(ti, &target_tmpl_list, list)
 		if (ti->stt == stt) {
 			list_del(&ti->list);
+			tgt_protocol_put(ti->proto);
 			kfree(ti);
 			break;
 		}
@@ -224,6 +234,7 @@ struct stgt_target *stgt_target_create(char *target_type, int queued_cmnds)
 {
 	static int target_id;
 	struct stgt_target *target;
+	struct target_type_internal *tti;
 
 	if (!daemon_pid) {
 		eprintk("%s\n", "Run the user-space daemon first!");
@@ -236,10 +247,12 @@ struct stgt_target *stgt_target_create(char *target_type, int queued_cmnds)
 	dprintk("%p\n", target);
 	memset(target, 0, sizeof(*target));
 
-	target->stt = target_template_get(target_type);
-	if (!target->stt)
+	tti = target_template_get(target_type);
+	if (!tti)
 		goto free_target;
 
+	target->stt = tti->stt;
+	target->proto = tti->proto;
 	target->tid = target_id++;
 	spin_lock_init(&target->lock);
 
@@ -486,39 +499,42 @@ void stgt_device_template_unregister(struct stgt_device_template *sdt)
 }
 EXPORT_SYMBOL_GPL(stgt_device_template_unregister);
 
+/*
+ * TODO: use a hash or any better alg/ds
+ */
 static struct stgt_device *
-stgt_device_find_nolock(struct stgt_target *target, uint32_t lun)
+stgt_device_find_nolock(struct stgt_target *target, uint64_t dev_id)
 {
 	struct stgt_device *device;
 
 	list_for_each_entry(device, &target->device_list, dlist)
-		if (device->lun == lun)
+		if (device->dev_id == dev_id)
 			return device;
 
 	return NULL;
 }
 
 static struct stgt_device *
-stgt_device_find(struct stgt_target *target, uint32_t lun)
+stgt_device_find(struct stgt_target *target, uint64_t dev_id)
 {
 	static struct stgt_device *device;
 	unsigned long flags;
 
 	spin_lock_irqsave(&target->lock, flags);
-	device = stgt_device_find_nolock(target, lun);
+	device = stgt_device_find_nolock(target, dev_id);
 	spin_unlock_irqrestore(&target->lock, flags);
 
 	return device;
 }
 
-static int stgt_device_create(int tid, uint32_t lun, char *device_type, char *path,
-			      unsigned long dflags)
+static int stgt_device_create(int tid, uint64_t dev_id, char *device_type,
+			      char *path, unsigned long dflags)
 {
 	struct stgt_target *target;
 	struct stgt_device *device;
 	unsigned long flags;
 
-	dprintk("%d %u %s %s\n", tid, lun, device_type, path);
+	dprintk("%d %llu %s %s\n", tid, dev_id, device_type, path);
 
 	target = target_find(tid);
 	if (!target)
@@ -529,16 +545,17 @@ static int stgt_device_create(int tid, uint32_t lun, char *device_type, char *pa
 		return -ENOMEM;
 
 	memset(device, 0, sizeof(*device));
-
-	device->lun = lun;
+	device->dev_id = dev_id;
 	device->target = target;
 	device->path = kstrdup(path, GFP_KERNEL);
 	if (!device->path)
 		goto free_device;
 
 	device->sdt = device_template_get(device_type);
-	if (!device->sdt)
+	if (!device->sdt) {
+		eprintk("Could not get devive type %s\n", device_type);
 		goto free_path;
+	}
 
 	device->sdt_data = kmalloc(sizeof(device->sdt->priv_data_size),
 				   GFP_KERNEL);
@@ -572,7 +589,7 @@ free_device:
 	return -EINVAL;
 }
 
-static int stgt_device_destroy(int tid, uint32_t lun)
+static int stgt_device_destroy(int tid, uint64_t dev_id)
 {
 	struct stgt_device *device;
 	struct stgt_target *target;
@@ -583,7 +600,7 @@ static int stgt_device_destroy(int tid, uint32_t lun)
 		return -ENOENT;
 
 	spin_lock_irqsave(&target->lock, flags);
-	device = stgt_device_find_nolock(target, lun);
+	device = stgt_device_find_nolock(target, dev_id);
 	spin_unlock_irqrestore(&target->lock, flags);
 	if (!device)
 		return -EINVAL;
@@ -640,43 +657,15 @@ void stgt_cmnd_destroy(struct stgt_cmnd *cmnd)
 }
 EXPORT_SYMBOL(stgt_cmnd_destroy);
 
-static void set_offset_and_length(uint8_t *scb, uint64_t *off, uint32_t *len)
-{
-	switch (scb[0]) {
-	case READ_6:
-	case WRITE_6:
-		*off = ((scb[1] & 0x1f) << 16) + (scb[2] << 8) + scb[3];
-		*len = scb[4];
-		if (!*len)
-			*len = 256;
-		break;
-	case READ_10:
-	case WRITE_10:
-	case WRITE_VERIFY:
-		*off = be32_to_cpu(*(u32 *) &scb[2]);
-		*len = (scb[7] << 8) + scb[8];
-		break;
-	case READ_16:
-	case WRITE_16:
-		*off = be64_to_cpu(*(u64 *)&scb[2]);
-		*len = be32_to_cpu(*(u32 *)&scb[10]);
-		break;
-	default:
-		break;
-	}
-
-	*off <<= 9;
-	*len <<= 9;
-}
-
 #define pgcnt(size, offset)	((((size) + ((offset) & ~PAGE_CACHE_MASK)) + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT)
 
-static void __alloc_buffer(struct stgt_cmnd *cmnd, uint32_t len, uint64_t offset)
+void __stgt_alloc_buffer(struct stgt_cmnd *cmnd)
 {
+	uint64_t offset = cmnd->offset;
+	uint32_t len = cmnd->bufflen;
 	int i;
 
 	cmnd->sg_count = pgcnt(len, offset);
-	cmnd->bufflen = len;
 	offset &= ~PAGE_CACHE_MASK;
 
 	cmnd->sg = kmalloc(cmnd->sg_count * sizeof(struct scatterlist),
@@ -693,17 +682,14 @@ static void __alloc_buffer(struct stgt_cmnd *cmnd, uint32_t len, uint64_t offset
 		len -= sg->length;
 	}
 }
+EXPORT_SYMBOL(__stgt_alloc_buffer);
 
-static void alloc_buffer(void *data)
+static void stgt_alloc_buffer(void *data)
 {
-	struct stgt_cmnd *cmnd = (struct stgt_cmnd *) data;
-	uint32_t len = 0;
-	uint64_t offset = 0;
+	struct stgt_cmnd *cmnd = data;
 
-	set_offset_and_length(cmnd->scb, &offset, &len);
-
-	dprintk("%x %llu %u\n", cmnd->scb[0], offset, len);
-	__alloc_buffer(cmnd, len, offset);
+	dprintk("%x %llu %u\n", cmnd->scb[0], cmnd->offset, cmnd->bufflen);
+	__stgt_alloc_buffer(cmnd);
 
 	if (cmnd->done) {
 		void (*done)(struct stgt_cmnd *) = cmnd->done;
@@ -714,18 +700,22 @@ static void alloc_buffer(void *data)
 
 void stgt_cmnd_alloc_buffer(struct stgt_cmnd *cmnd, void (*done)(struct stgt_cmnd *))
 {
+	struct tgt_protocol *proto = cmnd->session->target->proto;
+
 	assert(list_empty(&cmnd->clist));
+
+	proto->init_cmnd_buffer(cmnd);
 
 	if (done) {
 		struct stgt_session *session = cmnd->session;
 		struct stgt_work *work;
 
-		work = stgt_init_work(session, alloc_buffer, cmnd);
+		work = stgt_init_work(session, stgt_alloc_buffer, cmnd);
 		stgt_queue_work(session->target, work);
 		return;
 	};
 
-	alloc_buffer(cmnd);
+	stgt_alloc_buffer(cmnd);
 }
 EXPORT_SYMBOL(stgt_cmnd_alloc_buffer);
 
@@ -738,7 +728,8 @@ static int uspace_cmnd_send(struct stgt_cmnd *cmnd)
 	int len;
 
 	len = NLMSG_SPACE(sizeof(*ev) + sizeof(cmnd->scb));
-	if (!(skb = alloc_skb(NLMSG_SPACE(len), GFP_KERNEL)))
+	skb = alloc_skb(NLMSG_SPACE(len), GFP_KERNEL);
+	if (!skb)
 		return -ENOMEM;
 
 	dprintk("%d %Zd %Zd\n", len, sizeof(*ev), sizeof(cmnd->scb));
@@ -749,7 +740,7 @@ static int uspace_cmnd_send(struct stgt_cmnd *cmnd)
 
 	pdu = (char *) ev + sizeof(*ev);
 	ev->k.cmnd_req.tid = cmnd->session->target->tid;
-	ev->k.cmnd_req.lun = cmnd->lun;
+	ev->k.cmnd_req.dev_id = cmnd->dev_id;
 	ev->k.cmnd_req.cid = cmnd->cid;
 
 	memcpy(pdu, cmnd->scb, sizeof(cmnd->scb));
@@ -757,14 +748,22 @@ static int uspace_cmnd_send(struct stgt_cmnd *cmnd)
 	return netlink_unicast(nls, skb, daemon_pid, 0);
 }
 
-static void cmnd_done(struct stgt_cmnd *cmnd, int result)
+static void cmnd_done(struct stgt_cmnd *cmnd)
 {
 	void (*done)(struct stgt_cmnd *);
 
-	cmnd->result = result;
 	done = cmnd->done;
 	cmnd->done = NULL;
 	done(cmnd);
+}
+
+static void kspace_cmnd_done(struct stgt_cmnd *cmnd, int result)
+{
+	struct stgt_target *target = cmnd->session->target;
+	struct tgt_protocol *proto = target->proto;
+
+	proto->cmnd_done(cmnd, result);
+	cmnd_done(cmnd);
 }
 
 static void uspace_cmnd_done(struct stgt_cmnd *cmnd, char *data,
@@ -776,7 +775,9 @@ static void uspace_cmnd_done(struct stgt_cmnd *cmnd, char *data,
 	dprintk("%x %u\n", cmnd->scb[0], len);
 
 	if (len) {
-		__alloc_buffer(cmnd, len, 0);
+		cmnd->bufflen = len;
+		cmnd->offset = 0;
+		__stgt_alloc_buffer(cmnd);
 
 		for (i = 0; i < cmnd->sg_count; i++) {
 			uint32_t copy = min_t(uint32_t, len, PAGE_CACHE_SIZE);
@@ -788,128 +789,45 @@ static void uspace_cmnd_done(struct stgt_cmnd *cmnd, char *data,
 		}
 	}
 
-	cmnd_done(cmnd, result);
-}
-
-static int sense_data_build(struct stgt_cmnd *cmnd, uint8_t key,
-			    uint8_t ascode, uint8_t ascodeq)
-{
-	int i, len = 8, alen = 6;
-	uint8_t *data;
-
-	/* It works, however, dirty. */
-	for (i = 0; i < cmnd->sg_count; i++)
-		__free_page(cmnd->sg[i].page);
-	kfree(cmnd->sg);
-
-	__alloc_buffer(cmnd, len + alen, 0);
-	data = page_address(cmnd->sg[0].page);
-	clear_page(data);
-
-	data[0] = 0x70 | 1U << 7;
-	data[2] = key;
-	data[7] = alen;
-	data[12] = ascode;
-	data[13] = ascodeq;
-
-	return len + alen;
-}
-
-/* TODO: better error handling
- * We should get ASC and ASCQ from the device code.
- */
-static uint8_t error_to_sense_key(int err)
-{
-	uint8_t key;
-
-	switch (err) {
-	case -ENOMEM:
-		key = ABORTED_COMMAND;
-		break;
-	case -EOVERFLOW:
-		key = HARDWARE_ERROR;
-		break;
-	default:
-		key = HARDWARE_ERROR;
-		break;
-	}
-
-	return key;
+	cmnd->result = result;
+	cmnd_done(cmnd);
 }
 
 static void queuecommand(void *data)
 {
-	int err;
-	uint8_t key;
-	enum stgt_cmnd_type type = STGT_CMND_USPACE;
-	struct stgt_cmnd *cmnd = (struct stgt_cmnd *) data;
+	int err = 0;
+	struct stgt_cmnd *cmnd = data;
 	struct stgt_target *target = cmnd->session->target;
 	struct stgt_device *device;
 
 	dprintk("%x\n", cmnd->scb[0]);
 
 	/* Should we do this earlier? */
-	device = stgt_device_find(target, cmnd->lun);
+	device = stgt_device_find(target, cmnd->dev_id);
 	if (device)
-		dprintk("found %u\n", cmnd->lun);
+		dprintk("found %llu\n", cmnd->dev_id);
 
-	if (device && device->sdt->prepcommand)
-		type = device->sdt->prepcommand(device, cmnd);
-
-	switch (type) {
-	case STGT_CMND_KSPACE:
-		err = device->sdt->queuecommand(device, cmnd);
-		if (err < 0)
-			goto failed_cmnd;
-		else
-			cmnd_done(cmnd, SAM_STAT_GOOD);
-		break;
-	case STGT_CMND_USPACE:
+	if (cmnd->rw == READ || cmnd->rw == WRITE)
+		err = device->sdt->queue_cmnd(device, cmnd);
+	else {
 		err = uspace_cmnd_send(cmnd);
-		if (err < 0)
-			goto failed_cmnd;
-		break;
-	default:
-		eprintk("%u %d\n", cmnd->scb[0], type);
-		assert(0);
-		break;
+		if (err >= 0)
+			/* sent to userspace */
+			return;
 	}
 
-	return;
-
-failed_cmnd:
-	eprintk("failed cmnd %llu %u %d %d\n",
-		cmnd->cid, cmnd->scb[0], err, type);
-	key = error_to_sense_key(err);
-	sense_data_build(cmnd, key, 0, 0);
-	cmnd_done(cmnd, SAM_STAT_CHECK_CONDITION);
+	if (unlikely(err))
+		eprintk("failed cmnd %llu %u %d %d\n",
+			cmnd->cid, cmnd->scb[0], err, cmnd->rw);
+	kspace_cmnd_done(cmnd, err);
 }
 
-static uint32_t translate_lun(uint8_t *p, int size)
-{
-	uint32_t lun = ~0U;
-
-	switch (*p >> 6) {
-	case 0:
-		lun = p[1];
-		break;
-	case 1:
-		lun = (0x3f & p[0]) << 8 | p[1];
-		break;
-	case 2:
-	case 3:
-	default:
-		break;
-	}
-
-	return lun;
-}
-
-int stgt_cmnd_queue(struct stgt_cmnd *cmnd, uint8_t *lun, int lun_size,
+int stgt_cmnd_queue(struct stgt_cmnd *cmnd, uint8_t *id_buff, int buff_size,
 		    void (*done)(struct stgt_cmnd *))
 {
 	struct stgt_work *work;
 	struct stgt_session *session = cmnd->session;
+	struct tgt_protocol *proto = session->target->proto;
 
 	dprintk("%p %x\n", cmnd, cmnd->scb[0]);
 
@@ -924,8 +842,7 @@ int stgt_cmnd_queue(struct stgt_cmnd *cmnd, uint8_t *lun, int lun_size,
 	if (!work)
 		return -ENOMEM;
 
-	cmnd->lun = translate_lun(lun, lun_size);
-
+	proto->prep_cmnd(cmnd, id_buff, buff_size);
 	stgt_queue_work(session->target, work);
 
 	return 0;
@@ -973,14 +890,14 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 			break;
 		}
 		err = stgt_device_create(ev->u.c_device.tid,
-					 ev->u.c_device.lun,
+					 ev->u.c_device.dev_id,
 					 ev->u.c_device.type,
 					 (char *) ev + sizeof(*ev),
 					 ev->u.c_device.flags);
 		break;
 	case STGT_UEVENT_DEVICE_DESTROY:
 		err = stgt_device_destroy(ev->u.d_device.tid,
-					  ev->u.d_device.lun);
+					  ev->u.d_device.dev_id);
 		break;
 	case STGT_UEVENT_SCSI_CMND_RES:
 		cmnd = find_cmnd_by_id(ev->u.cmnd_res.cid);
@@ -1077,6 +994,8 @@ static int __init stgt_init(void)
 	spin_lock_init(&cmnd_hash_lock);
 	spin_lock_init(&target_tmpl_lock);
 	spin_lock_init(&device_tmpl_lock);
+
+	tgt_protocol_init();
 
 	err = stgt_sysfs_init();
 	if (err)

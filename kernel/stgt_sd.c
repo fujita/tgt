@@ -105,22 +105,12 @@ static int stgt_sd_queue(struct stgt_device *device, struct stgt_cmnd *cmnd)
 	return 0;
 }
 
-static int stgt_sd_prep(struct stgt_device *device, struct stgt_cmnd *cmnd)
-{
-	/*
-	 * can we take owner ship? If so return 0 else return a enum
-	 * (TODO define this)
-	 */
-	return 0;
-}
-
 static struct stgt_device_template stgt_sd = {
 	.name = "stgt_sd",
 	.module = THIS_MODULE,
 	.create = stgt_sd_create,
 	.destroy = stgt_sd_destroy,
-	.queuecommand = stgt_sd_queue,
-	.prepcommand = stgt_sd_prep,
+	.queue_cmnd = stgt_sd_queue,
 };
 
 static int __init stgt_sd_init(void)

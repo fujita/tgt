@@ -11,9 +11,16 @@
 #include <linux/device.h>
 #include <linux/list.h>
 
+struct tgt_protocol;
+
 struct stgt_target_template {
 	const char *name;
 	struct module *module;
+
+	/*
+	 * name of protocol to use
+	 */
+	const char *protocol;
 
 	/*
 	 * Pointer to the sysfs class properties for this host, NULL terminated.
@@ -24,6 +31,8 @@ struct stgt_target_template {
 struct stgt_target {
 	int tid;
 	struct stgt_target_template *stt;
+	struct tgt_protocol *proto;
+
 	struct class_device cdev;
 
 	int queued_cmnds;

@@ -14,12 +14,6 @@
 struct stgt_device;
 struct stgt_cmnd;
 
-enum stgt_cmnd_type {
-	STGT_CMND_UNKNOWN,
-	STGT_CMND_KSPACE,
-	STGT_CMND_USPACE,
-};
-
 struct stgt_device_template {
 	const char *name;
 	struct module *module;
@@ -27,8 +21,7 @@ struct stgt_device_template {
 
 	int (* create)(struct stgt_device *);
 	void (* destroy)(struct stgt_device *);
-	int (* queuecommand)(struct stgt_device *device, struct stgt_cmnd *cmd);
-	int (* prepcommand)(struct stgt_device *device, struct stgt_cmnd *cmn);
+	int (* queue_cmnd)(struct stgt_device *device, struct stgt_cmnd *cmd);
 
 	/*
 	 * Pointer to the sysfs class properties for this host, NULL terminated.
@@ -43,7 +36,7 @@ struct stgt_device {
 	struct class_device cdev;
 
         char *path;
-        uint32_t lun;
+        uint64_t dev_id;
         uint32_t blk_shift;
         uint64_t size;
 

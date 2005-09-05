@@ -6,6 +6,7 @@
 #ifndef __SCSI_TARGET_H
 #define __SCSI_TARGET_H
 
+#include <linux/mempool.h>
 #include <scsi/scsi_cmnd.h>
 
 struct stgt_session {
@@ -20,10 +21,14 @@ struct stgt_cmnd {
 	struct stgt_session *session;
 
 	uint32_t state;
-	uint32_t lun;
+	uint64_t dev_id;
 	uint64_t cid;
 
+	/*
+	 * TODO allocate this as protocol specific data
+	 */
 	uint8_t scb[MAX_COMMAND_SIZE];
+	int rw;
 
 	void (*done) (struct stgt_cmnd *);
 
@@ -33,9 +38,13 @@ struct stgt_cmnd {
 	int sg_count;
 	struct scatterlist *sg;
 	uint32_t bufflen;
+	uint64_t offset;
 
 	int result;
 
+	/*
+	 * target driver private
+	 */
 	void *private;
 };
 
@@ -47,6 +56,7 @@ extern int stgt_session_destroy(struct stgt_session *session);
 
 extern struct stgt_cmnd *stgt_cmnd_create(struct stgt_session *session);
 extern void stgt_cmnd_destroy(struct stgt_cmnd *cmnd);
+extern void __stgt_alloc_buffer(struct stgt_cmnd *cmnd);
 extern void stgt_cmnd_alloc_buffer(struct stgt_cmnd *cmnd,
 				  void (*done)(struct stgt_cmnd *));
 extern int stgt_cmnd_queue(struct stgt_cmnd *cmnd,

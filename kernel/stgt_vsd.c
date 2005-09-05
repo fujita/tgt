@@ -1,5 +1,5 @@
 /*
- * STGT virtual device
+ * SCSI target virtual device
  *
  * (C) 2005 FUJITA Tomonori <tomof@acm.org>
  * (C) 2005 Mike Christie <michaelc@cs.wisc.edu>
@@ -76,31 +76,6 @@ out:
 	return err;
 }
 
-static loff_t translate_offset(uint8_t *scb)
-{
-	loff_t off = 0;
-
-	switch (scb[0]) {
-	case READ_6:
-	case WRITE_6:
-		off = ((scb[1] & 0x1f) << 16) + (scb[2] << 8) + scb[3];
-		break;
-	case READ_10:
-	case WRITE_10:
-	case WRITE_VERIFY:
-		off = be32_to_cpu(*(u32 *)&scb[2]);
-		break;
-	case READ_16:
-	case WRITE_16:
-		off = be64_to_cpu(*(u64 *)&scb[2]);
-		break;
-	default:
-		BUG();
-	}
-
-	return off << 9;
-}
-
 static struct iovec* sg_to_iovec(struct scatterlist *sg, int sg_count)
 {
 	struct iovec* iov;
@@ -118,13 +93,12 @@ static struct iovec* sg_to_iovec(struct scatterlist *sg, int sg_count)
 	return iov;
 }
 
-static int vfs_io(struct stgt_device *device, struct stgt_cmnd *cmnd, int rw, int sync)
+static int stgt_vsd_queue(struct stgt_device *device, struct stgt_cmnd *cmnd)
 {
 	struct stgt_vsd_dev *vsddev = device->sdt_data;
-	struct inode *inode = vsddev->filp->f_dentry->d_inode;
 	ssize_t size;
 	struct iovec *iov;
-	loff_t pos = translate_offset(cmnd->scb);
+	loff_t pos = cmnd->offset;
 	int err = 0;
 
 	if (cmnd->bufflen + pos > device->size)
@@ -134,82 +108,22 @@ static int vfs_io(struct stgt_device *device, struct stgt_cmnd *cmnd, int rw, in
 	if (!iov)
 		return -ENOMEM;
 
-	if (rw == READ)
+	if (cmnd->rw == READ)
 		size = generic_file_readv(vsddev->filp, iov, cmnd->sg_count, &pos);
 	else
 		size = generic_file_writev(vsddev->filp, iov, cmnd->sg_count, &pos);
 
 	kfree(iov);
 
+/* not yet used
 	if (sync)
 		err = sync_page_range(inode, inode->i_mapping, pos,
 				      (size_t) cmnd->bufflen);
-
+*/
 	if ((size != cmnd->bufflen) || err)
 		return -EIO;
 	else
 		return 0;
-}
-
-static int stgt_vsd_queue(struct stgt_device *device, struct stgt_cmnd *cmnd)
-{
-	struct stgt_vsd_dev *vsddev = device->sdt_data;
-	struct inode *inode = vsddev->filp->f_dentry->d_inode;
-	int err = 0;
-
-	switch (cmnd->scb[0]) {
-	case READ_6:
-	case READ_10:
-	case READ_16:
-		err = vfs_io(device, cmnd, READ, 0);
-		break;
-	case WRITE_6:
-	case WRITE_10:
-	case WRITE_16:
-	case WRITE_VERIFY:
-		err = vfs_io(device, cmnd, WRITE, 0);
-		break;
-	case RESERVE:
-	case RELEASE:
-	case RESERVE_10:
-	case RELEASE_10:
-		break;
-	case SYNCHRONIZE_CACHE:
-		err = sync_page_range(inode, inode->i_mapping, 0, device->size);
-		break;
-	default:
-		BUG();
-	}
-
-	if (err < 0)
-		printk("%s %d: %x %d\n", __FUNCTION__, __LINE__, cmnd->scb[0], err);
-	return err;
-}
-
-static int stgt_vsd_prep(struct stgt_device *device, struct stgt_cmnd *cmnd)
-{
-	enum stgt_cmnd_type type;
-
-	switch (cmnd->scb[0]) {
-	case READ_6:
-	case READ_10:
-	case READ_16:
-	case WRITE_6:
-	case WRITE_10:
-	case WRITE_16:
-	case WRITE_VERIFY:
-	case RESERVE:
-	case RELEASE:
-	case RESERVE_10:
-	case RELEASE_10:
-	case SYNCHRONIZE_CACHE:
-		type = STGT_CMND_KSPACE;
-		break;
-	default:
-		type = STGT_CMND_USPACE;
-	}
-
-	return type;
 }
 
 static struct stgt_device_template stgt_vsd = {
@@ -217,8 +131,7 @@ static struct stgt_device_template stgt_vsd = {
 	.module = THIS_MODULE,
 	.create = stgt_vsd_create,
 	.destroy = stgt_vsd_destroy,
-	.queuecommand = stgt_vsd_queue,
-	.prepcommand = stgt_vsd_prep,
+	.queue_cmnd = stgt_vsd_queue,
 };
 
 static int __init stgt_vsd_init(void)

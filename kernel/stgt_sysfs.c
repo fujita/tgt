@@ -170,8 +170,8 @@ int stgt_sysfs_register_device(struct stgt_device *device)
 	int err, i;
 
 	cdev->class = &stgt_device_class;
-	snprintf(cdev->class_id, BUS_ID_SIZE, "device%d:%d",
-		 target->tid, device->lun);
+	snprintf(cdev->class_id, BUS_ID_SIZE, "device%d:%llu",
+		 target->tid, device->dev_id);
 	err = class_device_register(cdev);
 	if (err)
 		return err;

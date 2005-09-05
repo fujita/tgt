@@ -6,9 +6,9 @@ EXTRA_CFLAGS += -I$(obj) -I$(obj)/../include -DNETLINK_STGT=20
 
 ifneq ($(KERNELRELEASE),)
 obj-m		+= stgt_core.o
-stgt_core-objs	:= stgt_sysfs.o stgt.o
+stgt_core-objs	:= stgt_sysfs.o tgt_protocol.o stgt.o
 
-obj-m		+= stgt_sd.o stgt_vsd.o
+obj-m		+= stgt_vsd.o tgt_scsi.o
 else
 
 ifeq ($(KERNELSRC),)
