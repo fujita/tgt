@@ -395,8 +395,7 @@ static int sync_cache(int tid, uint64_t lun, uint8_t *scb, uint8_t *data,
 		      int *len)
 {
 	int fd, err;
-	/* yuck! - i need to learn which function to call to avoid this crap */
-	char path[PATH_MAX], buf[PATH_MAX], dev[PATH_MAX];
+	char path[PATH_MAX], buf[PATH_MAX];
 
 	sprintf(path, "/sys/class/stgt_device/device%d:%llu/path", tid, lun);
 
@@ -414,9 +413,13 @@ static int sync_cache(int tid, uint64_t lun, uint8_t *scb, uint8_t *data,
 		err = EIO;
 		goto eio;
 	}
-	sscanf(buf, "%s\n", dev);
+	/*
+	 * yuck! wtf should I be using
+	 */
+	memset(path, 0, PATH_MAX);
+	sscanf(buf, "%s\n", path);
 
-	fd = open(dev, O_RDWR);
+	fd = open(path, O_RDWR);
 	if (fd < 0) {
 		perror("scsi sync_cache could not open device");
 		err = EIO;
