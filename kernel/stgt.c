@@ -277,7 +277,7 @@ free_target:
 	kfree(target);
 	return NULL;
 }
-EXPORT_SYMBOL(stgt_target_create);
+EXPORT_SYMBOL_GPL(stgt_target_create);
 
 int stgt_target_destroy(struct stgt_target *target)
 {
@@ -292,7 +292,7 @@ int stgt_target_destroy(struct stgt_target *target)
 
 	return 0;
 }
-EXPORT_SYMBOL(stgt_target_destroy);
+EXPORT_SYMBOL_GPL(stgt_target_destroy);
 
 static int session_init(struct stgt_session *session, int max_cmnds)
 {
@@ -419,7 +419,7 @@ out:
 	kfree(session);
 	return NULL;
 }
-EXPORT_SYMBOL(stgt_session_create);
+EXPORT_SYMBOL_GPL(stgt_session_create);
 
 int stgt_session_destroy(struct stgt_session *session)
 {
@@ -429,7 +429,7 @@ int stgt_session_destroy(struct stgt_session *session)
 
 	return 0;
 }
-EXPORT_SYMBOL(stgt_session_destroy);
+EXPORT_SYMBOL_GPL(stgt_session_destroy);
 
 struct device_type_internal {
 	struct stgt_device_template *sdt;
@@ -638,7 +638,7 @@ struct stgt_cmnd *stgt_cmnd_create(struct stgt_session *session)
 
 	return cmnd;
 }
-EXPORT_SYMBOL(stgt_cmnd_create);
+EXPORT_SYMBOL_GPL(stgt_cmnd_create);
 
 void stgt_cmnd_destroy(struct stgt_cmnd *cmnd)
 {
@@ -655,7 +655,7 @@ void stgt_cmnd_destroy(struct stgt_cmnd *cmnd)
 
 	mempool_free(cmnd, cmnd->session->cmnd_pool);
 }
-EXPORT_SYMBOL(stgt_cmnd_destroy);
+EXPORT_SYMBOL_GPL(stgt_cmnd_destroy);
 
 #define pgcnt(size, offset)	((((size) + ((offset) & ~PAGE_CACHE_MASK)) + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT)
 
@@ -682,7 +682,7 @@ void __stgt_alloc_buffer(struct stgt_cmnd *cmnd)
 		len -= sg->length;
 	}
 }
-EXPORT_SYMBOL(__stgt_alloc_buffer);
+EXPORT_SYMBOL_GPL(__stgt_alloc_buffer);
 
 static void stgt_alloc_buffer(void *data)
 {
@@ -717,7 +717,7 @@ void stgt_cmnd_alloc_buffer(struct stgt_cmnd *cmnd, void (*done)(struct stgt_cmn
 
 	stgt_alloc_buffer(cmnd);
 }
-EXPORT_SYMBOL(stgt_cmnd_alloc_buffer);
+EXPORT_SYMBOL_GPL(stgt_cmnd_alloc_buffer);
 
 static int uspace_cmnd_send(struct stgt_cmnd *cmnd)
 {
@@ -847,7 +847,7 @@ int stgt_cmnd_queue(struct stgt_cmnd *cmnd, uint8_t *id_buff, int buff_size,
 
 	return 0;
 }
-EXPORT_SYMBOL(stgt_cmnd_queue);
+EXPORT_SYMBOL_GPL(stgt_cmnd_queue);
 
 static struct stgt_cmnd *find_cmnd_by_id(uint64_t cid)
 {
