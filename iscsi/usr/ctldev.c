@@ -443,7 +443,7 @@ static int iscsi_lunit_create(u32 tid, u32 lun, char *args)
 
 	ev = NLMSG_DATA(nlh);
 	ev->u.c_device.tid = tid;
-	ev->u.c_device.lun = lun;
+	ev->u.c_device.dev_id = lun;
 	strncpy(ev->u.c_device.type, type, sizeof(ev->u.c_device.type));
 	memcpy((char *) ev + sizeof(*ev), path, strlen(path));
 
@@ -467,7 +467,7 @@ static int iscsi_lunit_destroy(u32 tid, u32 lun)
 
 	ev = NLMSG_DATA(nlh);
 	ev->u.d_device.tid = tid;
-	ev->u.d_device.lun = lun;
+	ev->u.d_device.dev_id = lun;
 
 	err = ipc_cmnd_execute(nlm_ev, nlh->nlmsg_len);
 

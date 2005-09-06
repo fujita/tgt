@@ -1574,6 +1574,7 @@ void cmnd_rx_end(struct iscsi_cmnd *cmnd)
 static struct stgt_target_template iet_stgt_target_template = {
 	.name = "iet",
 	.module = THIS_MODULE,
+	.protocol = "scsi",
 };
 
 static void iscsi_exit(void)

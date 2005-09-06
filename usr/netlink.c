@@ -117,7 +117,7 @@ static int scsi_cmnd_queue(int fd, char *reqbuf, char *resbuf)
 	scb = reqbuf + sizeof(*ev);
 	dprintf("%" PRIu64 " %x\n", cid, scb[0]);
 
-	result = scsi_cmnd_process(ev->k.cmnd_req.tid, ev->k.cmnd_req.lun,
+	result = scsi_cmnd_process(ev->k.cmnd_req.tid, ev->k.cmnd_req.dev_id,
 				scb, resbuf, &len);
 
 	memset(ev, 0, sizeof(*ev));

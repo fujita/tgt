@@ -15,6 +15,7 @@
 #include <stdint.h>
 #include <dirent.h>
 #include <unistd.h>
+#include <errno.h>
 #include <scsi/scsi.h>
 #include <asm/byteorder.h>
 #include <sys/stat.h>
@@ -56,12 +57,12 @@ static uint32_t blk_shift = 9;
 #define max_t(type,x,y) \
 	({ type __x = (x); type __y = (y); __x > __y ? __x: __y; })
 
-static int device_info(int tid, uint32_t lun, uint64_t *size)
+static int device_info(int tid, uint64_t lun, uint64_t *size)
 {
 	int fd, err;
 	char path[PATH_MAX], buf[128];
 
-	sprintf(path, "/sys/class/stgt_device/device%d:%u/size", tid, lun);
+	sprintf(path, "/sys/class/stgt_device/device%d:%llu/size", tid, lun);
 
 	fd = open(path, O_RDONLY);
 	if (fd < 0)
@@ -150,7 +151,7 @@ static int insert_geo_m_pg(uint8_t *ptr, uint64_t sec)
 	return sizeof(geo_m_pg);
 }
 
-static int mode_sense(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int *len)
+static int mode_sense(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *len)
 {
 	int result = SAM_STAT_GOOD;
 	uint8_t pcode = scb[2] & 0x3f;
@@ -219,7 +220,7 @@ static int mode_sense(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int *l
 #define PRODUCT_ID	"VIRTUAL-DISK"
 #define PRODUCT_REV	"0"
 
-static int inquiry(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int *len)
+static int inquiry(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *len)
 {
 	int result = SAM_STAT_CHECK_CONDITION;
 
@@ -278,8 +279,8 @@ static int inquiry(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int *len)
 			data[4] = 0x1;
 			data[5] = 0x1;
 			data[7] = tmp;
-			if (lun != ~0UL)
-				sprintf(data + 8, "deadbeaf%d:%u", tid, lun);
+			if (lun != ~0ULL)
+				sprintf(data + 8, "deadbeaf%d:%llu", tid, lun);
 			*len = tmp + 8;
 			result = SAM_STAT_GOOD;
 		}
@@ -290,7 +291,7 @@ static int inquiry(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int *len)
 
 	*len = min_t(int, *len, scb[4]);
 
-	if (lun == ~0UL)
+	if (lun == ~0ULL)
 		data[0] = TYPE_NO_LUN;
 
 	return SAM_STAT_GOOD;
@@ -303,6 +304,9 @@ err:
 
 static int report_luns(int tid, uint32_t unused, uint8_t *scb, uint8_t *p, int *len)
 {
+	/*
+	 * TODO Convert to 64 bits
+	 */
 	uint32_t lun;
 	uint32_t *data = (uint32_t *) p;
 	int idx, alen, oalen, rbuflen, nr_luns;
@@ -360,7 +364,7 @@ out:
 	return result;
 }
 
-static int read_capacity(int tid, uint32_t lun, uint8_t *scb, uint8_t *p, int *len)
+static int read_capacity(int tid, uint64_t lun, uint8_t *scb, uint8_t *p, int *len)
 {
 	uint32_t *data = (uint32_t *) p;
 	uint64_t size;
@@ -387,17 +391,70 @@ static int read_capacity(int tid, uint32_t lun, uint8_t *scb, uint8_t *p, int *l
 	return SAM_STAT_GOOD;
 }
 
+static int sync_cache(int tid, uint64_t lun, uint8_t *scb, uint8_t *data,
+		      int *len)
+{
+	int fd, err;
+	/* yuck! - i need to learn which function to call to avoid this crap */
+	char path[PATH_MAX], buf[PATH_MAX], dev[PATH_MAX];
+
+	sprintf(path, "/sys/class/stgt_device/device%d:%llu/path", tid, lun);
+
+	fd = open(path, O_RDONLY);
+	if (fd < 0) {
+		perror("scsi sync_cache could not get LU's path");
+		err = EINVAL;
+		goto einval;
+	}
+
+	err = read(fd, buf, sizeof(buf));
+	close(fd);
+	if (err < 0) {
+		perror("scsi sync_cache could not read LUN path");
+		err = EIO;
+		goto eio;
+	}
+	sscanf(buf, "%s\n", dev);
+
+	fd = open(dev, O_RDWR);
+	if (fd < 0) {
+		perror("scsi sync_cache could not open device");
+		err = EIO;
+		goto eio;
+	}
+	err = fsync(fd);
+	close(fd);
+
+	switch (err) {
+	case EROFS:
+	case EINVAL:
+	case EBADF:
+einval:
+		/* is this the right sense code? */
+		*len = sense_data_build(data, 0x70, ILLEGAL_REQUEST, 0, 0);
+		return SAM_STAT_CHECK_CONDITION;
+	case EIO:
+eio:
+		/* what should I put for the asc/ascq? */
+		*len = sense_data_build(data, 0x70, ILLEGAL_REQUEST, 0, 0);
+		return SAM_STAT_CHECK_CONDITION;
+	default:
+		*len = 0;
+		return SAM_STAT_GOOD;
+	}
+}
+
 /*
  * TODO: We always assume autosense.
  */
-static int request_sense(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int* len)
+static int request_sense(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int* len)
 {
 	*len = sense_data_build(data, 0x70, NO_SENSE, 0, 0);
 
 	return SAM_STAT_GOOD;
 }
 
-static int sevice_action(int tid, uint32_t lun, uint8_t *scb, uint8_t *p, int *len)
+static int sevice_action(int tid, uint64_t lun, uint8_t *scb, uint8_t *p, int *len)
 {
 	uint32_t *data = (uint32_t *) p;
 	uint64_t *data64, size;
@@ -418,13 +475,13 @@ static int sevice_action(int tid, uint32_t lun, uint8_t *scb, uint8_t *p, int *l
 	return SAM_STAT_GOOD;
 }
 
-int scsi_cmnd_process(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int *len)
+int scsi_cmnd_process(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *len)
 {
 	int result = SAM_STAT_GOOD;
 
 	dprintf("%x\n", scb[0]);
 
-	if (lun == ~0UL)
+	if (lun == ~0ULL)
 		switch (scb[0]) {
 		case REQUEST_SENSE:
 		case INQUIRY:
@@ -456,9 +513,11 @@ int scsi_cmnd_process(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int *l
 	case SERVICE_ACTION_IN:
 		result = sevice_action(tid, lun, scb, data, len);
 		break;
+	case SYNCHRONIZE_CACHE:
+		result = sync_cache(tid, lun, scb, data, len);
+		break;
 	case START_STOP:
 	case TEST_UNIT_READY:
-	case SYNCHRONIZE_CACHE:
 	case VERIFY:
 		*len = 0;
 		break;
@@ -472,7 +531,7 @@ int scsi_cmnd_process(int tid, uint32_t lun, uint8_t *scb, uint8_t *data, int *l
 	case RESERVE_10:
 	case RELEASE_10:
 	default:
-		dprintf("BUG? %u %u\n", scb[0], lun);
+		dprintf("BUG? %u %llu\n", scb[0], lun);
 		*len = 0;
 		break;
 	}

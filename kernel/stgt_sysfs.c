@@ -130,7 +130,7 @@ static ssize_t								\
 show_##field (struct class_device *cdev, char *buf)			\
 {									\
 	struct stgt_device *device = cdev_to_stgt_device(cdev);		\
-	return sprintf (buf, format_string, device->field);	\
+	return sprintf(buf, format_string, device->field);	\
 }
 
 #define stgt_device_rd_attr(field, format_string)		\

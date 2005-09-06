@@ -25,13 +25,13 @@ struct stgt_event {
 	union {
 		struct {
 			int tid;
-			uint32_t lun;
+			uint64_t dev_id;
 			uint32_t flags;
 			char type[32];
 		} c_device;
 		struct {
 			int tid;
-			uint32_t lun;
+			uint64_t dev_id;
 		} d_device;
 		struct {
 			uint64_t cid;
@@ -48,7 +48,7 @@ struct stgt_event {
 		struct {
 			uint64_t cid;
 			int tid;
-			uint32_t lun;
+			uint64_t dev_id;
 		} cmnd_req;
 	} k;
 };
