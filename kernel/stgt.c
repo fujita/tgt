@@ -134,7 +134,7 @@ static void stgt_queue_work(struct stgt_target *target, struct stgt_work *work)
 	list_add_tail(&work->list, &target->work_list);
 	spin_unlock_irqrestore(&target->lock, flags);
 
-	schedule_work(&target->work);
+	queue_work(target->twq, &target->work);
 }
 
 struct target_type_internal {
@@ -232,6 +232,7 @@ found:
 
 struct stgt_target *stgt_target_create(char *target_type, int queued_cmnds)
 {
+	char name[16];
 	static int target_id;
 	struct stgt_target *target;
 	struct target_type_internal *tti;
@@ -263,14 +264,21 @@ struct stgt_target *stgt_target_create(char *target_type, int queued_cmnds)
 	INIT_WORK(&target->work, stgt_worker, target);
 	target->queued_cmnds = queued_cmnds;
 
-	if (stgt_sysfs_register_target(target))
+	snprintf(name, sizeof(name), "tgtd%d", target->tid);
+	target->twq = create_workqueue(name);
+	if (!target->twq)
 		goto put_template;
+
+	if (stgt_sysfs_register_target(target))
+		goto free_workqueue;
 
 	spin_lock(&all_targets_lock);
 	list_add(&target->tlist, &all_targets);
 	spin_unlock(&all_targets_lock);
 	return target;
 
+free_workqueue:
+	destroy_workqueue(target->twq);
 put_template:
 	target_template_put(target->stt);
 free_target:
@@ -287,6 +295,7 @@ int stgt_target_destroy(struct stgt_target *target)
 	list_del(&target->tlist);
 	spin_unlock(&all_targets_lock);
 
+	destroy_workqueue(target->twq);
 	target_template_put(target->stt);
 	stgt_sysfs_unregister_target(target);
 
@@ -370,7 +379,7 @@ static int session_atomic_init(struct stgt_session *session,
 	list_add(&ssa->list, &atomic_sessions);
 	spin_unlock_irqrestore(&atomic_sessions_lock, flags);
 
-	schedule_work(&atomic_session_work);
+	queue_work(session->target->twq, &atomic_session_work);
 
 	return 0;
 }

@@ -47,6 +47,7 @@ struct stgt_target {
 
 	struct work_struct work;
 	struct list_head work_list;
+	struct workqueue_struct *twq;
 };
 
 #define cdev_to_stgt_target(cdev) \
