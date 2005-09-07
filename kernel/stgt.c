@@ -626,20 +626,18 @@ static int stgt_device_destroy(int tid, uint64_t dev_id)
 
 struct stgt_cmnd *stgt_cmnd_create(struct stgt_session *session)
 {
-	static uint64_t cid = 0;
 	struct stgt_cmnd *cmnd;
 	unsigned long flags;
 
-	dprintk("%p %llu\n", session, cid);
 	cmnd = mempool_alloc(session->cmnd_pool, GFP_ATOMIC);
 	assert(cmnd);
 	memset(cmnd, 0, sizeof(*cmnd));
 	cmnd->session = session;
-	cmnd->cid = cid++;
+	cmnd->cid = (uint64_t) (unsigned long) cmnd;
 	INIT_LIST_HEAD(&cmnd->clist);
 	INIT_LIST_HEAD(&cmnd->hash_list);
 
-	dprintk("%p %llu\n", session, cid);
+	dprintk("%p %llu\n", session, cmnd->cid);
 
 	spin_lock_irqsave(&cmnd_hash_lock, flags);
 	list_add_tail(&cmnd->hash_list, &cmnd_hash[cmnd_hashfn(cmnd->cid)]);
