@@ -1615,6 +1615,7 @@ static int iscsi_init(void)
 	if (!iscsi_cmnd_cache)
 		goto err;
 
+	iet_stgt_target_template.priv_data_size = sizeof(struct iscsi_target);
 	err = stgt_target_template_register(&iet_stgt_target_template);
 	if (err < 0)
 		goto err;
