@@ -106,12 +106,11 @@ static int iscsi_target_create(struct target_info *info)
 	int err = -EINVAL;
 	struct iscsi_target *target;
 
-	if (!(target = kmalloc(sizeof(*target), GFP_KERNEL))) {
-		err = -ENOMEM;
-		goto out;
-	}
-	memset(target, 0, sizeof(*target));
+	target = kmalloc(sizeof(*target), GFP_KERNEL);
+	if (!target)
+		return -ENOMEM;
 
+	memset(target, 0, sizeof(*target));
 	memcpy(&target->sess_param, &default_session_param, sizeof(default_session_param));
 	memcpy(&target->trgt_param, &default_target_param, sizeof(default_target_param));
 
@@ -122,19 +121,21 @@ static int iscsi_target_create(struct target_info *info)
 
 	nthread_init(target);
 
-	if ((err = target_thread_start(target)) < 0) {
-		target_thread_stop(target);
-		goto out;
-	}
-
 	target->stt = stgt_target_create("iet", DEFAULT_NR_QUEUED_CMNDS);
+	if (!target->stt)
+		goto free_target;
+
+	err = target_thread_start(target);
+	if (err < 0)
+		goto destory_tgt;
 
 	target->tid = info->tid = target->stt->tid;
-
 	return 0;
-out:
-	kfree(target);
 
+destory_tgt:
+	stgt_target_destroy(target->stt);
+free_target:
+	kfree(target);
 	return err;
 }
 
