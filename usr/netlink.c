@@ -105,7 +105,7 @@ int nl_cmnd_call(int fd, int type, char *data, int size, int *res)
 	return err;
 }
 
-static int scsi_cmnd_queue(int fd, char *reqbuf, char *resbuf)
+static int cmnd_queue(int fd, char *reqbuf, char *resbuf)
 {
 	int result, len;
 	struct iovec iov[2];
@@ -117,6 +117,10 @@ static int scsi_cmnd_queue(int fd, char *reqbuf, char *resbuf)
 	scb = reqbuf + sizeof(*ev);
 	dprintf("%" PRIu64 " %x\n", cid, scb[0]);
 
+	/*
+	 * TODO match tid to protocol and route cmnd to correct userspace
+	 * protocol module
+	 */
 	result = scsi_cmnd_process(ev->k.cmnd_req.tid, ev->k.cmnd_req.dev_id,
 				scb, resbuf, &len);
 
@@ -130,7 +134,7 @@ static int scsi_cmnd_queue(int fd, char *reqbuf, char *resbuf)
 	iov[1].iov_base = resbuf;
 	iov[1].iov_len = len;
 
-	return nl_write(fd, STGT_UEVENT_SCSI_CMND_RES, iov, len ? 2 : 1);
+	return nl_write(fd, STGT_UEVENT_CMND_RES, iov, len ? 2 : 1);
 }
 
 void nl_event_handle(int fd)
@@ -167,8 +171,8 @@ read_again:
 	}
 
 	switch (nlh->nlmsg_type) {
-	case STGT_KEVENT_SCSI_CMND_REQ:
-		scsi_cmnd_queue(fd, NLMSG_DATA(recvbuf), sendbuf);
+	case STGT_KEVENT_CMND_REQ:
+		cmnd_queue(fd, NLMSG_DATA(recvbuf), sendbuf);
 		break;
 	default:
 		/* kernel module bug */

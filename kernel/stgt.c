@@ -755,7 +755,7 @@ static int uspace_cmnd_send(struct stgt_cmnd *cmnd)
 
 	dprintk("%d %Zd %Zd\n", len, sizeof(*ev), sizeof(cmnd->scb));
 	nlh = __nlmsg_put(skb, daemon_pid, 0,
-			  STGT_KEVENT_SCSI_CMND_REQ, len - sizeof(*nlh), 0);
+			  STGT_KEVENT_CMND_REQ, len - sizeof(*nlh), 0);
 	ev = NLMSG_DATA(nlh);
 	memset(ev, 0, sizeof(*ev));
 
@@ -936,7 +936,7 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 		err = stgt_device_destroy(ev->u.d_device.tid,
 					  ev->u.d_device.dev_id);
 		break;
-	case STGT_UEVENT_SCSI_CMND_RES:
+	case STGT_UEVENT_CMND_RES:
 		cmnd = find_cmnd_by_id(ev->u.cmnd_res.cid);
 		if (cmnd)
 			uspace_cmnd_done(cmnd, (char *) ev + sizeof(*ev),
@@ -987,7 +987,7 @@ static int event_recv_skb(struct sk_buff *skb)
 
 		eprintk("%d %d\n", nlh->nlmsg_type, err);
 		ev->k.event_res.err = err;
-		if (nlh->nlmsg_type != STGT_UEVENT_SCSI_CMND_RES)
+		if (nlh->nlmsg_type != STGT_UEVENT_CMND_RES)
 			send_event_res(NETLINK_CREDS(skb)->pid,
 				       STGT_KEVENT_RESPONSE,
 				       ev, sizeof(*ev));
