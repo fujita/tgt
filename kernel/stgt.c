@@ -1,5 +1,5 @@
 /*
- * SCSI Targets Framework
+ * Core Target Framework code
  *
  * (C) 2005 FUJITA Tomonori <tomof@acm.org>
  * (C) 2005 Mike Christie <michaelc@cs.wisc.edu>
@@ -15,7 +15,6 @@
 #include <linux/mempool.h>
 #include <linux/netlink.h>
 #include <net/tcp.h>
-#include <scsi/scsi.h>
 
 #include <stgt.h>
 #include <stgt_target.h>
