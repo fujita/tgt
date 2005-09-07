@@ -1,5 +1,5 @@
 /*
- * SCSI target virtual device
+ * virtual device
  *
  * (C) 2005 FUJITA Tomonori <tomof@acm.org>
  * (C) 2005 Mike Christie <michaelc@cs.wisc.edu>
@@ -12,7 +12,6 @@
 #include <linux/uio.h>
 #include <linux/fs.h>
 #include <linux/writeback.h>
-#include <scsi/scsi.h>
 
 #include <stgt.h>
 #include <stgt_device.h>
