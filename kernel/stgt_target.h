@@ -12,10 +12,15 @@
 #include <linux/list.h>
 
 struct tgt_protocol;
+struct stgt_target;
 
 struct stgt_target_template {
 	const char *name;
 	struct module *module;
+	unsigned priv_data_size;
+
+	int (* target_create) (struct stgt_target *);
+	void (* target_destroy) (struct stgt_target *);
 
 	/*
 	 * name of protocol to use
@@ -31,6 +36,7 @@ struct stgt_target_template {
 struct stgt_target {
 	int tid;
 	struct stgt_target_template *stt;
+	void *stt_data;
 	struct tgt_protocol *proto;
 
 	struct class_device cdev;

@@ -11,6 +11,8 @@
 enum stgt_event_type {
 	/* user -> kernel */
 	STGT_UEVENT_START,
+	STGT_UEVENT_TARGET_CREATE,
+	STGT_UEVENT_TARGET_DESTROY,
 	STGT_UEVENT_DEVICE_CREATE,
 	STGT_UEVENT_DEVICE_DESTROY,
 	STGT_UEVENT_SCSI_CMND_RES,
@@ -23,6 +25,13 @@ enum stgt_event_type {
 struct stgt_event {
 	/* user-> kernel */
 	union {
+		struct {
+			char type[32];
+			int nr_cmnds;
+		} c_target;
+		struct {
+			int tid;
+		} d_target;
 		struct {
 			int tid;
 			uint64_t dev_id;

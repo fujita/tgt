@@ -245,7 +245,6 @@ struct stgt_target *stgt_target_create(char *target_type, int queued_cmnds)
 	target = kmalloc(sizeof(*target), GFP_KERNEL);
 	if (!target)
 		return NULL;
-	dprintk("%p\n", target);
 	memset(target, 0, sizeof(*target));
 
 	tti = target_template_get(target_type);
@@ -269,14 +268,27 @@ struct stgt_target *stgt_target_create(char *target_type, int queued_cmnds)
 	if (!target->twq)
 		goto put_template;
 
-	if (stgt_sysfs_register_target(target))
+	target->stt_data = kmalloc(sizeof(target->stt->priv_data_size), GFP_KERNEL);
+	if (!target->stt_data)
 		goto free_workqueue;
+
+	if (target->stt->target_create)
+		if (target->stt->target_create(target))
+			goto free_priv_stt_data;
+
+	if (stgt_sysfs_register_target(target))
+		goto stt_destroy;
 
 	spin_lock(&all_targets_lock);
 	list_add(&target->tlist, &all_targets);
 	spin_unlock(&all_targets_lock);
 	return target;
 
+stt_destroy:
+	if (target->stt->target_destroy)
+		target->stt->target_destroy(target);
+free_priv_stt_data:
+	kfree(target->stt_data);
 free_workqueue:
 	destroy_workqueue(target->twq);
 put_template:
@@ -294,6 +306,9 @@ int stgt_target_destroy(struct stgt_target *target)
 	spin_lock(&all_targets_lock);
 	list_del(&target->tlist);
 	spin_unlock(&all_targets_lock);
+
+	if (target->stt->target_destroy)
+		target->stt->target_destroy(target);
 
 	destroy_workqueue(target->twq);
 	target_template_put(target->stt);
@@ -882,6 +897,7 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 	int err = 0;
 	struct stgt_event *ev = NLMSG_DATA(nlh);
 	struct stgt_cmnd *cmnd;
+	struct stgt_target *target;
 
 	daemon_pid  = NETLINK_CREDS(skb)->pid;
 
@@ -890,6 +906,21 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 	switch (nlh->nlmsg_type) {
 	case STGT_UEVENT_START:
 		dprintk("start %d\n", daemon_pid);
+		break;
+	case STGT_UEVENT_TARGET_CREATE:
+		target = stgt_target_create(ev->u.c_target.type,
+					    ev->u.c_target.nr_cmnds);
+		if (target)
+			err = target->tid;
+		else
+			err = -EINVAL;
+		break;
+	case STGT_UEVENT_TARGET_DESTROY:
+		target = target_find(ev->u.d_target.tid);
+		if (target)
+			err = stgt_target_destroy(target);
+		else
+			err = -EINVAL;
 		break;
 	case STGT_UEVENT_DEVICE_CREATE:
 		if (nlh->nlmsg_len <= NLMSG_SPACE(sizeof(*ev))) {

@@ -33,6 +33,7 @@ static struct class_device_attribute *stgt_target_attrs[] = {
 static void stgt_target_class_release(struct class_device *cdev)
 {
 	struct stgt_target *target = cdev_to_stgt_target(cdev);
+	kfree(target->stt_data);
 	kfree(target);
 }
 
