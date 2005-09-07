@@ -24,6 +24,11 @@
 
 #define CTL_DEVICE	"/dev/ietctl"
 
+/*
+ * tomo:
+ * netlink code is temporary until ietd will be integrated to stgtd
+ */
+
 extern int ctrl_fd;
 
 struct session_file_operations {
@@ -80,31 +85,6 @@ static int ctrdev_open(void)
 	}
 
 	return ctlfd;
-}
-
-static int iscsi_target_create(u32 *tid, char *name)
-{
-	int err;
-	struct target_info info;
-
-	memset(&info, 0, sizeof(info));
-
-	info.tid = *tid;
-	if ((err = ioctl(ctrl_fd, ADD_TARGET, &info)) < 0)
-		log_warning("can't create a target %d %u\n", errno, info.tid);
-
-	*tid = info.tid;
-	return err;
-}
-
-static int iscsi_target_destroy(u32 tid)
-{
-	struct target_info info;
-
-	memset(&info, 0, sizeof(info));
-	info.tid = tid;
-
-	return ioctl(ctrl_fd, DEL_TARGET, &info);
 }
 
 static int iscsi_conn_destroy(u32 tid, u64 sid, u32 cid)
@@ -385,7 +365,7 @@ out:
 	if (fd > 0)
 		close(fd);
 
-	return fd;
+	return err;
 }
 
 static void nlmsg_init(struct nlmsghdr *nlh, u32 pid, u32 seq, int type,
@@ -396,6 +376,49 @@ static void nlmsg_init(struct nlmsghdr *nlh, u32 pid, u32 seq, int type,
 	nlh->nlmsg_flags = 0;
 	nlh->nlmsg_type = type;
 	nlh->nlmsg_seq = seq;
+}
+
+static int iscsi_target_create(u32 *tid, char *name)
+{
+	int err;
+	char nlm_ev[8912];
+	struct stgt_event *ev;
+	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
+
+	memset(nlm_ev, 0, sizeof(nlm_ev));
+	nlmsg_init(nlh, getpid(), 0, STGT_UEVENT_TARGET_CREATE,
+		   NLMSG_SPACE(sizeof(*ev)), 0);
+
+	ev = NLMSG_DATA(nlh);
+	sprintf(ev->u.c_target.type, "%s", "iet");
+	ev->u.c_target.nr_cmnds = DEFAULT_NR_QUEUED_CMNDS;
+
+	err = ipc_cmnd_execute(nlm_ev, nlh->nlmsg_len);
+	if (err > 0) {
+		*tid = err;
+		err = 0;
+	}
+
+	return err;
+}
+
+static int iscsi_target_destroy(u32 tid)
+{
+	int err;
+	char nlm_ev[8912];
+	struct stgt_event *ev;
+	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
+
+	memset(nlm_ev, 0, sizeof(nlm_ev));
+	nlmsg_init(nlh, getpid(), 0, STGT_UEVENT_TARGET_DESTROY,
+		   NLMSG_SPACE(sizeof(*ev)), 0);
+
+	ev = NLMSG_DATA(nlh);
+	ev->u.d_target.tid = tid;
+
+	err = ipc_cmnd_execute(nlm_ev, nlh->nlmsg_len);
+
+	return err;
 }
 
 static int iscsi_lunit_create(u32 tid, u32 lun, char *args)

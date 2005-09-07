@@ -180,20 +180,6 @@ out:
 	return err;
 }
 
-static int add_target(unsigned long ptr)
-{
-	int err;
-	struct target_info info;
-
-	if ((err = copy_from_user(&info, (void *) ptr, sizeof(info))) < 0)
-		return err;
-
-	if (!(err = target_add(&info)))
-		err = copy_to_user((void *) ptr, &info, sizeof(info));
-
-	return err;
-}
-
 static long ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct iscsi_target *target = NULL;
@@ -203,20 +189,7 @@ static long ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	if ((err = get_user(id, (u32 *) arg)) != 0)
 		goto done;
 
-	if (cmd == DEL_TARGET) {
-		err = target_del(id);
-		goto done;
-	}
-
-	if (cmd != ADD_TARGET)
-		target = target_lookup_by_id(id);
-
-	switch (cmd) {
-	case ADD_TARGET:
-		err = add_target(arg);
-		goto done;
-	}
-
+	target = target_lookup_by_id(id);
 	if (!target) {
 		eprintk("can't find the target %u\n", id);
 		err = -EINVAL;

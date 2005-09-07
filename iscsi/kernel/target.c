@@ -101,16 +101,15 @@ static void target_thread_stop(struct iscsi_target *target)
 	nthread_stop(target);
 }
 
-static int iscsi_target_create(struct target_info *info)
+static int iscsi_target_create(struct stgt_target *stt)
 {
 	int err = -EINVAL;
-	struct iscsi_target *target;
-
-	target = kmalloc(sizeof(*target), GFP_KERNEL);
-	if (!target)
-		return -ENOMEM;
+	struct iscsi_target *target =
+		(struct iscsi_target *) stt->stt_data;
 
 	memset(target, 0, sizeof(*target));
+
+	target->stt = stt;
 	memcpy(&target->sess_param, &default_session_param, sizeof(default_session_param));
 	memcpy(&target->trgt_param, &default_target_param, sizeof(default_target_param));
 
@@ -121,25 +120,15 @@ static int iscsi_target_create(struct target_info *info)
 
 	nthread_init(target);
 
-	target->stt = stgt_target_create("iet", DEFAULT_NR_QUEUED_CMNDS);
-	if (!target->stt)
-		goto free_target;
-
 	err = target_thread_start(target);
 	if (err < 0)
-		goto destory_tgt;
+		return err;
 
-	target->tid = info->tid = target->stt->tid;
+	target->tid = target->stt->tid;
 	return 0;
-
-destory_tgt:
-	stgt_target_destroy(target->stt);
-free_target:
-	kfree(target);
-	return err;
 }
 
-int target_add(struct target_info *info)
+int target_add(struct stgt_target *stt)
 {
 	int err = -EEXIST;
 
@@ -150,10 +139,7 @@ int target_add(struct target_info *info)
 		goto out;
 	}
 
-	if (info->tid)
-		goto out;
-
-	if (!(err = iscsi_target_create(info)))
+	if (!(err = iscsi_target_create(stt)))
 		nr_targets++;
 out:
 	up(&target_list_sem);
@@ -161,36 +147,17 @@ out:
 	return err;
 }
 
-static void target_destroy(struct iscsi_target *target)
+void target_del(struct stgt_target *stt)
 {
-	dprintk(D_SETUP, "%u\n", target->tid);
+	struct iscsi_target *target =
+		(struct iscsi_target *) stt->stt_data;
 
-	stgt_target_destroy(target->stt);
-
-	target_thread_stop(target);
-
-	kfree(target);
-}
-
-int target_del(u32 id)
-{
-	struct iscsi_target *target;
-	int err;
-
-	if ((err = down_interruptible(&target_list_sem)) < 0)
-		return err;
-
-	if (!(target = __target_lookup_by_id(id))) {
-		err = -ENOENT;
-		goto out;
-	}
+	down(&target_list_sem);
 
 	target_lock(target, 0);
 
-	if (!list_empty(&target->session_list)) {
-		err = -EBUSY;
-		goto out;
-	}
+	if (!list_empty(&target->session_list))
+		BUG();
 
 	list_del(&target->t_list);
 	nr_targets--;
@@ -198,13 +165,7 @@ int target_del(u32 id)
 	target_unlock(target);
 	up(&target_list_sem);
 
-	target_destroy(target);
-	return 0;
-
-out:
-	target_unlock(target);
-	up(&target_list_sem);
-	return err;
+	target_thread_stop(target);
 }
 
 int iet_info_show(struct seq_file *seq, iet_show_info_t *func)

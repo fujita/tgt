@@ -10,10 +10,6 @@
 #define VENDOR_ID_LEN	8
 #define SCSI_ID_LEN	24
 
-struct target_info {
-	int tid;
-};
-
 struct session_info {
 	u32 tid;
 

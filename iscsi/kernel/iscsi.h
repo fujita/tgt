@@ -226,8 +226,8 @@ extern void nthread_wakeup(struct iscsi_target *);
 extern int target_lock(struct iscsi_target *, int);
 extern void target_unlock(struct iscsi_target *);
 struct iscsi_target *target_lookup_by_id(u32);
-extern int target_add(struct target_info *);
-extern int target_del(u32 id);
+extern int target_add(struct stgt_target *);
+extern void target_del(struct stgt_target *);
 
 /* config.c */
 extern int iet_procfs_init(void);

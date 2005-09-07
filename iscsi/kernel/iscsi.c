@@ -1575,6 +1575,8 @@ static struct stgt_target_template iet_stgt_target_template = {
 	.name = "iet",
 	.module = THIS_MODULE,
 	.protocol = "scsi",
+	.target_create = target_add,
+	.target_destroy = target_del,
 };
 
 static void iscsi_exit(void)
