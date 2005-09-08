@@ -8,6 +8,7 @@
 #include <linux/fs.h>
 #include <linux/module.h>
 #include <scsi/scsi.h>
+#include <linux/mm.h>
 #include <stgt.h>
 #include <tgt_protocol.h>
 

@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <dirent.h>
 #include <unistd.h>
 #include <errno.h>
@@ -62,7 +63,8 @@ static int device_info(int tid, uint64_t lun, uint64_t *size)
 	int fd, err;
 	char path[PATH_MAX], buf[128];
 
-	sprintf(path, "/sys/class/stgt_device/device%d:%llu/size", tid, lun);
+	sprintf(path, "/sys/class/stgt_device/device%d:%" PRIu64 "/size",
+		tid, lun);
 
 	fd = open(path, O_RDONLY);
 	if (fd < 0)
@@ -280,7 +282,7 @@ static int inquiry(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *len)
 			data[5] = 0x1;
 			data[7] = tmp;
 			if (lun != ~0ULL)
-				sprintf(data + 8, "deadbeaf%d:%llu", tid, lun);
+				sprintf(data + 8, "deadbeaf%d:%" PRIu64, tid, lun);
 			*len = tmp + 8;
 			result = SAM_STAT_GOOD;
 		}
@@ -397,7 +399,7 @@ static int sync_cache(int tid, uint64_t lun, uint8_t *scb, uint8_t *data,
 	int fd, err;
 	char path[PATH_MAX], buf[PATH_MAX];
 
-	sprintf(path, "/sys/class/stgt_device/device%d:%llu/path", tid, lun);
+	sprintf(path, "/sys/class/stgt_device/device%d:%" PRIu64 "/path", tid, lun);
 
 	fd = open(path, O_RDONLY);
 	if (fd < 0) {
@@ -534,7 +536,7 @@ int scsi_cmnd_process(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *l
 	case RESERVE_10:
 	case RELEASE_10:
 	default:
-		dprintf("BUG? %u %llu\n", scb[0], lun);
+		dprintf("BUG? %u %" PRIu64 "\n", scb[0], lun);
 		*len = 0;
 		break;
 	}
