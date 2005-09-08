@@ -457,7 +457,7 @@ static int iscsi_lunit_create(u32 tid, u32 lun, char *args)
 		return -EINVAL;
 	}
 
-	fprintf(stderr, "%s %d %s %s %d %d\n",
+	fprintf(stderr, "%s %d %s %s %Zd %Zd\n",
 		__FUNCTION__, __LINE__, type, path, strlen(path), sizeof(*ev));
 
 	memset(nlm_ev, 0, sizeof(nlm_ev));
