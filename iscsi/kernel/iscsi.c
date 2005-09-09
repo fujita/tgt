@@ -82,8 +82,6 @@ struct iscsi_cmnd *cmnd_alloc(struct iscsi_conn *conn, int req)
 	if (req) {
 		assert(conn->session);
 		assert(conn->session->sts);
-		cmnd->stc = stgt_cmnd_create(conn->session->sts);
-		assert(cmnd->stc);
 	}
 
 	dprintk(D_GENERIC, "%p:%p\n", conn, cmnd);
@@ -712,7 +710,6 @@ static void scsi_cmnd_done(struct stgt_cmnd *stc)
 	if (stc->result != SAM_STAT_GOOD) {
 		struct iscsi_cmnd *rsp;
 
-		eprintk("%p %d %x\n", stc, stc->result, stc->scb[0]);
 		rsp = do_create_sense_rsp(cmnd);
 		iscsi_cmnd_init_write(rsp);
 		return;
@@ -759,8 +756,7 @@ static void scsi_cmnd_exec(struct iscsi_cmnd *cmnd)
 	} else {
 		set_cmnd_waitio(cmnd);
 		cmnd->stc->private = cmnd;
-		stgt_cmnd_queue(cmnd->stc, cmnd_hdr(cmnd)->lun,
-				sizeof(cmnd_hdr(cmnd)->lun), scsi_cmnd_done);
+		stgt_cmnd_queue(cmnd->stc, scsi_cmnd_done);
 	}
 }
 
@@ -847,7 +843,10 @@ static void scsi_cmnd_start(struct iscsi_conn *conn, struct iscsi_cmnd *req)
 
 	eprintk("scsi command: %02x\n", req_hdr->cdb[0]);
 
-	memcpy(req->stc->scb, req_hdr->cdb, sizeof(req->stc->scb));
+	req->stc = stgt_cmnd_create(conn->session->sts, req_hdr->cdb,
+				    req_hdr->lun,
+				    sizeof(req_hdr->lun));
+	assert(req->stc);
 
 	switch (req_hdr->cdb[0]) {
 	case SERVICE_ACTION_IN:
@@ -1284,8 +1283,6 @@ void cmnd_release(struct iscsi_cmnd *cmnd, int force)
 
 	if (!cmnd)
 		return;
-
-/* 	eprintk("%x %lx %d\n", cmnd_opcode(cmnd), cmnd->flags, force); */
 
 	req = cmnd->req;
 	is_last = cmnd_final(cmnd);
