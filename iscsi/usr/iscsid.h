@@ -131,9 +131,6 @@ struct connection {
 
 #define INCOMING_BUFSIZE	8192
 
-/* isns */
-struct storage_node;
-
 struct target {
 	struct qelem tlist;
 
@@ -219,20 +216,6 @@ extern struct iscsi_kernel_interface *ki;
 /* the following functions should be killed */
 extern int session_conns_close(u32 tid, u64 sid);
 extern int server_stop(void);
-
-
-/* isns.c */
-struct tag_len_val;
-struct network_entity;
-extern int initialize_iet_isns(char *isnsip, int port);
-extern void cleanup_iet_isns(void);
-extern struct storage_node *initialize_storage_node(char *name, char *alias);
-extern void cleanup_storage_node(struct storage_node *node);
-extern int RegNode(struct storage_node *node);
-extern int DeRegNode(struct storage_node *node);
-extern int use_isns;
-extern int get_portal_address(char *ip);
-extern int DeRegEntity(struct network_entity *entity, struct tag_len_val *name);
 
 /* event.c */
 extern void handle_iscsi_events(int fd);

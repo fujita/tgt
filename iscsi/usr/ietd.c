@@ -51,7 +51,6 @@ static struct option const long_options[] =
 	{"config", required_argument, 0, 'c'},
 	{"foreground", no_argument, 0, 'f'},
 	{"debug", required_argument, 0, 'd'},
-	{"isns", required_argument, 0, 's'},
 	{"uid", required_argument, 0, 'u'},
 	{"gid", required_argument, 0, 'g'},
 	{"version", no_argument, 0, 'v'},
@@ -75,7 +74,6 @@ iSCSI target daemon.\n\
 		printf("\
   -f, --foreground        make the program run in the foreground\n\
   -d, --debug debuglevel  print debugging information\n\
-  -s, --isns=[ip]         work with isns server, default is disabled\n\
   -u, --uid=uid           run as uid, default is current user\n\
   -g, --gid=gid           run as gid, default is current user group\n\
   -h, --help              display this help and exit\n\
@@ -376,11 +374,10 @@ int main(int argc, char **argv)
 {
 	int ch, longindex;
 	char *config = NULL;
-	char isns_ip[32];
 	uid_t uid = 0;
 	gid_t gid = 0;
 
-	while ((ch = getopt_long(argc, argv, "c:fd:s:u:g:vh", long_options, &longindex)) >= 0) {
+	while ((ch = getopt_long(argc, argv, "c:fd:u:g:vh", long_options, &longindex)) >= 0) {
 		switch (ch) {
 		case 'c':
 			config = optarg;
@@ -390,11 +387,6 @@ int main(int argc, char **argv)
 			break;
 		case 'd':
 			log_level = atoi(optarg);
-			break;
-		case 's':
-			memset(isns_ip, 0, sizeof(isns_ip));
-			strncpy(isns_ip, optarg, sizeof(isns_ip));
-			use_isns = 1;
 			break;
 		case 'u':
 			uid = strtoul(optarg, NULL, 10);
@@ -464,12 +456,6 @@ int main(int argc, char **argv)
 		setsid();
 	}
 
-	if (use_isns) {
-		if (initialize_iet_isns(isns_ip,
-					ISCSI_LISTEN_PORT) < 0)
-			use_isns = 0;
-	}
-
 	cops->init(config);
 
 	if (uid && setuid(uid) < 0)
@@ -479,10 +465,6 @@ int main(int argc, char **argv)
 		perror("setgid\n");
 
 	event_loop();
-
-	if (use_isns) {
-		cleanup_iet_isns();
-	}
 
 	return 0;
 }
