@@ -102,10 +102,6 @@ struct iet_event {
 
 #define NETLINK_IET	21
 
-#define ADD_TARGET _IOW('i', 0, struct target_info)
-#define DEL_TARGET _IOW('i', 1, struct target_info)
-#define START_TARGET _IO('i', 2)
-#define STOP_TARGET _IO('i', 3)
 #define ADD_SESSION _IOW('i', 6, struct session_info)
 #define DEL_SESSION _IOW('i', 7, struct session_info)
 #define GET_SESSION_INFO _IOWR('i', 8, struct session_info)
