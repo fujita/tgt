@@ -720,7 +720,6 @@ void __stgt_alloc_buffer(struct stgt_cmnd *cmnd)
 		len -= sg->length;
 	}
 }
-EXPORT_SYMBOL_GPL(__stgt_alloc_buffer);
 
 static void stgt_alloc_buffer(void *data)
 {
@@ -786,22 +785,18 @@ static int uspace_cmnd_send(struct stgt_cmnd *cmnd)
 	return netlink_unicast(nls, skb, daemon_pid, 0);
 }
 
-static void cmnd_done(struct stgt_cmnd *cmnd)
+static void cmnd_done(struct stgt_cmnd *cmnd, int result)
 {
+	struct stgt_target *target = cmnd->session->target;
+	struct tgt_protocol *proto = target->proto;
 	void (*done)(struct stgt_cmnd *);
+
+	proto->cmnd_done(cmnd, result);
+	cmnd->result = result;
 
 	done = cmnd->done;
 	cmnd->done = NULL;
 	done(cmnd);
-}
-
-static void kspace_cmnd_done(struct stgt_cmnd *cmnd, int result)
-{
-	struct stgt_target *target = cmnd->session->target;
-	struct tgt_protocol *proto = target->proto;
-
-	proto->cmnd_done(cmnd, result);
-	cmnd_done(cmnd);
 }
 
 static void uspace_cmnd_done(struct stgt_cmnd *cmnd, char *data,
@@ -825,8 +820,7 @@ static void uspace_cmnd_done(struct stgt_cmnd *cmnd, char *data,
 		}
 	}
 
-	cmnd->result = result;
-	cmnd_done(cmnd);
+	cmnd_done(cmnd, result);
 }
 
 static void queuecommand(void *data)
@@ -850,10 +844,11 @@ static void queuecommand(void *data)
 			return;
 	}
 
+	/* kspace command failure or failed to send commands to space. */
 	if (unlikely(err))
 		eprintk("failed cmnd %llu %d %d\n", cmnd->cid, err, cmnd->rw);
 
-	kspace_cmnd_done(cmnd, err);
+	cmnd_done(cmnd, err);
 }
 
 int stgt_cmnd_queue(struct stgt_cmnd *cmnd, void (*done)(struct stgt_cmnd *))

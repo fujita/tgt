@@ -39,10 +39,15 @@ struct stgt_cmnd {
 
 	int result;
 
+	/* TODO: there should be a better way. */
+	uint8_t *error_buff;
+	int error_buff_len;
+
 	/*
 	 * target driver private
 	 */
 	void *private;
+
 	void *tgt_protocol_private;
 };
 
@@ -56,7 +61,6 @@ extern struct stgt_cmnd *stgt_cmnd_create(struct stgt_session *session,
 					  uint8_t *proto_data,
 					  uint8_t *id_buff, int buff_size);
 extern void stgt_cmnd_destroy(struct stgt_cmnd *cmnd);
-extern void __stgt_alloc_buffer(struct stgt_cmnd *cmnd);
 extern void stgt_cmnd_alloc_buffer(struct stgt_cmnd *cmnd,
 				  void (*done)(struct stgt_cmnd *));
 extern int stgt_cmnd_queue(struct stgt_cmnd *cmnd,

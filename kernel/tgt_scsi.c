@@ -14,6 +14,7 @@
 
 struct scsi_tgt_cmnd {
 	uint8_t scb[MAX_COMMAND_SIZE];
+	uint8_t sense_buff[SCSI_SENSE_BUFFERSIZE];
 	int tags;
 };
 
@@ -112,26 +113,30 @@ static void scsi_tgt_init_cmnd(struct stgt_cmnd *cmnd, uint8_t *proto_data,
 static int sense_data_build(struct stgt_cmnd *cmnd, uint8_t key,
 			    uint8_t ascode, uint8_t ascodeq)
 {
-	int i, len = 8, alen = 6;
-	uint8_t *data;
+	struct scsi_tgt_cmnd *scsi_tgt_cmnd = cmnd->tgt_protocol_private;
+	int len = 8, alen = 6;
+	uint8_t *data = scsi_tgt_cmnd->sense_buff;
 
-	/* It works, however, dirty. */
-	for (i = 0; i < cmnd->sg_count; i++)
-		__free_page(cmnd->sg[i].page);
-	kfree(cmnd->sg);
+	memset(data, 0, sizeof(scsi_tgt_cmnd->sense_buff));
 
-	cmnd->bufflen = len + alen;
-	cmnd->offset = 0;
+	if (cmnd->rw == READ || cmnd->rw == WRITE) {
+		/* kspace command failure */
 
-	__stgt_alloc_buffer(cmnd);
-	data = page_address(cmnd->sg[0].page);
-	clear_page(data);
+		data[0] = 0x70 | 1U << 7;
+		data[2] = key;
+		data[7] = alen;
+		data[12] = ascode;
+		data[13] = ascodeq;
+	} else {
+		/* uspace command failure */
 
-	data[0] = 0x70 | 1U << 7;
-	data[2] = key;
-	data[7] = alen;
-	data[12] = ascode;
-	data[13] = ascodeq;
+		len = min(cmnd->bufflen, sizeof(scsi_tgt_cmnd->sense_buff));
+		alen = 0;
+		memcpy(data, page_address(cmnd->sg[0].page), len);
+	}
+
+	cmnd->error_buff = data;
+	cmnd->error_buff_len = len + alen;
 
 	return len + alen;
 }
