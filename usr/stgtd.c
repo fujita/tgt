@@ -1,8 +1,8 @@
 /*
- * SCSI target framework user-space daemon
+ * Core target framework user-space daemon
  *
  * (C) 2005 FUJITA Tomonori <tomof@acm.org>
- *
+ * (C) 2005 Mike Christie <michaelc@cs.wisc.edu>
  * This code is licenced under the GPL.
  */
 

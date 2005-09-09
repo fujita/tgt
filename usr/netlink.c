@@ -1,5 +1,6 @@
 /*
  * (C) 2005 FUJITA Tomonori <tomof@acm.org>
+ * (C) 2005 Mike Christie <michaelc@cs.wisc.edu>
  *
  * Netlink functions are based on open-iscsi code
  * written by Dmitry Yusupov and Alex Aizman.

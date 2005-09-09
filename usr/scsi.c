@@ -2,9 +2,11 @@
  * SCSI command processing
  *
  * (C) 2004 - 2005 FUJITA Tomonori <tomof@acm.org>
+ * (C) 2005 Mike Christie <michaelc@cs.wisc.edu>
  * This code is licenced under the GPL.
  *
- * heavily based on code from kernel/iscsi.c:
+ * SCSI target emulation code is based on Ardis's iSCSI implementation.
+ *   http://www.ardistech.com/iscsi/
  *   Copyright (C) 2002-2003 Ardis Technolgies <roman@ardistech.com>,
  *   licensed under the terms of the GNU GPL v2.0,
  */
