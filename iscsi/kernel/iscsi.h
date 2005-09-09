@@ -12,6 +12,7 @@
 #include <linux/mm.h>
 #include <linux/crypto.h>
 #include <net/sock.h>
+#include <asm/scatterlist.h>
 
 #include "iscsi_proto.h"
 #include "iet_u.h"
@@ -179,7 +180,7 @@ struct iscsi_cmnd {
 
 	struct list_head hash_list;
 
-	struct scatterlist *sg;
+	struct scatterlist *sg, sense_sg;
 
 	u32 r2t_sn;
 	u32 r2t_length;

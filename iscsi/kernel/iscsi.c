@@ -264,7 +264,7 @@ static struct iscsi_cmnd *do_create_sense_rsp(struct iscsi_cmnd *req)
 	struct iscsi_cmnd *rsp;
 	struct iscsi_cmd_rsp *rsp_hdr;
 	struct iscsi_sense_data *sense;
-	struct scatterlist *sg = req->stc->sg;
+	struct scatterlist *sg = &req->sense_sg;
 
 	rsp = iscsi_cmnd_create_rsp_cmnd(req, 1);
 
@@ -275,12 +275,13 @@ static struct iscsi_cmnd *do_create_sense_rsp(struct iscsi_cmnd *req)
 	rsp_hdr->cmd_status = SAM_STAT_CHECK_CONDITION;
 	rsp_hdr->itt = cmnd_hdr(req)->itt;
 
-	sense = (struct iscsi_sense_data *) page_address(sg[0].page);
-	memmove(sense->data, sense, req->stc->bufflen);
-	sense->length = cpu_to_be16(req->stc->bufflen);
+	sense = (struct iscsi_sense_data *) req->stc->error_buff;
+	memmove(sense->data, sense, req->stc->error_buff_len);
+	sense->length = cpu_to_be16(req->stc->error_buff_len);
 
-	req->stc->bufflen += sizeof(struct iscsi_sense_data);
-	sg->length = req->stc->bufflen;
+	sg->page = virt_to_page(req->stc->error_buff);
+	sg->offset = offset_in_page(req->stc->error_buff);
+	sg->length = req->stc->error_buff_len + sizeof(struct iscsi_sense_data);
 	rsp->pdu.datasize = sg->length;
 	rsp->sg = sg;
 
@@ -293,7 +294,7 @@ static struct iscsi_cmnd *create_sense_rsp(struct iscsi_cmnd *req,
 	struct iscsi_cmnd *rsp;
 	struct iscsi_cmd_rsp *rsp_hdr;
 	struct iscsi_sense_data *sense;
-	struct scatterlist *sg;
+	struct scatterlist *sg = &req->sense_sg;
 
 	rsp = iscsi_cmnd_create_rsp_cmnd(req, 1);
 
@@ -304,21 +305,11 @@ static struct iscsi_cmnd *create_sense_rsp(struct iscsi_cmnd *req,
 	rsp_hdr->cmd_status = SAM_STAT_CHECK_CONDITION;
 	rsp_hdr->itt = cmnd_hdr(req)->itt;
 
-	assert(req->stc);
-	assert(!req->stc->sg);
+	sg->page = virt_to_page(req->stc->error_buff);
+	sg->offset = offset_in_page(req->stc->error_buff);
+	sg->length = req->stc->error_buff_len;
 
-	/* TODO: really needs cleanups. */
-	req->stc->bufflen = sizeof(struct iscsi_sense_data) + 14;
-	req->stc->sg_count = 1;
-	req->stc->sg = sg =
-		kmalloc(sizeof(struct scatterlist *), __GFP_NOFAIL | GFP_KERNEL);
-
-	sg->page = alloc_page(__GFP_NOFAIL | GFP_KERNEL);
-	sg->offset = 0;
-	sg->length = req->stc->bufflen;
-
-	sense = (struct iscsi_sense_data *) page_address(sg[0].page);
-	clear_page(sense);
+	sense = (struct iscsi_sense_data *) req->stc->error_buff;
 	sense->length = cpu_to_be16(14);
 	sense->data[0] = 0xf0;
 	sense->data[2] = sense_key;
