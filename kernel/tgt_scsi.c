@@ -12,6 +12,11 @@
 #include <stgt.h>
 #include <tgt_protocol.h>
 
+struct scsi_tgt_cmnd {
+	uint8_t scb[MAX_COMMAND_SIZE];
+	int tags;
+};
+
 /*
  * we should be able to use scsi-ml's functions for this
  */
@@ -37,7 +42,8 @@ static uint64_t scsi_tgt_translate_lun(uint8_t *p, int size)
 
 static void scsi_tgt_init_cmnd_buffer(struct stgt_cmnd *cmnd)
 {
-	uint8_t *scb = cmnd->scb;
+	struct scsi_tgt_cmnd *scsi_tgt_cmnd = cmnd->tgt_protocol_private;
+	uint8_t *scb = scsi_tgt_cmnd->scb;
 	uint64_t off = 0;
 	uint32_t len = 0;
 
@@ -74,10 +80,13 @@ static void scsi_tgt_init_cmnd_buffer(struct stgt_cmnd *cmnd)
 	cmnd->offset = off;
 }
 
-static void scsi_tgt_prep_cmnd(struct stgt_cmnd *cmnd, uint8_t *id_buff,
-			       int buff_size)
+static void scsi_tgt_init_cmnd(struct stgt_cmnd *cmnd, uint8_t *proto_data,
+			       uint8_t *id_buff, int buff_size)
 {
-	uint8_t *scb = cmnd->scb;
+	struct scsi_tgt_cmnd *scsi_tgt_cmnd = cmnd->tgt_protocol_private;
+	uint8_t *scb = scsi_tgt_cmnd->scb;
+
+	memcpy(scb, proto_data, sizeof(scsi_tgt_cmnd->scb));
 
 	/* set operation */
 	switch (scb[0]) {
@@ -162,12 +171,22 @@ static void scsi_tgt_cmnd_done(struct stgt_cmnd *cmnd, int err)
 		cmnd->result = SAM_STAT_GOOD;
 }
 
+void scsi_tgt_build_uspace_pdu(struct stgt_cmnd *cmnd, void *data)
+{
+	struct scsi_tgt_cmnd *scsi_tgt_cmnd = cmnd->tgt_protocol_private;
+
+	memcpy(data, scsi_tgt_cmnd->scb, sizeof(scsi_tgt_cmnd->scb));
+}
+
 static struct tgt_protocol scsi_tgt_proto = {
 	.name = "scsi",
 	.module = THIS_MODULE,
+	.init_cmnd = scsi_tgt_init_cmnd,
 	.init_cmnd_buffer = scsi_tgt_init_cmnd_buffer,
-	.prep_cmnd = scsi_tgt_prep_cmnd,
 	.cmnd_done = scsi_tgt_cmnd_done,
+	.build_uspace_pdu = scsi_tgt_build_uspace_pdu,
+	.priv_cmd_data_size = sizeof(struct scsi_tgt_cmnd),
+	.uspace_pdu_size = MAX_COMMAND_SIZE,
 };
 
 static int __init scsi_tgt_init(void)

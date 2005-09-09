@@ -16,12 +16,14 @@ struct tgt_protocol {
 	struct module *module;
 
 	int priv_cmd_data_size;
+	int uspace_pdu_size;
+
 	/*
 	 * perform command preparation, such as setting the rw field
 	 * and dev_id
 	 */
-	void (* prep_cmnd)(struct stgt_cmnd *cmd, uint8_t *id_buff,
-			   int buff_size);
+	void (* init_cmnd)(struct stgt_cmnd *cmnd, uint8_t *proto_data,
+			   uint8_t *id_buff, int buff_size);
 	/*
 	 * setup buffer fields like offset and len
 	 */
@@ -30,6 +32,8 @@ struct tgt_protocol {
 	 * process completion of a command
 	 */
 	void (* cmnd_done)(struct stgt_cmnd *cmd, int err);
+
+	void (* build_uspace_pdu)(struct stgt_cmnd *cmnd, void *data);
 };
 
 extern void tgt_protocol_init(void);

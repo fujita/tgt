@@ -638,20 +638,35 @@ static int stgt_device_destroy(int tid, uint64_t dev_id)
 	return 0;
 }
 
-struct stgt_cmnd *stgt_cmnd_create(struct stgt_session *session)
+struct stgt_cmnd *stgt_cmnd_create(struct stgt_session *session,
+				   uint8_t *proto_data,
+				   uint8_t *id_buff, int buff_size)
 {
+	struct tgt_protocol *proto = session->target->proto;
 	struct stgt_cmnd *cmnd;
+	void *pcmnd_data;
 	unsigned long flags;
+
+	/*
+	 * slab in tgt_protocol structure like struct proto (in net/sock.h) ?
+	 * However, how can we guarantee the specified number of commands ?
+	 */
+	pcmnd_data = kmalloc(proto->priv_cmd_data_size, GFP_ATOMIC);
+	if (!pcmnd_data)
+		return NULL;
 
 	cmnd = mempool_alloc(session->cmnd_pool, GFP_ATOMIC);
 	assert(cmnd);
 	memset(cmnd, 0, sizeof(*cmnd));
+	cmnd->tgt_protocol_private = pcmnd_data;
 	cmnd->session = session;
 	cmnd->cid = (uint64_t) (unsigned long) cmnd;
 	INIT_LIST_HEAD(&cmnd->clist);
 	INIT_LIST_HEAD(&cmnd->hash_list);
 
 	dprintk("%p %llu\n", session, cmnd->cid);
+
+	proto->init_cmnd(cmnd, proto_data, id_buff, buff_size);
 
 	spin_lock_irqsave(&cmnd_hash_lock, flags);
 	list_add_tail(&cmnd->hash_list, &cmnd_hash[cmnd_hashfn(cmnd->cid)]);
@@ -665,6 +680,8 @@ void stgt_cmnd_destroy(struct stgt_cmnd *cmnd)
 {
 	unsigned long flags;
 	int i;
+
+	kfree(cmnd->tgt_protocol_private);
 
 	for (i = 0; i < cmnd->sg_count; i++)
 		__free_page(cmnd->sg[i].page);
@@ -709,7 +726,6 @@ static void stgt_alloc_buffer(void *data)
 {
 	struct stgt_cmnd *cmnd = data;
 
-	dprintk("%x %llu %u\n", cmnd->scb[0], cmnd->offset, cmnd->bufflen);
 	__stgt_alloc_buffer(cmnd);
 
 	if (cmnd->done) {
@@ -742,18 +758,19 @@ EXPORT_SYMBOL_GPL(stgt_cmnd_alloc_buffer);
 
 static int uspace_cmnd_send(struct stgt_cmnd *cmnd)
 {
+	struct tgt_protocol *proto = cmnd->session->target->proto;
 	struct sk_buff *skb;
 	struct nlmsghdr *nlh;
 	struct stgt_event *ev;
 	char *pdu;
-	int len;
+	int len, proto_pdu_size = proto->uspace_pdu_size;
 
-	len = NLMSG_SPACE(sizeof(*ev) + sizeof(cmnd->scb));
+	len = NLMSG_SPACE(sizeof(*ev) + proto_pdu_size);
 	skb = alloc_skb(NLMSG_SPACE(len), GFP_KERNEL);
 	if (!skb)
 		return -ENOMEM;
 
-	dprintk("%d %Zd %Zd\n", len, sizeof(*ev), sizeof(cmnd->scb));
+	dprintk("%d %Zd %d\n", len, sizeof(*ev), proto_pdu_size);
 	nlh = __nlmsg_put(skb, daemon_pid, 0,
 			  STGT_KEVENT_CMND_REQ, len - sizeof(*nlh), 0);
 	ev = NLMSG_DATA(nlh);
@@ -764,7 +781,7 @@ static int uspace_cmnd_send(struct stgt_cmnd *cmnd)
 	ev->k.cmnd_req.dev_id = cmnd->dev_id;
 	ev->k.cmnd_req.cid = cmnd->cid;
 
-	memcpy(pdu, cmnd->scb, sizeof(cmnd->scb));
+	proto->build_uspace_pdu(cmnd, pdu);
 
 	return netlink_unicast(nls, skb, daemon_pid, 0);
 }
@@ -793,8 +810,6 @@ static void uspace_cmnd_done(struct stgt_cmnd *cmnd, char *data,
 	int i;
 	assert(cmnd->done);
 
-	dprintk("%x %u\n", cmnd->scb[0], len);
-
 	if (len) {
 		cmnd->bufflen = len;
 		cmnd->offset = 0;
@@ -821,8 +836,6 @@ static void queuecommand(void *data)
 	struct stgt_target *target = cmnd->session->target;
 	struct stgt_device *device;
 
-	dprintk("%x\n", cmnd->scb[0]);
-
 	/* Should we do this earlier? */
 	device = stgt_device_find(target, cmnd->dev_id);
 	if (device)
@@ -838,19 +851,15 @@ static void queuecommand(void *data)
 	}
 
 	if (unlikely(err))
-		eprintk("failed cmnd %llu %u %d %d\n",
-			cmnd->cid, cmnd->scb[0], err, cmnd->rw);
+		eprintk("failed cmnd %llu %d %d\n", cmnd->cid, err, cmnd->rw);
+
 	kspace_cmnd_done(cmnd, err);
 }
 
-int stgt_cmnd_queue(struct stgt_cmnd *cmnd, uint8_t *id_buff, int buff_size,
-		    void (*done)(struct stgt_cmnd *))
+int stgt_cmnd_queue(struct stgt_cmnd *cmnd, void (*done)(struct stgt_cmnd *))
 {
 	struct stgt_work *work;
 	struct stgt_session *session = cmnd->session;
-	struct tgt_protocol *proto = session->target->proto;
-
-	dprintk("%p %x\n", cmnd, cmnd->scb[0]);
 
 	assert(!cmnd->done);
 	cmnd->done = done;
@@ -863,7 +872,6 @@ int stgt_cmnd_queue(struct stgt_cmnd *cmnd, uint8_t *id_buff, int buff_size,
 	if (!work)
 		return -ENOMEM;
 
-	proto->prep_cmnd(cmnd, id_buff, buff_size);
 	stgt_queue_work(session->target, work);
 
 	return 0;
