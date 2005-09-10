@@ -3,7 +3,7 @@ PROGRAMS = stgtd
 
 all: $(PROGRAMS)
 
-stgtd: stgtd.o scsi.o netlink.o ipc.o
+stgtd: stgtd.o scsi.o netlink.o ipc.o log.o
 	$(CC) $^ -o $@ $(LIBS)
 
 clean:

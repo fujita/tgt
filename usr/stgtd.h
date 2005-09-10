@@ -1,20 +1,18 @@
 #ifndef __SCSI_TARGET_DAEMON_H
 #define __SCSI_TARGET_DAEMON_H
 
+#include "log.h"
+
 #define eprintf(fmt, args...)						\
 do {									\
-	fprintf(stderr, "%s(%d) " fmt, __FUNCTION__, __LINE__, args);	\
+	log_error("%s/%d " fmt, __FUNCTION__, __LINE__, args);	\
 } while (0)
-
 
 #define dprintf(fmt, args...)						\
 do {									\
-	if ((stgtd_debug)) {						\
-		eprintf(fmt, args);					\
-	}								\
+	log_debug("%s/%d " fmt, __FUNCTION__, __LINE__, args);	\
 } while (0)
 
-extern uint32_t stgtd_debug;
 extern int nl_fd;
 
 extern int nl_open(void);

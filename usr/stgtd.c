@@ -25,7 +25,6 @@
 #include "stgtd.h"
 
 int nl_fd, ipc_fd;
-uint32_t stgtd_debug = 1;
 
 enum {
 	POLL_NL,
@@ -63,7 +62,7 @@ SCSI target daemon.\n\
 static void signal_catch(int signo) {
 }
 
-static void init(void)
+static void init(int daemon, int debug)
 {
 	int fd;
 	char path[64];
@@ -85,16 +84,27 @@ static void init(void)
 	sprintf(path, "/proc/%d/oom_adj", getpid());
 	fd = open(path, O_WRONLY);
 	if (fd < 0) {
-		eprintf("can not adjust oom-killer's pardon %s\n", path);
+		fprintf(stderr, "can not adjust oom-killer's pardon %s\n", path);
 		return;
 	}
 	write(fd, "-17\n", 4);
 	close(fd);
+
+	if (log_init("tgtd", DEFAULT_AREA_SIZE, daemon, debug) < 0) {
+		fprintf(stderr, "can not start the logger daemon\n");
+		exit(-1);
+	}
 }
 
 static void event_loop(struct pollfd *poll_array)
 {
 	int err;
+
+	while (1) {
+		static int i = 1;
+		eprintf("Target daemon with pid=%d started %d\n", getpid(), i++);
+		sleep(1);
+	}
 
 	while (1) {
 		if ((err = poll(poll_array, POLL_MAX, -1)) < 0) {
@@ -110,20 +120,24 @@ static void event_loop(struct pollfd *poll_array)
 
 		if (poll_array[POLL_IPC].revents)
 			ipc_event_handle(ipc_fd);
+
 	}
 }
 
 int main(int argc, char **argv)
 {
 	int ch, longindex;
+	int is_daemon = 1, is_debug = 1;
+	pid_t pid;
 	struct pollfd poll_array[POLL_MAX + 1];
 
 	while ((ch = getopt_long(argc, argv, "fd:vh", long_options, &longindex)) >= 0) {
 		switch (ch) {
 		case 'f':
+			is_daemon = 0;
 			break;
 		case 'd':
-			stgtd_debug = atoi(optarg);
+			is_debug = atoi(optarg);
 			break;
 		case 'v':
 			exit(0);
@@ -137,7 +151,23 @@ int main(int argc, char **argv)
 		}
 	}
 
-	init();
+	init(is_daemon, is_debug);
+
+	if (is_daemon) {
+		pid = fork();
+		if (pid < 0)
+			exit(-1);
+		else if (pid)
+			exit(0);
+
+		chdir("/");
+
+		close(0);
+		open("/dev/null", O_RDWR);
+		dup2(0, 1);
+		dup2(0, 2);
+		setsid();
+	}
 
 	memset(poll_array, 0, sizeof(poll_array));
 
