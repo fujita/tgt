@@ -1,0 +1,46 @@
+#!/bin/bash
+#
+# Temporary script to start tgt and istgt
+#
+
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+MEM_SIZE=1048576
+
+start_server()
+{
+	insmod ${PWD}/kernel/stgt_core.ko
+	insmod ${PWD}/kernel/tgt_scsi.ko
+	insmod ${PWD}/kernel/stgt_vsd.ko
+	${PWD}/usr/stgtd
+
+	modprobe -q crc32c
+	insmod ${PWD}/iscsi/kernel/iscsi_trgt.ko
+	${PWD}/iscsi/usr/ietd
+}
+	
+stop_server()
+{
+	${PWD}/iscsi/usr/ietadm --op delete
+	killall ietd
+	killall -9 stgtd
+	rmmod iscsi_trgt
+
+	rmmod stgt_vsd
+	rmmod tgt_scsi
+	rmmod stgt_core
+}
+
+case "$1" in
+	start)
+		start_server
+		;;
+	stop)
+		stop_server
+		;;
+	*)
+		echo "Usage: {start|stop}" >&2
+		exit 1
+		;;
+esac
+
+exit 0
