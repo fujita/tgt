@@ -101,12 +101,6 @@ static void event_loop(struct pollfd *poll_array)
 	int err;
 
 	while (1) {
-		static int i = 1;
-		eprintf("Target daemon with pid=%d started %d\n", getpid(), i++);
-		sleep(1);
-	}
-
-	while (1) {
 		if ((err = poll(poll_array, POLL_MAX, -1)) < 0) {
 			if (errno != EINTR) {
 				eprintf("%d %d\n", err, errno);
