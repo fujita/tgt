@@ -1604,8 +1604,6 @@ static int iscsi_init(void)
 	if (!iscsi_cmnd_cache)
 		goto err;
 
-	eprintk("%d %Zd\n", iet_tgt_target_template.priv_data_size, sizeof(struct iscsi_target));
-
 	err = tgt_target_template_register(&iet_tgt_target_template);
 	if (err < 0)
 		goto err;
