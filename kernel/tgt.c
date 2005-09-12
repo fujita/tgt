@@ -268,7 +268,7 @@ struct tgt_target *tgt_target_create(char *target_type, int queued_cmnds)
 	if (!target->twq)
 		goto put_template;
 
-	target->tt_data = kmalloc(sizeof(target->tt->priv_data_size), GFP_KERNEL);
+	target->tt_data = kmalloc(target->tt->priv_data_size, GFP_KERNEL);
 	if (!target->tt_data)
 		goto free_workqueue;
 
@@ -581,8 +581,8 @@ static int tgt_device_create(int tid, uint64_t dev_id, char *device_type,
 		goto free_path;
 	}
 
-	device->dt_data = kmalloc(sizeof(device->dt->priv_data_size),
-				   GFP_KERNEL);
+	device->dt_data = kmalloc(device->dt->priv_data_size,
+				  GFP_KERNEL);
 	if (!device->dt_data)
 		goto put_template;
 
