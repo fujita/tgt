@@ -22,8 +22,8 @@
 #include <asm/types.h>
 #include <linux/netlink.h>
 
-#include <stgt_if.h>
-#include "stgtd.h"
+#include <tgt_if.h>
+#include "tgtd.h"
 
 #define	NL_BUFSIZE	8192
 
@@ -88,7 +88,7 @@ int nl_cmnd_call(int fd, int type, char *data, int size, int *res)
 {
 	int err;
 	struct iovec iov;
-	struct stgt_event *ev;
+	struct tgt_event *ev;
 	char nlm_ev[NLMSG_SPACE(sizeof(*ev))];
 
 	iov.iov_base = data;
@@ -100,7 +100,7 @@ int nl_cmnd_call(int fd, int type, char *data, int size, int *res)
 
 	err = nl_read(fd, nlm_ev, sizeof(nlm_ev), 0);
 
-	ev = (struct stgt_event *) NLMSG_DATA(nlm_ev);
+	ev = (struct tgt_event *) NLMSG_DATA(nlm_ev);
 	*res = ev->k.event_res.err;
 
 	return err;
@@ -110,7 +110,7 @@ static int cmnd_queue(int fd, char *reqbuf, char *resbuf)
 {
 	int result, len;
 	struct iovec iov[2];
-	struct stgt_event *ev = (struct stgt_event *) reqbuf;
+	struct tgt_event *ev = (struct tgt_event *) reqbuf;
 	uint64_t cid = ev->k.cmnd_req.cid;
 	uint8_t *scb;
 
@@ -135,13 +135,13 @@ static int cmnd_queue(int fd, char *reqbuf, char *resbuf)
 	iov[1].iov_base = resbuf;
 	iov[1].iov_len = len;
 
-	return nl_write(fd, STGT_UEVENT_CMND_RES, iov, len ? 2 : 1);
+	return nl_write(fd, TGT_UEVENT_CMND_RES, iov, len ? 2 : 1);
 }
 
 void nl_event_handle(int fd)
 {
 	struct nlmsghdr *nlh;
-	struct stgt_event *ev;
+	struct tgt_event *ev;
 	int err;
 
 peek_again:
@@ -156,7 +156,7 @@ peek_again:
 	}
 
 	nlh = (struct nlmsghdr *) recvbuf;
-	ev = (struct stgt_event *) NLMSG_DATA(nlh);
+	ev = (struct tgt_event *) NLMSG_DATA(nlh);
 
 	dprintf("%d %d\n", nlh->nlmsg_type, nlh->nlmsg_len);
 
@@ -172,7 +172,7 @@ read_again:
 	}
 
 	switch (nlh->nlmsg_type) {
-	case STGT_KEVENT_CMND_REQ:
+	case TGT_KEVENT_CMND_REQ:
 		cmnd_queue(fd, NLMSG_DATA(recvbuf), sendbuf);
 		break;
 	default:
@@ -186,9 +186,9 @@ read_again:
 static void nl_start(int fd)
 {
 	int err, res;
-	struct stgt_event ev;
+	struct tgt_event ev;
 
-	err = nl_cmnd_call(fd, STGT_UEVENT_START, (char *) &ev, sizeof(ev), &res);
+	err = nl_cmnd_call(fd, TGT_UEVENT_START, (char *) &ev, sizeof(ev), &res);
 	if (err < 0 || res < 0) {
 		eprintf("%d %d\n", err, res);
 		exit(-1);
@@ -204,7 +204,7 @@ int nl_open(void)
 		return -ENOMEM;
 	recvbuf = sendbuf + NL_BUFSIZE;
 
-	fd = socket(PF_NETLINK, SOCK_RAW, NETLINK_STGT);
+	fd = socket(PF_NETLINK, SOCK_RAW, NETLINK_TGT);
 	if (fd < 0) {
 		eprintf("%d\n", fd);
 		return fd;

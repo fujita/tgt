@@ -14,22 +14,23 @@
 #include <linux/slab.h>
 #include <linux/mempool.h>
 #include <linux/netlink.h>
+#include <asm/scatterlist.h>
 #include <net/tcp.h>
 
-#include <stgt.h>
-#include <stgt_target.h>
-#include <stgt_device.h>
-#include <stgt_if.h>
+#include <tgt.h>
+#include <tgt_target.h>
+#include <tgt_device.h>
+#include <tgt_if.h>
 #include <tgt_protocol.h>
 
-#define DEBUG_STGT
+#define DEBUG_TGT
 
 #define eprintk(fmt, args...)					\
 do {								\
 	printk("%s(%d) " fmt, __FUNCTION__, __LINE__, args);	\
 } while (0)
 
-#ifdef DEBUG_STGT
+#ifdef DEBUG_TGT
 #define dprintk eprintk
 #else
 #define dprintk(fmt, args...)
@@ -68,29 +69,29 @@ static kmem_cache_t *cmnd_slab, *work_slab;
 
 /* TODO: lock per session */
 static spinlock_t cmnd_hash_lock;
-#define STGT_HASH_ORDER		8
-#define	cmnd_hashfn(key)	hash_long((key), STGT_HASH_ORDER)
-static struct list_head cmnd_hash[1 << STGT_HASH_ORDER];
+#define TGT_HASH_ORDER		8
+#define	cmnd_hashfn(key)	hash_long((key), TGT_HASH_ORDER)
+static struct list_head cmnd_hash[1 << TGT_HASH_ORDER];
 
 struct atomic_session_args {
-	struct stgt_session *session;
-	void (*done) (void *, struct stgt_session *);
+	struct tgt_session *session;
+	void (*done) (void *, struct tgt_session *);
 	int max_cmnds;
 	void *arg;
 	struct list_head list;
 };
 
-struct stgt_work {
+struct tgt_work {
 	void (*fn) (void *);
 	void *arg;
 	mempool_t *pool;
 	struct list_head list;
 };
 
-static struct stgt_work * stgt_init_work(struct stgt_session *session,
-					 void (*fn)(void *), void *arg)
+static struct tgt_work * tgt_init_work(struct tgt_session *session,
+					void (*fn)(void *), void *arg)
 {
-	struct stgt_work *work;
+	struct tgt_work *work;
 	mempool_t *pool = session->work_pool;
 
 	work = mempool_alloc(pool, GFP_ATOMIC);
@@ -104,15 +105,15 @@ static struct stgt_work * stgt_init_work(struct stgt_session *session,
 	return work;
 }
 
-static void stgt_worker(void *data)
+static void tgt_worker(void *data)
 {
-	struct stgt_target *target = (struct stgt_target *) data;
-	struct stgt_work *work = NULL;
+	struct tgt_target *target = (struct tgt_target *) data;
+	struct tgt_work *work = NULL;
 	unsigned long flags;
 
 	spin_lock_irqsave(&target->lock, flags);
 	if (!list_empty(&target->work_list)) {
-		work = list_entry(target->work_list.next, struct stgt_work, list);
+		work = list_entry(target->work_list.next, struct tgt_work, list);
 		list_del(&work->list);
 	}
 	spin_unlock_irqrestore(&target->lock, flags);
@@ -125,7 +126,7 @@ static void stgt_worker(void *data)
 	return;
 }
 
-static void stgt_queue_work(struct stgt_target *target, struct stgt_work *work)
+static void tgt_queue_work(struct tgt_target *target, struct tgt_work *work)
 {
 	unsigned long flags;
 
@@ -138,7 +139,7 @@ static void stgt_queue_work(struct stgt_target *target, struct stgt_work *work)
 
 struct target_type_internal {
 	struct list_head list;
-	struct stgt_target_template *stt;
+	struct tgt_target_template *tt;
 	struct tgt_protocol *proto;
 };
 
@@ -150,8 +151,8 @@ static struct target_type_internal *target_template_get(const char *name)
 	spin_lock_irqsave(&target_tmpl_lock, flags);
 
 	list_for_each_entry(ti, &target_tmpl_list, list)
-		if (!strcmp(name, ti->stt->name)) {
-			if (!try_module_get(ti->stt->module))
+		if (!strcmp(name, ti->tt->name)) {
+			if (!try_module_get(ti->tt->module))
 				ti = NULL;
 			spin_unlock_irqrestore(&target_tmpl_lock, flags);
 			return ti;
@@ -162,12 +163,12 @@ static struct target_type_internal *target_template_get(const char *name)
 	return NULL;
 }
 
-static void target_template_put(struct stgt_target_template *stt)
+static void target_template_put(struct tgt_target_template *tt)
 {
-	module_put(stt->module);
+	module_put(tt->module);
 }
 
-int stgt_target_template_register(struct stgt_target_template *stt)
+int tgt_target_template_register(struct tgt_target_template *tt)
 {
 	unsigned long flags;
 	struct target_type_internal *ti;
@@ -177,11 +178,11 @@ int stgt_target_template_register(struct stgt_target_template *stt)
 		return -ENOMEM;
 	memset(ti, 0, sizeof(*ti));
 	INIT_LIST_HEAD(&ti->list);
-	ti->stt = stt;
+	ti->tt = tt;
 
-	ti->proto = tgt_protocol_get(stt->protocol);
+	ti->proto = tgt_protocol_get(tt->protocol);
 	if (!ti->proto) {
-		eprintk("Could not find %s protocol\n", stt->protocol);
+		eprintk("Could not find %s protocol\n", tt->protocol);
 		kfree(ti);
 		return -EINVAL;
 	}
@@ -192,9 +193,9 @@ int stgt_target_template_register(struct stgt_target_template *stt)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(stgt_target_template_register);
+EXPORT_SYMBOL_GPL(tgt_target_template_register);
 
-void stgt_target_template_unregister(struct stgt_target_template *stt)
+void tgt_target_template_unregister(struct tgt_target_template *tt)
 {
 	unsigned long flags;
 	struct target_type_internal *ti;
@@ -202,7 +203,7 @@ void stgt_target_template_unregister(struct stgt_target_template *stt)
 	spin_lock_irqsave(&target_tmpl_lock, flags);
 
 	list_for_each_entry(ti, &target_tmpl_list, list)
-		if (ti->stt == stt) {
+		if (ti->tt == tt) {
 			list_del(&ti->list);
 			tgt_protocol_put(ti->proto);
 			kfree(ti);
@@ -211,11 +212,11 @@ void stgt_target_template_unregister(struct stgt_target_template *stt)
 
 	spin_unlock_irqrestore(&target_tmpl_lock, flags);
 }
-EXPORT_SYMBOL_GPL(stgt_target_template_unregister);
+EXPORT_SYMBOL_GPL(tgt_target_template_unregister);
 
-static struct stgt_target *target_find(int tid)
+static struct tgt_target *target_find(int tid)
 {
-	struct stgt_target *target;
+	struct tgt_target *target;
 
 	spin_lock(&all_targets_lock);
 	list_for_each_entry(target, &all_targets, tlist) {
@@ -229,12 +230,12 @@ found:
 	return target;
 }
 
-struct stgt_target *stgt_target_create(char *target_type, int queued_cmnds)
+struct tgt_target *tgt_target_create(char *target_type, int queued_cmnds)
 {
 	char name[16];
 	static int target_id;
-	struct stgt_target *target;
-	struct target_type_internal *tti;
+	struct tgt_target *target;
+	struct target_type_internal *ti;
 
 	if (!daemon_pid) {
 		eprintk("%s\n", "Run the user-space daemon first!");
@@ -246,12 +247,12 @@ struct stgt_target *stgt_target_create(char *target_type, int queued_cmnds)
 		return NULL;
 	memset(target, 0, sizeof(*target));
 
-	tti = target_template_get(target_type);
-	if (!tti)
+	ti = target_template_get(target_type);
+	if (!ti)
 		goto free_target;
 
-	target->stt = tti->stt;
-	target->proto = tti->proto;
+	target->tt = ti->tt;
+	target->proto = ti->proto;
 	target->tid = target_id++;
 	spin_lock_init(&target->lock);
 
@@ -259,7 +260,7 @@ struct stgt_target *stgt_target_create(char *target_type, int queued_cmnds)
 	INIT_LIST_HEAD(&target->device_list);
 	INIT_LIST_HEAD(&target->work_list);
 
-	INIT_WORK(&target->work, stgt_worker, target);
+	INIT_WORK(&target->work, tgt_worker, target);
 	target->queued_cmnds = queued_cmnds;
 
 	snprintf(name, sizeof(name), "tgtd%d", target->tid);
@@ -267,38 +268,38 @@ struct stgt_target *stgt_target_create(char *target_type, int queued_cmnds)
 	if (!target->twq)
 		goto put_template;
 
-	target->stt_data = kmalloc(sizeof(target->stt->priv_data_size), GFP_KERNEL);
-	if (!target->stt_data)
+	target->tt_data = kmalloc(sizeof(target->tt->priv_data_size), GFP_KERNEL);
+	if (!target->tt_data)
 		goto free_workqueue;
 
-	if (target->stt->target_create)
-		if (target->stt->target_create(target))
-			goto free_priv_stt_data;
+	if (target->tt->target_create)
+		if (target->tt->target_create(target))
+			goto free_priv_tt_data;
 
-	if (stgt_sysfs_register_target(target))
-		goto stt_destroy;
+	if (tgt_sysfs_register_target(target))
+		goto tt_destroy;
 
 	spin_lock(&all_targets_lock);
 	list_add(&target->tlist, &all_targets);
 	spin_unlock(&all_targets_lock);
 	return target;
 
-stt_destroy:
-	if (target->stt->target_destroy)
-		target->stt->target_destroy(target);
-free_priv_stt_data:
-	kfree(target->stt_data);
+tt_destroy:
+	if (target->tt->target_destroy)
+		target->tt->target_destroy(target);
+free_priv_tt_data:
+	kfree(target->tt_data);
 free_workqueue:
 	destroy_workqueue(target->twq);
 put_template:
-	target_template_put(target->stt);
+	target_template_put(target->tt);
 free_target:
 	kfree(target);
 	return NULL;
 }
-EXPORT_SYMBOL_GPL(stgt_target_create);
+EXPORT_SYMBOL_GPL(tgt_target_create);
 
-int stgt_target_destroy(struct stgt_target *target)
+int tgt_target_destroy(struct tgt_target *target)
 {
 	dprintk("%p\n", target);
 
@@ -306,20 +307,20 @@ int stgt_target_destroy(struct stgt_target *target)
 	list_del(&target->tlist);
 	spin_unlock(&all_targets_lock);
 
-	if (target->stt->target_destroy)
-		target->stt->target_destroy(target);
+	if (target->tt->target_destroy)
+		target->tt->target_destroy(target);
 
 	destroy_workqueue(target->twq);
-	target_template_put(target->stt);
-	stgt_sysfs_unregister_target(target);
+	target_template_put(target->tt);
+	tgt_sysfs_unregister_target(target);
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(stgt_target_destroy);
+EXPORT_SYMBOL_GPL(tgt_target_destroy);
 
-static int session_init(struct stgt_session *session, int max_cmnds)
+static int session_init(struct tgt_session *session, int max_cmnds)
 {
-	struct stgt_target *target = session->target;
+	struct tgt_target *target = session->target;
 	unsigned long flags;
 
 	session->cmnd_pool = mempool_create(max_cmnds, mempool_alloc_slab,
@@ -373,9 +374,9 @@ static void session_init_handler(void *data)
 	kfree(ssa);
 }
 
-static int session_atomic_init(struct stgt_session *session,
+static int session_atomic_init(struct tgt_session *session,
 			       int max_cmnds,
-			       void (*done) (void *, struct stgt_session *),
+			       void (*done) (void *, struct tgt_session *),
 			       int *arg)
 {
 	struct atomic_session_args *ssa;
@@ -398,13 +399,13 @@ static int session_atomic_init(struct stgt_session *session,
 	return 0;
 }
 
-struct stgt_session *
-stgt_session_create(struct stgt_target *target,
-		    int max_cmnds,
-		    void (*done)(void *, struct stgt_session *),
-		    void *arg)
+struct tgt_session *
+tgt_session_create(struct tgt_target *target,
+		   int max_cmnds,
+		   void (*done)(void *, struct tgt_session *),
+		   void *arg)
 {
-	struct stgt_session *session;
+	struct tgt_session *session;
 
 	if (!target) {
 		eprintk("%s\n", "Null target pointer!");
@@ -442,9 +443,9 @@ out:
 	kfree(session);
 	return NULL;
 }
-EXPORT_SYMBOL_GPL(stgt_session_create);
+EXPORT_SYMBOL_GPL(tgt_session_create);
 
-int stgt_session_destroy(struct stgt_session *session)
+int tgt_session_destroy(struct tgt_session *session)
 {
 	mempool_destroy(session->cmnd_pool);
 	mempool_destroy(session->work_pool);
@@ -452,14 +453,14 @@ int stgt_session_destroy(struct stgt_session *session)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(stgt_session_destroy);
+EXPORT_SYMBOL_GPL(tgt_session_destroy);
 
 struct device_type_internal {
-	struct stgt_device_template *sdt;
+	struct tgt_device_template *sdt;
 	struct list_head list;
 };
 
-static struct stgt_device_template *device_template_get(const char *name)
+static struct tgt_device_template *device_template_get(const char *name)
 {
 	unsigned long flags;
 	struct device_type_internal *ti;
@@ -479,12 +480,12 @@ static struct stgt_device_template *device_template_get(const char *name)
 	return NULL;
 }
 
-static void device_template_put(struct stgt_device_template *sdt)
+static void device_template_put(struct tgt_device_template *sdt)
 {
 	module_put(sdt->module);
 }
 
-int stgt_device_template_register(struct stgt_device_template *sdt)
+int tgt_device_template_register(struct tgt_device_template *sdt)
 {
 	unsigned long flags;
 	struct device_type_internal *ti;
@@ -502,9 +503,9 @@ int stgt_device_template_register(struct stgt_device_template *sdt)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(stgt_device_template_register);
+EXPORT_SYMBOL_GPL(tgt_device_template_register);
 
-void stgt_device_template_unregister(struct stgt_device_template *sdt)
+void tgt_device_template_unregister(struct tgt_device_template *sdt)
 {
 	unsigned long flags;
 	struct device_type_internal *ti;
@@ -520,15 +521,15 @@ void stgt_device_template_unregister(struct stgt_device_template *sdt)
 
 	spin_unlock_irqrestore(&device_tmpl_lock, flags);
 }
-EXPORT_SYMBOL_GPL(stgt_device_template_unregister);
+EXPORT_SYMBOL_GPL(tgt_device_template_unregister);
 
 /*
  * TODO: use a hash or any better alg/ds
  */
-static struct stgt_device *
-stgt_device_find_nolock(struct stgt_target *target, uint64_t dev_id)
+static struct tgt_device *
+tgt_device_find_nolock(struct tgt_target *target, uint64_t dev_id)
 {
-	struct stgt_device *device;
+	struct tgt_device *device;
 
 	list_for_each_entry(device, &target->device_list, dlist)
 		if (device->dev_id == dev_id)
@@ -537,24 +538,24 @@ stgt_device_find_nolock(struct stgt_target *target, uint64_t dev_id)
 	return NULL;
 }
 
-static struct stgt_device *
-stgt_device_find(struct stgt_target *target, uint64_t dev_id)
+static struct tgt_device *
+tgt_device_find(struct tgt_target *target, uint64_t dev_id)
 {
-	static struct stgt_device *device;
+	static struct tgt_device *device;
 	unsigned long flags;
 
 	spin_lock_irqsave(&target->lock, flags);
-	device = stgt_device_find_nolock(target, dev_id);
+	device = tgt_device_find_nolock(target, dev_id);
 	spin_unlock_irqrestore(&target->lock, flags);
 
 	return device;
 }
 
-static int stgt_device_create(int tid, uint64_t dev_id, char *device_type,
+static int tgt_device_create(int tid, uint64_t dev_id, char *device_type,
 			      char *path, unsigned long dflags)
 {
-	struct stgt_target *target;
-	struct stgt_device *device;
+	struct tgt_target *target;
+	struct tgt_device *device;
 	unsigned long flags;
 
 	dprintk("%d %llu %s %s\n", tid, dev_id, device_type, path);
@@ -574,23 +575,23 @@ static int stgt_device_create(int tid, uint64_t dev_id, char *device_type,
 	if (!device->path)
 		goto free_device;
 
-	device->sdt = device_template_get(device_type);
-	if (!device->sdt) {
+	device->dt = device_template_get(device_type);
+	if (!device->dt) {
 		eprintk("Could not get devive type %s\n", device_type);
 		goto free_path;
 	}
 
-	device->sdt_data = kmalloc(sizeof(device->sdt->priv_data_size),
+	device->dt_data = kmalloc(sizeof(device->dt->priv_data_size),
 				   GFP_KERNEL);
-	if (!device->sdt_data)
+	if (!device->dt_data)
 		goto put_template;
 
-	if (device->sdt->create)
-		if (device->sdt->create(device))
-			goto free_priv_sdt_data;
+	if (device->dt->create)
+		if (device->dt->create(device))
+			goto free_priv_dt_data;
 
-	if (stgt_sysfs_register_device(device))
-		goto sdt_destroy;
+	if (tgt_sysfs_register_device(device))
+		goto dt_destroy;
 
 	spin_lock_irqsave(&target->lock, flags);
 	list_add(&device->dlist, &target->device_list);
@@ -598,13 +599,13 @@ static int stgt_device_create(int tid, uint64_t dev_id, char *device_type,
 
 	return 0;
 
-sdt_destroy:
-	if (device->sdt->destroy)
-		device->sdt->destroy(device);
-free_priv_sdt_data:
-	kfree(device->sdt_data);
+dt_destroy:
+	if (device->dt->destroy)
+		device->dt->destroy(device);
+free_priv_dt_data:
+	kfree(device->dt_data);
 put_template:
-	device_template_put(device->sdt);
+	device_template_put(device->dt);
 free_path:
 	kfree(device->path);
 free_device:
@@ -612,10 +613,10 @@ free_device:
 	return -EINVAL;
 }
 
-static int stgt_device_destroy(int tid, uint64_t dev_id)
+static int tgt_device_destroy(int tid, uint64_t dev_id)
 {
-	struct stgt_device *device;
-	struct stgt_target *target;
+	struct tgt_device *device;
+	struct tgt_target *target;
 	unsigned long flags;
 
 	target = target_find(tid);
@@ -623,27 +624,27 @@ static int stgt_device_destroy(int tid, uint64_t dev_id)
 		return -ENOENT;
 
 	spin_lock_irqsave(&target->lock, flags);
-	device = stgt_device_find_nolock(target, dev_id);
+	device = tgt_device_find_nolock(target, dev_id);
 	spin_unlock_irqrestore(&target->lock, flags);
 	if (!device)
 		return -EINVAL;
 
 	list_del(&device->dlist);
-	if (device->sdt->destroy)
-		device->sdt->destroy(device);
+	if (device->dt->destroy)
+		device->dt->destroy(device);
 
-	device_template_put(device->sdt);
-	stgt_sysfs_unregister_device(device);
+	device_template_put(device->dt);
+	tgt_sysfs_unregister_device(device);
 
 	return 0;
 }
 
-struct stgt_cmnd *stgt_cmnd_create(struct stgt_session *session,
+struct tgt_cmnd *tgt_cmnd_create(struct tgt_session *session,
 				   uint8_t *proto_data,
 				   uint8_t *id_buff, int buff_size)
 {
 	struct tgt_protocol *proto = session->target->proto;
-	struct stgt_cmnd *cmnd;
+	struct tgt_cmnd *cmnd;
 	void *pcmnd_data;
 	unsigned long flags;
 
@@ -674,9 +675,9 @@ struct stgt_cmnd *stgt_cmnd_create(struct stgt_session *session,
 
 	return cmnd;
 }
-EXPORT_SYMBOL_GPL(stgt_cmnd_create);
+EXPORT_SYMBOL_GPL(tgt_cmnd_create);
 
-void stgt_cmnd_destroy(struct stgt_cmnd *cmnd)
+void tgt_cmnd_destroy(struct tgt_cmnd *cmnd)
 {
 	unsigned long flags;
 	int i;
@@ -693,11 +694,11 @@ void stgt_cmnd_destroy(struct stgt_cmnd *cmnd)
 
 	mempool_free(cmnd, cmnd->session->cmnd_pool);
 }
-EXPORT_SYMBOL_GPL(stgt_cmnd_destroy);
+EXPORT_SYMBOL_GPL(tgt_cmnd_destroy);
 
 #define pgcnt(size, offset)	((((size) + ((offset) & ~PAGE_CACHE_MASK)) + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT)
 
-void __stgt_alloc_buffer(struct stgt_cmnd *cmnd)
+void __tgt_alloc_buffer(struct tgt_cmnd *cmnd)
 {
 	uint64_t offset = cmnd->offset;
 	uint32_t len = cmnd->bufflen;
@@ -721,20 +722,20 @@ void __stgt_alloc_buffer(struct stgt_cmnd *cmnd)
 	}
 }
 
-static void stgt_alloc_buffer(void *data)
+static void tgt_alloc_buffer(void *data)
 {
-	struct stgt_cmnd *cmnd = data;
+	struct tgt_cmnd *cmnd = data;
 
-	__stgt_alloc_buffer(cmnd);
+	__tgt_alloc_buffer(cmnd);
 
 	if (cmnd->done) {
-		void (*done)(struct stgt_cmnd *) = cmnd->done;
+		void (*done)(struct tgt_cmnd *) = cmnd->done;
 		cmnd->done = NULL;
 		done(cmnd);
 	}
 }
 
-void stgt_cmnd_alloc_buffer(struct stgt_cmnd *cmnd, void (*done)(struct stgt_cmnd *))
+void tgt_cmnd_alloc_buffer(struct tgt_cmnd *cmnd, void (*done)(struct tgt_cmnd *))
 {
 	struct tgt_protocol *proto = cmnd->session->target->proto;
 
@@ -743,24 +744,24 @@ void stgt_cmnd_alloc_buffer(struct stgt_cmnd *cmnd, void (*done)(struct stgt_cmn
 	proto->init_cmnd_buffer(cmnd);
 
 	if (done) {
-		struct stgt_session *session = cmnd->session;
-		struct stgt_work *work;
+		struct tgt_session *session = cmnd->session;
+		struct tgt_work *work;
 
-		work = stgt_init_work(session, stgt_alloc_buffer, cmnd);
-		stgt_queue_work(session->target, work);
+		work = tgt_init_work(session, tgt_alloc_buffer, cmnd);
+		tgt_queue_work(session->target, work);
 		return;
 	};
 
-	stgt_alloc_buffer(cmnd);
+	tgt_alloc_buffer(cmnd);
 }
-EXPORT_SYMBOL_GPL(stgt_cmnd_alloc_buffer);
+EXPORT_SYMBOL_GPL(tgt_cmnd_alloc_buffer);
 
-static int uspace_cmnd_send(struct stgt_cmnd *cmnd)
+static int uspace_cmnd_send(struct tgt_cmnd *cmnd)
 {
 	struct tgt_protocol *proto = cmnd->session->target->proto;
 	struct sk_buff *skb;
 	struct nlmsghdr *nlh;
-	struct stgt_event *ev;
+	struct tgt_event *ev;
 	char *pdu;
 	int len, proto_pdu_size = proto->uspace_pdu_size;
 
@@ -771,7 +772,7 @@ static int uspace_cmnd_send(struct stgt_cmnd *cmnd)
 
 	dprintk("%d %Zd %d\n", len, sizeof(*ev), proto_pdu_size);
 	nlh = __nlmsg_put(skb, daemon_pid, 0,
-			  STGT_KEVENT_CMND_REQ, len - sizeof(*nlh), 0);
+			  TGT_KEVENT_CMND_REQ, len - sizeof(*nlh), 0);
 	ev = NLMSG_DATA(nlh);
 	memset(ev, 0, sizeof(*ev));
 
@@ -785,11 +786,11 @@ static int uspace_cmnd_send(struct stgt_cmnd *cmnd)
 	return netlink_unicast(nls, skb, daemon_pid, 0);
 }
 
-static void cmnd_done(struct stgt_cmnd *cmnd, int result)
+static void cmnd_done(struct tgt_cmnd *cmnd, int result)
 {
-	struct stgt_target *target = cmnd->session->target;
+	struct tgt_target *target = cmnd->session->target;
 	struct tgt_protocol *proto = target->proto;
-	void (*done)(struct stgt_cmnd *);
+	void (*done)(struct tgt_cmnd *);
 
 	proto->cmnd_done(cmnd, result);
 	cmnd->result = result;
@@ -799,7 +800,7 @@ static void cmnd_done(struct stgt_cmnd *cmnd, int result)
 	done(cmnd);
 }
 
-static void uspace_cmnd_done(struct stgt_cmnd *cmnd, char *data,
+static void uspace_cmnd_done(struct tgt_cmnd *cmnd, char *data,
 			     int result, uint32_t len)
 {
 	int i;
@@ -808,7 +809,7 @@ static void uspace_cmnd_done(struct stgt_cmnd *cmnd, char *data,
 	if (len) {
 		cmnd->bufflen = len;
 		cmnd->offset = 0;
-		__stgt_alloc_buffer(cmnd);
+		__tgt_alloc_buffer(cmnd);
 
 		for (i = 0; i < cmnd->sg_count; i++) {
 			uint32_t copy = min_t(uint32_t, len, PAGE_CACHE_SIZE);
@@ -826,17 +827,17 @@ static void uspace_cmnd_done(struct stgt_cmnd *cmnd, char *data,
 static void queuecommand(void *data)
 {
 	int err = 0;
-	struct stgt_cmnd *cmnd = data;
-	struct stgt_target *target = cmnd->session->target;
-	struct stgt_device *device;
+	struct tgt_cmnd *cmnd = data;
+	struct tgt_target *target = cmnd->session->target;
+	struct tgt_device *device;
 
 	/* Should we do this earlier? */
-	device = stgt_device_find(target, cmnd->dev_id);
+	device = tgt_device_find(target, cmnd->dev_id);
 	if (device)
 		dprintk("found %llu\n", cmnd->dev_id);
 
 	if (cmnd->rw == READ || cmnd->rw == WRITE)
-		err = device->sdt->queue_cmnd(device, cmnd);
+		err = device->dt->queue_cmnd(device, cmnd);
 	else {
 		err = uspace_cmnd_send(cmnd);
 		if (err >= 0)
@@ -851,10 +852,10 @@ static void queuecommand(void *data)
 	cmnd_done(cmnd, err);
 }
 
-int stgt_cmnd_queue(struct stgt_cmnd *cmnd, void (*done)(struct stgt_cmnd *))
+int tgt_cmnd_queue(struct tgt_cmnd *cmnd, void (*done)(struct tgt_cmnd *))
 {
-	struct stgt_work *work;
-	struct stgt_session *session = cmnd->session;
+	struct tgt_work *work;
+	struct tgt_session *session = cmnd->session;
 
 	assert(!cmnd->done);
 	cmnd->done = done;
@@ -863,20 +864,20 @@ int stgt_cmnd_queue(struct stgt_cmnd *cmnd, void (*done)(struct stgt_cmnd *))
 		return -EINVAL;
 	}
 
-	work = stgt_init_work(session, queuecommand, cmnd);
+	work = tgt_init_work(session, queuecommand, cmnd);
 	if (!work)
 		return -ENOMEM;
 
-	stgt_queue_work(session->target, work);
+	tgt_queue_work(session->target, work);
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(stgt_cmnd_queue);
+EXPORT_SYMBOL_GPL(tgt_cmnd_queue);
 
-static struct stgt_cmnd *find_cmnd_by_id(uint64_t cid)
+static struct tgt_cmnd *find_cmnd_by_id(uint64_t cid)
 {
 	struct list_head *head;
-	struct stgt_cmnd *cmnd;
+	struct tgt_cmnd *cmnd;
 	unsigned long flags;
 
 	head = &cmnd_hash[cmnd_hashfn(cid)];
@@ -897,49 +898,49 @@ found:
 static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 {
 	int err = 0;
-	struct stgt_event *ev = NLMSG_DATA(nlh);
-	struct stgt_cmnd *cmnd;
-	struct stgt_target *target;
+	struct tgt_event *ev = NLMSG_DATA(nlh);
+	struct tgt_cmnd *cmnd;
+	struct tgt_target *target;
 
 	daemon_pid  = NETLINK_CREDS(skb)->pid;
 
 	dprintk("%d %d\n", daemon_pid, nlh->nlmsg_type);
 
 	switch (nlh->nlmsg_type) {
-	case STGT_UEVENT_START:
+	case TGT_UEVENT_START:
 		dprintk("start %d\n", daemon_pid);
 		break;
-	case STGT_UEVENT_TARGET_CREATE:
-		target = stgt_target_create(ev->u.c_target.type,
-					    ev->u.c_target.nr_cmnds);
+	case TGT_UEVENT_TARGET_CREATE:
+		target = tgt_target_create(ev->u.c_target.type,
+					   ev->u.c_target.nr_cmnds);
 		if (target)
 			err = target->tid;
 		else
 			err = -EINVAL;
 		break;
-	case STGT_UEVENT_TARGET_DESTROY:
+	case TGT_UEVENT_TARGET_DESTROY:
 		target = target_find(ev->u.d_target.tid);
 		if (target)
-			err = stgt_target_destroy(target);
+			err = tgt_target_destroy(target);
 		else
 			err = -EINVAL;
 		break;
-	case STGT_UEVENT_DEVICE_CREATE:
+	case TGT_UEVENT_DEVICE_CREATE:
 		if (nlh->nlmsg_len <= NLMSG_SPACE(sizeof(*ev))) {
 			err = -EINVAL;
 			break;
 		}
-		err = stgt_device_create(ev->u.c_device.tid,
-					 ev->u.c_device.dev_id,
-					 ev->u.c_device.type,
-					 (char *) ev + sizeof(*ev),
-					 ev->u.c_device.flags);
+		err = tgt_device_create(ev->u.c_device.tid,
+					ev->u.c_device.dev_id,
+					ev->u.c_device.type,
+					(char *) ev + sizeof(*ev),
+					ev->u.c_device.flags);
 		break;
-	case STGT_UEVENT_DEVICE_DESTROY:
-		err = stgt_device_destroy(ev->u.d_device.tid,
-					  ev->u.d_device.dev_id);
+	case TGT_UEVENT_DEVICE_DESTROY:
+		err = tgt_device_destroy(ev->u.d_device.tid,
+					 ev->u.d_device.dev_id);
 		break;
-	case STGT_UEVENT_CMND_RES:
+	case TGT_UEVENT_CMND_RES:
 		cmnd = find_cmnd_by_id(ev->u.cmnd_res.cid);
 		if (cmnd)
 			uspace_cmnd_done(cmnd, (char *) ev + sizeof(*ev),
@@ -976,7 +977,7 @@ static int event_recv_skb(struct sk_buff *skb)
 	int err;
 	uint32_t rlen;
 	struct nlmsghdr	*nlh;
-	struct stgt_event *ev;
+	struct tgt_event *ev;
 
 	while (skb->len >= NLMSG_SPACE(0)) {
 		nlh = (struct nlmsghdr *) skb->data;
@@ -990,9 +991,9 @@ static int event_recv_skb(struct sk_buff *skb)
 
 		eprintk("%d %d\n", nlh->nlmsg_type, err);
 		ev->k.event_res.err = err;
-		if (nlh->nlmsg_type != STGT_UEVENT_CMND_RES)
+		if (nlh->nlmsg_type != TGT_UEVENT_CMND_RES)
 			send_event_res(NETLINK_CREDS(skb)->pid,
-				       STGT_KEVENT_RESPONSE,
+				       TGT_KEVENT_RESPONSE,
 				       ev, sizeof(*ev));
 		skb_pull(skb, rlen);
 	}
@@ -1011,7 +1012,7 @@ static void event_recv(struct sock *sk, int length)
 	}
 }
 
-static void __exit stgt_exit(void)
+static void __exit tgt_exit(void)
 {
 	if (cmnd_slab)
 		kmem_cache_destroy(cmnd_slab);
@@ -1022,10 +1023,10 @@ static void __exit stgt_exit(void)
 	if (nls)
 		sock_release(nls->sk_socket);
 
-	stgt_sysfs_exit();
+	tgt_sysfs_exit();
 }
 
-static int __init stgt_init(void)
+static int __init tgt_init(void)
 {
 	int i, err = -ENOMEM;
 
@@ -1037,23 +1038,23 @@ static int __init stgt_init(void)
 
 	tgt_protocol_init();
 
-	err = stgt_sysfs_init();
+	err = tgt_sysfs_init();
 	if (err)
 		return err;
 
-	cmnd_slab = kmem_cache_create("stgt_cmnd", sizeof(struct stgt_cmnd), 0,
+	cmnd_slab = kmem_cache_create("tgt_cmnd", sizeof(struct tgt_cmnd), 0,
 				      SLAB_HWCACHE_ALIGN | SLAB_NO_REAP,
 				      NULL, NULL);
 	if (!cmnd_slab)
 		goto out;
 
-	work_slab = kmem_cache_create("stgt_work", sizeof(struct stgt_work), 0,
+	work_slab = kmem_cache_create("tgt_work", sizeof(struct tgt_work), 0,
 				      SLAB_HWCACHE_ALIGN | SLAB_NO_REAP,
 				      NULL, NULL);
 	if (!work_slab)
 		goto out;
 
-	nls = netlink_kernel_create(NETLINK_STGT, event_recv);
+	nls = netlink_kernel_create(NETLINK_TGT, event_recv);
 	if (!nls)
 		goto out;
 
@@ -1062,9 +1063,9 @@ static int __init stgt_init(void)
 
 	return 0;
 out:
-	stgt_exit();
+	tgt_exit();
 	return err;
 }
 
-module_init(stgt_init);
-module_exit(stgt_exit);
+module_init(tgt_init);
+module_exit(tgt_exit);

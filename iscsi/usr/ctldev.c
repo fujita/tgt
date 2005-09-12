@@ -20,7 +20,7 @@
 #include <linux/netlink.h>
 
 #include "iscsid.h"
-#include "stgt_if.h"
+#include "tgt_if.h"
 
 #define CTL_DEVICE	"/dev/ietctl"
 
@@ -181,7 +181,7 @@ int server_stop(void)
 	int tid, err;
 	int32_t lun;
 
-	dir = opendir("/sys/class/stgt_device");
+	dir = opendir("/sys/class/tgt_device");
 	if (!dir)
 		return errno;
 
@@ -193,7 +193,7 @@ int server_stop(void)
 
 	closedir(dir);
 
-	dir = opendir("/sys/class/stgt_target");
+	dir = opendir("/sys/class/tgt_target");
 	if (!dir)
 		return errno;
 
@@ -333,8 +333,8 @@ static int ipc_cmnd_execute(char *data, int len)
 {
 	int fd, err;
 	struct sockaddr_un addr;
-	char nlm_ev[NLMSG_SPACE(sizeof(struct stgt_event))];
-	struct stgt_event *ev;
+	char nlm_ev[NLMSG_SPACE(sizeof(struct tgt_event))];
+	struct tgt_event *ev;
 	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
 
 	fd = socket(AF_LOCAL, SOCK_STREAM, 0);
@@ -343,8 +343,8 @@ static int ipc_cmnd_execute(char *data, int len)
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_LOCAL;
-	memcpy((char *) &addr.sun_path + 1, STGT_IPC_NAMESPACE,
-	       strlen(STGT_IPC_NAMESPACE));
+	memcpy((char *) &addr.sun_path + 1, TGT_IPC_NAMESPACE,
+	       strlen(TGT_IPC_NAMESPACE));
 
 	err = connect(fd, (struct sockaddr *) &addr, sizeof(addr));
 	if (err < 0)
@@ -382,11 +382,11 @@ static int iscsi_target_create(u32 *tid, char *name)
 {
 	int err;
 	char nlm_ev[8912];
-	struct stgt_event *ev;
+	struct tgt_event *ev;
 	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
 
 	memset(nlm_ev, 0, sizeof(nlm_ev));
-	nlmsg_init(nlh, getpid(), 0, STGT_UEVENT_TARGET_CREATE,
+	nlmsg_init(nlh, getpid(), 0, TGT_UEVENT_TARGET_CREATE,
 		   NLMSG_SPACE(sizeof(*ev)), 0);
 
 	ev = NLMSG_DATA(nlh);
@@ -406,11 +406,11 @@ static int iscsi_target_destroy(u32 tid)
 {
 	int err;
 	char nlm_ev[8912];
-	struct stgt_event *ev;
+	struct tgt_event *ev;
 	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
 
 	memset(nlm_ev, 0, sizeof(nlm_ev));
-	nlmsg_init(nlh, getpid(), 0, STGT_UEVENT_TARGET_DESTROY,
+	nlmsg_init(nlh, getpid(), 0, TGT_UEVENT_TARGET_DESTROY,
 		   NLMSG_SPACE(sizeof(*ev)), 0);
 
 	ev = NLMSG_DATA(nlh);
@@ -425,8 +425,8 @@ static int iscsi_lunit_create(u32 tid, u32 lun, char *args)
 {
 	int err;
 	char nlm_ev[8912], *p, *q, *type = NULL, *path = NULL;
-	char dtype[] = "stgt_vsd";
-	struct stgt_event *ev;
+	char dtype[] = "tgt_vsd";
+	struct tgt_event *ev;
 	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
 
 	fprintf(stderr, "%s %d %s\n", __FUNCTION__, __LINE__, args);
@@ -461,7 +461,7 @@ static int iscsi_lunit_create(u32 tid, u32 lun, char *args)
 		__FUNCTION__, __LINE__, type, path, strlen(path), sizeof(*ev));
 
 	memset(nlm_ev, 0, sizeof(nlm_ev));
-	nlmsg_init(nlh, getpid(), 0, STGT_UEVENT_DEVICE_CREATE,
+	nlmsg_init(nlh, getpid(), 0, TGT_UEVENT_DEVICE_CREATE,
 		   NLMSG_SPACE(sizeof(*ev) + strlen(path)), 0);
 
 	ev = NLMSG_DATA(nlh);
@@ -479,13 +479,13 @@ static int iscsi_lunit_destroy(u32 tid, u32 lun)
 {
 	int err;
 	char nlm_ev[8912];
-	struct stgt_event *ev;
+	struct tgt_event *ev;
 	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
 
 	fprintf(stderr, "%s %d %d %u\n", __FUNCTION__, __LINE__, tid, lun);
 
 	memset(nlm_ev, 0, sizeof(nlm_ev));
-	nlmsg_init(nlh, getpid(), 0, STGT_UEVENT_DEVICE_DESTROY,
+	nlmsg_init(nlh, getpid(), 0, TGT_UEVENT_DEVICE_DESTROY,
 		   NLMSG_SPACE(sizeof(*ev)), 0);
 
 	ev = NLMSG_DATA(nlh);

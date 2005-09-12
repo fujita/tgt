@@ -57,7 +57,7 @@ struct network_thread_info {
 };
 
 struct iscsi_cmnd;
-struct stgt_target;
+struct tgt_target;
 
 enum iscsi_device_state {
 	IDEV_RUNNING,
@@ -77,7 +77,7 @@ struct iscsi_target {
 
 	struct semaphore target_sem;
 
-	struct stgt_target *stt;
+	struct tgt_target *tt;
 };
 
 #define IET_HASH_ORDER		8
@@ -104,7 +104,7 @@ struct iscsi_session {
 
 	u32 next_ttt;
 
-	struct stgt_session *sts;
+	struct tgt_session *ts;
 };
 
 enum connection_state_bit {
@@ -192,7 +192,7 @@ struct iscsi_cmnd {
 	u32 ddigest;
 
 	struct iscsi_cmnd *req;
-	struct stgt_cmnd *stc;
+	struct tgt_cmnd *tc;
 };
 
 #define ISCSI_OP_SCSI_REJECT	ISCSI_OP_VENDOR1_CMD
@@ -227,8 +227,8 @@ extern void nthread_wakeup(struct iscsi_target *);
 extern int target_lock(struct iscsi_target *, int);
 extern void target_unlock(struct iscsi_target *);
 struct iscsi_target *target_lookup_by_id(u32);
-extern int target_add(struct stgt_target *);
-extern void target_del(struct stgt_target *);
+extern int target_add(struct tgt_target *);
+extern void target_del(struct tgt_target *);
 
 /* config.c */
 extern int iet_procfs_init(void);

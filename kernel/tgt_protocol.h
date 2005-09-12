@@ -1,5 +1,5 @@
 /*
- * Target protocol
+ * Target Framework Protocol definitions
  *
  * (C) 2005 FUJITA Tomonori <tomof@acm.org>
  * (C) 2005 Mike Christie <michaelc@cs.wisc.edu>
@@ -9,7 +9,7 @@
 #define __TGT_PROTOCOL_H
 
 struct module;
-struct stgt_cmnd;
+struct tgt_cmnd;
 
 struct tgt_protocol {
 	const char *name;
@@ -22,18 +22,18 @@ struct tgt_protocol {
 	 * perform command preparation, such as setting the rw field
 	 * and dev_id
 	 */
-	void (* init_cmnd)(struct stgt_cmnd *cmnd, uint8_t *proto_data,
+	void (* init_cmnd)(struct tgt_cmnd *cmnd, uint8_t *proto_data,
 			   uint8_t *id_buff, int buff_size);
 	/*
 	 * setup buffer fields like offset and len
 	 */
-	void (* init_cmnd_buffer)(struct stgt_cmnd *cmd);
+	void (* init_cmnd_buffer)(struct tgt_cmnd *cmd);
 	/*
 	 * process completion of a command
 	 */
-	void (* cmnd_done)(struct stgt_cmnd *cmd, int err);
+	void (* cmnd_done)(struct tgt_cmnd *cmd, int err);
 
-	void (* build_uspace_pdu)(struct stgt_cmnd *cmnd, void *data);
+	void (* build_uspace_pdu)(struct tgt_cmnd *cmnd, void *data);
 };
 
 extern void tgt_protocol_init(void);

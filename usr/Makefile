@@ -1,9 +1,9 @@
-CFLAGS += -O2 -fno-inline -Wall -Wstrict-prototypes -I../include -DNETLINK_STGT=20
-PROGRAMS = stgtd
+CFLAGS += -O2 -fno-inline -Wall -Wstrict-prototypes -I../include -DNETLINK_TGT=20
+PROGRAMS = tgtd
 
 all: $(PROGRAMS)
 
-stgtd: stgtd.o scsi.o netlink.o ipc.o log.o
+tgtd: tgtd.o scsi.o netlink.o ipc.o log.o
 	$(CC) $^ -o $@ $(LIBS)
 
 clean:

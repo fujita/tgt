@@ -21,8 +21,8 @@
 #include <sys/signal.h>
 #include <sys/stat.h>
 
-#include <stgt_if.h>
-#include "stgtd.h"
+#include <tgt_if.h>
+#include "tgtd.h"
 
 int nl_fd, ipc_fd;
 
@@ -41,7 +41,7 @@ static struct option const long_options[] =
 	{0, 0, 0, 0},
 };
 
-static char program_name[] = "stgtd";
+static char program_name[] = "tgtd";
 
 static void usage(int status)
 {
@@ -50,7 +50,7 @@ static void usage(int status)
 	else {
 		printf("Usage: %s [OPTION]\n", program_name);
 		printf("\
-SCSI target daemon.\n\
+Target framework daemon.\n\
   -f, --foreground        make the program run in the foreground\n\
   -d, --debug debuglevel  print debugging information\n\
   -h, --help              display this help and exit\n\
@@ -90,7 +90,7 @@ static void init(int daemon, int debug)
 	write(fd, "-17\n", 4);
 	close(fd);
 
-	if (log_init("tgtd", DEFAULT_AREA_SIZE, daemon, debug) < 0) {
+	if (log_init(program_name, DEFAULT_AREA_SIZE, daemon, debug) < 0) {
 		fprintf(stderr, "can not start the logger daemon\n");
 		exit(-1);
 	}

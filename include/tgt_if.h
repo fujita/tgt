@@ -1,28 +1,29 @@
 /*
  * (C) 2005 FUJITA Tomonori <tomof@acm.org>
+ * (C) 2005 Mike Christie <michaelc@cs.wisc.edu>
  * This code is licenced under the GPL.
  */
 
-#ifndef __SCSI_TARGET_IF_H
-#define __SCSI_TARGET_IF_H
+#ifndef TARGET_FRAMEWORK_IF_H
+#define TARGET_FRAMEWORK_IF_H
 
-#define STGT_IPC_NAMESPACE "STGT_IPC_ABSTRACT_NAMESPACE"
+#define TGT_IPC_NAMESPACE "TGT_IPC_ABSTRACT_NAMESPACE"
 
-enum stgt_event_type {
+enum tgt_event_type {
 	/* user -> kernel */
-	STGT_UEVENT_START,
-	STGT_UEVENT_TARGET_CREATE,
-	STGT_UEVENT_TARGET_DESTROY,
-	STGT_UEVENT_DEVICE_CREATE,
-	STGT_UEVENT_DEVICE_DESTROY,
-	STGT_UEVENT_CMND_RES,
+	TGT_UEVENT_START,
+	TGT_UEVENT_TARGET_CREATE,
+	TGT_UEVENT_TARGET_DESTROY,
+	TGT_UEVENT_DEVICE_CREATE,
+	TGT_UEVENT_DEVICE_DESTROY,
+	TGT_UEVENT_CMND_RES,
 
 	/* kernel -> user */
-	STGT_KEVENT_RESPONSE,
-	STGT_KEVENT_CMND_REQ,
+	TGT_KEVENT_RESPONSE,
+	TGT_KEVENT_CMND_REQ,
 };
 
-struct stgt_event {
+struct tgt_event {
 	/* user-> kernel */
 	union {
 		struct {

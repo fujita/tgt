@@ -1,26 +1,26 @@
 /*
- * STGT target definitions
+ * Target Framework Target definitions
  *
  * (C) 2005 FUJITA Tomonori <tomof@acm.org>
  * (C) 2005 Mike Christie <michaelc@cs.wisc.edu>
  * This code is licenced under the GPL.
  */
-#ifndef __SCSI_STGT_TARGET_H
-#define __SCSI_STGT_TARGET_H
+#ifndef __TGT_TARGET_H
+#define __TGT_TARGET_H
 
 #include <linux/device.h>
 #include <linux/list.h>
 
 struct tgt_protocol;
-struct stgt_target;
+struct tgt_target;
 
-struct stgt_target_template {
+struct tgt_target_template {
 	const char *name;
 	struct module *module;
 	unsigned priv_data_size;
 
-	int (* target_create) (struct stgt_target *);
-	void (* target_destroy) (struct stgt_target *);
+	int (* target_create) (struct tgt_target *);
+	void (* target_destroy) (struct tgt_target *);
 
 	/*
 	 * name of protocol to use
@@ -33,10 +33,10 @@ struct stgt_target_template {
 	struct class_device_attribute **target_attrs;
 };
 
-struct stgt_target {
+struct tgt_target {
 	int tid;
-	struct stgt_target_template *stt;
-	void *stt_data;
+	struct tgt_target_template *tt;
+	void *tt_data;
 	struct tgt_protocol *proto;
 
 	struct class_device cdev;
@@ -56,14 +56,14 @@ struct stgt_target {
 	struct workqueue_struct *twq;
 };
 
-#define cdev_to_stgt_target(cdev) \
-	container_of(cdev, struct stgt_target, cdev)
+#define cdev_to_tgt_target(cdev) \
+	container_of(cdev, struct tgt_target, cdev)
 
-extern struct stgt_target *stgt_target_create(char *target_type, int nr_cmnds);
-extern int stgt_target_destroy(struct stgt_target *target);
-extern int stgt_sysfs_register_target(struct stgt_target *target);
-extern void stgt_sysfs_unregister_target(struct stgt_target *target);
-extern int stgt_target_template_register(struct stgt_target_template *stt);
-extern void stgt_target_template_unregister(struct stgt_target_template *stt);
+extern struct tgt_target *tgt_target_create(char *target_type, int nr_cmnds);
+extern int tgt_target_destroy(struct tgt_target *target);
+extern int tgt_sysfs_register_target(struct tgt_target *target);
+extern void tgt_sysfs_unregister_target(struct tgt_target *target);
+extern int tgt_target_template_register(struct tgt_target_template *tt);
+extern void tgt_target_template_unregister(struct tgt_target_template *tt);
 
 #endif

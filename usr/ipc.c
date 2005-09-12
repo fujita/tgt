@@ -3,7 +3,6 @@
  *
  * (C) 2005 FUJITA Tomonori <tomof@acm.org>
  * (C) 2005 Mike Christie <michaelc@cs.wisc.edu>
- *
  * This code is licenced under the GPL.
  */
 
@@ -19,8 +18,8 @@
 #include <sys/socket.h>
 #include <linux/netlink.h>
 
-#include <stgt_if.h>
-#include "stgtd.h"
+#include <tgt_if.h>
+#include "tgtd.h"
 
 void ipc_event_handle(int accept_fd)
 {
@@ -28,7 +27,7 @@ void ipc_event_handle(int accept_fd)
 	struct ucred cred;
 	int fd, err, res;
 	socklen_t len;
-	struct stgt_event *ev;
+	struct tgt_event *ev;
 	char nlm_ev[8192], *data;
 	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
 	struct iovec iov;
@@ -87,7 +86,7 @@ void ipc_event_handle(int accept_fd)
 
 send:
 	nlh->nlmsg_len = NLMSG_SPACE(sizeof(*ev));
-	nlh->nlmsg_type = STGT_KEVENT_RESPONSE;
+	nlh->nlmsg_type = TGT_KEVENT_RESPONSE;
 	nlh->nlmsg_flags = 0;
 	nlh->nlmsg_pid = 0;
 	ev = NLMSG_DATA(nlh);
@@ -111,8 +110,8 @@ int ipc_open(void)
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_LOCAL;
-	memcpy((char *) &addr.sun_path + 1, STGT_IPC_NAMESPACE,
-	       strlen(STGT_IPC_NAMESPACE));
+	memcpy((char *) &addr.sun_path + 1, TGT_IPC_NAMESPACE,
+	       strlen(TGT_IPC_NAMESPACE));
 
 	if ((err = bind(fd, (struct sockaddr *) &addr, sizeof(addr))) < 0)
 		return err;

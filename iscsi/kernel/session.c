@@ -8,7 +8,7 @@
 
 #include <iscsi.h>
 #include <iscsi_dbg.h>
-#include <stgt.h>
+#include <tgt.h>
 
 struct iscsi_session *session_lookup(struct iscsi_target *target, u64 sid)
 {
@@ -59,7 +59,7 @@ static int iet_session_alloc(struct iscsi_target *target, struct session_info *i
 
 	list_add(&session->list, &target->session_list);
 
-	session->sts = stgt_session_create(target->stt, 64, NULL, NULL);
+	session->ts = tgt_session_create(target->tt, 64, NULL, NULL);
 
 	return 0;
 err:
@@ -99,7 +99,7 @@ static int session_free(struct iscsi_session *session)
 	list_del(&session->list);
 	kfree(session->initiator);
 
-	stgt_session_destroy(session->sts);
+	tgt_session_destroy(session->ts);
 	kfree(session);
 
 	return 0;

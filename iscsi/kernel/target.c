@@ -9,9 +9,9 @@
 #include <iscsi.h>
 #include <digest.h>
 #include <iscsi_dbg.h>
-#include <stgt.h>
-#include <stgt_device.h>
-#include <stgt_target.h>
+#include <tgt.h>
+#include <tgt_device.h>
+#include <tgt_target.h>
 
 #define	MAX_NR_TARGETS	(1UL << 30)
 
@@ -101,15 +101,15 @@ static void target_thread_stop(struct iscsi_target *target)
 	nthread_stop(target);
 }
 
-static int iscsi_target_create(struct stgt_target *stt)
+static int iscsi_target_create(struct tgt_target *tt)
 {
 	int err = -EINVAL;
 	struct iscsi_target *target =
-		(struct iscsi_target *) stt->stt_data;
+		(struct iscsi_target *) tt->tt_data;
 
 	memset(target, 0, sizeof(*target));
 
-	target->stt = stt;
+	target->tt = tt;
 	memcpy(&target->sess_param, &default_session_param, sizeof(default_session_param));
 	memcpy(&target->trgt_param, &default_target_param, sizeof(default_target_param));
 
@@ -124,11 +124,11 @@ static int iscsi_target_create(struct stgt_target *stt)
 	if (err < 0)
 		return err;
 
-	target->tid = target->stt->tid;
+	target->tid = target->tt->tid;
 	return 0;
 }
 
-int target_add(struct stgt_target *stt)
+int target_add(struct tgt_target *tt)
 {
 	int err = -EEXIST;
 
@@ -139,7 +139,7 @@ int target_add(struct stgt_target *stt)
 		goto out;
 	}
 
-	if (!(err = iscsi_target_create(stt)))
+	if (!(err = iscsi_target_create(tt)))
 		nr_targets++;
 out:
 	up(&target_list_sem);
@@ -147,10 +147,10 @@ out:
 	return err;
 }
 
-void target_del(struct stgt_target *stt)
+void target_del(struct tgt_target *tt)
 {
 	struct iscsi_target *target =
-		(struct iscsi_target *) stt->stt_data;
+		(struct iscsi_target *) tt->tt_data;
 
 	down(&target_list_sem);
 

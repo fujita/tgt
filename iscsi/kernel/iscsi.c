@@ -12,8 +12,8 @@
 
 #include <iscsi.h>
 #include <iscsi_dbg.h>
-#include <stgt.h>
-#include <stgt_target.h>
+#include <tgt.h>
+#include <tgt_target.h>
 
 unsigned long debug_enable_flags;
 
@@ -81,7 +81,7 @@ struct iscsi_cmnd *cmnd_alloc(struct iscsi_conn *conn, int req)
 
 	if (req) {
 		assert(conn->session);
-		assert(conn->session->sts);
+		assert(conn->session->ts);
 	}
 
 	dprintk(D_GENERIC, "%p:%p\n", conn, cmnd);
@@ -160,7 +160,7 @@ static void do_send_data_rsp(struct iscsi_cmnd *cmnd)
 {
 	struct iscsi_conn *conn = cmnd->conn;
 	struct iscsi_cmnd *data_cmnd;
-	struct scatterlist *sg = cmnd->stc->sg;
+	struct scatterlist *sg = cmnd->tc->sg;
 	struct iscsi_cmd *req = cmnd_hdr(cmnd);
 	struct iscsi_data_rsp *rsp;
 	u32 pdusize, expsize, scsisize, size, offset, sn;
@@ -169,9 +169,9 @@ static void do_send_data_rsp(struct iscsi_cmnd *cmnd)
 	dprintk(D_GENERIC, "%p\n", cmnd);
 	pdusize = conn->session->param.max_xmit_data_length;
 	expsize = cmnd_read_size(cmnd);
-	assert(cmnd->stc);
-	size = min(expsize, cmnd->stc->bufflen);
-	eprintk("%u %u\n", expsize, cmnd->stc->bufflen);
+	assert(cmnd->tc);
+	size = min(expsize, cmnd->tc->bufflen);
+	eprintk("%u %u\n", expsize, cmnd->tc->bufflen);
 	offset = 0;
 	sn = 0;
 
@@ -193,7 +193,7 @@ static void do_send_data_rsp(struct iscsi_cmnd *cmnd)
 			rsp->flags = ISCSI_FLAG_CMD_FINAL |
 				     ISCSI_FLAG_DATA_STATUS;
 
-			scsisize = cmnd->stc->bufflen;
+			scsisize = cmnd->tc->bufflen;
 			if (scsisize < expsize) {
 				rsp->flags |= ISCSI_FLAG_CMD_UNDERFLOW;
 				size = expsize - scsisize;
@@ -275,13 +275,13 @@ static struct iscsi_cmnd *do_create_sense_rsp(struct iscsi_cmnd *req)
 	rsp_hdr->cmd_status = SAM_STAT_CHECK_CONDITION;
 	rsp_hdr->itt = cmnd_hdr(req)->itt;
 
-	sense = (struct iscsi_sense_data *) req->stc->error_buff;
-	memmove(sense->data, sense, req->stc->error_buff_len);
-	sense->length = cpu_to_be16(req->stc->error_buff_len);
+	sense = (struct iscsi_sense_data *) req->tc->error_buff;
+	memmove(sense->data, sense, req->tc->error_buff_len);
+	sense->length = cpu_to_be16(req->tc->error_buff_len);
 
-	sg->page = virt_to_page(req->stc->error_buff);
-	sg->offset = offset_in_page(req->stc->error_buff);
-	sg->length = req->stc->error_buff_len + sizeof(struct iscsi_sense_data);
+	sg->page = virt_to_page(req->tc->error_buff);
+	sg->offset = offset_in_page(req->tc->error_buff);
+	sg->length = req->tc->error_buff_len + sizeof(struct iscsi_sense_data);
 	rsp->pdu.datasize = sg->length;
 	rsp->sg = sg;
 
@@ -305,11 +305,11 @@ static struct iscsi_cmnd *create_sense_rsp(struct iscsi_cmnd *req,
 	rsp_hdr->cmd_status = SAM_STAT_CHECK_CONDITION;
 	rsp_hdr->itt = cmnd_hdr(req)->itt;
 
-	sg->page = virt_to_page(req->stc->error_buff);
-	sg->offset = offset_in_page(req->stc->error_buff);
-	sg->length = req->stc->error_buff_len;
+	sg->page = virt_to_page(req->tc->error_buff);
+	sg->offset = offset_in_page(req->tc->error_buff);
+	sg->length = req->tc->error_buff_len;
 
-	sense = (struct iscsi_sense_data *) req->stc->error_buff;
+	sense = (struct iscsi_sense_data *) req->tc->error_buff;
 	sense->length = cpu_to_be16(14);
 	sense->data[0] = 0xf0;
 	sense->data[2] = sense_key;
@@ -362,8 +362,8 @@ void iscsi_cmnd_remove(struct iscsi_cmnd *cmnd)
 	list_del(&cmnd->conn_list);
 	spin_unlock(&conn->list_lock);
 
-	if (cmnd->stc)
-		stgt_cmnd_destroy(cmnd->stc);
+	if (cmnd->tc)
+		tgt_cmnd_destroy(cmnd->tc);
 
 	kmem_cache_free(iscsi_cmnd_cache, cmnd);
 }
@@ -592,7 +592,7 @@ static void cmnd_skip_data(struct iscsi_cmnd *req)
 	cmnd_skip_pdu(req);
 }
 
-static int cmnd_recv_pdu(struct iscsi_conn *conn, struct stgt_cmnd *stc,
+static int cmnd_recv_pdu(struct iscsi_conn *conn, struct tgt_cmnd *tc,
 			 u32 offset, u32 size)
 {
 	int idx, i;
@@ -601,17 +601,17 @@ static int cmnd_recv_pdu(struct iscsi_conn *conn, struct stgt_cmnd *stc,
 
 	dprintk(D_GENERIC, "%u,%u\n", offset, size);
 
-	assert(stc);
-	sg = stc->sg;
+	assert(tc);
+	sg = tc->sg;
 	offset += sg->offset;
 
-	if (!(offset < sg->offset + stc->bufflen) ||
-	    !(offset + size <= sg->offset + stc->bufflen)) {
-		eprintk("%u %u %u %u", offset, size, sg->offset, stc->bufflen);
+	if (!(offset < sg->offset + tc->bufflen) ||
+	    !(offset + size <= sg->offset + tc->bufflen)) {
+		eprintk("%u %u %u %u", offset, size, sg->offset, tc->bufflen);
 		return -EIO;
 	}
-	assert(offset < sg->offset + stc->bufflen);
-	assert(offset + size <= sg->offset + stc->bufflen);
+	assert(offset < sg->offset + tc->bufflen);
+	assert(offset + size <= sg->offset + tc->bufflen);
 
 	idx = offset >> PAGE_CACHE_SHIFT;
 	offset &= ~PAGE_CACHE_MASK;
@@ -693,12 +693,12 @@ static void send_r2t(struct iscsi_cmnd *req)
 	iscsi_cmnds_init_write(&send);
 }
 
-static void scsi_cmnd_done(struct stgt_cmnd *stc)
+static void scsi_cmnd_done(struct tgt_cmnd *tc)
 {
-	struct iscsi_cmnd *cmnd = (struct iscsi_cmnd *) stc->private;
+	struct iscsi_cmnd *cmnd = (struct iscsi_cmnd *) tc->private;
 	struct iscsi_cmd *req = cmnd_hdr(cmnd);
 
-	if (stc->result != SAM_STAT_GOOD) {
+	if (tc->result != SAM_STAT_GOOD) {
 		struct iscsi_cmnd *rsp;
 
 		rsp = do_create_sense_rsp(cmnd);
@@ -746,8 +746,8 @@ static void scsi_cmnd_exec(struct iscsi_cmnd *cmnd)
 			send_r2t(cmnd);
 	} else {
 		set_cmnd_waitio(cmnd);
-		cmnd->stc->private = cmnd;
-		stgt_cmnd_queue(cmnd->stc, scsi_cmnd_done);
+		cmnd->tc->private = cmnd;
+		tgt_cmnd_queue(cmnd->tc, scsi_cmnd_done);
 	}
 }
 
@@ -834,10 +834,10 @@ static void scsi_cmnd_start(struct iscsi_conn *conn, struct iscsi_cmnd *req)
 
 	eprintk("scsi command: %02x\n", req_hdr->cdb[0]);
 
-	req->stc = stgt_cmnd_create(conn->session->sts, req_hdr->cdb,
-				    req_hdr->lun,
-				    sizeof(req_hdr->lun));
-	assert(req->stc);
+	req->tc = tgt_cmnd_create(conn->session->ts, req_hdr->cdb,
+				   req_hdr->lun,
+				   sizeof(req_hdr->lun));
+	assert(req->tc);
 
 	switch (req_hdr->cdb[0]) {
 	case SERVICE_ACTION_IN:
@@ -880,7 +880,7 @@ static void scsi_cmnd_start(struct iscsi_conn *conn, struct iscsi_cmnd *req)
 			cmnd_skip_data(req);
 		}
 
-		stgt_cmnd_alloc_buffer(req->stc, NULL);
+		tgt_cmnd_alloc_buffer(req->tc, NULL);
 
 		break;
 	}
@@ -906,10 +906,10 @@ static void scsi_cmnd_start(struct iscsi_conn *conn, struct iscsi_cmnd *req)
 		if (req_hdr->cdb[0] == WRITE_VERIFY && req_hdr->cdb[1] & 0x02)
 			eprintk("Verification is ignored %x\n", cmnd_itt(req));
 
-		stgt_cmnd_alloc_buffer(req->stc, NULL);
+		tgt_cmnd_alloc_buffer(req->tc, NULL);
 
 		if (req->pdu.datasize) {
-			if (cmnd_recv_pdu(conn, req->stc, 0, req->pdu.datasize) < 0)
+			if (cmnd_recv_pdu(conn, req->tc, 0, req->pdu.datasize) < 0)
 				assert(0);
 		}
 		break;
@@ -966,7 +966,7 @@ static void data_out_start(struct iscsi_conn *conn, struct iscsi_cmnd *cmnd)
 	dprintk(D_WRITE, "%u %p %p %u %u\n", req->ttt, cmnd, scsi_cmnd,
 		offset, cmnd->pdu.datasize);
 
-	if (cmnd_recv_pdu(conn, scsi_cmnd->stc, offset, cmnd->pdu.datasize) < 0)
+	if (cmnd_recv_pdu(conn, scsi_cmnd->tc, offset, cmnd->pdu.datasize) < 0)
 		goto skip_data;
 	return;
 
@@ -991,7 +991,7 @@ static void data_out_end(struct iscsi_conn *conn, struct iscsi_cmnd *cmnd)
 /* 		assert(scsi_cmnd->tio); */
 		offset = be32_to_cpu(req->offset);
 		offset += cmnd->pdu.datasize - conn->read_overflow;
-		if (cmnd_recv_pdu(conn, scsi_cmnd->stc, offset, conn->read_overflow) < 0)
+		if (cmnd_recv_pdu(conn, scsi_cmnd->tc, offset, conn->read_overflow) < 0)
 			assert(0);
 		return;
 	}
@@ -1559,7 +1559,7 @@ void cmnd_rx_end(struct iscsi_cmnd *cmnd)
 	}
 }
 
-static struct stgt_target_template iet_stgt_target_template = {
+static struct tgt_target_template iet_tgt_target_template = {
 	.name = "iet",
 	.module = THIS_MODULE,
 	.protocol = "scsi",
@@ -1578,7 +1578,7 @@ static void iscsi_exit(void)
 	if (iscsi_cmnd_cache)
 		kmem_cache_destroy(iscsi_cmnd_cache);
 
-	stgt_target_template_unregister(&iet_stgt_target_template);
+	tgt_target_template_unregister(&iet_tgt_target_template);
 }
 
 static int iscsi_init(void)
@@ -1603,8 +1603,8 @@ static int iscsi_init(void)
 	if (!iscsi_cmnd_cache)
 		goto err;
 
-	iet_stgt_target_template.priv_data_size = sizeof(struct iscsi_target);
-	err = stgt_target_template_register(&iet_stgt_target_template);
+	iet_tgt_target_template.priv_data_size = sizeof(struct iscsi_target);
+	err = tgt_target_template_register(&iet_tgt_target_template);
 	if (err < 0)
 		goto err;
 

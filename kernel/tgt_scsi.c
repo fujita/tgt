@@ -7,9 +7,11 @@
  */
 #include <linux/fs.h>
 #include <linux/module.h>
-#include <scsi/scsi.h>
 #include <linux/mm.h>
-#include <stgt.h>
+#include <scsi/scsi.h>
+#include <scsi/scsi_cmnd.h>
+
+#include <tgt.h>
 #include <tgt_protocol.h>
 
 struct scsi_tgt_cmnd {
@@ -41,7 +43,7 @@ static uint64_t scsi_tgt_translate_lun(uint8_t *p, int size)
 	return lun;
 }
 
-static void scsi_tgt_init_cmnd_buffer(struct stgt_cmnd *cmnd)
+static void scsi_tgt_init_cmnd_buffer(struct tgt_cmnd *cmnd)
 {
 	struct scsi_tgt_cmnd *scsi_tgt_cmnd = cmnd->tgt_protocol_private;
 	uint8_t *scb = scsi_tgt_cmnd->scb;
@@ -81,7 +83,7 @@ static void scsi_tgt_init_cmnd_buffer(struct stgt_cmnd *cmnd)
 	cmnd->offset = off;
 }
 
-static void scsi_tgt_init_cmnd(struct stgt_cmnd *cmnd, uint8_t *proto_data,
+static void scsi_tgt_init_cmnd(struct tgt_cmnd *cmnd, uint8_t *proto_data,
 			       uint8_t *id_buff, int buff_size)
 {
 	struct scsi_tgt_cmnd *scsi_tgt_cmnd = cmnd->tgt_protocol_private;
@@ -110,7 +112,7 @@ static void scsi_tgt_init_cmnd(struct stgt_cmnd *cmnd, uint8_t *proto_data,
 	cmnd->dev_id = scsi_tgt_translate_lun(id_buff, buff_size);
 }
 
-static int sense_data_build(struct stgt_cmnd *cmnd, uint8_t key,
+static int sense_data_build(struct tgt_cmnd *cmnd, uint8_t key,
 			    uint8_t ascode, uint8_t ascodeq)
 {
 	struct scsi_tgt_cmnd *scsi_tgt_cmnd = cmnd->tgt_protocol_private;
@@ -164,7 +166,7 @@ static uint8_t error_to_sense_key(int err)
 	return key;
 }
 
-static void scsi_tgt_cmnd_done(struct stgt_cmnd *cmnd, int err)
+static void scsi_tgt_cmnd_done(struct tgt_cmnd *cmnd, int err)
 {
 	if (err < 0) {
 		uint8_t key;
@@ -176,7 +178,7 @@ static void scsi_tgt_cmnd_done(struct stgt_cmnd *cmnd, int err)
 		cmnd->result = SAM_STAT_GOOD;
 }
 
-void scsi_tgt_build_uspace_pdu(struct stgt_cmnd *cmnd, void *data)
+void scsi_tgt_build_uspace_pdu(struct tgt_cmnd *cmnd, void *data)
 {
 	struct scsi_tgt_cmnd *scsi_tgt_cmnd = cmnd->tgt_protocol_private;
 
