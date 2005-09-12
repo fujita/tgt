@@ -1565,6 +1565,7 @@ static struct tgt_target_template iet_tgt_target_template = {
 	.protocol = "scsi",
 	.target_create = target_add,
 	.target_destroy = target_del,
+	.priv_data_size = sizeof(struct iscsi_target),
 };
 
 static void iscsi_exit(void)
@@ -1603,7 +1604,8 @@ static int iscsi_init(void)
 	if (!iscsi_cmnd_cache)
 		goto err;
 
-	iet_tgt_target_template.priv_data_size = sizeof(struct iscsi_target);
+	eprintk("%d %Zd\n", iet_tgt_target_template.priv_data_size, sizeof(struct iscsi_target));
+
 	err = tgt_target_template_register(&iet_tgt_target_template);
 	if (err < 0)
 		goto err;

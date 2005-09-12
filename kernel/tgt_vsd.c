@@ -131,11 +131,11 @@ static struct tgt_device_template tgt_vsd = {
 	.create = tgt_vsd_create,
 	.destroy = tgt_vsd_destroy,
 	.queue_cmnd = tgt_vsd_queue,
+	.priv_data_size = sizeof(struct tgt_vsd_dev),
 };
 
 static int __init tgt_vsd_init(void)
 {
-	tgt_vsd.priv_data_size = sizeof(struct tgt_vsd_dev);
 	return tgt_device_template_register(&tgt_vsd);
 }
 
