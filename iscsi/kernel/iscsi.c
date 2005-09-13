@@ -601,7 +601,8 @@ static int cmnd_recv_pdu(struct iscsi_conn *conn, struct tgt_cmnd *tc,
 
 	dprintk(D_GENERIC, "%u,%u\n", offset, size);
 
-	assert(tc);
+	BUG_ON(!tc);
+	BUG_ON(!tc->sg);
 	sg = tc->sg;
 	offset += sg->offset;
 
@@ -610,8 +611,8 @@ static int cmnd_recv_pdu(struct iscsi_conn *conn, struct tgt_cmnd *tc,
 		eprintk("%u %u %u %u", offset, size, sg->offset, tc->bufflen);
 		return -EIO;
 	}
-	assert(offset < sg->offset + tc->bufflen);
-	assert(offset + size <= sg->offset + tc->bufflen);
+	BUG_ON(!(offset < sg->offset + tc->bufflen));
+	BUG_ON(!(offset + size <= sg->offset + tc->bufflen));
 
 	idx = offset >> PAGE_CACHE_SHIFT;
 	offset &= ~PAGE_CACHE_MASK;
@@ -622,9 +623,12 @@ static int cmnd_recv_pdu(struct iscsi_conn *conn, struct tgt_cmnd *tc,
 
 	i = 0;
 	while (1) {
-		assert(sg->page);
+		sg = tc->sg + idx;
+		BUG_ON(!sg);
+		BUG_ON(!sg->page);
 		addr = page_address(sg->page);
-		assert(addr);
+		BUG_ON(!addr);
+
 		conn->read_iov[i].iov_base =  addr + offset;
 		if (offset + size <= PAGE_CACHE_SIZE) {
 			conn->read_iov[i].iov_len = size;
