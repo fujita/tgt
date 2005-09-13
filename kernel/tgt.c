@@ -47,86 +47,16 @@ static LIST_HEAD(target_tmpl_list);
 static spinlock_t device_tmpl_lock;
 static LIST_HEAD(device_tmpl_list);
 
-static void session_init_handler(void *data);
-static spinlock_t atomic_sessions_lock;
-static LIST_HEAD(atomic_sessions);
-static DECLARE_WORK(atomic_session_work, session_init_handler,
-		    &atomic_sessions);
-
 static int daemon_pid;
 static struct sock *nls;
 
-static kmem_cache_t *cmnd_slab, *work_slab;
+static kmem_cache_t *cmnd_slab;
 
 /* TODO: lock per session */
 static spinlock_t cmnd_hash_lock;
 #define TGT_HASH_ORDER		8
 #define	cmnd_hashfn(key)	hash_long((key), TGT_HASH_ORDER)
 static struct list_head cmnd_hash[1 << TGT_HASH_ORDER];
-
-struct atomic_session_args {
-	struct tgt_session *session;
-	void (*done) (void *, struct tgt_session *);
-	int max_cmnds;
-	void *arg;
-	struct list_head list;
-};
-
-struct tgt_work {
-	void (*fn) (void *);
-	void *arg;
-	mempool_t *pool;
-	struct list_head list;
-};
-
-static struct tgt_work * tgt_init_work(struct tgt_session *session,
-					void (*fn)(void *), void *arg)
-{
-	struct tgt_work *work;
-	mempool_t *pool = session->work_pool;
-
-	work = mempool_alloc(pool, GFP_ATOMIC);
-	if (!work)
-		return NULL;
-
-	work->fn = fn;
-	work->arg = arg;
-	work->pool = pool;
-
-	return work;
-}
-
-static void tgt_worker(void *data)
-{
-	struct tgt_target *target = (struct tgt_target *) data;
-	struct tgt_work *work = NULL;
-	unsigned long flags;
-
-	spin_lock_irqsave(&target->lock, flags);
-	if (!list_empty(&target->work_list)) {
-		work = list_entry(target->work_list.next, struct tgt_work, list);
-		list_del(&work->list);
-	}
-	spin_unlock_irqrestore(&target->lock, flags);
-
-	if (work) {
-		work->fn(work->arg);
-		mempool_free(work, work->pool);
-	}
-
-	return;
-}
-
-static void tgt_queue_work(struct tgt_target *target, struct tgt_work *work)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&target->lock, flags);
-	list_add_tail(&work->list, &target->work_list);
-	spin_unlock_irqrestore(&target->lock, flags);
-
-	queue_work(target->twq, &target->work);
-}
 
 struct target_type_internal {
 	struct list_head list;
@@ -251,7 +181,6 @@ struct tgt_target *tgt_target_create(char *target_type, int queued_cmnds)
 	INIT_LIST_HEAD(&target->device_list);
 	INIT_LIST_HEAD(&target->work_list);
 
-	INIT_WORK(&target->work, tgt_worker, target);
 	target->queued_cmnds = queued_cmnds;
 
 	snprintf(name, sizeof(name), "tgtd%d", target->tid);
@@ -319,11 +248,6 @@ static int session_init(struct tgt_session *session, int max_cmnds)
 	if (!session->cmnd_pool)
 		goto out;
 
-	session->work_pool = mempool_create(max_cmnds, mempool_alloc_slab,
-					    mempool_free_slab, work_slab);
-	if (!session->work_pool)
-		goto out;
-
 	spin_lock_irqsave(&target->lock, flags);
 	list_add(&session->slist, &target->session_list);
 	spin_unlock_irqrestore(&target->lock, flags);
@@ -333,61 +257,7 @@ out:
 	if (session->cmnd_pool)
 		mempool_destroy(session->cmnd_pool);
 
-	if (session->work_pool)
-		mempool_destroy(session->work_pool);
-
 	return -ENOMEM;
-}
-
-static void session_init_handler(void *data)
-{
-	struct list_head *head = (struct list_head *) data;
-	struct atomic_session_args *ssa = NULL;
-	unsigned long flags;
-	int err;
-
-	spin_lock_irqsave(&atomic_sessions_lock, flags);
-	if (!list_empty(&atomic_sessions)) {
-		ssa = list_entry(head->next, struct atomic_session_args, list);
-		list_del(&ssa->list);
-	}
-	spin_unlock_irqrestore(&atomic_sessions_lock, flags);
-
-	if (!ssa)
-		return;
-
-	err = session_init(ssa->session, ssa->max_cmnds);
-	if (err)
-		kfree(ssa->session);
-
-	ssa->done(ssa->arg, err ? NULL : ssa->session);
-
-	kfree(ssa);
-}
-
-static int session_atomic_init(struct tgt_session *session,
-			       int max_cmnds,
-			       void (*done) (void *, struct tgt_session *),
-			       int *arg)
-{
-	struct atomic_session_args *ssa;
-	unsigned long flags;
-
-	ssa = kmalloc(sizeof(*ssa), GFP_ATOMIC);
-	if (!ssa)
-		return -ENOMEM;
-
-	ssa->session = session;
-	ssa->max_cmnds = max_cmnds;
-	ssa->arg = arg;
-
-	spin_lock_irqsave(&atomic_sessions_lock, flags);
-	list_add(&ssa->list, &atomic_sessions);
-	spin_unlock_irqrestore(&atomic_sessions_lock, flags);
-
-	queue_work(session->target->twq, &atomic_session_work);
-
-	return 0;
 }
 
 struct tgt_session *
@@ -398,14 +268,16 @@ tgt_session_create(struct tgt_target *target,
 {
 	struct tgt_session *session;
 
-	if (!target) {
-		eprintk("%s\n", "Null target pointer!");
-		return NULL;
-	}
+	BUG_ON(!target);
 
 	if (done && !arg) {
 		eprintk("%s\n", "Need arg !");
 		return NULL;
+	}
+
+	if (done) {
+		eprintk("%s\n", "Not supported yet!");
+		BUG();
 	}
 
 	dprintk("%p %d\n", target, max_cmnds);
@@ -417,13 +289,6 @@ tgt_session_create(struct tgt_target *target,
 	memset(session, 0, sizeof(*session));
 	session->target = target;
 	INIT_LIST_HEAD(&session->slist);
-
-	if (done) {
-		if (session_atomic_init(session, max_cmnds, done, arg) < 0)
-			goto out;
-
-		return session;
-	}
 
 	if (session_init(session, max_cmnds) < 0)
 		goto out;
@@ -439,7 +304,6 @@ EXPORT_SYMBOL_GPL(tgt_session_create);
 int tgt_session_destroy(struct tgt_session *session)
 {
 	mempool_destroy(session->cmnd_pool);
-	mempool_destroy(session->work_pool);
 	kfree(session);
 
 	return 0;
@@ -736,10 +600,10 @@ void tgt_cmnd_alloc_buffer(struct tgt_cmnd *cmnd, void (*done)(struct tgt_cmnd *
 
 	if (done) {
 		struct tgt_session *session = cmnd->session;
-		struct tgt_work *work;
 
-		work = tgt_init_work(session, tgt_alloc_buffer, cmnd);
-		tgt_queue_work(session->target, work);
+		INIT_WORK(&cmnd->work, tgt_alloc_buffer, cmnd);
+		cmnd->done = done;
+		queue_work(session->target->twq, &cmnd->work);
 		return;
 	};
 
@@ -845,21 +709,14 @@ static void queuecommand(void *data)
 
 int tgt_cmnd_queue(struct tgt_cmnd *cmnd, void (*done)(struct tgt_cmnd *))
 {
-	struct tgt_work *work;
 	struct tgt_session *session = cmnd->session;
 
 	BUG_ON(cmnd->done);
+	BUG_ON(!done);
+
 	cmnd->done = done;
-	if (!done) {
-		eprintk("%s\n", "Null done function!");
-		return -EINVAL;
-	}
-
-	work = tgt_init_work(session, queuecommand, cmnd);
-	if (!work)
-		return -ENOMEM;
-
-	tgt_queue_work(session->target, work);
+	INIT_WORK(&cmnd->work, queuecommand, cmnd);
+	queue_work(session->target->twq, &cmnd->work);
 
 	return 0;
 }
@@ -1008,9 +865,6 @@ static void __exit tgt_exit(void)
 	if (cmnd_slab)
 		kmem_cache_destroy(cmnd_slab);
 
-	if (work_slab)
-		kmem_cache_destroy(work_slab);
-
 	if (nls)
 		sock_release(nls->sk_socket);
 
@@ -1022,7 +876,6 @@ static int __init tgt_init(void)
 	int i, err = -ENOMEM;
 
 	spin_lock_init(&all_targets_lock);
-	spin_lock_init(&atomic_sessions_lock);
 	spin_lock_init(&cmnd_hash_lock);
 	spin_lock_init(&target_tmpl_lock);
 	spin_lock_init(&device_tmpl_lock);
@@ -1037,12 +890,6 @@ static int __init tgt_init(void)
 				      SLAB_HWCACHE_ALIGN | SLAB_NO_REAP,
 				      NULL, NULL);
 	if (!cmnd_slab)
-		goto out;
-
-	work_slab = kmem_cache_create("tgt_work", sizeof(struct tgt_work), 0,
-				      SLAB_HWCACHE_ALIGN | SLAB_NO_REAP,
-				      NULL, NULL);
-	if (!work_slab)
 		goto out;
 
 	nls = netlink_kernel_create(NETLINK_TGT, event_recv);

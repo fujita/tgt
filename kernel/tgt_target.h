@@ -51,7 +51,6 @@ struct tgt_target {
 	struct list_head device_list;
 	struct list_head session_list;
 
-	struct work_struct work;
 	struct list_head work_list;
 	struct workqueue_struct *twq;
 };

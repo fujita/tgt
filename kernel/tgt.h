@@ -16,7 +16,6 @@ struct tgt_session {
 	struct list_head slist;
 
 	mempool_t *cmnd_pool;
-	mempool_t *work_pool;
 };
 
 struct tgt_cmnd {
@@ -28,6 +27,7 @@ struct tgt_cmnd {
 
 	int rw;
 
+	struct work_struct work;
 	void (*done) (struct tgt_cmnd *);
 
 	struct list_head clist;
@@ -37,7 +37,6 @@ struct tgt_cmnd {
 	struct scatterlist *sg;
 	uint32_t bufflen;
 	uint64_t offset;
-
 	int result;
 
 	/* TODO: there should be a better way. */
