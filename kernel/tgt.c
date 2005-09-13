@@ -260,6 +260,27 @@ out:
 	return -ENOMEM;
 }
 
+struct async_session_data {
+	struct tgt_session *session;
+	struct work_struct work;
+	int cmds;
+	void (*done)(void *, struct tgt_session *);
+	void *arg;
+};
+
+static void session_async_create(void *data)
+{
+	struct async_session_data *async
+		= (struct async_session_data *) data;
+	int err;
+
+	err = session_init(async->session, async->cmds);
+	if (err)
+		kfree(async->session);
+	async->done(async->arg, err ? NULL : async->session);
+	kfree(async);
+}
+
 struct tgt_session *
 tgt_session_create(struct tgt_target *target,
 		   int max_cmnds,
@@ -267,17 +288,13 @@ tgt_session_create(struct tgt_target *target,
 		   void *arg)
 {
 	struct tgt_session *session;
+	struct async_session_data *async;
 
 	BUG_ON(!target);
 
 	if (done && !arg) {
-		eprintk("%s\n", "Need arg !");
+		eprintk("Need arg %d!\n", target->tid);
 		return NULL;
-	}
-
-	if (done) {
-		eprintk("%s\n", "Not supported yet!");
-		BUG();
 	}
 
 	dprintk("%p %d\n", target, max_cmnds);
@@ -285,10 +302,24 @@ tgt_session_create(struct tgt_target *target,
 	session = kmalloc(sizeof(*session), done ? GFP_ATOMIC : GFP_KERNEL);
 	if (!session)
 		return NULL;
-
 	memset(session, 0, sizeof(*session));
 	session->target = target;
 	INIT_LIST_HEAD(&session->slist);
+
+	if (done) {
+		async = kmalloc(sizeof(*async), GFP_ATOMIC);
+		if (!async)
+			goto out;
+
+		async->session = session;
+		async->cmds = max_cmnds;
+		async->done = done;
+		async->arg = arg;
+
+		INIT_WORK(&async->work, session_async_create, async);
+		queue_work(session->target->twq, &async->work);
+		return session;
+	}
 
 	if (session_init(session, max_cmnds) < 0)
 		goto out;
