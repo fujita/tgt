@@ -36,15 +36,6 @@ do {								\
 #define dprintk(fmt, args...)
 #endif
 
-#define assert(p) do {						\
-	if (!(p)) {						\
-		printk(KERN_CRIT "BUG at %s:%d assert(%s)\n",	\
-		       __FILE__, __LINE__, #p);			\
-		dump_stack();					\
-		BUG();						\
-	}							\
-} while (0)
-
 MODULE_LICENSE("GPL");
 
 static spinlock_t all_targets_lock;
@@ -657,7 +648,7 @@ struct tgt_cmnd *tgt_cmnd_create(struct tgt_session *session,
 		return NULL;
 
 	cmnd = mempool_alloc(session->cmnd_pool, GFP_ATOMIC);
-	assert(cmnd);
+	BUG_ON(!cmnd);
 	memset(cmnd, 0, sizeof(*cmnd));
 	cmnd->tgt_protocol_private = pcmnd_data;
 	cmnd->session = session;
@@ -739,7 +730,7 @@ void tgt_cmnd_alloc_buffer(struct tgt_cmnd *cmnd, void (*done)(struct tgt_cmnd *
 {
 	struct tgt_protocol *proto = cmnd->session->target->proto;
 
-	assert(list_empty(&cmnd->clist));
+	BUG_ON(!list_empty(&cmnd->clist));
 
 	proto->init_cmnd_buffer(cmnd);
 
@@ -804,7 +795,7 @@ static void uspace_cmnd_done(struct tgt_cmnd *cmnd, char *data,
 			     int result, uint32_t len)
 {
 	int i;
-	assert(cmnd->done);
+	BUG_ON(!cmnd->done);
 
 	if (len) {
 		cmnd->bufflen = len;
@@ -857,7 +848,7 @@ int tgt_cmnd_queue(struct tgt_cmnd *cmnd, void (*done)(struct tgt_cmnd *))
 	struct tgt_work *work;
 	struct tgt_session *session = cmnd->session;
 
-	assert(!cmnd->done);
+	BUG_ON(cmnd->done);
 	cmnd->done = done;
 	if (!done) {
 		eprintk("%s\n", "Null done function!");
