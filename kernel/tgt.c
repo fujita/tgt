@@ -636,7 +636,7 @@ void tgt_cmnd_alloc_buffer(struct tgt_cmnd *cmnd, void (*done)(struct tgt_cmnd *
 		cmnd->done = done;
 		queue_work(session->target->twq, &cmnd->work);
 		return;
-	};
+	}
 
 	tgt_alloc_buffer(cmnd);
 }
