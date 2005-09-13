@@ -1106,7 +1106,8 @@ static void execute_task_management(struct iscsi_cmnd *req)
 	rsp_hdr->opcode = ISCSI_OP_SCSI_TMFUNC_RSP;
 	rsp_hdr->flags = ISCSI_FLAG_CMD_FINAL;
 	rsp_hdr->itt = req_hdr->itt;
-	rsp_hdr->response = ISCSI_TMF_RSP_COMPLETE;
+/* 	rsp_hdr->response = ISCSI_TMF_RSP_COMPLETE; */
+	rsp_hdr->response = ISCSI_RESPONSE_FUNCTION_REJECTED;
 
 	eprintk("%x %d %x\n", cmnd_itt(req), function, req_hdr->rtt);
 
