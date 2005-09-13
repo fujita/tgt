@@ -699,9 +699,12 @@ static void uspace_cmnd_done(struct tgt_cmnd *cmnd, char *data,
 
 		for (i = 0; i < cmnd->sg_count; i++) {
 			uint32_t copy = min_t(uint32_t, len, PAGE_CACHE_SIZE);
-			char *p = data;
+			char *dest, *p = data;
 
-			memcpy(page_address(cmnd->sg[i].page), p, copy);
+			dest = kmap_atomic(cmnd->sg[i].page, KM_SOFTIRQ0);
+			memcpy(dest, p, copy);
+			kunmap_atomic(dest, KM_SOFTIRQ0);
+
 			p += copy;
 			len -= copy;
 		}
