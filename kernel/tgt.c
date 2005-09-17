@@ -926,7 +926,7 @@ static int __init tgt_init(void)
 	if (!cmnd_slab)
 		goto out;
 
-	nls = netlink_kernel_create(NETLINK_TGT, event_recv);
+	nls = netlink_kernel_create(NETLINK_TGT, 1, event_recv, THIS_MODULE);
 	if (!nls)
 		goto out;
 
