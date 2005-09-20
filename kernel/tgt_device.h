@@ -35,13 +35,13 @@ struct tgt_device {
 
 	struct class_device cdev;
 
-        char *path;
-        uint64_t dev_id;
-        uint32_t blk_shift;
-        uint64_t size;
+	char *path;
+	uint64_t dev_id;
+	uint32_t blk_shift;
+	uint64_t size;
 
-        struct tgt_target *target;
-        struct list_head dlist;
+	struct tgt_target *target;
+	struct list_head dlist;
 };
 
 #define cdev_to_tgt_device(cdev) \
