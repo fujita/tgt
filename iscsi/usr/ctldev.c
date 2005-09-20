@@ -6,7 +6,6 @@
 
 #include <ctype.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -17,6 +16,7 @@
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <asm/fcntl.h>
 #include <linux/netlink.h>
 
 #include "iscsid.h"
@@ -332,27 +332,32 @@ static int iscsi_conn_create(u32 tid, u64 sid, u32 cid, u32 stat_sn, u32 exp_sta
 static int ipc_cmnd_execute(char *data, int len)
 {
 	int fd, err;
-	struct sockaddr_un addr;
+	struct sockaddr_nl addr;
 	char nlm_ev[NLMSG_SPACE(sizeof(struct tgt_event))];
 	struct tgt_event *ev;
 	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
 
-	fd = socket(AF_LOCAL, SOCK_STREAM, 0);
-	if (fd < 0)
+	fd = socket(PF_NETLINK, SOCK_RAW, NETLINK_TGT);
+	if (fd < 0) {
+		log_error("Could not create socket %d %d\n", fd, errno);
 		return fd;
-
+	}
 	memset(&addr, 0, sizeof(addr));
-	addr.sun_family = AF_LOCAL;
-	memcpy((char *) &addr.sun_path + 1, TGT_IPC_NAMESPACE,
-	       strlen(TGT_IPC_NAMESPACE));
+	addr.nl_family = AF_NETLINK;
+	addr.nl_pid = 0;
+	addr.nl_groups = 0;
 
 	err = connect(fd, (struct sockaddr *) &addr, sizeof(addr));
-	if (err < 0)
+	if (err < 0) {
+		log_error("Could not connect %d %d\n", err, errno);
 		return err;
+	}
 
 	err = write(fd, data, len);
-	if (err < 0)
+	if (err < 0) {
+		log_error("sendmsg failed %d %d\n", err, errno);
 		goto out;
+	}
 
 	err = read(fd, nlm_ev, sizeof(nlm_ev));
 	if (err < 0)
@@ -423,7 +428,7 @@ static int iscsi_target_destroy(u32 tid)
 
 static int iscsi_lunit_create(u32 tid, u32 lun, char *args)
 {
-	int err;
+	int err, fd;
 	char nlm_ev[8912], *p, *q, *type = NULL, *path = NULL;
 	char dtype[] = "tgt_vsd";
 	struct tgt_event *ev;
@@ -460,27 +465,37 @@ static int iscsi_lunit_create(u32 tid, u32 lun, char *args)
 	fprintf(stderr, "%s %d %s %s %Zd %Zd\n",
 		__FUNCTION__, __LINE__, type, path, strlen(path), sizeof(*ev));
 
+	fd = open(path, O_RDWR | O_LARGEFILE);
+	if (fd < 0) {
+		log_error("Could not open %s errno %d\n", path, errno);
+		return errno;
+	}
+
 	memset(nlm_ev, 0, sizeof(nlm_ev));
 	nlmsg_init(nlh, getpid(), 0, TGT_UEVENT_DEVICE_CREATE,
-		   NLMSG_SPACE(sizeof(*ev) + strlen(path)), 0);
+		   NLMSG_SPACE(sizeof(*ev)), 0);
+
+	log_error("pid %d\n", nlh->nlmsg_pid);
 
 	ev = NLMSG_DATA(nlh);
 	ev->u.c_device.tid = tid;
 	ev->u.c_device.dev_id = lun;
+	ev->u.c_device.fd = fd;
 	strncpy(ev->u.c_device.type, type, sizeof(ev->u.c_device.type));
-	memcpy((char *) ev + sizeof(*ev), path, strlen(path));
 
 	err = ipc_cmnd_execute(nlm_ev, nlh->nlmsg_len);
-
+	if (err)
+		close(fd);
 	return err;
 }
 
 static int iscsi_lunit_destroy(u32 tid, u32 lun)
 {
-	int err;
+	int err, fd;
 	char nlm_ev[8912];
 	struct tgt_event *ev;
 	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
+	char path[PATH_MAX], buf[PATH_MAX];
 
 	fprintf(stderr, "%s %d %d %u\n", __FUNCTION__, __LINE__, tid, lun);
 
@@ -488,12 +503,27 @@ static int iscsi_lunit_destroy(u32 tid, u32 lun)
 	nlmsg_init(nlh, getpid(), 0, TGT_UEVENT_DEVICE_DESTROY,
 		   NLMSG_SPACE(sizeof(*ev)), 0);
 
+	sprintf(path, "/sys/class/tgt_device/device%d:%d/fd", tid, lun);
+	fd = open(path, O_RDONLY);
+	if (fd < 0) {
+		perror("iscsi_lunit_destroy could not open fd file");
+		return errno;
+	}
+
+	err = read(fd, buf, sizeof(buf));
+	close(fd);
+	if (err < 0) {
+		perror("iscsi_lunit_destroy could not read fd file");
+		return errno;
+	}
+	sscanf(buf, "%d\n", &fd);
+
 	ev = NLMSG_DATA(nlh);
 	ev->u.d_device.tid = tid;
 	ev->u.d_device.dev_id = lun;
 
 	err = ipc_cmnd_execute(nlm_ev, nlh->nlmsg_len);
-
+	close(fd);
 	return err;
 }
 

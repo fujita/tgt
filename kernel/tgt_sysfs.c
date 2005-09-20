@@ -154,11 +154,11 @@ show_##field (struct class_device *cdev, char *buf)			\
 	tgt_device_show_fn(field, format_string)		\
 static CLASS_DEVICE_ATTR(field, S_IRUGO, show_##field, NULL);
 
-tgt_device_rd_attr(path, "%s\n");
+tgt_device_rd_attr(fd, "%d\n");
 tgt_device_rd_attr(size, "%llu\n");
 
 static struct class_device_attribute *tgt_device_attrs[] = {
-	&class_device_attr_path,
+	&class_device_attr_fd,
 	&class_device_attr_size,
 	NULL,
 };
@@ -171,7 +171,6 @@ static void tgt_device_class_release(struct class_device *cdev)
 
 	class_device_put(&target->cdev);
 	kfree(device->dt_data);
-	kfree(device->path);
 	kfree(device);
 }
 

@@ -8,9 +8,9 @@
 
 #include <linux/types.h>
 #include <linux/blkdev.h>
-#include <linux/namei.h>
 #include <linux/uio.h>
 #include <linux/fs.h>
+#include <linux/file.h>
 #include <linux/writeback.h>
 
 #include <tgt.h>
@@ -23,36 +23,30 @@ struct tgt_vsd_dev {
 static void tgt_vsd_destroy(struct tgt_device *device)
 {
 	struct tgt_vsd_dev *vsddev = device->dt_data;
-	filp_close(vsddev->filp, NULL);
+	fput(vsddev->filp);
 }
 
-static int open_file(struct tgt_vsd_dev *vsddev, const char *path)
+static int open_file(struct tgt_vsd_dev *vsddev, int fd)
 {
 	struct file *filp;
-	mm_segment_t oldfs;
-	int err = 0;
 
-	oldfs = get_fs();
-	set_fs(get_ds());
-	filp = filp_open(path, O_RDWR|O_LARGEFILE, 0);
-	set_fs(oldfs);
+	filp = fget(fd);
+	if (!filp) {
+		printk("Could not get fd %d\n", fd);
+		return -EINVAL;
+	}
 
-	if (IS_ERR(filp)) {
-		err = PTR_ERR(filp);
-		printk("Can't open %s %d\n", path, err);
-	} else
-		vsddev->filp = filp;
-
-	return err;
+	vsddev->filp = filp;
+	return 0;
 }
 
 static int tgt_vsd_create(struct tgt_device *device)
 {
 	struct tgt_vsd_dev *vsddev = device->dt_data;
 	struct inode *inode;
-	int err = 0;
+	int err;
 
-	err = open_file(vsddev, device->path);
+	err = open_file(vsddev, device->fd);
 	if (err)
 		return err;
 
@@ -67,11 +61,11 @@ static int tgt_vsd_create(struct tgt_device *device)
 	}
 
 	device->size = inode->i_size;
-	printk("%s %llu\n", device->path, inode->i_size >> 9);
+	printk("%d %llu\n", device->fd, inode->i_size >> 9);
 
 	return 0;
 out:
-	filp_close(vsddev->filp, NULL);
+	fput(vsddev->filp);
 	return err;
 }
 

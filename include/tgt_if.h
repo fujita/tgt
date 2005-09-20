@@ -38,6 +38,7 @@ struct tgt_event {
 			uint64_t dev_id;
 			uint32_t flags;
 			char type[32];
+			int fd;
 		} c_device;
 		struct {
 			int tid;

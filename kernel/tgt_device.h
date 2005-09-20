@@ -35,7 +35,7 @@ struct tgt_device {
 
 	struct class_device cdev;
 
-	char *path;
+	int fd;
 	uint64_t dev_id;
 	uint32_t blk_shift;
 	uint64_t size;

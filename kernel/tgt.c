@@ -438,13 +438,14 @@ tgt_device_find(struct tgt_target *target, uint64_t dev_id)
 }
 
 static int tgt_device_create(int tid, uint64_t dev_id, char *device_type,
-			      char *path, unsigned long dflags)
+			     int fd, unsigned long dflags)
 {
 	struct tgt_target *target;
 	struct tgt_device *device;
 	unsigned long flags;
 
-	dprintk("%d %llu %s %s\n", tid, dev_id, device_type, path);
+	dprintk("tid %d dev_id %llu type %s fd %d\n",
+		tid, dev_id, device_type, fd);
 
 	target = target_find(tid);
 	if (!target)
@@ -457,14 +458,12 @@ static int tgt_device_create(int tid, uint64_t dev_id, char *device_type,
 	memset(device, 0, sizeof(*device));
 	device->dev_id = dev_id;
 	device->target = target;
-	device->path = kstrdup(path, GFP_KERNEL);
-	if (!device->path)
-		goto free_device;
+	device->fd = fd;
 
 	device->dt = device_template_get(device_type);
 	if (!device->dt) {
 		eprintk("Could not get devive type %s\n", device_type);
-		goto free_path;
+		goto free_device;
 	}
 
 	device->dt_data = kmalloc(device->dt->priv_data_size,
@@ -492,8 +491,6 @@ free_priv_dt_data:
 	kfree(device->dt_data);
 put_template:
 	device_template_put(device->dt);
-free_path:
-	kfree(device->path);
 free_device:
 	kfree(device);
 	return -EINVAL;
@@ -784,12 +781,12 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 	struct tgt_cmnd *cmnd;
 	struct tgt_target *target;
 
-	daemon_pid  = NETLINK_CREDS(skb)->pid;
-
-	dprintk("%d %d\n", daemon_pid, nlh->nlmsg_type);
+	dprintk("%d %d %d %d\n", daemon_pid, nlh->nlmsg_type,
+		nlh->nlmsg_pid, current->pid);
 
 	switch (nlh->nlmsg_type) {
 	case TGT_UEVENT_START:
+		daemon_pid  = NETLINK_CREDS(skb)->pid;
 		dprintk("start %d\n", daemon_pid);
 		break;
 	case TGT_UEVENT_TARGET_CREATE:
@@ -808,14 +805,10 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 			err = -EINVAL;
 		break;
 	case TGT_UEVENT_DEVICE_CREATE:
-		if (nlh->nlmsg_len <= NLMSG_SPACE(sizeof(*ev))) {
-			err = -EINVAL;
-			break;
-		}
 		err = tgt_device_create(ev->u.c_device.tid,
 					ev->u.c_device.dev_id,
 					ev->u.c_device.type,
-					(char *) ev + sizeof(*ev),
+					ev->u.c_device.fd,
 					ev->u.c_device.flags);
 		break;
 	case TGT_UEVENT_DEVICE_DESTROY:

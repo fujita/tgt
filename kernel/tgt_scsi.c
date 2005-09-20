@@ -8,6 +8,7 @@
 #include <linux/fs.h>
 #include <linux/module.h>
 #include <linux/mm.h>
+#include <linux/highmem.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
 
@@ -130,11 +131,15 @@ static int sense_data_build(struct tgt_cmnd *cmnd, uint8_t key,
 		data[12] = ascode;
 		data[13] = ascodeq;
 	} else {
+		char *addr;
 		/* uspace command failure */
 
 		len = min(cmnd->bufflen, sizeof(scsi_tgt_cmnd->sense_buff));
 		alen = 0;
-		memcpy(data, page_address(cmnd->sg[0].page), len);
+
+		addr = kmap_atomic(cmnd->sg[0].page, KM_SOFTIRQ0);
+		memcpy(data, addr, len);
+		kunmap_atomic(addr, KM_SOFTIRQ0);
 	}
 
 	cmnd->error_buff = data;
