@@ -725,6 +725,11 @@ static void queuecommand(void *data)
 	if (cmnd->rw == READ || cmnd->rw == WRITE)
 		err = device->dt->queue_cmnd(device, cmnd);
 	else {
+		/*
+		 * TODO: if we fail to get the command to userspace there
+		 * will be no setup sense buffer below so we need to add
+		 * something.
+		 */
 		err = uspace_cmnd_send(cmnd);
 		if (err >= 0)
 			/* sent to userspace */
