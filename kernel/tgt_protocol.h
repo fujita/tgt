@@ -8,6 +8,8 @@
 #ifndef __TGT_PROTOCOL_H
 #define __TGT_PROTOCOL_H
 
+#include <linux/slab.h>
+
 struct module;
 struct tgt_cmnd;
 
@@ -15,7 +17,7 @@ struct tgt_protocol {
 	const char *name;
 	struct module *module;
 
-	int priv_cmd_data_size;
+	kmem_cache_t *cmnd_cache;
 	int uspace_pdu_size;
 
 	/*

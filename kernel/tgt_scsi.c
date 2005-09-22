@@ -15,6 +15,8 @@
 #include <tgt.h>
 #include <tgt_protocol.h>
 
+static kmem_cache_t *scsi_tgt_cmnd_cache;
+
 struct scsi_tgt_cmnd {
 	uint8_t scb[MAX_COMMAND_SIZE];
 	uint8_t sense_buff[SCSI_SENSE_BUFFERSIZE];
@@ -46,8 +48,8 @@ static uint64_t scsi_tgt_translate_lun(uint8_t *p, int size)
 
 static void scsi_tgt_init_cmnd_buffer(struct tgt_cmnd *cmnd)
 {
-	struct scsi_tgt_cmnd *scsi_tgt_cmnd = cmnd->tgt_protocol_private;
-	uint8_t *scb = scsi_tgt_cmnd->scb;
+	struct scsi_tgt_cmnd *scmnd = (struct scsi_tgt_cmnd *)cmnd->proto_priv;
+	uint8_t *scb = scmnd->scb;
 	uint64_t off = 0;
 	uint32_t len = 0;
 
@@ -87,10 +89,10 @@ static void scsi_tgt_init_cmnd_buffer(struct tgt_cmnd *cmnd)
 static void scsi_tgt_init_cmnd(struct tgt_cmnd *cmnd, uint8_t *proto_data,
 			       uint8_t *id_buff, int buff_size)
 {
-	struct scsi_tgt_cmnd *scsi_tgt_cmnd = cmnd->tgt_protocol_private;
-	uint8_t *scb = scsi_tgt_cmnd->scb;
+	struct scsi_tgt_cmnd *scmnd = (struct scsi_tgt_cmnd *)cmnd->proto_priv;
+	uint8_t *scb = scmnd->scb;
 
-	memcpy(scb, proto_data, sizeof(scsi_tgt_cmnd->scb));
+	memcpy(scb, proto_data, sizeof(scmnd->scb));
 
 	/* set operation */
 	switch (scb[0]) {
@@ -138,11 +140,11 @@ static uint8_t error_to_sense_key(int err)
 
 static int sense_data_build(struct tgt_cmnd *cmnd, int err)
 {
-	struct scsi_tgt_cmnd *scsi_tgt_cmnd = cmnd->tgt_protocol_private;
+	struct scsi_tgt_cmnd *scmnd = (struct scsi_tgt_cmnd *)cmnd->proto_priv;
 	int len = 8, alen = 6;
-	uint8_t *data = scsi_tgt_cmnd->sense_buff;
+	uint8_t *data = scmnd->sense_buff;
 
-	memset(data, 0, sizeof(scsi_tgt_cmnd->sense_buff));
+	memset(data, 0, sizeof(scmnd->sense_buff));
 
 	if (cmnd->rw == READ || cmnd->rw == WRITE) {
 		uint8_t key = error_to_sense_key(err);
@@ -160,7 +162,7 @@ static int sense_data_build(struct tgt_cmnd *cmnd, int err)
 	} else {
 		/* uspace command failure */
 
-		len = min(cmnd->bufflen, sizeof(scsi_tgt_cmnd->sense_buff));
+		len = min(cmnd->bufflen, sizeof(scmnd->sense_buff));
 		alen = 0;
 
 		memcpy(data, page_address(cmnd->sg[0].page), len);
@@ -183,9 +185,8 @@ static void scsi_tgt_cmnd_done(struct tgt_cmnd *cmnd, int err)
 
 void scsi_tgt_build_uspace_pdu(struct tgt_cmnd *cmnd, void *data)
 {
-	struct scsi_tgt_cmnd *scsi_tgt_cmnd = cmnd->tgt_protocol_private;
-
-	memcpy(data, scsi_tgt_cmnd->scb, sizeof(scsi_tgt_cmnd->scb));
+	struct scsi_tgt_cmnd *scmnd = (struct scsi_tgt_cmnd *)cmnd->proto_priv;
+	memcpy(data, scmnd->scb, sizeof(scmnd->scb));
 }
 
 static struct tgt_protocol scsi_tgt_proto = {
@@ -195,17 +196,30 @@ static struct tgt_protocol scsi_tgt_proto = {
 	.init_cmnd_buffer = scsi_tgt_init_cmnd_buffer,
 	.cmnd_done = scsi_tgt_cmnd_done,
 	.build_uspace_pdu = scsi_tgt_build_uspace_pdu,
-	.priv_cmd_data_size = sizeof(struct scsi_tgt_cmnd),
 	.uspace_pdu_size = MAX_COMMAND_SIZE,
 };
 
 static int __init scsi_tgt_init(void)
 {
-	return tgt_protocol_register(&scsi_tgt_proto);
+	int err;
+
+	scsi_tgt_cmnd_cache = kmem_cache_create("scsi_tgt_cmnd",
+			sizeof(struct tgt_cmnd) + sizeof(struct scsi_tgt_cmnd),
+			0, SLAB_HWCACHE_ALIGN | SLAB_NO_REAP, NULL, NULL);
+	if (!scsi_tgt_cmnd_cache)
+		return -ENOMEM;
+	scsi_tgt_proto.cmnd_cache = scsi_tgt_cmnd_cache;
+
+	err = tgt_protocol_register(&scsi_tgt_proto);
+	if (err)
+		kmem_cache_destroy(scsi_tgt_cmnd_cache);
+
+	return err;
 }
 
 static void __exit scsi_tgt_exit(void)
 {
+	kmem_cache_destroy(scsi_tgt_cmnd_cache);
 	tgt_protocol_unregister(&scsi_tgt_proto);
 }
 

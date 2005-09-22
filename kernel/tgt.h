@@ -48,7 +48,10 @@ struct tgt_cmnd {
 	 */
 	void *private;
 
-	void *tgt_protocol_private;
+	/*
+	 * is the alignment still needed?  See scsi_host.h
+	 */
+	unsigned long proto_priv[0] __attribute__ ((aligned (sizeof(unsigned long))));
 };
 
 extern struct tgt_session *

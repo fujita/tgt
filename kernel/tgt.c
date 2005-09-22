@@ -54,8 +54,6 @@ static LIST_HEAD(device_tmpl_list);
 static int tgt_pid, daemon_pid;
 static struct sock *nls;
 
-static kmem_cache_t *cmnd_slab;
-
 /* TODO: lock per session */
 static spinlock_t cmnd_hash_lock;
 #define TGT_HASH_ORDER		8
@@ -245,10 +243,11 @@ EXPORT_SYMBOL_GPL(tgt_target_destroy);
 static int session_init(struct tgt_session *session, int max_cmnds)
 {
 	struct tgt_target *target = session->target;
+	struct tgt_protocol *proto = session->target->proto;
 	unsigned long flags;
 
 	session->cmnd_pool = mempool_create(max_cmnds, mempool_alloc_slab,
-					    mempool_free_slab, cmnd_slab);
+					mempool_free_slab, proto->cmnd_cache);
 	if (!session->cmnd_pool)
 		goto out;
 
@@ -532,29 +531,15 @@ struct tgt_cmnd *tgt_cmnd_create(struct tgt_session *session,
 {
 	struct tgt_protocol *proto = session->target->proto;
 	struct tgt_cmnd *cmnd;
-	void *pcmnd_data;
 	unsigned long flags;
-
-	/*
-	 * slab in tgt_protocol structure like struct proto (in net/sock.h) ?
-	 * However, how can we guarantee the specified number of commands ?
-	 */
-	pcmnd_data = kmalloc(proto->priv_cmd_data_size, GFP_ATOMIC);
-	if (!pcmnd_data) {
-		eprintk("Could not allocate command private data for %p",
-			 session);
-		return NULL;
-	}
 
 	cmnd = mempool_alloc(session->cmnd_pool, GFP_ATOMIC);
 	if (!cmnd) {
 		eprintk("Could not allocate tgt_cmnd for %p\n", session);
-		kfree(pcmnd_data);
 		return NULL;
 	}
 
 	memset(cmnd, 0, sizeof(*cmnd));
-	cmnd->tgt_protocol_private = pcmnd_data;
 	cmnd->session = session;
 	cmnd->cid = (uint64_t) (unsigned long) cmnd;
 	INIT_LIST_HEAD(&cmnd->clist);
@@ -578,8 +563,6 @@ void tgt_cmnd_destroy(struct tgt_cmnd *cmnd)
 	int i;
 
 	dprintk("cid %llu\n", cmnd->cid);
-
-	kfree(cmnd->tgt_protocol_private);
 
 	for (i = 0; i < cmnd->sg_count; i++)
 		__free_page(cmnd->sg[i].page);
@@ -963,9 +946,6 @@ static void event_recv(struct sock *sk, int length)
 
 static void __exit tgt_exit(void)
 {
-	if (cmnd_slab)
-		kmem_cache_destroy(cmnd_slab);
-
 	if (nls)
 		sock_release(nls->sk_socket);
 
@@ -986,12 +966,6 @@ static int __init tgt_init(void)
 	err = tgt_sysfs_init();
 	if (err)
 		return err;
-
-	cmnd_slab = kmem_cache_create("tgt_cmnd", sizeof(struct tgt_cmnd), 0,
-				      SLAB_HWCACHE_ALIGN | SLAB_NO_REAP,
-				      NULL, NULL);
-	if (!cmnd_slab)
-		goto out;
 
 	nls = netlink_kernel_create(NETLINK_TGT, 1, event_recv, THIS_MODULE);
 	if (!nls)
