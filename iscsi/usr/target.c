@@ -112,7 +112,7 @@ int target_add(u32 *tid, char *name)
 	memcpy(target->name, name, sizeof(target->name) - 1);
 
 	if ((err = ki->target_create(tid, name)) < 0) {
-		log_warning("can't create a target %d %u\n", errno, *tid);
+		log_warning("can't create a target %d %u\n", err, *tid);
 		goto out;
 	}
 

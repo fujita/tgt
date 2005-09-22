@@ -57,6 +57,8 @@ tgt_session_create(struct tgt_target *target,
 		   void (*done)(void *, struct tgt_session *), void *arg);
 extern int tgt_session_destroy(struct tgt_session *session);
 
+extern int tgt_msg_send(struct tgt_target *target, void *data, int data_len,
+			unsigned int gfp_flags);
 extern struct tgt_cmnd *tgt_cmnd_create(struct tgt_session *session,
 					uint8_t *proto_data,
 					uint8_t *id_buff, int buff_size);

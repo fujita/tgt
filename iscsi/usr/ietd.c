@@ -412,11 +412,6 @@ int main(int argc, char **argv)
 		exit(-1);
 	};
 
-	if ((ctrl_fd = ki->ctldev_open()) < 0) {
-		perror("ctldev fd\n");
-		exit(-1);
-	}
-
 	if ((ipc_fd = ietadm_request_listen()) < 0) {
 		perror("ipc fd\n");
 		exit(-1);

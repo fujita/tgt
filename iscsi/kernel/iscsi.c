@@ -10,19 +10,16 @@
 #include <scsi/scsi.h>
 #include <linux/mempool.h>
 
-#include <iscsi.h>
-#include <iscsi_dbg.h>
 #include <tgt.h>
 #include <tgt_target.h>
+
+#include <iscsi.h>
+#include <iscsi_dbg.h>
 
 unsigned long debug_enable_flags;
 
 static kmem_cache_t *iscsi_cmnd_cache;
 static char dummy_data[1024];
-
-static int ctr_major;
-static char ctr_name[] = "ietctl";
-extern struct file_operations ctr_fops;
 
 static u32 cmnd_write_size(struct iscsi_cmnd *cmnd)
 {
@@ -1570,13 +1567,12 @@ static struct tgt_target_template iet_tgt_target_template = {
 	.protocol = "scsi",
 	.target_create = target_add,
 	.target_destroy = target_del,
+	.msg_recv = iet_msg_recv,
 	.priv_data_size = sizeof(struct iscsi_target),
 };
 
 static void iscsi_exit(void)
 {
-	unregister_chrdev(ctr_major, ctr_name);
-
 	iet_procfs_exit();
 
 	event_exit();
@@ -1592,11 +1588,6 @@ static int iscsi_init(void)
 	int err = -ENOMEM;
 
 	printk("iSCSI Enterprise Target Software - version %s\n", IET_VERSION_STRING);
-
-	if ((ctr_major = register_chrdev(0, ctr_name, &ctr_fops)) < 0) {
-		eprintk("failed to register the control device %d\n", ctr_major);
-		return ctr_major;
-	}
 
 	if ((err = iet_procfs_init()) < 0)
 		goto err;

@@ -30,36 +30,26 @@
 static struct sockaddr_nl src_addr, dest_addr;
 static char *recvbuf, *sendbuf;
 
-static int nl_write(int fd, int type, struct iovec *iovp, int count)
+static int nl_write(int fd, int type, char *data, int len)
 {
-	int i, datalen;
-	struct iovec iov[8];
+	struct nlmsghdr *nlh = (struct nlmsghdr *) data;
+	struct iovec iov;
 	struct msghdr msg;
-	struct nlmsghdr nlh;
 
-	for (datalen = 0, i = 0; i < count; i++)
-		datalen += iovp[i].iov_len;
+	memset(nlh, 0, sizeof(*nlh));
+	nlh->nlmsg_len = len;
+	nlh->nlmsg_type = type;
+	nlh->nlmsg_flags = 0;
+	nlh->nlmsg_pid = getpid();
 
-	memset(&nlh, 0, sizeof(nlh));
-	nlh.nlmsg_len = NLMSG_SPACE(datalen);
-	nlh.nlmsg_type = type;
-	nlh.nlmsg_flags = 0;
-	nlh.nlmsg_pid = getpid();
-
-	iov[0].iov_base = &nlh;
-	iov[0].iov_len = sizeof(nlh);
-
-	for (i = 1; i <= count; i++) {
-		iov[i].iov_base = iovp->iov_base;
-		iov[i].iov_len = iovp->iov_len;
-		iovp++;
-	}
+	iov.iov_base = data;
+	iov.iov_len = len;
 
 	memset(&msg, 0, sizeof(msg));
 	msg.msg_name= (void*) &dest_addr;
 	msg.msg_namelen = sizeof(dest_addr);
 	msg.msg_iov = (void *) &iov;
-	msg.msg_iovlen = count + 1;
+	msg.msg_iovlen = 1;
 
 	return sendmsg(fd, &msg, 0);
 }
@@ -87,14 +77,10 @@ static int nl_read(int fd, void *data, int size, int flags)
 int nl_cmnd_call(int fd, int type, char *data, int size, int *res)
 {
 	int err;
-	struct iovec iov;
 	struct tgt_event *ev;
 	char nlm_ev[NLMSG_SPACE(sizeof(*ev))];
 
-	iov.iov_base = data;
-	iov.iov_len = size;
-
-	err = nl_write(fd, type, &iov, 1);
+	err = nl_write(fd, type, data, size);
 	if (err < 0)
 		return err;
 
@@ -108,34 +94,34 @@ int nl_cmnd_call(int fd, int type, char *data, int size, int *res)
 
 static int cmnd_queue(int fd, char *reqbuf, char *resbuf)
 {
-	int result, len;
-	struct iovec iov[2];
-	struct tgt_event *ev = (struct tgt_event *) reqbuf;
-	uint64_t cid = ev->k.cmnd_req.cid;
+	int result, len = 0;
+	struct tgt_event *ev_req = (struct tgt_event *) reqbuf;
+	struct tgt_event *ev_res = NLMSG_DATA(resbuf);
+	uint64_t cid = ev_req->k.cmnd_req.cid;
 	uint8_t *scb;
 
 	memset(resbuf, 0, NL_BUFSIZE);
-	scb = reqbuf + sizeof(*ev);
+	scb = (uint8_t *) ev_req->data;
 	dprintf("%" PRIu64 " %x\n", cid, scb[0]);
 
 	/*
 	 * TODO match tid to protocol and route cmnd to correct userspace
 	 * protocol module
 	 */
-	result = scsi_cmnd_process(ev->k.cmnd_req.tid, ev->k.cmnd_req.dev_id,
-				scb, resbuf, &len);
+	result = scsi_cmnd_process(ev_req->k.cmnd_req.tid,
+				   ev_req->k.cmnd_req.dev_id, scb,
+				   (uint8_t *) ev_res->data, &len);
 
-	memset(ev, 0, sizeof(*ev));
-	ev->u.cmnd_res.cid = cid;
-	ev->u.cmnd_res.len = len;
-	ev->u.cmnd_res.result = result;
+	memset(ev_res, 0, sizeof(*ev_res));
+	ev_res->u.cmnd_res.cid = cid;
+	ev_res->u.cmnd_res.len = len;
+	ev_res->u.cmnd_res.result = result;
 
-	iov[0].iov_base = ev;
-	iov[0].iov_len = sizeof(*ev);
-	iov[1].iov_base = resbuf;
-	iov[1].iov_len = len;
 
-	return nl_write(fd, TGT_UEVENT_CMND_RES, iov, len ? 2 : 1);
+	log_error("scsi_cmnd_process res %d len %d\n", result, len);
+
+	return nl_write(fd, TGT_UEVENT_CMND_RES, resbuf,
+			NLMSG_SPACE(sizeof(*ev_res) + len));
 }
 
 void nl_event_handle(int fd)
@@ -158,7 +144,7 @@ peek_again:
 	nlh = (struct nlmsghdr *) recvbuf;
 	ev = (struct tgt_event *) NLMSG_DATA(nlh);
 
-	dprintf("%d %d\n", nlh->nlmsg_type, nlh->nlmsg_len);
+	dprintf("nl_event_handle %d %d\n", nlh->nlmsg_type, nlh->nlmsg_len);
 
 read_again:
 	err = nl_read(fd, recvbuf, nlh->nlmsg_len, 0);
@@ -186,9 +172,10 @@ read_again:
 static void nl_start(int fd)
 {
 	int err, res;
-	struct tgt_event ev;
+	char nlmsg[NLMSG_SPACE(sizeof(struct tgt_event))];
 
-	err = nl_cmnd_call(fd, TGT_UEVENT_START, (char *) &ev, sizeof(ev), &res);
+	err = nl_cmnd_call(fd, TGT_UEVENT_START, nlmsg, 
+			   NLMSG_SPACE(sizeof(struct tgt_event)), &res);
 	if (err < 0 || res < 0) {
 		eprintf("%d %d\n", err, res);
 		exit(-1);

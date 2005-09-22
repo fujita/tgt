@@ -21,7 +21,7 @@ struct tgt_target_template {
 
 	int (* target_create) (struct tgt_target *);
 	void (* target_destroy) (struct tgt_target *);
-
+	int (* msg_recv) (struct tgt_target *, uint32_t, void *);
 	/*
 	 * name of protocol to use
 	 */

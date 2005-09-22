@@ -113,41 +113,6 @@ static void scsi_tgt_init_cmnd(struct tgt_cmnd *cmnd, uint8_t *proto_data,
 	cmnd->dev_id = scsi_tgt_translate_lun(id_buff, buff_size);
 }
 
-static int sense_data_build(struct tgt_cmnd *cmnd, uint8_t key,
-			    uint8_t ascode, uint8_t ascodeq)
-{
-	struct scsi_tgt_cmnd *scsi_tgt_cmnd = cmnd->tgt_protocol_private;
-	int len = 8, alen = 6;
-	uint8_t *data = scsi_tgt_cmnd->sense_buff;
-
-	memset(data, 0, sizeof(scsi_tgt_cmnd->sense_buff));
-
-	if (cmnd->rw == READ || cmnd->rw == WRITE) {
-		/* kspace command failure */
-
-		data[0] = 0x70 | 1U << 7;
-		data[2] = key;
-		data[7] = alen;
-		data[12] = ascode;
-		data[13] = ascodeq;
-	} else {
-		char *addr;
-		/* uspace command failure */
-
-		len = min(cmnd->bufflen, sizeof(scsi_tgt_cmnd->sense_buff));
-		alen = 0;
-
-		addr = kmap_atomic(cmnd->sg[0].page, KM_SOFTIRQ0);
-		memcpy(data, addr, len);
-		kunmap_atomic(addr, KM_SOFTIRQ0);
-	}
-
-	cmnd->error_buff = data;
-	cmnd->error_buff_len = len + alen;
-
-	return len + alen;
-}
-
 /*
  * TODO: better error handling
  * We should get ASC and ASCQ from the device code.
@@ -171,15 +136,48 @@ static uint8_t error_to_sense_key(int err)
 	return key;
 }
 
+static int sense_data_build(struct tgt_cmnd *cmnd, int err)
+{
+	struct scsi_tgt_cmnd *scsi_tgt_cmnd = cmnd->tgt_protocol_private;
+	int len = 8, alen = 6;
+	uint8_t *data = scsi_tgt_cmnd->sense_buff;
+
+	memset(data, 0, sizeof(scsi_tgt_cmnd->sense_buff));
+
+	if (cmnd->rw == READ || cmnd->rw == WRITE) {
+		uint8_t key = error_to_sense_key(err);
+		/* kspace command failure */
+
+		data[0] = 0x70 | 1U << 7;
+		data[2] = key;
+		data[7] = alen;
+		/*
+		 * TODO
+		 */
+		data[12] = 0;
+		data[13] = 0;
+		cmnd->result = SAM_STAT_CHECK_CONDITION;
+	} else {
+		/* uspace command failure */
+
+		len = min(cmnd->bufflen, sizeof(scsi_tgt_cmnd->sense_buff));
+		alen = 0;
+
+		memcpy(data, page_address(cmnd->sg[0].page), len);
+		cmnd->result = err;
+	}
+
+	cmnd->error_buff = data;
+	cmnd->error_buff_len = len + alen;
+
+	return len + alen;
+}
+
 static void scsi_tgt_cmnd_done(struct tgt_cmnd *cmnd, int err)
 {
-	if (err < 0) {
-		uint8_t key;
-
-		key = error_to_sense_key(err);
-		sense_data_build(cmnd, key, 0, 0);
-		cmnd->result = SAM_STAT_CHECK_CONDITION;
-	} else
+	if (err != 0)
+		sense_data_build(cmnd, err);
+	else
 		cmnd->result = SAM_STAT_GOOD;
 }
 

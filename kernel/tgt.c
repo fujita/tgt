@@ -47,7 +47,11 @@ static LIST_HEAD(target_tmpl_list);
 static spinlock_t device_tmpl_lock;
 static LIST_HEAD(device_tmpl_list);
 
-static int daemon_pid;
+/*
+ * when we merge the daemons we will not need both of these
+ * this is just a tmp hack
+ */
+static int tgt_pid, daemon_pid;
 static struct sock *nls;
 
 static kmem_cache_t *cmnd_slab;
@@ -158,7 +162,7 @@ struct tgt_target *tgt_target_create(char *target_type, int queued_cmnds)
 	struct tgt_target *target;
 	struct target_type_internal *ti;
 
-	if (!daemon_pid) {
+	if (!tgt_pid) {
 		eprintk("%s\n", "Run the user-space daemon first!");
 		return NULL;
 	}
@@ -523,8 +527,8 @@ static int tgt_device_destroy(int tid, uint64_t dev_id)
 }
 
 struct tgt_cmnd *tgt_cmnd_create(struct tgt_session *session,
-				   uint8_t *proto_data,
-				   uint8_t *id_buff, int buff_size)
+				 uint8_t *proto_data,
+				 uint8_t *id_buff, int buff_size)
 {
 	struct tgt_protocol *proto = session->target->proto;
 	struct tgt_cmnd *cmnd;
@@ -536,11 +540,19 @@ struct tgt_cmnd *tgt_cmnd_create(struct tgt_session *session,
 	 * However, how can we guarantee the specified number of commands ?
 	 */
 	pcmnd_data = kmalloc(proto->priv_cmd_data_size, GFP_ATOMIC);
-	if (!pcmnd_data)
+	if (!pcmnd_data) {
+		eprintk("Could not allocate command private data for %p",
+			 session);
 		return NULL;
+	}
 
 	cmnd = mempool_alloc(session->cmnd_pool, GFP_ATOMIC);
-	BUG_ON(!cmnd);
+	if (!cmnd) {
+		eprintk("Could not allocate tgt_cmnd for %p\n", session);
+		kfree(pcmnd_data);
+		return NULL;
+	}
+
 	memset(cmnd, 0, sizeof(*cmnd));
 	cmnd->tgt_protocol_private = pcmnd_data;
 	cmnd->session = session;
@@ -564,6 +576,8 @@ void tgt_cmnd_destroy(struct tgt_cmnd *cmnd)
 {
 	unsigned long flags;
 	int i;
+
+	dprintk("cid %llu\n", cmnd->cid);
 
 	kfree(cmnd->tgt_protocol_private);
 
@@ -589,6 +603,9 @@ void __tgt_alloc_buffer(struct tgt_cmnd *cmnd)
 
 	cmnd->sg_count = pgcnt(len, offset);
 	offset &= ~PAGE_CACHE_MASK;
+
+	dprintk("cid %llu pg_count %d offset %llu len %d\n", cmnd->cid,
+		cmnd->sg_count, cmnd->offset, cmnd->bufflen);
 
 	cmnd->sg = kmalloc(cmnd->sg_count * sizeof(struct scatterlist),
 			   GFP_KERNEL | __GFP_NOFAIL);
@@ -654,19 +671,19 @@ static int uspace_cmnd_send(struct tgt_cmnd *cmnd)
 		return -ENOMEM;
 
 	dprintk("%d %Zd %d\n", len, sizeof(*ev), proto_pdu_size);
-	nlh = __nlmsg_put(skb, daemon_pid, 0,
-			  TGT_KEVENT_CMND_REQ, len - sizeof(*nlh), 0);
+	nlh = __nlmsg_put(skb, tgt_pid, 0, TGT_KEVENT_CMND_REQ,
+			  len - sizeof(*nlh), 0);
 	ev = NLMSG_DATA(nlh);
 	memset(ev, 0, sizeof(*ev));
 
-	pdu = (char *) ev + sizeof(*ev);
+	pdu = (char *) ev->data;
 	ev->k.cmnd_req.tid = cmnd->session->target->tid;
 	ev->k.cmnd_req.dev_id = cmnd->dev_id;
 	ev->k.cmnd_req.cid = cmnd->cid;
 
 	proto->build_uspace_pdu(cmnd, pdu);
 
-	return netlink_unicast(nls, skb, daemon_pid, 0);
+	return netlink_unicast(nls, skb, tgt_pid, 0);
 }
 
 static void cmnd_done(struct tgt_cmnd *cmnd, int result)
@@ -683,11 +700,15 @@ static void cmnd_done(struct tgt_cmnd *cmnd, int result)
 	done(cmnd);
 }
 
-static void uspace_cmnd_done(struct tgt_cmnd *cmnd, char *data,
+static void uspace_cmnd_done(struct tgt_cmnd *cmnd, void *data,
 			     int result, uint32_t len)
 {
+	char *p = data;
 	int i;
 	BUG_ON(!cmnd->done);
+
+	dprintk("cid %llu result %d len %d\n",
+		cmnd->cid, result, len);
 
 	if (len) {
 		cmnd->bufflen = len;
@@ -696,12 +717,8 @@ static void uspace_cmnd_done(struct tgt_cmnd *cmnd, char *data,
 
 		for (i = 0; i < cmnd->sg_count; i++) {
 			uint32_t copy = min_t(uint32_t, len, PAGE_CACHE_SIZE);
-			char *dest, *p = data;
 
-			dest = kmap_atomic(cmnd->sg[i].page, KM_SOFTIRQ0);
-			memcpy(dest, p, copy);
-			kunmap_atomic(dest, KM_SOFTIRQ0);
-
+			memcpy(page_address(cmnd->sg[i].page), p, copy);
 			p += copy;
 			len -= copy;
 		}
@@ -716,6 +733,8 @@ static void queuecommand(void *data)
 	struct tgt_cmnd *cmnd = data;
 	struct tgt_target *target = cmnd->session->target;
 	struct tgt_device *device;
+
+	dprintk("cid %llu rw %d\n", cmnd->cid, cmnd->rw);
 
 	/* Should we do this earlier? */
 	device = tgt_device_find(target, cmnd->dev_id);
@@ -779,6 +798,33 @@ found:
 	return cmnd;
 }
 
+int tgt_msg_send(struct tgt_target *target, void *data, int data_len,
+		 unsigned int gfp_flags)
+{
+	struct tgt_event *ev;
+	struct sk_buff *skb;
+	struct nlmsghdr *nlh;
+	int len;
+
+	len = NLMSG_SPACE(sizeof(*ev) + data_len);
+	skb = alloc_skb(len, gfp_flags);
+	if (!skb)
+		return -ENOMEM;
+
+	dprintk("%d %Zd %d\n", len, sizeof(*ev), data_len);
+	nlh = __nlmsg_put(skb, daemon_pid, 0, TGT_KEVENT_TARGET_PASSTHRU,
+			 len - sizeof(*nlh), 0);
+	ev = NLMSG_DATA(nlh);
+	memset(ev, 0, sizeof(*ev));
+
+	memcpy(ev->data, data, data_len);
+	ev->k.tgt_passthru.tid = target->tid;
+	ev->k.tgt_passthru.len = data_len;
+
+	return netlink_unicast(nls, skb, daemon_pid, 0);
+}
+EXPORT_SYMBOL_GPL(tgt_msg_send);
+
 static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 {
 	int err = 0;
@@ -789,10 +835,15 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 	dprintk("%d %d %d %d\n", daemon_pid, nlh->nlmsg_type,
 		nlh->nlmsg_pid, current->pid);
 
+	/*
+	 * stupid hack until we merge daemons
+	 */
+	daemon_pid = NETLINK_CREDS(skb)->pid;
+
 	switch (nlh->nlmsg_type) {
 	case TGT_UEVENT_START:
-		daemon_pid  = NETLINK_CREDS(skb)->pid;
-		dprintk("start %d\n", daemon_pid);
+		tgt_pid  = NETLINK_CREDS(skb)->pid;
+		dprintk("start %d\n", tgt_pid);
 		break;
 	case TGT_UEVENT_TARGET_CREATE:
 		target = tgt_target_create(ev->u.c_target.type,
@@ -809,6 +860,18 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 		else
 			err = -EINVAL;
 		break;
+	case TGT_UEVENT_TARGET_PASSTHRU:
+		target = target_find(ev->u.tgt_passthru.tid);
+		if (!target || !target->tt->msg_recv) {
+			dprintk("Could not find target %d for passthru\n",
+				ev->u.tgt_passthru.tid);
+			err = -EINVAL;
+			break;
+		}
+
+		err = target->tt->msg_recv(target, ev->u.tgt_passthru.len,
+					   ev->data);
+		break;
 	case TGT_UEVENT_DEVICE_CREATE:
 		err = tgt_device_create(ev->u.c_device.tid,
 					ev->u.c_device.dev_id,
@@ -823,7 +886,7 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 	case TGT_UEVENT_CMND_RES:
 		cmnd = find_cmnd_by_id(ev->u.cmnd_res.cid);
 		if (cmnd)
-			uspace_cmnd_done(cmnd, (char *) ev + sizeof(*ev),
+			uspace_cmnd_done(cmnd, ev->data,
 					 ev->u.cmnd_res.result,
 					 ev->u.cmnd_res.len);
 		else {
@@ -870,11 +933,17 @@ static int event_recv_skb(struct sk_buff *skb)
 		err = event_recv_msg(skb, nlh);
 
 		eprintk("%d %d\n", nlh->nlmsg_type, err);
-		ev->k.event_res.err = err;
-		if (nlh->nlmsg_type != TGT_UEVENT_CMND_RES)
+		/*
+		 * TODO for passthru commands the lower level should
+		 * probably handle the result or we should modify this
+		 */
+		if (nlh->nlmsg_type != TGT_UEVENT_CMND_RES &&
+		    nlh->nlmsg_type != TGT_UEVENT_TARGET_PASSTHRU) {
+			ev->k.event_res.err = err;
 			send_event_res(NETLINK_CREDS(skb)->pid,
 				       TGT_KEVENT_RESPONSE,
 				       ev, sizeof(*ev));
+		}
 		skb_pull(skb, rlen);
 	}
 	return 0;

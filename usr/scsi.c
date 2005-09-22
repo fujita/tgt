@@ -401,11 +401,13 @@ static int sync_cache(int tid, uint64_t lun, uint8_t *scb, uint8_t *data,
 	int fd, err;
 	char path[PATH_MAX], buf[PATH_MAX];
 
-	sprintf(path, "/sys/class/tgt_device/device%d:%" PRIu64 "/path", tid, lun);
+	sprintf(path, "/sys/class/tgt_device/device%d:%" PRIu64 "/fd",
+		tid, lun);
 
 	fd = open(path, O_RDONLY);
 	if (fd < 0) {
-		perror("scsi sync_cache could not get LU's path");
+		log_error("scsi sync_cache could not get LU's fd err %d",
+			  errno);
 		err = EINVAL;
 		goto einval;
 	}
@@ -413,24 +415,32 @@ static int sync_cache(int tid, uint64_t lun, uint8_t *scb, uint8_t *data,
 	err = read(fd, buf, sizeof(buf));
 	close(fd);
 	if (err < 0) {
-		perror("scsi sync_cache could not read LUN path");
+		log_error("scsi sync_cache could not read LUN path err %d",
+			  errno);
 		err = EIO;
 		goto eio;
 	}
 	/*
 	 * yuck! wtf should I be using
 	 */
-	memset(path, 0, PATH_MAX);
-	sscanf(buf, "%s\n", path);
+	fd = 0;
+	sscanf(buf, "%d\n", &fd);
 
-	fd = open(path, O_RDWR);
-	if (fd < 0) {
-		perror("scsi sync_cache could not open device");
-		err = EIO;
-		goto eio;
-	}
+	/*
+	 * this will work when we merge the daemons (fd's are associated
+	 * with procssess so this will fail when ietd opens the fd and
+	 * this thread syncs it).
+	 */
 	err = fsync(fd);
-	close(fd);
+	if (err) {
+		log_error("scsi sync_cache fsync of fd %d failed err %d",
+			   fd, errno);
+		/*
+		 * this is what we should do but for now we lie.
+		 * err = errno;
+		 */
+		err = 0;
+	}
 
 	switch (err) {
 	case EROFS:

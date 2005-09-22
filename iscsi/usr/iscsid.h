@@ -198,7 +198,6 @@ extern int ietadm_request_handle(int accept_fd);
 
 /* ctldev.c */
 struct iscsi_kernel_interface {
-	int (*ctldev_open) (void);
 	int (*lunit_create) (u32 tid, u32 lun, char *args);
 	int (*lunit_destroy) (u32 tid, u32 lun);
 	int (*param_get) (u32, u64, struct iscsi_param *);

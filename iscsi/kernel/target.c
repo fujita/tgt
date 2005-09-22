@@ -104,8 +104,7 @@ static void target_thread_stop(struct iscsi_target *target)
 static int iscsi_target_create(struct tgt_target *tt)
 {
 	int err = -EINVAL;
-	struct iscsi_target *target =
-		(struct iscsi_target *) tt->tt_data;
+	struct iscsi_target *target = tt->tt_data;
 
 	memset(target, 0, sizeof(*target));
 

@@ -231,6 +231,7 @@ extern int target_add(struct tgt_target *);
 extern void target_del(struct tgt_target *);
 
 /* config.c */
+extern int iet_msg_recv(struct tgt_target *, uint32_t, void *);
 extern int iet_procfs_init(void);
 extern void iet_procfs_exit(void);
 extern int iet_info_show(struct seq_file *, iet_show_info_t *);

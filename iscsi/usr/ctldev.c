@@ -7,6 +7,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <dirent.h>
@@ -22,8 +23,6 @@
 #include "iscsid.h"
 #include "tgt_if.h"
 
-#define CTL_DEVICE	"/dev/ietctl"
-
 /*
  * tomo:
  * netlink code is temporary until ietd will be integrated to stgtd
@@ -37,68 +36,118 @@ struct session_file_operations {
 	int (*connection_op) (int fd, u32 tid, u64 sid, u32 cid, void *arg);
 };
 
-static int ctrdev_open(void)
+/* Temporary stgt glue */
+
+static int ipc_cmnd_execute(struct nlmsghdr *nlm_send, int len)
 {
-	FILE *f;
-	char devname[256];
-	char buf[256];
-	int devn;
-	int ctlfd;
+	int fd, err;
+	struct sockaddr_nl addr;
+	struct nlmsghdr *nlm_recv;
+	struct tgt_event *ev;
+	struct iet_msg *msg;
 
-	if (!(f = fopen("/proc/devices", "r"))) {
-		perror("Cannot open control path to the driver\n");
-		return -1;
+	nlm_recv = calloc(1, len);
+	if (!nlm_recv)
+		return -ENOMEM;
+
+	fd = socket(PF_NETLINK, SOCK_RAW, NETLINK_TGT);
+	if (fd < 0) {
+		log_error("Could not create socket %d %d\n", fd, errno);
+		err = fd;
+		goto free_nlm;
+	}
+	memset(&addr, 0, sizeof(addr));
+	addr.nl_family = AF_NETLINK;
+	addr.nl_pid = 0;
+	addr.nl_groups = 0;
+
+	err = connect(fd, (struct sockaddr *) &addr, sizeof(addr));
+	if (err < 0) {
+		log_error("Could not connect %d %d\n", err, errno);
+		goto close;
 	}
 
-	devn = 0;
-	while (!feof(f)) {
-		if (!fgets(buf, sizeof (buf), f)) {
-			break;
-		}
-		if (sscanf(buf, "%d %s", &devn, devname) != 2) {
-			continue;
-		}
-		if (!strcmp(devname, "ietctl")) {
-			break;
-		}
-		devn = 0;
+	err = write(fd, nlm_send, len);
+	if (err < 0) {
+		log_error("sendmsg failed %d %d\n", err, errno);
+		goto close;
 	}
 
-	fclose(f);
-	if (!devn) {
-		printf
-		    ("cannot find iscsictl in /proc/devices - "
-		     "make sure the module is loaded\n");
-		return -1;
+	err = read(fd, nlm_recv, len);
+	if (err < 0)
+		goto close;
+
+	ev = NLMSG_DATA(nlm_recv);
+	switch (nlm_recv->nlmsg_type) {
+		case TGT_KEVENT_TARGET_PASSTHRU:
+			msg = (struct iet_msg *)ev->data;
+			memcpy(nlm_send, nlm_recv, len);
+			err = msg->result;
+		default:
+			err = ev->k.event_res.err;
 	}
 
-	unlink(CTL_DEVICE);
-	if (mknod(CTL_DEVICE, (S_IFCHR | 0600), (devn << 8))) {
-		printf("cannot create %s %d\n", CTL_DEVICE, errno);
-		return -1;
-	}
-
-	ctlfd = open(CTL_DEVICE, O_RDWR);
-	if (ctlfd < 0) {
-		printf("cannot open %s %d\n", CTL_DEVICE, errno);
-		return -1;
-	}
-
-	return ctlfd;
+close:
+	if (fd >= 0)
+		close(fd);
+free_nlm:
+	free(nlm_recv);
+	return err;
 }
+
+static void nlmsg_init(struct nlmsghdr *nlh, u32 pid, u32 seq, int type,
+		       int len, int flags)
+{
+	nlh->nlmsg_pid = pid;
+	nlh->nlmsg_len = len;
+	nlh->nlmsg_flags = 0;
+	nlh->nlmsg_type = type;
+	nlh->nlmsg_seq = seq;
+}
+
+/*
+ * this will have to be redone and made generic when we move it
+ */
+static struct nlmsghdr *get_iet_msg(u32 tid, struct iet_msg **msg)
+{
+	int len;
+	struct nlmsghdr *nlh;
+	struct tgt_event *ev;
+
+	len = NLMSG_SPACE(sizeof(*ev) + sizeof(struct iet_msg));
+	nlh = calloc(1, len);
+	if (!nlh)
+		return NULL;
+
+	nlmsg_init(nlh, getpid(), 0, TGT_UEVENT_TARGET_PASSTHRU, len, 0);
+	ev = NLMSG_DATA(nlh);
+	ev->u.tgt_passthru.tid = tid;
+	ev->u.tgt_passthru.len = sizeof(struct iet_msg);
+	*msg = (struct iet_msg *)ev->data;
+
+	return nlh;
+}
+
 
 static int iscsi_conn_destroy(u32 tid, u64 sid, u32 cid)
 {
+	struct iet_msg *msg;
+	struct nlmsghdr *nlh;
+	struct conn_info *info;
 	int err;
-	struct conn_info info;
 
-	info.tid = tid;
-	info.sid = sid;
-	info.cid = cid;
+	nlh = get_iet_msg(tid, &msg);
+	if (!nlh)
+		return -ENOMEM;
 
-	if ((err = ioctl(ctrl_fd, DEL_CONN, &info)) < 0)
-		err = errno;
+	info = &msg->u.conn_info;
+	info->tid = tid;
+	info->sid = sid;
+	info->cid = cid;
+	msg->msg_type = IET_DEL_CONN;
 
+	err = ipc_cmnd_execute(nlh, nlh->nlmsg_len);
+	free(nlh);
 	return err;
 }
 
@@ -240,147 +289,143 @@ int session_conns_close(u32 tid, u64 sid)
 
 static int iscsi_param_get(u32 tid, u64 sid, struct iscsi_param *param)
 {
+	struct iet_msg *msg;
+	struct nlmsghdr *nlh;
+	struct iscsi_param_info *info;
 	int err, i;
-	struct iscsi_param_info info;
 
-	memset(&info, 0, sizeof(info));
-	info.tid = tid;
-	info.sid = sid;
+	nlh = get_iet_msg(tid, &msg);
+	if (!nlh)
+		return -ENOMEM;
 
-	if ((err = ioctl(ctrl_fd, ISCSI_PARAM_GET, &info)) < 0)
-		log_error("Can't set session param %d %d\n", info.tid, errno);
+	info = &msg->u.param_info;
+	info->tid = tid;
+	info->sid = sid;
 
-	for (i = 0; i < session_key_last; i++)
-		param[i].val = info.session_param[i];
+	msg->msg_type = IET_ISCSI_PARAM_GET;
 
+	err = ipc_cmnd_execute(nlh, nlh->nlmsg_len);
+	if (err < 0)
+		log_error("Can't get session param %d %d\n", info->tid, err);
+	else {
+		struct tgt_event *ev;
+
+		ev = NLMSG_DATA(nlh);
+		msg = (struct iet_msg *)ev->data;
+		info = &msg->u.param_info;
+
+		for (i = 0; i < session_key_last; i++)
+			param[i].val = info->session_param[i];
+	}
+
+	free(nlh);
 	return err;
 }
 
 static int iscsi_param_set(u32 tid, u64 sid, int type, u32 partial, struct iscsi_param *param)
 {
-	int i, err;
-	struct iscsi_param_info info;
+	struct iet_msg *msg;
+	struct nlmsghdr *nlh;
+	struct iscsi_param_info *info;
+	int err, i;
 
-	memset(&info, 0, sizeof(info));
-	info.tid = tid;
-	info.sid = sid;
-	info.param_type = type;
-	info.partial = partial;
+	nlh = get_iet_msg(tid, &msg);
+	if (!nlh)
+		return -ENOMEM;
 
-	if (info.param_type == key_session)
+	info = &msg->u.param_info;
+	info->tid = tid;
+	info->sid = sid;
+	info->param_type = type;
+	info->partial = partial;
+
+	if (type == key_session)
 		for (i = 0; i < session_key_last; i++)
-			info.session_param[i] = param[i].val;
+			info->session_param[i] = param[i].val;
 	else
 		for (i = 0; i < target_key_last; i++)
-			info.target_param[i] = param[i].val;
+			info->target_param[i] = param[i].val;
+	msg->msg_type = IET_ISCSI_PARAM_SET;
 
-	if ((err = ioctl(ctrl_fd, ISCSI_PARAM_SET, &info)) < 0)
-		fprintf(stderr, "%d %d %u " "%" PRIu64 " %d %u\n",
+	err = ipc_cmnd_execute(nlh, nlh->nlmsg_len);
+	if (err)
+		fprintf(stderr, "%d %d %u %llu %d %u\n",
 			err, errno, tid, sid, type, partial);
-
+	free(nlh);
 	return err;
 }
 
 static int iscsi_session_create(u32 tid, u64 sid, u32 exp_cmd_sn, u32 max_cmd_sn, char *name)
 {
-	struct session_info info;
+	struct iet_msg *msg;
+	struct nlmsghdr *nlh;
+	struct session_info *info;
+	int err;
 
-	memset(&info, 0, sizeof(info));
+	nlh = get_iet_msg(tid, &msg);
+	if (!nlh)
+		return -ENOMEM;
 
-	info.tid = tid;
-	info.sid = sid;
-	info.exp_cmd_sn = exp_cmd_sn;
-	info.max_cmd_sn = max_cmd_sn;
-	strncpy(info.initiator_name, name, sizeof(info.initiator_name) - 1);
+	info = &msg->u.sess_info;
+	info->tid = tid;
+	info->sid = sid;
+	info->exp_cmd_sn = exp_cmd_sn;
+	info->max_cmd_sn = max_cmd_sn;
+	strncpy(info->initiator_name, name, sizeof(info->initiator_name) - 1);
+	msg->msg_type = IET_ADD_SESSION;
 
-	return ioctl(ctrl_fd, ADD_SESSION, &info);
+	err = ipc_cmnd_execute(nlh, nlh->nlmsg_len);
+	free(nlh);
+	return err;
 }
 
 static int iscsi_session_destroy(u32 tid, u64 sid)
 {
-	struct session_info info;
+	struct iet_msg *msg;
+	struct nlmsghdr *nlh;
+	struct session_info *info;
+	int err;
 
-	memset(&info, 0, sizeof(info));
+	nlh = get_iet_msg(tid, &msg);
+	if (!nlh)
+		return -ENOMEM;
 
-	info.tid = tid;
-	info.sid = sid;
+	info = &msg->u.sess_info;
+	info->tid = tid;
+	info->sid = sid;
+	msg->msg_type = IET_DEL_SESSION;
 
-	return ioctl(ctrl_fd, DEL_SESSION, &info);
+	err = ipc_cmnd_execute(nlh, nlh->nlmsg_len);
+	free(nlh);
+	return err;
 }
 
 static int iscsi_conn_create(u32 tid, u64 sid, u32 cid, u32 stat_sn, u32 exp_stat_sn,
 			     int fd, u32 hdigest, u32 ddigest)
 {
-	struct conn_info info;
+	struct iet_msg *msg;
+	struct nlmsghdr *nlh;
+	struct conn_info *info;
+	int err;
 
-	memset(&info, 0, sizeof(info));
+	nlh = get_iet_msg(tid, &msg);
+	if (!nlh)
+		return -ENOMEM;
 
-	info.tid = tid;
-	info.sid = sid;
-	info.cid = cid;
-	info.stat_sn = stat_sn;
-	info.exp_stat_sn = exp_stat_sn;
-	info.fd = fd;
-	info.header_digest = hdigest;
-	info.data_digest = ddigest;
+	info = &msg->u.conn_info;
+	info->tid = tid;
+	info->sid = sid;
+	info->cid = cid;
+	info->stat_sn = stat_sn;
+	info->exp_stat_sn = exp_stat_sn;
+	info->fd = fd;
+	info->header_digest = hdigest;
+	info->data_digest = ddigest;
+	msg->msg_type = IET_ADD_CONN;
 
-	return ioctl(ctrl_fd, ADD_CONN, &info);
-}
-
-/* Temporary stgt glue */
-
-static int ipc_cmnd_execute(char *data, int len)
-{
-	int fd, err;
-	struct sockaddr_nl addr;
-	char nlm_ev[NLMSG_SPACE(sizeof(struct tgt_event))];
-	struct tgt_event *ev;
-	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
-
-	fd = socket(PF_NETLINK, SOCK_RAW, NETLINK_TGT);
-	if (fd < 0) {
-		log_error("Could not create socket %d %d\n", fd, errno);
-		return fd;
-	}
-	memset(&addr, 0, sizeof(addr));
-	addr.nl_family = AF_NETLINK;
-	addr.nl_pid = 0;
-	addr.nl_groups = 0;
-
-	err = connect(fd, (struct sockaddr *) &addr, sizeof(addr));
-	if (err < 0) {
-		log_error("Could not connect %d %d\n", err, errno);
-		return err;
-	}
-
-	err = write(fd, data, len);
-	if (err < 0) {
-		log_error("sendmsg failed %d %d\n", err, errno);
-		goto out;
-	}
-
-	err = read(fd, nlm_ev, sizeof(nlm_ev));
-	if (err < 0)
-		goto out;
-
-	ev = NLMSG_DATA(nlh);
-	err = ev->k.event_res.err;
-
-out:
-	if (fd > 0)
-		close(fd);
-
+	err = ipc_cmnd_execute(nlh, nlh->nlmsg_len);
+	free(nlh);
 	return err;
-}
-
-static void nlmsg_init(struct nlmsghdr *nlh, u32 pid, u32 seq, int type,
-		       int len, int flags)
-{
-	nlh->nlmsg_pid = pid;
-	nlh->nlmsg_len = len;
-	nlh->nlmsg_flags = 0;
-	nlh->nlmsg_type = type;
-	nlh->nlmsg_seq = seq;
 }
 
 static int iscsi_target_create(u32 *tid, char *name)
@@ -398,7 +443,7 @@ static int iscsi_target_create(u32 *tid, char *name)
 	sprintf(ev->u.c_target.type, "%s", "iet");
 	ev->u.c_target.nr_cmnds = DEFAULT_NR_QUEUED_CMNDS;
 
-	err = ipc_cmnd_execute(nlm_ev, nlh->nlmsg_len);
+	err = ipc_cmnd_execute(nlh, nlh->nlmsg_len);
 	if (err > 0) {
 		*tid = err;
 		err = 0;
@@ -421,7 +466,7 @@ static int iscsi_target_destroy(u32 tid)
 	ev = NLMSG_DATA(nlh);
 	ev->u.d_target.tid = tid;
 
-	err = ipc_cmnd_execute(nlm_ev, nlh->nlmsg_len);
+	err = ipc_cmnd_execute(nlh, nlh->nlmsg_len);
 
 	return err;
 }
@@ -429,10 +474,10 @@ static int iscsi_target_destroy(u32 tid)
 static int iscsi_lunit_create(u32 tid, u32 lun, char *args)
 {
 	int err, fd;
-	char nlm_ev[8912], *p, *q, *type = NULL, *path = NULL;
+	char *p, *q, *type = NULL, *path = NULL;
 	char dtype[] = "tgt_vsd";
 	struct tgt_event *ev;
-	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
+	struct nlmsghdr *nlh;
 
 	fprintf(stderr, "%s %d %s\n", __FUNCTION__, __LINE__, args);
 
@@ -471,11 +516,13 @@ static int iscsi_lunit_create(u32 tid, u32 lun, char *args)
 		return errno;
 	}
 
-	memset(nlm_ev, 0, sizeof(nlm_ev));
+	nlh = calloc(1, NLMSG_SPACE(sizeof(*ev)));
+	if (!nlh) {
+		err = -ENOMEM;
+		goto close_fd;
+	}
 	nlmsg_init(nlh, getpid(), 0, TGT_UEVENT_DEVICE_CREATE,
 		   NLMSG_SPACE(sizeof(*ev)), 0);
-
-	log_error("pid %d\n", nlh->nlmsg_pid);
 
 	ev = NLMSG_DATA(nlh);
 	ev->u.c_device.tid = tid;
@@ -483,9 +530,12 @@ static int iscsi_lunit_create(u32 tid, u32 lun, char *args)
 	ev->u.c_device.fd = fd;
 	strncpy(ev->u.c_device.type, type, sizeof(ev->u.c_device.type));
 
-	err = ipc_cmnd_execute(nlm_ev, nlh->nlmsg_len);
-	if (err)
+	err = ipc_cmnd_execute(nlh, nlh->nlmsg_len);
+close_fd:
+	if (err) {
 		close(fd);
+		free(nlh);
+	}
 	return err;
 }
 
@@ -503,6 +553,10 @@ static int iscsi_lunit_destroy(u32 tid, u32 lun)
 	nlmsg_init(nlh, getpid(), 0, TGT_UEVENT_DEVICE_DESTROY,
 		   NLMSG_SPACE(sizeof(*ev)), 0);
 
+	ev = NLMSG_DATA(nlh);
+	ev->u.d_device.tid = tid;
+	ev->u.d_device.dev_id = lun;
+
 	sprintf(path, "/sys/class/tgt_device/device%d:%d/fd", tid, lun);
 	fd = open(path, O_RDONLY);
 	if (fd < 0) {
@@ -518,17 +572,12 @@ static int iscsi_lunit_destroy(u32 tid, u32 lun)
 	}
 	sscanf(buf, "%d\n", &fd);
 
-	ev = NLMSG_DATA(nlh);
-	ev->u.d_device.tid = tid;
-	ev->u.d_device.dev_id = lun;
-
-	err = ipc_cmnd_execute(nlm_ev, nlh->nlmsg_len);
+	err = ipc_cmnd_execute(nlh, nlh->nlmsg_len);
 	close(fd);
 	return err;
 }
 
 struct iscsi_kernel_interface ioctl_ki = {
-	.ctldev_open = ctrdev_open,
 	.lunit_create = iscsi_lunit_create,
 	.lunit_destroy = iscsi_lunit_destroy,
 	.param_get = iscsi_param_get,

@@ -92,6 +92,46 @@ struct iet_event {
 	u32 state;
 };
 
+/*
+ * TODO: merge iet_msg with iet_event
+ *
+ * the info msgs/ioctls can be done in sysfs the event
+ * could be moved too
+ */
+/*
+ * msg types
+ */
+enum {
+	IET_ADD_SESSION,
+	IET_DEL_SESSION,
+	IET_ADD_CONN,
+	IET_DEL_CONN,
+	IET_ISCSI_PARAM_SET,
+	IET_ISCSI_PARAM_GET,
+};
+
+struct iet_msg {
+	uint32_t msg_type;
+	uint32_t result;
+
+	/* user-> kernel */
+	union {
+		struct session_info sess_info;
+		struct conn_info conn_info;
+		struct iscsi_param_info param_info;
+	} u;
+
+	/* kernel -> user */
+	union {
+		struct {
+			u32 tid;
+			u64 sid;
+			u32 cid;
+			u32 state;
+		} conn_state_change;
+	} k;
+} __attribute__ ((aligned (sizeof(uint64_t))));
+
 #define	DEFAULT_NR_WTHREADS	8
 #define	MIN_NR_WTHREADS		1
 #define	MAX_NR_WTHREADS		128
@@ -101,14 +141,5 @@ struct iet_event {
 #define	MAX_NR_QUEUED_CMNDS	256
 
 #define NETLINK_IET	21
-
-#define ADD_SESSION _IOW('i', 6, struct session_info)
-#define DEL_SESSION _IOW('i', 7, struct session_info)
-#define GET_SESSION_INFO _IOWR('i', 8, struct session_info)
-#define ADD_CONN _IOW('i', 9, struct conn_info)
-#define DEL_CONN _IOW('i', 10, struct conn_info)
-#define GET_CONN_INFO _IOWR('i', 11, struct conn_info)
-#define ISCSI_PARAM_SET _IOW('i', 12, struct iscsi_param_info)
-#define ISCSI_PARAM_GET _IOWR('i', 13, struct iscsi_param_info)
 
 #endif

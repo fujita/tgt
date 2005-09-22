@@ -6,6 +6,10 @@
 
 #include <linux/proc_fs.h>
 
+#include <tgt.h>
+#include <tgt_target.h>
+
+#include "iet_u.h"
 #include "iscsi.h"
 #include "iscsi_dbg.h"
 
@@ -62,188 +66,73 @@ err:
 	return -ENOMEM;
 }
 
-static int get_conn_info(struct iscsi_target *target, unsigned long ptr)
+static int add_conn(struct iscsi_target *target, struct conn_info *info)
 {
-	int err;
 	struct iscsi_session *session;
-	struct conn_info info;
-	struct iscsi_conn *conn;
 
-	if ((err = copy_from_user(&info, (void *) ptr, sizeof(info))) < 0)
-		return err;
-
-	session = session_lookup(target, info.sid);
-	if (!session)
-		return -ENOENT;
-	conn = conn_lookup(session, info.cid);
-
-	info.cid = conn->cid;
-	info.stat_sn = conn->stat_sn;
-	info.exp_stat_sn = conn->exp_stat_sn;
-
-	if (copy_to_user((void *) ptr, &info, sizeof(info)))
-		return -EFAULT;
-
-	return 0;
-}
-
-static int add_conn(struct iscsi_target *target, unsigned long ptr)
-{
-	int err;
-	struct iscsi_session *session;
-	struct conn_info info;
-
-	if ((err = copy_from_user(&info, (void *) ptr, sizeof(info))) < 0)
-		return err;
-
-	if (!(session = session_lookup(target, info.sid)))
-		return -ENOENT;
-
-	return conn_add(session, &info);
-}
-
-static int del_conn(struct iscsi_target *target, unsigned long ptr)
-{
-	int err;
-	struct iscsi_session *session;
-	struct conn_info info;
-
-	if ((err = copy_from_user(&info, (void *) ptr, sizeof(info))) < 0)
-		return err;
-
-	if (!(session = session_lookup(target, info.sid)))
-		return -ENOENT;
-
-	return conn_del(session, &info);
-}
-
-static int get_session_info(struct iscsi_target *target, unsigned long ptr)
-{
-	int err;
-	struct iscsi_session *session;
-	struct session_info info;
-
-	if ((err = copy_from_user(&info, (void *) ptr, sizeof(info))) < 0)
-		return err;
-
-	session = session_lookup(target, info.sid);
-
+	session = session_lookup(target, info->sid);
 	if (!session)
 		return -ENOENT;
 
-	info.exp_cmd_sn = session->exp_cmd_sn;
-	info.max_cmd_sn = session->max_cmd_sn;
-
-	if (copy_to_user((void *) ptr, &info, sizeof(info)))
-		return -EFAULT;
-
-	return 0;
+	return conn_add(session, info);
 }
 
-static int add_session(struct iscsi_target *target, unsigned long ptr)
+static int del_conn(struct iscsi_target *target, struct conn_info *info)
 {
+	struct iscsi_session *session;
+
+	session = session_lookup(target, info->sid);
+	if (!session)
+		return -ENOENT;
+
+	return conn_del(session, info);
+}
+
+int iet_msg_recv(struct tgt_target *tgt, uint32_t len, void *data)
+{
+	struct iscsi_target *target = tgt->tt_data;
+	struct iet_msg *msg = data;
 	int err;
-	struct session_info info;
 
-	if ((err = copy_from_user(&info, (void *) ptr, sizeof(info))) < 0)
-		return err;
-
-	return session_add(target, &info);
-}
-
-static int del_session(struct iscsi_target *target, unsigned long ptr)
-{
-	int err;
-	struct session_info info;
-
-	if ((err = copy_from_user(&info, (void *) ptr, sizeof(info))) < 0)
-		return err;
-
-	return session_del(target, info.sid);
-}
-
-static int iscsi_param_config(struct iscsi_target *target, unsigned long ptr, int set)
-{
-	int err;
-	struct iscsi_param_info info;
-
-	if ((err = copy_from_user(&info, (void *) ptr, sizeof(info))) < 0)
-		goto out;
-
-	if ((err = iscsi_param_set(target, &info, set)) < 0)
-		goto out;
-
-	if (!set)
-		err = copy_to_user((void *) ptr, &info, sizeof(info));
-
-out:
-	return err;
-}
-
-static long ioctl(struct file *file, unsigned int cmd, unsigned long arg)
-{
-	struct iscsi_target *target = NULL;
-	long err;
-	u32 id;
-
-	if ((err = get_user(id, (u32 *) arg)) != 0)
+	err = target_lock(target, 1);
+	if (err < 0) {
+		eprintk("interrupted %u %d\n", err, msg->msg_type);
 		goto done;
+	}
 
-	target = target_lookup_by_id(id);
-	if (!target) {
-		eprintk("can't find the target %u\n", id);
+	eprintk("msg_type %d\n", msg->msg_type);
+
+	switch (msg->msg_type) {
+	case IET_ADD_SESSION:
+		err = session_add(target, &msg->u.sess_info);
+		break;
+
+	case IET_DEL_SESSION:
+		err = session_del(target, msg->u.sess_info.sid);
+		break;
+
+	case IET_ISCSI_PARAM_SET:
+		err = iscsi_param_set(target, &msg->u.param_info, 1);
+		break;
+
+	case IET_ISCSI_PARAM_GET:
+		err = iscsi_param_set(target, &msg->u.param_info, 0);
+		break;
+
+	case IET_ADD_CONN:
+		err = add_conn(target, &msg->u.conn_info);
+		break;
+
+	case IET_DEL_CONN:
+		err = del_conn(target, &msg->u.conn_info);
+		break;
+	default:
 		err = -EINVAL;
-		goto done;
 	}
 
-	if ((err = target_lock(target, 1)) < 0) {
-		eprintk("interrupted %ld %d\n", err, cmd);
-		goto done;
-	}
-
-	switch (cmd) {
-	case ADD_SESSION:
-		err = add_session(target, arg);
-		break;
-
-	case DEL_SESSION:
-		err = del_session(target, arg);
-		break;
-
-	case GET_SESSION_INFO:
-		err = get_session_info(target, arg);
-		break;
-
-	case ISCSI_PARAM_SET:
-		err = iscsi_param_config(target, arg, 1);
-		break;
-
-	case ISCSI_PARAM_GET:
-		err = iscsi_param_config(target, arg, 0);
-		break;
-
-	case ADD_CONN:
-		err = add_conn(target, arg);
-		break;
-
-	case DEL_CONN:
-		err = del_conn(target, arg);
-		break;
-
-	case GET_CONN_INFO:
-		err = get_conn_info(target, arg);
-		break;
-
-	}
-
-	if (target)
-		target_unlock(target);
-
+	target_unlock(target);
 done:
+	msg->result = err;
+	tgt_msg_send(tgt, msg, sizeof(*msg), GFP_KERNEL);
 	return err;
 }
-
-struct file_operations ctr_fops = {
-	.owner		= THIS_MODULE,
-	.unlocked_ioctl	= ioctl,
-};

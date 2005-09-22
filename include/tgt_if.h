@@ -14,6 +14,7 @@ enum tgt_event_type {
 	TGT_UEVENT_START,
 	TGT_UEVENT_TARGET_CREATE,
 	TGT_UEVENT_TARGET_DESTROY,
+	TGT_UEVENT_TARGET_PASSTHRU,
 	TGT_UEVENT_DEVICE_CREATE,
 	TGT_UEVENT_DEVICE_DESTROY,
 	TGT_UEVENT_CMND_RES,
@@ -21,6 +22,7 @@ enum tgt_event_type {
 	/* kernel -> user */
 	TGT_KEVENT_RESPONSE,
 	TGT_KEVENT_CMND_REQ,
+	TGT_KEVENT_TARGET_PASSTHRU,
 };
 
 struct tgt_event {
@@ -33,6 +35,10 @@ struct tgt_event {
 		struct {
 			int tid;
 		} d_target;
+		struct {
+			int tid;
+			uint32_t len;
+		} tgt_passthru;
 		struct {
 			int tid;
 			uint64_t dev_id;
@@ -61,7 +67,19 @@ struct tgt_event {
 			int tid;
 			uint64_t dev_id;
 		} cmnd_req;
+		struct {
+			int tid;
+			uint32_t len;
+		} tgt_passthru;
 	} k;
-};
+
+	/*
+	 * I think a pointer is a unsigned long but this struct
+	 * gets passed around from the kernel to userspace and
+	 * back again so to handle some ppc64 setups where userspace is
+	 * 32 bits but the kernel is 64 we do this odd thing
+	 */
+	uint64_t data[0];
+} __attribute__ ((aligned (sizeof(uint64_t))));
 
 #endif
