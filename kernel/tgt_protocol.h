@@ -9,6 +9,7 @@
 #define __TGT_PROTOCOL_H
 
 #include <linux/slab.h>
+#include <linux/dma-mapping.h>
 
 struct module;
 struct tgt_cmnd;
@@ -27,22 +28,24 @@ struct tgt_protocol {
 	int uspace_pdu_size;
 
 	/*
-	 * create a command.
+	 * create a command and allocate a buffer of size data_len for
+	 * for transfer. The buffer will be allocated with GFP_KERNEL
+	 * so if you cannot sleep the caller must pass in a done() function.
+	 * The done function will be called from process context.
+	 *
+	 * TODO: This dual behavior is a little strange. We will convert
+	 * iet to open-iscsi's model so eventually the done() function
+	 * will be a requirement so we can have a common path.
 	 */
 	struct tgt_cmnd *(* create_cmnd)(struct tgt_session *session,
-					uint8_t *cmd, uint8_t *dev_id_buff,
-					int buff_size);
+					uint8_t *cmd, uint32_t data_len,
+					enum dma_data_direction data_dir,
+					uint8_t *dev_id_buff, int id_buff_size,
+					void (*done)(struct tgt_cmnd *));
 	/*
 	 * destroy a command. This will free the command and buffer
 	 */
 	void (* destroy_cmnd)(struct tgt_cmnd *cmd); 
-	/*
-	 * allocoate a comand buffer. If this is called from irq context
-	 * a done callback can be set so the allocation is done in process
-	 * context.
-	 */
-	void (* alloc_cmnd_buffer)(struct tgt_cmnd *cmnd,
-				   void (*done)(struct tgt_cmnd *));
 	/*
 	 * queue a command to be executed in a workqueue. A done() callback
 	 * must be passed in.

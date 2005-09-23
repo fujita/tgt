@@ -40,12 +40,12 @@ static int tgt_vsd_create(struct tgt_device *device)
 /*
  * is this device specific or common? Should it be moved to the protocol.
  */
-static void tgt_vsd_prep(struct tgt_cmnd *cmnd)
+static void tgt_vsd_prep(struct tgt_cmnd *cmnd, uint32_t data_len)
 {
 	struct scsi_tgt_cmnd *scmnd = tgt_cmnd_to_scsi(cmnd);
 	uint8_t *scb = scmnd->scb;
 	uint64_t off = 0;
-	uint32_t len = 0;
+/*	uint32_t len = 0; */
 
 	/*
 	 * set bufflen and offset
@@ -54,29 +54,32 @@ static void tgt_vsd_prep(struct tgt_cmnd *cmnd)
 	case READ_6:
 	case WRITE_6:
 		off = ((scb[1] & 0x1f) << 16) + (scb[2] << 8) + scb[3];
-		len = scb[4];
+/*		len = scb[4];
 		if (!len)
-			len = 256;
+			len = 256;*/
 		break;
 	case READ_10:
 	case WRITE_10:
 	case WRITE_VERIFY:
 		off = be32_to_cpu(*(u32 *) &scb[2]);
-		len = (scb[7] << 8) + scb[8];
+/*		len = (scb[7] << 8) + scb[8]; */
 		break;
 	case READ_16:
 	case WRITE_16:
 		off = be64_to_cpu(*(u64 *)&scb[2]);
-		len = be32_to_cpu(*(u32 *)&scb[10]);
+/*		len = be32_to_cpu(*(u32 *)&scb[10]); */
 		break;
 	default:
 		break;
 	}
 
 	off <<= 9;
-	len <<= 9;
+/*	len <<= 9; */
 
-	cmnd->bufflen = len;
+	/*
+	 * we trust the data_len passed in for now
+	 */
+	cmnd->bufflen = data_len;
 	cmnd->offset = off;
 }
 

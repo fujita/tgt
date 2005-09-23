@@ -843,13 +843,26 @@ static void scsi_cmnd_start(struct iscsi_conn *conn, struct iscsi_cmnd *req)
 {
 	struct tgt_protocol *proto = conn->session->ts->target->proto;
 	struct iscsi_cmd *req_hdr = cmnd_hdr(req);
+	enum dma_data_direction data_dir;
 
 	dprintk(D_GENERIC, "scsi command: %02x\n", req_hdr->cdb[0]);
 
 	eprintk("scsi command: %02x\n", req_hdr->cdb[0]);
 
+	/*
+	 * handle bidi later
+	 */
+	if (req_hdr->flags & ISCSI_FLAG_CMD_WRITE)
+		data_dir = DMA_TO_DEVICE;
+	else if (req_hdr->flags & ISCSI_FLAG_CMD_READ)
+		data_dir = DMA_FROM_DEVICE;
+	else
+		data_dir = DMA_NONE;
+
 	req->tc = proto->create_cmnd(conn->session->ts, req_hdr->cdb,
-				     req_hdr->lun, sizeof(req_hdr->lun));
+				     be32_to_cpu(req_hdr->data_length),
+				     data_dir, req_hdr->lun,
+				     sizeof(req_hdr->lun), NULL);
 	assert(req->tc);
 
 	switch (req_hdr->cdb[0]) {
@@ -893,7 +906,6 @@ static void scsi_cmnd_start(struct iscsi_conn *conn, struct iscsi_cmnd *req)
 			cmnd_skip_data(req);
 		}
 
-		proto->alloc_cmnd_buffer(req->tc, NULL);
 		break;
 	}
 	case WRITE_6:
@@ -917,8 +929,6 @@ static void scsi_cmnd_start(struct iscsi_conn *conn, struct iscsi_cmnd *req)
 
 		if (req_hdr->cdb[0] == WRITE_VERIFY && req_hdr->cdb[1] & 0x02)
 			eprintk("Verification is ignored %x\n", cmnd_itt(req));
-
-		proto->alloc_cmnd_buffer(req->tc, NULL);
 
 		if (req->pdu.datasize) {
 			if (cmnd_recv_pdu(conn, req->tc, 0, req->pdu.datasize) < 0)

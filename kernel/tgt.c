@@ -561,15 +561,21 @@ struct tgt_cmnd *tgt_cmnd_create(struct tgt_session *session)
 }
 EXPORT_SYMBOL_GPL(tgt_cmnd_create);
 
+static void tgt_free_buffer(struct tgt_cmnd *cmnd)
+{
+	int i;
+	
+	for (i = 0; i < cmnd->sg_count; i++)
+		__free_page(cmnd->sg[i].page);
+	kfree(cmnd->sg);
+}
+
 void tgt_cmnd_destroy(struct tgt_cmnd *cmnd)
 {
 	unsigned long flags;
-	int i;
 
 	dprintk("cid %llu\n", cmnd->cid);
 
-	for (i = 0; i < cmnd->sg_count; i++)
-		__free_page(cmnd->sg[i].page);
 	kfree(cmnd->sg);
 
 	spin_lock_irqsave(&cmnd_hash_lock, flags);
@@ -687,13 +693,23 @@ static void uspace_cmnd_done(struct tgt_cmnd *cmnd, void *data,
 	int i;
 	BUG_ON(!cmnd->done);
 
-	dprintk("cid %llu result %d len %d\n",
-		cmnd->cid, result, len);
+	dprintk("cid %llu result %d len %d bufflen %u\n",
+		cmnd->cid, result, len, cmnd->bufflen);
 
 	if (len) {
-		cmnd->bufflen = len;
-		cmnd->offset = 0;
-		__tgt_alloc_buffer(cmnd);
+		/*
+		 * yuck TODO fix.
+		 * This will happen if we though we were going to do some
+		 * IO but we ended up just gettting some sense back
+		 */
+		if (len != cmnd->bufflen) {
+			tgt_free_buffer(cmnd);
+
+			cmnd->bufflen = len;
+			cmnd->offset = 0;
+
+			__tgt_alloc_buffer(cmnd);
+		}
 
 		for (i = 0; i < cmnd->sg_count; i++) {
 			uint32_t copy = min_t(uint32_t, len, PAGE_CACHE_SIZE);

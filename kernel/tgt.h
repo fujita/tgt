@@ -10,6 +10,7 @@
 #define __TGT_H
 
 #include <linux/mempool.h>
+#include <linux/dma-mapping.h>
 
 struct tgt_device;
 struct tgt_protocol;
@@ -36,6 +37,7 @@ struct tgt_cmnd {
 	struct list_head clist;
 	struct list_head hash_list;
 
+	enum dma_data_direction data_dir;
 	int sg_count;
 	struct scatterlist *sg;
 	uint32_t bufflen;

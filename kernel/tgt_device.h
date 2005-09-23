@@ -54,7 +54,7 @@ struct tgt_device_template {
 	/*
 	 * setup buffer or device fields if needed
 	 */
-	void (* prep_cmnd)(struct tgt_cmnd *cmnd);
+	void (* prep_cmnd)(struct tgt_cmnd *cmnd, uint32_t data_len);
 
 	/*
 	 * Pointer to the sysfs class properties for this host, NULL terminated.

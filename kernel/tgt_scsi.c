@@ -47,8 +47,10 @@ static uint64_t scsi_tgt_translate_lun(uint8_t *p, int size)
  * differently
  */
 static struct tgt_cmnd *
-scsi_tgt_create_cmnd(struct tgt_session *session, uint8_t *scb, uint8_t *lun,
-		     int lun_size)
+scsi_tgt_create_cmnd(struct tgt_session *session, uint8_t *scb,
+		     uint32_t data_len, enum dma_data_direction data_dir,
+		     uint8_t *lun, int lun_size,
+		     void (*done)(struct tgt_cmnd *))
 {
 	struct tgt_device *device;
 	struct tgt_cmnd *cmnd;
@@ -72,8 +74,17 @@ scsi_tgt_create_cmnd(struct tgt_session *session, uint8_t *scb, uint8_t *lun,
 	}
 	cmnd->device = device;
 
+	/* is this device specific */
+	cmnd->data_dir = data_dir;
+	/*
+	 * set bufflen based on data_len for now, but let device specific
+	 * handler overide just in case
+	 */
+	cmnd->bufflen = data_len;
 	/* do scsi device specific setup */
-	device->dt->prep_cmnd(cmnd);
+	device->dt->prep_cmnd(cmnd, data_len);
+	if (cmnd->bufflen)
+		tgt_cmnd_alloc_buffer(cmnd, done);
 	return cmnd;
 }
 
@@ -128,7 +139,6 @@ static struct tgt_protocol scsi_tgt_proto = {
 	.module = THIS_MODULE,
 	.create_cmnd = scsi_tgt_create_cmnd,
 	.destroy_cmnd = tgt_cmnd_destroy,
-	.alloc_cmnd_buffer = tgt_cmnd_alloc_buffer,
 	.queue_cmnd = tgt_cmnd_queue,
 	.build_uspace_pdu = scsi_tgt_build_uspace_pdu,
 	.uspace_pdu_size = MAX_COMMAND_SIZE,
