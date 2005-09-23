@@ -11,6 +11,9 @@
 
 #include <linux/mempool.h>
 
+struct tgt_device;
+struct tgt_protocol;
+
 struct tgt_session {
 	struct tgt_target *target;
 	struct list_head slist;
@@ -20,12 +23,12 @@ struct tgt_session {
 
 struct tgt_cmnd {
 	struct tgt_session *session;
+	struct tgt_device *device;
+	struct tgt_protocol *proto;
 
 	uint32_t state;
 	uint64_t dev_id;
 	uint64_t cid;
-
-	int rw;
 
 	struct work_struct work;
 	void (*done) (struct tgt_cmnd *);
@@ -38,10 +41,6 @@ struct tgt_cmnd {
 	uint32_t bufflen;
 	uint64_t offset;
 	int result;
-
-	/* TODO: there should be a better way. */
-	uint8_t *error_buff;
-	int error_buff_len;
 
 	/*
 	 * target driver private
@@ -62,9 +61,8 @@ extern int tgt_session_destroy(struct tgt_session *session);
 
 extern int tgt_msg_send(struct tgt_target *target, void *data, int data_len,
 			unsigned int gfp_flags);
-extern struct tgt_cmnd *tgt_cmnd_create(struct tgt_session *session,
-					uint8_t *proto_data,
-					uint8_t *id_buff, int buff_size);
+extern int tgt_uspace_cmnd_send(struct tgt_cmnd *cmnd);
+extern struct tgt_cmnd *tgt_cmnd_create(struct tgt_session *session);
 extern void tgt_cmnd_destroy(struct tgt_cmnd *cmnd);
 extern void tgt_cmnd_alloc_buffer(struct tgt_cmnd *cmnd,
 				  void (*done)(struct tgt_cmnd *));

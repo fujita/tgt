@@ -14,6 +14,7 @@
 #include <linux/slab.h>
 #include <linux/mempool.h>
 #include <linux/netlink.h>
+#include <linux/file.h>
 #include <asm/scatterlist.h>
 #include <net/tcp.h>
 
@@ -427,8 +428,7 @@ tgt_device_find_nolock(struct tgt_target *target, uint64_t dev_id)
 	return NULL;
 }
 
-static struct tgt_device *
-tgt_device_find(struct tgt_target *target, uint64_t dev_id)
+struct tgt_device *tgt_device_find(struct tgt_target *target, uint64_t dev_id)
 {
 	static struct tgt_device *device;
 	unsigned long flags;
@@ -439,6 +439,7 @@ tgt_device_find(struct tgt_target *target, uint64_t dev_id)
 
 	return device;
 }
+EXPORT_SYMBOL_GPL(tgt_device_find);
 
 static int tgt_device_create(int tid, uint64_t dev_id, char *device_type,
 			     int fd, unsigned long dflags)
@@ -463,14 +464,19 @@ static int tgt_device_create(int tid, uint64_t dev_id, char *device_type,
 	device->target = target;
 	device->fd = fd;
 
-	device->dt = device_template_get(device_type);
-	if (!device->dt) {
-		eprintk("Could not get devive type %s\n", device_type);
+	device->file = fget(fd);
+	if (!device->file) {
+		eprintk("Could not get fd %d\n", fd);
 		goto free_device;
 	}
 
-	device->dt_data = kmalloc(device->dt->priv_data_size,
-				  GFP_KERNEL);
+	device->dt = device_template_get(device_type);
+	if (!device->dt) {
+		eprintk("Could not get devive type %s\n", device_type);
+		goto put_fd;
+	}
+
+	device->dt_data = kmalloc(device->dt->priv_data_size, GFP_KERNEL);
 	if (!device->dt_data)
 		goto put_template;
 
@@ -494,6 +500,8 @@ free_priv_dt_data:
 	kfree(device->dt_data);
 put_template:
 	device_template_put(device->dt);
+put_fd:
+	fput(device->file);
 free_device:
 	kfree(device);
 	return -EINVAL;
@@ -519,17 +527,15 @@ static int tgt_device_destroy(int tid, uint64_t dev_id)
 	if (device->dt->destroy)
 		device->dt->destroy(device);
 
+	fput(device->file);
 	device_template_put(device->dt);
 	tgt_sysfs_unregister_device(device);
 
 	return 0;
 }
 
-struct tgt_cmnd *tgt_cmnd_create(struct tgt_session *session,
-				 uint8_t *proto_data,
-				 uint8_t *id_buff, int buff_size)
+struct tgt_cmnd *tgt_cmnd_create(struct tgt_session *session)
 {
-	struct tgt_protocol *proto = session->target->proto;
 	struct tgt_cmnd *cmnd;
 	unsigned long flags;
 
@@ -546,8 +552,6 @@ struct tgt_cmnd *tgt_cmnd_create(struct tgt_session *session,
 	INIT_LIST_HEAD(&cmnd->hash_list);
 
 	dprintk("%p %llu\n", session, cmnd->cid);
-
-	proto->init_cmnd(cmnd, proto_data, id_buff, buff_size);
 
 	spin_lock_irqsave(&cmnd_hash_lock, flags);
 	list_add_tail(&cmnd->hash_list, &cmnd_hash[cmnd_hashfn(cmnd->cid)]);
@@ -620,11 +624,7 @@ static void tgt_alloc_buffer(void *data)
 
 void tgt_cmnd_alloc_buffer(struct tgt_cmnd *cmnd, void (*done)(struct tgt_cmnd *))
 {
-	struct tgt_protocol *proto = cmnd->session->target->proto;
-
 	BUG_ON(!list_empty(&cmnd->clist));
-
-	proto->init_cmnd_buffer(cmnd);
 
 	if (done) {
 		struct tgt_session *session = cmnd->session;
@@ -639,7 +639,7 @@ void tgt_cmnd_alloc_buffer(struct tgt_cmnd *cmnd, void (*done)(struct tgt_cmnd *
 }
 EXPORT_SYMBOL_GPL(tgt_cmnd_alloc_buffer);
 
-static int uspace_cmnd_send(struct tgt_cmnd *cmnd)
+int tgt_uspace_cmnd_send(struct tgt_cmnd *cmnd)
 {
 	struct tgt_protocol *proto = cmnd->session->target->proto;
 	struct sk_buff *skb;
@@ -668,15 +668,11 @@ static int uspace_cmnd_send(struct tgt_cmnd *cmnd)
 
 	return netlink_unicast(nls, skb, tgt_pid, 0);
 }
+EXPORT_SYMBOL_GPL(tgt_uspace_cmnd_send);
 
-static void cmnd_done(struct tgt_cmnd *cmnd, int result)
+static void cmnd_done(struct tgt_cmnd *cmnd)
 {
-	struct tgt_target *target = cmnd->session->target;
-	struct tgt_protocol *proto = target->proto;
 	void (*done)(struct tgt_cmnd *);
-
-	proto->cmnd_done(cmnd, result);
-	cmnd->result = result;
 
 	done = cmnd->done;
 	cmnd->done = NULL;
@@ -686,6 +682,7 @@ static void cmnd_done(struct tgt_cmnd *cmnd, int result)
 static void uspace_cmnd_done(struct tgt_cmnd *cmnd, void *data,
 			     int result, uint32_t len)
 {
+	struct tgt_device *device = cmnd->device;
 	char *p = data;
 	int i;
 	BUG_ON(!cmnd->done);
@@ -707,7 +704,10 @@ static void uspace_cmnd_done(struct tgt_cmnd *cmnd, void *data,
 		}
 	}
 
-	cmnd_done(cmnd, result);
+	cmnd->result = result;
+	if (device->dt->complete_uspace_cmnd)
+		device->dt->complete_uspace_cmnd(cmnd);
+	cmnd_done(cmnd);
 }
 
 static void queuecommand(void *data)
@@ -715,34 +715,28 @@ static void queuecommand(void *data)
 	int err = 0;
 	struct tgt_cmnd *cmnd = data;
 	struct tgt_target *target = cmnd->session->target;
-	struct tgt_device *device;
+	struct tgt_device *device = cmnd->device;
 
-	dprintk("cid %llu rw %d\n", cmnd->cid, cmnd->rw);
+	dprintk("cid %llu\n", cmnd->cid);
 
 	/* Should we do this earlier? */
-	device = tgt_device_find(target, cmnd->dev_id);
+	if (!device)
+		cmnd->device = device = tgt_device_find(target, cmnd->dev_id);
 	if (device)
 		dprintk("found %llu\n", cmnd->dev_id);
 
-	if (cmnd->rw == READ || cmnd->rw == WRITE)
-		err = device->dt->queue_cmnd(device, cmnd);
-	else {
-		/*
-		 * TODO: if we fail to get the command to userspace there
-		 * will be no setup sense buffer below so we need to add
-		 * something.
-		 */
-		err = uspace_cmnd_send(cmnd);
-		if (err >= 0)
-			/* sent to userspace */
-			return;
-	}
+	err = device->dt->queue_cmnd(cmnd);
 
-	/* kspace command failure or failed to send commands to space. */
-	if (unlikely(err))
-		eprintk("failed cmnd %llu %d %d\n", cmnd->cid, err, cmnd->rw);
-
-	cmnd_done(cmnd, err);
+	switch (err) {
+	case TGT_CMND_FAILED:
+	case TGT_CMND_COMPLETED:
+		dprintk("command completed %d\n", err);
+		if (device->dt->complete_kern_cmnd)
+			device->dt->complete_kern_cmnd(cmnd);
+		cmnd_done(cmnd);
+	default:
+		dprintk("command %llu queued\n", cmnd->cid);
+	};
 }
 
 int tgt_cmnd_queue(struct tgt_cmnd *cmnd, void (*done)(struct tgt_cmnd *))

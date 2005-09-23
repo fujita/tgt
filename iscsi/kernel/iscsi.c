@@ -12,6 +12,8 @@
 
 #include <tgt.h>
 #include <tgt_target.h>
+#include <tgt_scsi.h>
+#include <tgt_protocol.h>
 
 #include <iscsi.h>
 #include <iscsi_dbg.h>
@@ -261,6 +263,7 @@ static struct iscsi_cmnd *do_create_sense_rsp(struct iscsi_cmnd *req)
 	struct iscsi_cmnd *rsp;
 	struct iscsi_cmd_rsp *rsp_hdr;
 	struct iscsi_sense_data *sense;
+	struct scsi_tgt_cmnd *stc;
 	struct scatterlist *sg = &req->sense_sg;
 
 	rsp = iscsi_cmnd_create_rsp_cmnd(req, 1);
@@ -272,13 +275,17 @@ static struct iscsi_cmnd *do_create_sense_rsp(struct iscsi_cmnd *req)
 	rsp_hdr->cmd_status = SAM_STAT_CHECK_CONDITION;
 	rsp_hdr->itt = cmnd_hdr(req)->itt;
 
-	sense = (struct iscsi_sense_data *) req->tc->error_buff;
-	memmove(sense->data, sense, req->tc->error_buff_len);
-	sense->length = cpu_to_be16(req->tc->error_buff_len);
+	stc = tgt_cmnd_to_scsi(req->tc);
+	sense = (struct iscsi_sense_data *) stc->sense_buff;
+	memmove(sense->data, sense, stc->sense_len);
+	/*
+	 * this looks broken for ppc
+	 */
+	sense->length = cpu_to_be16(stc->sense_len);
 
-	sg->page = virt_to_page(req->tc->error_buff);
-	sg->offset = offset_in_page(req->tc->error_buff);
-	sg->length = req->tc->error_buff_len + sizeof(struct iscsi_sense_data);
+	sg->page = virt_to_page(stc->sense_buff);
+	sg->offset = offset_in_page(stc->sense_buff);
+	sg->length = stc->sense_len + sizeof(struct iscsi_sense_data);
 	rsp->pdu.datasize = sg->length;
 	rsp->sg = sg;
 
@@ -288,6 +295,7 @@ static struct iscsi_cmnd *do_create_sense_rsp(struct iscsi_cmnd *req)
 static struct iscsi_cmnd *create_sense_rsp(struct iscsi_cmnd *req,
 					   u8 sense_key, u8 asc, u8 ascq)
 {
+	struct scsi_tgt_cmnd *stc;
 	struct iscsi_cmnd *rsp;
 	struct iscsi_cmd_rsp *rsp_hdr;
 	struct iscsi_sense_data *sense;
@@ -302,11 +310,12 @@ static struct iscsi_cmnd *create_sense_rsp(struct iscsi_cmnd *req,
 	rsp_hdr->cmd_status = SAM_STAT_CHECK_CONDITION;
 	rsp_hdr->itt = cmnd_hdr(req)->itt;
 
-	sg->page = virt_to_page(req->tc->error_buff);
-	sg->offset = offset_in_page(req->tc->error_buff);
-	sg->length = req->tc->error_buff_len;
+	stc = tgt_cmnd_to_scsi(req->tc);
+	sg->page = virt_to_page(stc->sense_buff);
+	sg->offset = offset_in_page(stc->sense_buff);
+	sg->length = stc->sense_len;
 
-	sense = (struct iscsi_sense_data *) req->tc->error_buff;
+	sense = (struct iscsi_sense_data *) stc->sense_buff;
 	sense->length = cpu_to_be16(14);
 	sense->data[0] = 0xf0;
 	sense->data[2] = sense_key;
@@ -746,9 +755,12 @@ static void scsi_cmnd_exec(struct iscsi_cmnd *cmnd)
 		if (!cmnd->is_unsolicited_data)
 			send_r2t(cmnd);
 	} else {
+		struct tgt_protocol *proto = cmnd->tc->session->target->proto;
+ 
 		set_cmnd_waitio(cmnd);
 		cmnd->tc->private = cmnd;
-		tgt_cmnd_queue(cmnd->tc, scsi_cmnd_done);
+
+		proto->queue_cmnd(cmnd->tc, scsi_cmnd_done);
 	}
 }
 
@@ -829,15 +841,15 @@ static u32 get_next_ttt(struct iscsi_session *session)
 
 static void scsi_cmnd_start(struct iscsi_conn *conn, struct iscsi_cmnd *req)
 {
+	struct tgt_protocol *proto = conn->session->ts->target->proto;
 	struct iscsi_cmd *req_hdr = cmnd_hdr(req);
 
 	dprintk(D_GENERIC, "scsi command: %02x\n", req_hdr->cdb[0]);
 
 	eprintk("scsi command: %02x\n", req_hdr->cdb[0]);
 
-	req->tc = tgt_cmnd_create(conn->session->ts, req_hdr->cdb,
-				   req_hdr->lun,
-				   sizeof(req_hdr->lun));
+	req->tc = proto->create_cmnd(conn->session->ts, req_hdr->cdb,
+				     req_hdr->lun, sizeof(req_hdr->lun));
 	assert(req->tc);
 
 	switch (req_hdr->cdb[0]) {
@@ -881,8 +893,7 @@ static void scsi_cmnd_start(struct iscsi_conn *conn, struct iscsi_cmnd *req)
 			cmnd_skip_data(req);
 		}
 
-		tgt_cmnd_alloc_buffer(req->tc, NULL);
-
+		proto->alloc_cmnd_buffer(req->tc, NULL);
 		break;
 	}
 	case WRITE_6:
@@ -907,7 +918,7 @@ static void scsi_cmnd_start(struct iscsi_conn *conn, struct iscsi_cmnd *req)
 		if (req_hdr->cdb[0] == WRITE_VERIFY && req_hdr->cdb[1] & 0x02)
 			eprintk("Verification is ignored %x\n", cmnd_itt(req));
 
-		tgt_cmnd_alloc_buffer(req->tc, NULL);
+		proto->alloc_cmnd_buffer(req->tc, NULL);
 
 		if (req->pdu.datasize) {
 			if (cmnd_recv_pdu(conn, req->tc, 0, req->pdu.datasize) < 0)

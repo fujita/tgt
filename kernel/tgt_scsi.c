@@ -13,15 +13,11 @@
 #include <scsi/scsi_cmnd.h>
 
 #include <tgt.h>
+#include <tgt_scsi.h>
+#include <tgt_device.h>
 #include <tgt_protocol.h>
 
 static kmem_cache_t *scsi_tgt_cmnd_cache;
-
-struct scsi_tgt_cmnd {
-	uint8_t scb[MAX_COMMAND_SIZE];
-	uint8_t sense_buff[SCSI_SENSE_BUFFERSIZE];
-	int tags;
-};
 
 /*
  * we should be able to use scsi-ml's functions for this
@@ -46,142 +42,80 @@ static uint64_t scsi_tgt_translate_lun(uint8_t *p, int size)
 	return lun;
 }
 
-static void scsi_tgt_init_cmnd_buffer(struct tgt_cmnd *cmnd)
+/*
+ * we may have to add a wrapper becuase people are passing the lun in
+ * differently
+ */
+static struct tgt_cmnd *
+scsi_tgt_create_cmnd(struct tgt_session *session, uint8_t *scb, uint8_t *lun,
+		     int lun_size)
 {
-	struct scsi_tgt_cmnd *scmnd = (struct scsi_tgt_cmnd *)cmnd->proto_priv;
-	uint8_t *scb = scmnd->scb;
-	uint64_t off = 0;
-	uint32_t len = 0;
+	struct tgt_device *device;
+	struct tgt_cmnd *cmnd;
+	struct scsi_tgt_cmnd *scmnd;
 
-	/*
-	 * set bufflen and offset
-	 */
-	switch (scb[0]) {
-	case READ_6:
-	case WRITE_6:
-		off = ((scb[1] & 0x1f) << 16) + (scb[2] << 8) + scb[3];
-		len = scb[4];
-		if (!len)
-			len = 256;
-		break;
-	case READ_10:
-	case WRITE_10:
-	case WRITE_VERIFY:
-		off = be32_to_cpu(*(u32 *) &scb[2]);
-		len = (scb[7] << 8) + scb[8];
-		break;
-	case READ_16:
-	case WRITE_16:
-		off = be64_to_cpu(*(u64 *)&scb[2]);
-		len = be32_to_cpu(*(u32 *)&scb[10]);
-		break;
-	default:
-		break;
+	cmnd = tgt_cmnd_create(session);
+	if (!cmnd) {
+		printk(KERN_ERR "Could not allocate command\n");
+		return NULL;
 	}
-
-	off <<= 9;
-	len <<= 9;
-
-	cmnd->bufflen = len;
-	cmnd->offset = off;
-}
-
-static void scsi_tgt_init_cmnd(struct tgt_cmnd *cmnd, uint8_t *proto_data,
-			       uint8_t *id_buff, int buff_size)
-{
-	struct scsi_tgt_cmnd *scmnd = (struct scsi_tgt_cmnd *)cmnd->proto_priv;
-	uint8_t *scb = scmnd->scb;
-
-	memcpy(scb, proto_data, sizeof(scmnd->scb));
-
-	/* set operation */
-	switch (scb[0]) {
-	case READ_6:
-	case READ_10:
-	case READ_16:
-		cmnd->rw = READ;
-		break;
-	case WRITE_6:
-	case WRITE_10:
-	case WRITE_16:
-	case WRITE_VERIFY:
-		cmnd->rw = WRITE;
-		break;
-	default:
-		cmnd->rw = SPECIAL;
-	};
+	scmnd = tgt_cmnd_to_scsi(cmnd);
+	memcpy(scmnd->scb, scb, sizeof(scmnd->scb));
 
 	/* translate target driver LUN to device id */
-	cmnd->dev_id = scsi_tgt_translate_lun(id_buff, buff_size);
-}
-
-/*
- * TODO: better error handling
- * We should get ASC and ASCQ from the device code.
- */
-static uint8_t error_to_sense_key(int err)
-{
-	uint8_t key;
-
-	switch (err) {
-	case -ENOMEM:
-		key = ABORTED_COMMAND;
-		break;
-	case -EOVERFLOW:
-		key = HARDWARE_ERROR;
-		break;
-	default:
-		key = HARDWARE_ERROR;
-		break;
+	cmnd->dev_id = scsi_tgt_translate_lun(lun, lun_size);
+	device = tgt_device_find(session->target, cmnd->dev_id);
+	if (!device) {
+		printk(KERN_ERR "Could not find device if %llu\n",
+		       cmnd->dev_id);
+		return NULL;
 	}
+	cmnd->device = device;
 
-	return key;
+	/* do scsi device specific setup */
+	device->dt->prep_cmnd(cmnd);
+	return cmnd;
 }
 
-static int sense_data_build(struct tgt_cmnd *cmnd, int err)
+/* kspace command failure */
+int scsi_tgt_sense_data_build(struct tgt_cmnd *cmnd, uint8_t key,
+			      uint8_t ascode, uint8_t ascodeq)
 {
-	struct scsi_tgt_cmnd *scmnd = (struct scsi_tgt_cmnd *)cmnd->proto_priv;
+	struct scsi_tgt_cmnd *scmnd = tgt_cmnd_to_scsi(cmnd);
 	int len = 8, alen = 6;
 	uint8_t *data = scmnd->sense_buff;
 
 	memset(data, 0, sizeof(scmnd->sense_buff));
 
-	if (cmnd->rw == READ || cmnd->rw == WRITE) {
-		uint8_t key = error_to_sense_key(err);
-		/* kspace command failure */
-
-		data[0] = 0x70 | 1U << 7;
-		data[2] = key;
-		data[7] = alen;
-		/*
-		 * TODO
-		 */
-		data[12] = 0;
-		data[13] = 0;
-		cmnd->result = SAM_STAT_CHECK_CONDITION;
-	} else {
-		/* uspace command failure */
-
-		len = min(cmnd->bufflen, sizeof(scmnd->sense_buff));
-		alen = 0;
-
-		memcpy(data, page_address(cmnd->sg[0].page), len);
-		cmnd->result = err;
-	}
-
-	cmnd->error_buff = data;
-	cmnd->error_buff_len = len + alen;
+	data[0] = 0x70 | 1U << 7;
+	data[2] = key;
+	data[7] = alen;
+	data[12] = ascode;
+	data[13] = ascodeq;
+	cmnd->result = SAM_STAT_CHECK_CONDITION;
+	scmnd->sense_len = len + alen;
 
 	return len + alen;
 }
+EXPORT_SYMBOL_GPL(scsi_tgt_sense_data_build);
 
-static void scsi_tgt_cmnd_done(struct tgt_cmnd *cmnd, int err)
+/* uspace command failure */
+int scsi_tgt_sense_copy(struct tgt_cmnd *cmnd)
 {
-	if (err != 0)
-		sense_data_build(cmnd, err);
-	else
-		cmnd->result = SAM_STAT_GOOD;
+	struct scsi_tgt_cmnd *scmnd = tgt_cmnd_to_scsi(cmnd);
+	uint8_t *data = scmnd->sense_buff;
+	int len;
+
+	memset(data, 0, sizeof(scmnd->sense_buff));
+	len = min(cmnd->bufflen, sizeof(scmnd->sense_buff));
+
+	/* userspace did everything for us */
+	memcpy(data, page_address(cmnd->sg[0].page), len);
+	scmnd->sense_len = len;
+
+	return len;
 }
+EXPORT_SYMBOL_GPL(scsi_tgt_sense_copy);
 
 void scsi_tgt_build_uspace_pdu(struct tgt_cmnd *cmnd, void *data)
 {
@@ -192,9 +126,10 @@ void scsi_tgt_build_uspace_pdu(struct tgt_cmnd *cmnd, void *data)
 static struct tgt_protocol scsi_tgt_proto = {
 	.name = "scsi",
 	.module = THIS_MODULE,
-	.init_cmnd = scsi_tgt_init_cmnd,
-	.init_cmnd_buffer = scsi_tgt_init_cmnd_buffer,
-	.cmnd_done = scsi_tgt_cmnd_done,
+	.create_cmnd = scsi_tgt_create_cmnd,
+	.destroy_cmnd = tgt_cmnd_destroy,
+	.alloc_cmnd_buffer = tgt_cmnd_alloc_buffer,
+	.queue_cmnd = tgt_cmnd_queue,
 	.build_uspace_pdu = scsi_tgt_build_uspace_pdu,
 	.uspace_pdu_size = MAX_COMMAND_SIZE,
 };
