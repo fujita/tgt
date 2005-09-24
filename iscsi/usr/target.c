@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 
 #include "iscsid.h"
+#include "tgtadm.h"
 
 static struct qelem targets_list = LIST_HEAD_INIT(targets_list);
 
@@ -23,8 +24,8 @@ void target_list_build(struct connection *conn, char *addr, char *name)
 	list_for_each_entry(target, &targets_list, tlist) {
 		if (name && strcmp(target->name, name))
 			continue;
-		if (cops->initiator_access(target->tid, conn->fd) < 0)
-			continue;
+/* 		if (cops->initiator_access(target->tid, conn->fd) < 0) */
+/* 			continue; */
 
 		text_key_add(conn, "TargetName", target->name);
 		text_key_add(conn, "TargetAddress", addr);
@@ -59,16 +60,15 @@ struct target* target_find_by_id(u32 tid)
 
 static void all_accounts_del(u32 tid, int dir)
 {
-	char name[ISCSI_NAME_LEN], pass[ISCSI_NAME_LEN];
+/* 	char name[ISCSI_NAME_LEN], pass[ISCSI_NAME_LEN]; */
 
-	for (memset(name, 0, sizeof(name));
-	     cops->account_query(tid, dir, name, pass) != -ENOENT;) {
-		cops->account_del(tid, dir, name);
-	}
-
+/* 	for (memset(name, 0, sizeof(name)); */
+/* 	     cops->account_query(tid, dir, name, pass) != -ENOENT;) { */
+/* 		cops->account_del(tid, dir, name); */
+/* 	} */
 }
 
-int target_del(u32 tid)
+int target_del(int tid)
 {
 	int err;
 	struct target* target;
@@ -97,7 +97,7 @@ int target_del(u32 tid)
 	return 0;
 }
 
-int target_add(u32 *tid, char *name)
+int target_add(int *tid, char *name)
 {
 	struct target *target;
 	int err;

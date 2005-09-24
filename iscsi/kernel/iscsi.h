@@ -235,6 +235,7 @@ extern int iet_msg_recv(struct tgt_target *, uint32_t, void *);
 extern int iet_procfs_init(void);
 extern void iet_procfs_exit(void);
 extern int iet_info_show(struct seq_file *, iet_show_info_t *);
+extern int event_send(struct tgt_target *tgt, u32 tid, u64 sid, u32 cid, u32 state);
 
 /* session.c */
 extern struct file_operations session_seq_fops;
@@ -244,18 +245,6 @@ extern int session_del(struct iscsi_target *, u64);
 
 /* params.c */
 extern int iscsi_param_set(struct iscsi_target *, struct iscsi_param_info *, int);
-
-/* extern int tio_init(void); */
-/* extern void tio_exit(void); */
-/* extern struct tio *tio_alloc(int); */
-/* extern void tio_get(struct tio *); */
-/* extern void tio_put(struct tio *); */
-/* extern void tio_set(struct tio *, u32, loff_t); */
-
-/* event.c */
-extern int event_send(u32, u64, u32, u32, int);
-extern int event_init(void);
-extern void event_exit(void);
 
 #define get_pgcnt(size, offset)	((((size) + ((offset) & ~PAGE_CACHE_MASK)) + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT)
 

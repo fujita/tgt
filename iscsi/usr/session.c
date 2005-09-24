@@ -42,7 +42,7 @@ struct session *session_find_name(u32 tid, const char *iname, uint8_t *isid)
 	if (!(target = target_find_by_id(tid)))
 		return NULL;
 
-	log_debug(1, "session_find_name: %s %x %x %x %x %x %x", iname,
+	log_debug("session_find_name: %s %x %x %x %x %x %x", iname,
 		  isid[0], isid[1], isid[2], isid[3], isid[4], isid[5]);
 	list_for_each_entry(session, &target->sessions_list, slist) {
 		if (!memcmp(isid, session->isid, sizeof(session->isid)) &&
@@ -61,7 +61,7 @@ struct session *session_find_id(u32 tid, u64 sid)
 	if (!(target = target_find_by_id(tid)))
 		return NULL;
 
-	log_debug(1, "session_find_id: %#" PRIx64, sid);
+	log_debug("session_find_id: %#" PRIx64, sid);
 	list_for_each_entry(session, &target->sessions_list, slist) {
 		if (sid64(session->isid, session->tsih) == sid)
 			return session;
@@ -145,7 +145,7 @@ void session_create(struct connection *conn)
 	conn->session = session;
 	conn->session->initiator = strdup(conn->initiator);
 
-	log_debug(1, "session_create: %#" PRIx64, sid);
+	log_debug("session_create: %#" PRIx64, sid);
 
 	ki->session_create(conn->tid, sid, conn->exp_cmd_sn,
 			   conn->max_cmd_sn, session->initiator);
@@ -156,7 +156,7 @@ void session_remove(struct session *session)
 {
 	uint64_t sid = sid64(session->isid, session->tsih);
 
-	log_debug(1, "session_remove: %#"  PRIx64, sid);
+	eprintf("session_remove: %#"  PRIx64, sid);
 
 	if (!session->tsih)
 		ki->session_destroy(session->target->tid, sid);

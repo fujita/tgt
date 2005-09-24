@@ -118,7 +118,8 @@ static int account_empty(u32 tid, int dir)
 	char pass[ISCSI_NAME_LEN];
 
 	memset(pass, 0, sizeof(pass));
-	return cops->account_query(tid, dir, pass, pass) < 0 ? 1 : 0;
+/* 	return cops->account_query(tid, dir, pass, pass) < 0 ? 1 : 0; */
+	return 1;
 }
 
 static void text_scan_security(struct connection *conn)
@@ -180,7 +181,7 @@ static void login_security_done(struct connection *conn)
 		if (!req->tsih) {
 			uint64_t sid = sid64(session->isid, session->tsih);
 			/* do session reinstatement */
-			session_conns_close(conn->tid, sid);
+/* 			session_conns_close(conn->tid, sid); */
 			session = NULL;
 		} else if (req->tsih != session->tsih) {
 			/* fail the login */
@@ -356,8 +357,9 @@ static void login_start(struct connection *conn)
 			return;
 		}
 
-		if (target_find_by_name(target_name, &conn->tid) < 0 ||
-		    cops->initiator_access(conn->tid, conn->fd) < 0) {
+/* 		if (target_find_by_name(target_name, &conn->tid) < 0 || */
+/* 		    cops->initiator_access(conn->tid, conn->fd) < 0) { */
+		if (target_find_by_name(target_name, &conn->tid) < 0) {
 			rsp->status_class = ISCSI_STATUS_CLS_INITIATOR_ERR;
 			rsp->status_detail = ISCSI_LOGIN_STATUS_TGT_NOT_FOUND;
 			conn->state = STATE_EXIT;
@@ -375,7 +377,7 @@ static void login_start(struct connection *conn)
 
 		ki->param_get(conn->tid, 0, conn->session_param);
 		conn->exp_cmd_sn = be32_to_cpu(req->cmdsn);
-		log_debug(1, "exp_cmd_sn: %d,%d", conn->exp_cmd_sn, req->cmdsn);
+		log_debug("exp_cmd_sn: %d,%d", conn->exp_cmd_sn, req->cmdsn);
 		conn->max_cmd_sn = conn->exp_cmd_sn;
 	}
 	text_key_add(conn, "TargetPortalGroupTag", "1");
@@ -443,7 +445,7 @@ static void cmnd_exec_login(struct connection *conn)
 
 	switch (ISCSI_LOGIN_CURRENT_STAGE(req->flags)) {
 	case ISCSI_SECURITY_NEGOTIATION_STAGE:
-		log_debug(1, "Login request (security negotiation): %d", conn->state);
+		log_debug("Login request (security negotiation): %d", conn->state);
 		rsp->flags = ISCSI_SECURITY_NEGOTIATION_STAGE << 2;
 
 		switch (conn->state) {
@@ -479,7 +481,7 @@ static void cmnd_exec_login(struct connection *conn)
 
 		break;
 	case ISCSI_OP_PARMS_NEGOTIATION_STAGE:
-		log_debug(1, "Login request (operational negotiation): %d", conn->state);
+		log_debug("Login request (operational negotiation): %d", conn->state);
 		rsp->flags = ISCSI_OP_PARMS_NEGOTIATION_STAGE << 2;
 
 		switch (conn->state) {
@@ -640,7 +642,7 @@ static void cmnd_exec_text(struct connection *conn)
 	if (!(req->opcode & ISCSI_OP_IMMEDIATE))
 		conn->exp_cmd_sn++;
 
-	log_debug(1, "Text request: %d", conn->state);
+	log_debug("Text request: %d", conn->state);
 	text_scan_text(conn);
 
 	if (req->flags & ISCSI_FLAG_CMD_FINAL)

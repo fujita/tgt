@@ -136,3 +136,15 @@ done:
 	tgt_msg_send(tgt, msg, sizeof(*msg), GFP_KERNEL);
 	return err;
 }
+
+int event_send(struct tgt_target *tgt, u32 tid, u64 sid, u32 cid, u32 state)
+{
+	struct iet_msg msg;
+
+	msg.k.conn_state_change.tid = tid;
+	msg.k.conn_state_change.sid = sid;
+	msg.k.conn_state_change.cid = cid;
+	msg.k.conn_state_change.state = state;
+
+	return tgt_msg_send(tgt, &msg, sizeof(msg), GFP_ATOMIC);
+}

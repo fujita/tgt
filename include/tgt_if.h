@@ -7,8 +7,6 @@
 #ifndef TARGET_FRAMEWORK_IF_H
 #define TARGET_FRAMEWORK_IF_H
 
-#define TGT_IPC_NAMESPACE "TGT_IPC_ABSTRACT_NAMESPACE"
-
 enum tgt_event_type {
 	/* user -> kernel */
 	TGT_UEVENT_START,

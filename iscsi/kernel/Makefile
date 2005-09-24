@@ -12,7 +12,7 @@ EXTRA_CFLAGS += -I$(obj) -I$(obj)/../include -I$(obj)/../../kernel
 ifneq ($(KERNELRELEASE),)
 obj-m		+= iscsi_trgt.o
 iscsi_trgt-objs	:= iscsi.o nthread.o config.o digest.o\
-			conn.o session.o target.o event.o param.o
+			conn.o session.o target.o param.o
 else
 
 ifeq ($(KERNELSRC),)

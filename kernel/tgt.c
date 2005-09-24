@@ -48,11 +48,7 @@ static LIST_HEAD(target_tmpl_list);
 static spinlock_t device_tmpl_lock;
 static LIST_HEAD(device_tmpl_list);
 
-/*
- * when we merge the daemons we will not need both of these
- * this is just a tmp hack
- */
-static int tgt_pid, daemon_pid;
+static int tgtd_pid;
 static struct sock *nls;
 
 /* TODO: lock per session */
@@ -161,7 +157,7 @@ struct tgt_target *tgt_target_create(char *target_type, int queued_cmds)
 	struct tgt_target *target;
 	struct target_type_internal *ti;
 
-	if (!tgt_pid) {
+	if (!tgtd_pid) {
 		eprintk("%s\n", "Run the user-space daemon first!");
 		return NULL;
 	}
@@ -666,7 +662,7 @@ int tgt_uspace_cmd_send(struct tgt_cmd *cmd)
 		return -ENOMEM;
 
 	dprintk("%d %Zd %d\n", len, sizeof(*ev), proto_pdu_size);
-	nlh = __nlmsg_put(skb, tgt_pid, 0, TGT_KEVENT_CMD_REQ,
+	nlh = __nlmsg_put(skb, tgtd_pid, 0, TGT_KEVENT_CMD_REQ,
 			  len - sizeof(*nlh), 0);
 	ev = NLMSG_DATA(nlh);
 	memset(ev, 0, sizeof(*ev));
@@ -678,7 +674,7 @@ int tgt_uspace_cmd_send(struct tgt_cmd *cmd)
 
 	proto->build_uspace_pdu(cmd, pdu);
 
-	return netlink_unicast(nls, skb, tgt_pid, 0);
+	return netlink_unicast(nls, skb, tgtd_pid, 0);
 }
 EXPORT_SYMBOL_GPL(tgt_uspace_cmd_send);
 
@@ -830,7 +826,7 @@ int tgt_msg_send(struct tgt_target *target, void *data, int data_len,
 		return -ENOMEM;
 
 	dprintk("%d %Zd %d\n", len, sizeof(*ev), data_len);
-	nlh = __nlmsg_put(skb, daemon_pid, 0, TGT_KEVENT_TARGET_PASSTHRU,
+	nlh = __nlmsg_put(skb, tgtd_pid, 0, TGT_KEVENT_TARGET_PASSTHRU,
 			 len - sizeof(*nlh), 0);
 	ev = NLMSG_DATA(nlh);
 	memset(ev, 0, sizeof(*ev));
@@ -839,7 +835,7 @@ int tgt_msg_send(struct tgt_target *target, void *data, int data_len,
 	ev->k.tgt_passthru.tid = target->tid;
 	ev->k.tgt_passthru.len = data_len;
 
-	return netlink_unicast(nls, skb, daemon_pid, 0);
+	return netlink_unicast(nls, skb, tgtd_pid, 0);
 }
 EXPORT_SYMBOL_GPL(tgt_msg_send);
 
@@ -850,18 +846,13 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 	struct tgt_cmd *cmd;
 	struct tgt_target *target;
 
-	dprintk("%d %d %d %d\n", daemon_pid, nlh->nlmsg_type,
+	dprintk("%d %d %d\n", nlh->nlmsg_type,
 		nlh->nlmsg_pid, current->pid);
-
-	/*
-	 * stupid hack until we merge daemons
-	 */
-	daemon_pid = NETLINK_CREDS(skb)->pid;
 
 	switch (nlh->nlmsg_type) {
 	case TGT_UEVENT_START:
-		tgt_pid  = NETLINK_CREDS(skb)->pid;
-		dprintk("start %d\n", tgt_pid);
+		tgtd_pid  = NETLINK_CREDS(skb)->pid;
+		dprintk("start %d\n", tgtd_pid);
 		break;
 	case TGT_UEVENT_TARGET_CREATE:
 		target = tgt_target_create(ev->u.c_target.type,

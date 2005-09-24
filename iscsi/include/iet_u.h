@@ -85,19 +85,6 @@ enum iet_event_state {
 	E_CONN_CLOSE,
 };
 
-struct iet_event {
-	u32 tid;
-	u64 sid;
-	u32 cid;
-	u32 state;
-};
-
-/*
- * TODO: merge iet_msg with iet_event
- *
- * the info msgs/ioctls can be done in sysfs the event
- * could be moved too
- */
 /*
  * msg types
  */

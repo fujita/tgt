@@ -1595,8 +1595,6 @@ static void iscsi_exit(void)
 {
 	iet_procfs_exit();
 
-	event_exit();
-
 	if (iscsi_cmnd_cache)
 		kmem_cache_destroy(iscsi_cmnd_cache);
 
@@ -1610,9 +1608,6 @@ static int iscsi_init(void)
 	printk("iSCSI Enterprise Target Software - version %s\n", IET_VERSION_STRING);
 
 	if ((err = iet_procfs_init()) < 0)
-		goto err;
-
-	if ((err = event_init()) < 0)
 		goto err;
 
 	iscsi_cmnd_cache = kmem_cache_create("iscsi_cmnd", sizeof(struct iscsi_cmnd),

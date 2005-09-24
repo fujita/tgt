@@ -21,6 +21,7 @@
 #include <sys/socket.h>
 #include <asm/types.h>
 #include <linux/netlink.h>
+#include <dlfcn.h>
 
 #include <tgt_if.h>
 #include "tgtd.h"
@@ -30,7 +31,7 @@
 static struct sockaddr_nl src_addr, dest_addr;
 static char *recvbuf, *sendbuf;
 
-static int nl_write(int fd, int type, char *data, int len)
+static int __nl_write(int fd, int type, char *data, int len)
 {
 	struct nlmsghdr *nlh = (struct nlmsghdr *) data;
 	struct iovec iov;
@@ -54,7 +55,7 @@ static int nl_write(int fd, int type, char *data, int len)
 	return sendmsg(fd, &msg, 0);
 }
 
-static int nl_read(int fd, void *data, int size, int flags)
+static int __nl_read(int fd, void *data, int size, int flags)
 {
 	int rc;
 	struct iovec iov;
@@ -74,20 +75,34 @@ static int nl_read(int fd, void *data, int size, int flags)
 	return rc;
 }
 
-int nl_cmd_call(int fd, int type, char *data, int size, int *res)
+int nl_read(int fd)
 {
-	int err;
+	struct nlmsghdr *nlh;
 	struct tgt_event *ev;
-	char nlm_ev[NLMSG_SPACE(sizeof(*ev))];
+	int err;
 
-	err = nl_write(fd, type, data, size);
-	if (err < 0)
+peek_again:
+	err = __nl_read(fd, recvbuf, NLMSG_SPACE(sizeof(*ev)), MSG_PEEK);
+	if (err < 0) {
+		eprintf("%d\n", err);
+		if (errno == EAGAIN || errno == EINTR)
+			goto peek_again;
 		return err;
+	}
 
-	err = nl_read(fd, nlm_ev, sizeof(nlm_ev), 0);
+	nlh = (struct nlmsghdr *) recvbuf;
+	ev = (struct tgt_event *) NLMSG_DATA(nlh);
 
-	ev = (struct tgt_event *) NLMSG_DATA(nlm_ev);
-	*res = ev->k.event_res.err;
+	dprintf("nl_event_handle %d %d\n", nlh->nlmsg_type, nlh->nlmsg_len);
+
+read_again:
+	err = __nl_read(fd, recvbuf, nlh->nlmsg_len, 0);
+	if (err < 0) {
+		eprintf("%d\n", err);
+		if (errno == EAGAIN || errno == EINTR)
+			goto read_again;
+		return err;
+	}
 
 	return err;
 }
@@ -120,8 +135,8 @@ static int cmd_queue(int fd, char *reqbuf, char *resbuf)
 
 	log_error("scsi_cmd_process res %d len %d\n", result, len);
 
-	return nl_write(fd, TGT_UEVENT_CMD_RES, resbuf,
-			NLMSG_SPACE(sizeof(*ev_res) + len));
+	return __nl_write(fd, TGT_UEVENT_CMD_RES, resbuf,
+			  NLMSG_SPACE(sizeof(*ev_res) + len));
 }
 
 void nl_event_handle(int fd)
@@ -129,37 +144,23 @@ void nl_event_handle(int fd)
 	struct nlmsghdr *nlh;
 	struct tgt_event *ev;
 	int err;
+	void (*fn) (char *);
 
-peek_again:
-	err = nl_read(fd, recvbuf, NLMSG_SPACE(sizeof(*ev)), MSG_PEEK);
-	if (err < 0) {
-		eprintf("%d\n", err);
-		if (errno == EAGAIN)
-			return;
-		if (errno == EINTR)
-			goto peek_again;
+	err = nl_read(fd);
+	if (err < 0)
 		return;
-	}
 
 	nlh = (struct nlmsghdr *) recvbuf;
 	ev = (struct tgt_event *) NLMSG_DATA(nlh);
 
-	dprintf("nl_event_handle %d %d\n", nlh->nlmsg_type, nlh->nlmsg_len);
-
-read_again:
-	err = nl_read(fd, recvbuf, nlh->nlmsg_len, 0);
-	if (err < 0) {
-		eprintf("%d\n", err);
-		if (errno == EAGAIN)
-			return;
-		if (errno == EINTR)
-			goto read_again;
-		return;
-	}
-
 	switch (nlh->nlmsg_type) {
 	case TGT_KEVENT_CMD_REQ:
 		cmd_queue(fd, NLMSG_DATA(recvbuf), sendbuf);
+		break;
+	case TGT_KEVENT_TARGET_PASSTHRU:
+		fn = dlsym(dl_handles[0], "async_event");
+		if (fn)
+			fn(NLMSG_DATA(recvbuf));
 		break;
 	default:
 		/* kernel module bug */
@@ -169,15 +170,41 @@ read_again:
 	}
 }
 
+int nl_cmd_call(int fd, int type, char *data, int size, char *rbuf)
+{
+	int err;
+	struct nlmsghdr *nlh;
+
+	err = __nl_write(fd, type, data, size);
+	if (err < 0)
+		return err;
+
+	err = nl_read(fd);
+
+	if (rbuf) {
+		nlh = (struct nlmsghdr *) recvbuf;
+		memcpy(rbuf, nlh, nlh->nlmsg_len);
+	}
+
+	return err;
+}
+
 static void nl_start(int fd)
 {
-	int err, res;
+	int err;
+	struct tgt_event *ev;
+	struct nlmsghdr *nlh;
+	char rbuf[8192];
 	char nlmsg[NLMSG_SPACE(sizeof(struct tgt_event))];
 
-	err = nl_cmd_call(fd, TGT_UEVENT_START, nlmsg, 
-			   NLMSG_SPACE(sizeof(struct tgt_event)), &res);
-	if (err < 0 || res < 0) {
-		eprintf("%d %d\n", err, res);
+	err = nl_cmd_call(fd, TGT_UEVENT_START, nlmsg,
+			  NLMSG_SPACE(sizeof(struct tgt_event)), rbuf);
+
+	nlh = (struct nlmsghdr *) rbuf;
+	ev = (struct tgt_event *) NLMSG_DATA(nlh);
+
+	if (err < 0 || ev->k.event_res.err < 0) {
+		eprintf("%d %d\n", err, ev->k.event_res.err);
 		exit(-1);
 	}
 }

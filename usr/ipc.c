@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <dlfcn.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <sys/socket.h>
@@ -18,43 +19,61 @@
 #include <sys/socket.h>
 #include <linux/netlink.h>
 
-#include <tgt_if.h>
 #include "tgtd.h"
+#include "tgtadm.h"
 
-void ipc_event_handle(int accept_fd)
+static int ipc_accept(int afd)
 {
 	struct sockaddr addr;
-	struct ucred cred;
-	int fd, err, res;
 	socklen_t len;
-	struct tgt_event *ev;
-	char nlm_ev[8192], *data;
-	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
-	struct iovec iov;
-	struct msghdr msg;
-
-	dprintf("%s %d\n", __FUNCTION__, __LINE__);
 
 	len = sizeof(addr);
-	if ((fd = accept(accept_fd, (struct sockaddr *) &addr, &len)) < 0) {
-		if (errno == EINTR)
-			err = -EINTR;
-		else
-			err = -EIO;
+	return accept(afd, (struct sockaddr *) &addr, &len);
+}
 
-		goto out;
-	}
+static int ipc_perm(int fd)
+{
+	struct ucred cred;
+	socklen_t len;
+	int err;
 
 	len = sizeof(cred);
 	err = getsockopt(fd, SOL_SOCKET, SO_PEERCRED, (void *) &cred, &len);
 	if (err < 0)
-		goto send;
+		goto out;
 
 	if (cred.uid || cred.gid) {
 		err = -EPERM;
-		goto send;
+		goto out;
+	}
+out:
+	return err;
+}
+
+void ipc_event_handle(int accept_fd)
+{
+	int fd, err;
+	char sbuf[4096], rbuf[4096];
+	struct nlmsghdr *nlh;
+	struct iovec iov;
+	struct msghdr msg;
+	struct tgtadm_res *res;
+	int (*fn) (char *, char *);
+
+	fd = ipc_accept(accept_fd);
+	if (fd < 0) {
+		eprintf("%d\n", fd);
+		return;
 	}
 
+	err = ipc_perm(fd);
+	if (err < 0)
+		goto fail;
+
+	memset(sbuf, 0, sizeof(sbuf));
+	memset(rbuf, 0, sizeof(rbuf));
+
+	nlh = (struct nlmsghdr *) sbuf;
 	iov.iov_base = nlh;
 	iov.iov_len = NLMSG_ALIGN(sizeof(struct nlmsghdr));
 	memset(&msg, 0, sizeof(msg));
@@ -64,7 +83,7 @@ void ipc_event_handle(int accept_fd)
 	err = recvmsg(fd, &msg, MSG_PEEK);
 	if (err != NLMSG_ALIGN(sizeof(struct nlmsghdr))) {
 		err = -EIO;
-		goto out;
+		goto fail;
 	}
 
 	iov.iov_base = nlh;
@@ -75,28 +94,34 @@ void ipc_event_handle(int accept_fd)
 
 	err = recvmsg(fd, &msg, MSG_DONTWAIT);
 	if (err < 0)
-		goto out;
-	data = NLMSG_DATA(nlh);
+		goto fail;
 
-	err = nl_cmd_call(nl_fd, nlh->nlmsg_type, data,
-			  nlh->nlmsg_len - NLMSG_ALIGN(sizeof(struct nlmsghdr)),
-			  &res);
+	eprintf("%s %d %d %d\n", __FUNCTION__, __LINE__, err, nlh->nlmsg_len);
 
-	dprintf("%s %d %d %d\n", __FUNCTION__, __LINE__, err, res);
+	fn = dlsym(dl_handles[0], "ipc_mgmt");
+	if (!fn) {
+		eprintf("%s\n", dlerror());
+		err = -EINVAL;
+		goto fail;
+	}
+	err = fn((char *) nlh, rbuf);
 
 send:
-	nlh->nlmsg_len = NLMSG_SPACE(sizeof(*ev));
-	nlh->nlmsg_type = TGT_KEVENT_RESPONSE;
-	nlh->nlmsg_flags = 0;
-	nlh->nlmsg_pid = 0;
-	ev = NLMSG_DATA(nlh);
-	ev->k.event_res.err = res;
+	err = write(fd, nlh, nlh->nlmsg_len);
 
-	err = write(fd, nlh, NLMSG_SPACE(sizeof(*ev)));
-
-out:
 	if (fd > 0)
 		close(fd);
+
+	if (err < 0)
+		eprintf("%d\n", err);
+
+	return;
+fail:
+	nlh = (struct nlmsghdr *) rbuf;
+	res = NLMSG_DATA(nlh);
+	res->err = err;
+	nlh->nlmsg_len = NLMSG_LENGTH(0);
+	goto send;
 }
 
 int ipc_open(void)

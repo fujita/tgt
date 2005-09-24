@@ -12,17 +12,16 @@ start_server()
 	insmod ${PWD}/kernel/tgt_scsi.ko
 	insmod ${PWD}/kernel/tgt_vsd.ko
 #	insmod ${PWD}/kernel/tgt_sd.ko
-	${PWD}/usr/tgtd
 
 	modprobe -q crc32c
 	insmod ${PWD}/iscsi/kernel/iscsi_trgt.ko
-	${PWD}/iscsi/usr/ietd
+
+	${PWD}/usr/tgtd
 }
 	
 stop_server()
 {
-	${PWD}/iscsi/usr/ietadm --op delete
-	killall -9 ietd
+	${PWD}/usr/tgtadm --op delete
 	killall -9 tgtd
 
 	rmmod iscsi_trgt

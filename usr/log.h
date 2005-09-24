@@ -71,4 +71,14 @@ extern void log_error(const char *fmt, ...)
 extern void log_debug(const char *fmt, ...)
 	__attribute__ ((format (printf, 1, 2)));
 
+#define eprintf(fmt, args...)						\
+do {									\
+	log_error("%s/%d " fmt, __FUNCTION__, __LINE__, args);	\
+} while (0)
+
+#define dprintf(fmt, args...)						\
+do {									\
+	log_debug("%s/%d " fmt, __FUNCTION__, __LINE__, args);	\
+} while (0)
+
 #endif	/* LOG_H */

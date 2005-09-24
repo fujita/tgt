@@ -1,15 +1,10 @@
-CFLAGS += -O2 -fno-inline -Wall -Wstrict-prototypes -g -I../include -I../../include -DNETLINK_TGT=20
-PROGRAMS = ietd ietadm
-LIBS = -lcrypto
+CFLAGS += -O2 -fno-inline -Wall -fPIC -Wstrict-prototypes -I../include -I../../include -I../../usr
+#LIBS = -lcrypto
+OBJS = istgt.o conn.o param.o iscsid.o session.o target.o chap.o ctldev.o
+SHAREDLIB = istgt.so
 
-all: $(PROGRAMS)
-
-ietd: ietd.o iscsid.o conn.o session.o target.o message.o ctldev.o log.o chap.o event.o param.o plain.o
-
-	$(CC) $^ -o $@ $(LIBS)
-
-ietadm: ietadm.o param.o
-	$(CC) $^ -o $@
+$(SHAREDLIB): $(OBJS)
+	$(CC) -shared -o $@ $(OBJS)
 
 clean:
-	rm -f *.o $(PROGRAMS)
+	rm -f *.o $(PROGRAMS) $(SHAREDLIB)

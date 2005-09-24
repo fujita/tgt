@@ -16,20 +16,26 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <dlfcn.h>
 #include <asm/types.h>
 #include <sys/poll.h>
 #include <sys/signal.h>
 #include <sys/stat.h>
+#include <dirent.h>
 
 #include <tgt_if.h>
 #include "tgtd.h"
 
 int nl_fd, ipc_fd;
 
+#define	MAX_DL_HANDLES	32
+void *dl_handles[MAX_DL_HANDLES];
+
+#define	POLLS_PER_DL	64
+
 enum {
 	POLL_NL,
 	POLL_IPC,
-	POLL_MAX,
 };
 
 static struct option const long_options[] =
@@ -57,6 +63,51 @@ Target framework daemon.\n\
 ");
 	}
 	exit(1);
+}
+
+/* TODO : proper handling of libraries.*/
+
+static int dl_init(void)
+{
+	char path[PATH_MAX];
+
+	getcwd(path, sizeof(path));
+	strcat(path, "/iscsi/usr/istgt.so");
+
+	dl_handles[0] = dlopen(path, RTLD_LAZY);
+	if (!dl_handles[0]) {
+		fprintf(stderr, "%s\n", dlerror());
+		exit(-1);
+	}
+
+	return 1;
+}
+
+static void dl_config_load(int nr)
+{
+	void (* fn)(void);
+
+	fn = dlsym(dl_handles[0], "initial_config_load");
+	if (!fn) {
+		eprintf("fail to dlsym %s\n", dlerror());
+		exit(-1);
+	}
+
+	fn();
+}
+
+static void dl_poll_init(int nr, struct pollfd *poll_array)
+{
+	int i;
+	void (* fn)(struct pollfd *, int);
+
+	fn = dlsym(dl_handles[0], "poll_init");
+	if (!fn) {
+		eprintf("fail to dlsym %s\n", dlerror());
+		exit(-1);
+	}
+
+	fn(poll_array, POLLS_PER_DL);
 }
 
 static void signal_catch(int signo) {
@@ -96,12 +147,13 @@ static void init(int daemon, int debug)
 	}
 }
 
-static void event_loop(struct pollfd *poll_array)
+static void event_loop(int nr_dls, struct pollfd *poll_array)
 {
-	int err;
+	int err, i, poll_max = (nr_dls + 1) * POLLS_PER_DL;
+	void (* fn)(struct pollfd *, int);
 
 	while (1) {
-		if ((err = poll(poll_array, POLL_MAX, -1)) < 0) {
+		if ((err = poll(poll_array, poll_max, -1)) < 0) {
 			if (errno != EINTR) {
 				eprintf("%d %d\n", err, errno);
 				exit(1);
@@ -115,15 +167,27 @@ static void event_loop(struct pollfd *poll_array)
 		if (poll_array[POLL_IPC].revents)
 			ipc_event_handle(ipc_fd);
 
+		for (i = 0; i < nr_dls && dl_handles[i]; i++) {
+			fn = dlsym(dl_handles[i], "poll_event");
+			if (!fn) {
+				eprintf("%s\n", dlerror());
+				continue;
+			}
+			fn(poll_array + ((i + 1) * POLLS_PER_DL), POLLS_PER_DL);
+		}
 	}
 }
 
 int main(int argc, char **argv)
 {
 	int ch, longindex;
-	int is_daemon = 1, is_debug = 1;
+	int nr_dls, is_daemon = 1, is_debug = 1;
 	pid_t pid;
-	struct pollfd poll_array[POLL_MAX + 1];
+	struct pollfd *poll_array;
+
+	nr_dls = dl_init();
+	if (nr_dls < 0)
+		nr_dls = 0;
 
 	while ((ch = getopt_long(argc, argv, "fd:vh", long_options, &longindex)) >= 0) {
 		switch (ch) {
@@ -163,7 +227,9 @@ int main(int argc, char **argv)
 		setsid();
 	}
 
-	memset(poll_array, 0, sizeof(poll_array));
+	poll_array = calloc((nr_dls + 1) * POLLS_PER_DL, sizeof(struct pollfd));
+	if (!poll_array)
+		exit(-ENOMEM);
 
 	nl_fd = nl_open();
 	if (nl_fd < 0)
@@ -178,7 +244,11 @@ int main(int argc, char **argv)
 	poll_array[POLL_IPC].fd = ipc_fd;
 	poll_array[POLL_IPC].events = POLLIN;
 
-	event_loop(poll_array);
+	dl_poll_init(nr_dls, poll_array + POLLS_PER_DL);
+
+	dl_config_load(nr_dls);
+
+	event_loop(nr_dls, poll_array);
 
 	return 0;
 }

@@ -607,7 +607,10 @@ static void close_conn(struct iscsi_conn *conn)
 		assert(0);
 	}
 
-	event_send(session->target->tid, session->sid, conn->cid, E_CONN_CLOSE, 0);
+	eprintk("%d %llu %u\n", session->target->tid, session->sid, conn->cid);
+
+	event_send(session->target->tt, session->target->tid,
+		   session->sid, conn->cid, E_CONN_CLOSE);
 	conn_free(conn);
 
 	if (list_empty(&session->conn_list))

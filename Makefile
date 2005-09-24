@@ -7,10 +7,10 @@ endif
 export KERNELSRC
 
 all:
+	make -C iscsi
+
 	make -C usr
 	make -C kernel
-
-	make -C iscsi
 clean:
 	make -C usr clean
 	make -C kernel clean

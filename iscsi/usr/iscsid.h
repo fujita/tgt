@@ -13,11 +13,9 @@
 #include "types.h"
 #include "iet_u.h"
 #include "param.h"
-#include "config.h"
 #include "misc.h"
+#include "log.h"
 #include <iscsi_proto.h>
-
-#define PROC_SESSION	"/proc/net/iet/session"
 
 #define sid64(isid, tsih)					\
 ({								\
@@ -26,6 +24,8 @@
 	(uint64_t) isid[4] << 32 | (uint64_t) isid[5] << 40 |	\
 	(uint64_t) tsih << 48;					\
 })
+
+#define PROC_SESSION	"/proc/net/iet/session"
 
 struct PDU {
 	struct iscsi_hdr bhs;
@@ -142,8 +142,6 @@ struct target {
 
 	int max_nr_sessions;
 	int nr_sessions;
-
-	struct storage_node *isns_node;
 };
 
 /* chap.c */
@@ -166,19 +164,6 @@ extern void cmnd_finish(struct connection *conn);
 extern char *text_key_find(struct connection *conn, char *searchKey);
 extern void text_key_add(struct connection *conn, char *key, char *value);
 
-/* log.c */
-extern int log_daemon;
-extern int log_level;
-
-extern void log_init(void);
-extern void log_warning(const char *fmt, ...)
-	__attribute__ ((format (printf, 1, 2)));
-extern void log_error(const char *fmt, ...)
-	__attribute__ ((format (printf, 1, 2)));
-extern void log_debug(int level, const char *fmt, ...)
-	__attribute__ ((format (printf, 2, 3)));
-extern void log_pdu(int level, struct PDU *pdu);
-
 /* session.c */
 extern struct session *session_find_name(u32 tid, const char *iname, uint8_t *isid);
 extern struct session *session_find_id(u32 tid, u64 sid);
@@ -186,15 +171,11 @@ extern void session_create(struct connection *conn);
 extern void session_remove(struct session *session);
 
 /* target.c */
-extern int target_add(u32 *, char *);
-extern int target_del(u32);
+extern int target_add(int *tid, char *name);
+extern int target_del(int tid);
 extern int target_find_by_name(const char *name, u32 *tid);
 struct target * target_find_by_id(u32);
 extern void target_list_build(struct connection *, char *, char *);
-
-/* message.c */
-extern int ietadm_request_listen(void);
-extern int ietadm_request_handle(int accept_fd);
 
 /* ctldev.c */
 struct iscsi_kernel_interface {
@@ -202,7 +183,7 @@ struct iscsi_kernel_interface {
 	int (*lunit_destroy) (u32 tid, u32 lun);
 	int (*param_get) (u32, u64, struct iscsi_param *);
 	int (*param_set) (u32, u64, int, u32, struct iscsi_param *);
-	int (*target_create) (u32 *, char *);
+	int (*target_create) (int *, char *);
 	int (*target_destroy) (u32);
 	int (*session_create) (u32, u64, u32, u32, char *);
 	int (*session_destroy) (u32, u64);
@@ -212,15 +193,23 @@ struct iscsi_kernel_interface {
 
 extern struct iscsi_kernel_interface *ki;
 
-/* the following functions should be killed */
-extern int session_conns_close(u32 tid, u64 sid);
-extern int server_stop(void);
-
-/* event.c */
-extern void handle_iscsi_events(int fd);
-extern int nl_open(void);
-
 /* param.c */
 int param_index_by_name(char *name, struct iscsi_key *keys);
+
+/* #define log_error(fmt, args...)						\ */
+/* do {									\ */
+/* } while (0) */
+
+/* #define log_warning(fmt, args...)					\ */
+/* do {									\ */
+/* } while (0) */
+
+/* #define log_debug(fmt, args...)						\ */
+/* do {									\ */
+/* } while (0) */
+
+#define log_pdu(x, y)							\
+do {									\
+} while (0)
 
 #endif	/* ISCSID_H */
