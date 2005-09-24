@@ -42,7 +42,6 @@ static struct iscsi_sess_param default_session_param = {
 };
 
 static struct iscsi_trgt_param default_target_param = {
-	.wthreads = DEFAULT_NR_WTHREADS,
 	.target_type = 0,
 	.queued_cmnds = DEFAULT_NR_QUEUED_CMNDS,
 };

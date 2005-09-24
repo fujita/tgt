@@ -109,7 +109,6 @@ static void trgt_param_check(struct iscsi_param_info *info)
 {
 	u32 *iparam = info->target_param;
 
-	CHECK_PARAM(info, iparam, wthreads, MIN_NR_WTHREADS, MAX_NR_WTHREADS);
 	CHECK_PARAM(info, iparam, queued_cmnds, MIN_NR_QUEUED_CMNDS, MAX_NR_QUEUED_CMNDS);
 }
 

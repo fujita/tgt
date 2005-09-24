@@ -284,7 +284,6 @@ static struct iscsi_key_ops marker_ops = {
 #define	SET_KEY_VALUES(x)	DEFAULT_NR_##x,MIN_NR_##x, MAX_NR_##x
 
 struct iscsi_key target_keys[] = {
-	{"Wthreads", SET_KEY_VALUES(WTHREADS), &minimum_ops},
 	{"Type", 0, 0, 16, &minimum_ops},
 	{"QueuedCommands", SET_KEY_VALUES(QUEUED_CMNDS), &minimum_ops},
 	{NULL,},

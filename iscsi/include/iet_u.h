@@ -59,7 +59,6 @@ enum {
 };
 
 enum {
-	key_wthreads,
 	key_target_type,
 	key_queued_cmnds,
 	target_key_last,
@@ -119,14 +118,8 @@ struct iet_msg {
 	} k;
 } __attribute__ ((aligned (sizeof(uint64_t))));
 
-#define	DEFAULT_NR_WTHREADS	8
-#define	MIN_NR_WTHREADS		1
-#define	MAX_NR_WTHREADS		128
-
 #define	DEFAULT_NR_QUEUED_CMNDS	32
 #define	MIN_NR_QUEUED_CMNDS	1
 #define	MAX_NR_QUEUED_CMNDS	256
-
-#define NETLINK_IET	21
 
 #endif

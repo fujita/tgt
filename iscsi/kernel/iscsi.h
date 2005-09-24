@@ -40,7 +40,6 @@ struct iscsi_sess_param {
 };
 
 struct iscsi_trgt_param {
-	int wthreads;
 	int target_type;
 	int queued_cmnds;
 };
@@ -148,7 +147,6 @@ struct iscsi_conn {
 	struct iovec write_iov[ISCSI_CONN_IOV_MAX];
 	struct iovec *write_iop;
 
-/* 	struct tio *write_tcmnd; */
 	struct scatterlist *write_tcmnd;
 
 	u32 write_size;
@@ -297,6 +295,7 @@ enum cmnd_flags {
 #define clear_cmnd_pending(cmnd)	clear_bit(CMND_pending, &(cmnd)->flags)
 #define cmnd_pending(cmnd)	test_bit(CMND_pending, &(cmnd)->flags)
 
+/* We still use 'IET' id. Maybe someday, we get own id. */
 
 #define VENDOR_ID	"IET"
 #define PRODUCT_ID	"VIRTUAL-DISK"
