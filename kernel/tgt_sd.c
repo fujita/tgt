@@ -83,7 +83,6 @@ static void tgt_sd_end_rq(struct request *rq)
 {
 	struct tgt_cmnd *cmnd = rq->end_io_data;
 	struct scsi_tgt_cmnd *scmnd = tgt_cmnd_to_scsi(cmnd);
-	void (*done)(struct tgt_cmnd *);
 
 	if (rq->sense_len) {
 		memcpy(scmnd->sense_buff, rq->sense, SCSI_SENSE_BUFFERSIZE);
