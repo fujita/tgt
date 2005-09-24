@@ -41,7 +41,7 @@ struct tgt_target {
 
 	struct class_device cdev;
 
-	int queued_cmnds;
+	int queued_cmds;
 
 	/* Protects session_list, work_list, device_list */
 	spinlock_t lock;
@@ -58,7 +58,7 @@ struct tgt_target {
 #define cdev_to_tgt_target(cdev) \
 	container_of(cdev, struct tgt_target, cdev)
 
-extern struct tgt_target *tgt_target_create(char *target_type, int nr_cmnds);
+extern struct tgt_target *tgt_target_create(char *target_type, int nr_cmds);
 extern int tgt_target_destroy(struct tgt_target *target);
 extern int tgt_sysfs_register_target(struct tgt_target *target);
 extern void tgt_sysfs_unregister_target(struct tgt_target *target);

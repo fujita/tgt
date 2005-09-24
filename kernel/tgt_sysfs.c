@@ -35,12 +35,12 @@ show_##field (struct class_device *cdev, char *buf)			\
 	tgt_target_template_show_fn(field, format_string)		\
 static CLASS_DEVICE_ATTR(field, S_IRUGO, show_##field, NULL);
 
-tgt_target_rd_attr(queued_cmnds, "%u\n");
+tgt_target_rd_attr(queued_cmds, "%u\n");
 tgt_target_template_rd_attr(name, "%s\n");
 tgt_target_template_rd_attr(protocol, "%s\n");
 
 static struct class_device_attribute *tgt_target_attrs[] = {
-	&class_device_attr_queued_cmnds,
+	&class_device_attr_queued_cmds,
 	&class_device_attr_name,
 	&class_device_attr_protocol,
 	NULL

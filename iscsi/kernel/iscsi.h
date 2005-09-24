@@ -192,7 +192,7 @@ struct iscsi_cmnd {
 	u32 ddigest;
 
 	struct iscsi_cmnd *req;
-	struct tgt_cmnd *tc;
+	struct tgt_cmd *tc;
 };
 
 #define ISCSI_OP_SCSI_REJECT	ISCSI_OP_VENDOR1_CMD

@@ -12,7 +12,7 @@
 #include <linux/dma-mapping.h>
 
 struct module;
-struct tgt_cmnd;
+struct tgt_cmd;
 struct tgt_session;
 
 /*
@@ -24,7 +24,7 @@ struct tgt_protocol {
 	const char *name;
 	struct module *module;
 
-	kmem_cache_t *cmnd_cache;
+	kmem_cache_t *cmd_cache;
 	int uspace_pdu_size;
 
 	/*
@@ -37,25 +37,25 @@ struct tgt_protocol {
 	 * iet to open-iscsi's model so eventually the done() function
 	 * will be a requirement so we can have a common path.
 	 */
-	struct tgt_cmnd *(* create_cmnd)(struct tgt_session *session,
+	struct tgt_cmd *(* create_cmd)(struct tgt_session *session,
 					uint8_t *cmd, uint32_t data_len,
 					enum dma_data_direction data_dir,
 					uint8_t *dev_id_buff, int id_buff_size,
-					void (*done)(struct tgt_cmnd *));
+					void (*done)(struct tgt_cmd *));
 	/*
 	 * destroy a command. This will free the command and buffer
 	 */
-	void (* destroy_cmnd)(struct tgt_cmnd *cmd); 
+	void (* destroy_cmd)(struct tgt_cmd *cmd); 
 	/*
 	 * queue a command to be executed in a workqueue. A done() callback
 	 * must be passed in.
 	 */
-	int (* queue_cmnd)(struct tgt_cmnd *cmnd,
-			   void (*done)(struct tgt_cmnd *));
+	int (* queue_cmd)(struct tgt_cmd *cmd,
+			   void (*done)(struct tgt_cmd *));
 	/*
 	 * build userspace packet
 	 */
-	void (* build_uspace_pdu)(struct tgt_cmnd *cmnd, void *data);
+	void (* build_uspace_pdu)(struct tgt_cmd *cmd, void *data);
 };
 
 extern void tgt_protocol_init(void);

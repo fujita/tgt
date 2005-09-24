@@ -492,7 +492,7 @@ static int sevice_action(int tid, uint64_t lun, uint8_t *scb, uint8_t *p, int *l
 	return SAM_STAT_GOOD;
 }
 
-int scsi_cmnd_process(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *len)
+int scsi_cmd_process(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *len)
 {
 	int result = SAM_STAT_GOOD;
 

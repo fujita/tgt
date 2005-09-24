@@ -43,10 +43,10 @@ static int tgt_sd_create(struct tgt_device *device)
 	return 0;
 }
 
-static void tgt_sd_prep(struct tgt_cmnd *cmnd, uint32_t data_len)
+static void tgt_sd_prep(struct tgt_cmd *cmd, uint32_t data_len)
 {
-	struct scsi_tgt_cmnd *scmnd = tgt_cmnd_to_scsi(cmnd);
-	uint8_t *scb = scmnd->scb;
+	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
+	uint8_t *scb = scmd->scb;
 	uint64_t off = 0;
 
 	/*
@@ -75,29 +75,29 @@ static void tgt_sd_prep(struct tgt_cmnd *cmnd, uint32_t data_len)
 	/*
 	 * we trust the data_len passed in for now
 	 */
-	cmnd->bufflen = data_len;
-	cmnd->offset = off;
+	cmd->bufflen = data_len;
+	cmd->offset = off;
 }
 
 static void tgt_sd_end_rq(struct request *rq)
 {
-	struct tgt_cmnd *cmnd = rq->end_io_data;
-	struct scsi_tgt_cmnd *scmnd = tgt_cmnd_to_scsi(cmnd);
+	struct tgt_cmd *cmd = rq->end_io_data;
+	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
 
 	if (rq->sense_len) {
-		memcpy(scmnd->sense_buff, rq->sense, SCSI_SENSE_BUFFERSIZE);
-		cmnd->result = SAM_STAT_CHECK_CONDITION;
+		memcpy(scmd->sense_buff, rq->sense, SCSI_SENSE_BUFFERSIZE);
+		cmd->result = SAM_STAT_CHECK_CONDITION;
 	} else if (rq->errors) {
 		/*
 		 * TODO check *_byte and just send error upwards
 		 */
-		scsi_tgt_sense_data_build(cmnd, HARDWARE_ERROR, 0, 0);
-		cmnd->result = SAM_STAT_CHECK_CONDITION;
+		scsi_tgt_sense_data_build(cmd, HARDWARE_ERROR, 0, 0);
+		cmd->result = SAM_STAT_CHECK_CONDITION;
 	} else
-		cmnd->result = SAM_STAT_GOOD;
+		cmd->result = SAM_STAT_GOOD;
 
 
-	tgt_cmnd_done(cmnd);
+	tgt_cmd_done(cmd);
 	__blk_put_request(rq->q, rq);
 }
 
@@ -193,27 +193,27 @@ static int req_map_sg(request_queue_t *q, struct request *rq,
 /*
  * TODO part of this will move to a io_handler callout
  */
-static int tgt_sd_queue_rq(struct tgt_cmnd *cmnd)
+static int tgt_sd_queue_rq(struct tgt_cmd *cmd)
 {
-	struct scsi_tgt_cmnd *scmnd = tgt_cmnd_to_scsi(cmnd);
-	struct file *file = cmnd->device->file;
+	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
+	struct file *file = cmd->device->file;
 	request_queue_t *q = bdev_get_queue(file->f_dentry->d_inode->i_bdev);
 	struct request *rq;
-	int write = (cmnd->data_dir == DMA_TO_DEVICE);
+	int write = (cmd->data_dir == DMA_TO_DEVICE);
 
 	rq = blk_get_request(q, write, GFP_KERNEL | __GFP_NOFAIL);
 	if (!rq)
 		goto hw_error;
 
-	if (req_map_sg(q, rq, cmnd->sg, cmnd->sg_count,
+	if (req_map_sg(q, rq, cmd->sg, cmd->sg_count,
 			GFP_KERNEL | __GFP_NOFAIL))
 		goto free_request;
 
-	rq->cmd_len = COMMAND_SIZE(scmnd->scb[0]);
-	memcpy(rq->cmd, scmnd->scb, rq->cmd_len);
+	rq->cmd_len = COMMAND_SIZE(scmd->scb[0]);
+	memcpy(rq->cmd, scmd->scb, rq->cmd_len);
 	rq->sense_len = 0;
-	rq->sense = scmnd->sense_buff;
-	rq->end_io_data = cmnd;
+	rq->sense = scmd->sense_buff;
+	rq->end_io_data = cmd;
 	rq->timeout = 60 * HZ; /* TODO */
 	rq->flags |= REQ_BLOCK_PC;
 
@@ -223,32 +223,32 @@ static int tgt_sd_queue_rq(struct tgt_cmnd *cmnd)
  free_request:
 	blk_put_request(rq);
  hw_error:
-	scsi_tgt_sense_data_build(cmnd, HARDWARE_ERROR, 0, 0);
+	scsi_tgt_sense_data_build(cmd, HARDWARE_ERROR, 0, 0);
 	return -ENOMEM;
 }
 
-static int tgt_sd_queue(struct tgt_cmnd *cmnd)
+static int tgt_sd_queue(struct tgt_cmd *cmd)
 {
-	struct tgt_device *device = cmnd->device;
-	loff_t pos = cmnd->offset;
+	struct tgt_device *device = cmd->device;
+	loff_t pos = cmd->offset;
 
-	if (cmnd->bufflen + pos > device->size) {
-		scsi_tgt_sense_data_build(cmnd, HARDWARE_ERROR, 0, 0);
-		return TGT_CMND_FAILED;
+	if (cmd->bufflen + pos > device->size) {
+		scsi_tgt_sense_data_build(cmd, HARDWARE_ERROR, 0, 0);
+		return TGT_CMD_FAILED;
 	}
 	/*
-	 * TODO this will become device->io_handler->queue_cmnd
+	 * TODO this will become device->io_handler->queue_cmd
 	 * when we seperate the io_handlers
 	 */
-	return tgt_sd_queue_rq(cmnd) ? TGT_CMND_FAILED : TGT_CMND_KERN_QUEUED;
+	return tgt_sd_queue_rq(cmd) ? TGT_CMD_FAILED : TGT_CMD_KERN_QUEUED;
 }
 
 static struct tgt_device_template tgt_sd = {
 	.name = "tgt_sd",
 	.module = THIS_MODULE,
 	.create = tgt_sd_create,
-	.queue_cmnd = tgt_sd_queue,
-	.prep_cmnd = tgt_sd_prep,
+	.queue_cmd = tgt_sd_queue,
+	.prep_cmd = tgt_sd_prep,
 };
 
 static int __init tgt_sd_init(void)

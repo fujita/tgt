@@ -441,7 +441,7 @@ static int iscsi_target_create(u32 *tid, char *name)
 
 	ev = NLMSG_DATA(nlh);
 	sprintf(ev->u.c_target.type, "%s", "iet");
-	ev->u.c_target.nr_cmnds = DEFAULT_NR_QUEUED_CMNDS;
+	ev->u.c_target.nr_cmds = DEFAULT_NR_QUEUED_CMNDS;
 
 	err = ipc_cmnd_execute(nlh, nlh->nlmsg_len);
 	if (err > 0) {

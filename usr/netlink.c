@@ -74,7 +74,7 @@ static int nl_read(int fd, void *data, int size, int flags)
 	return rc;
 }
 
-int nl_cmnd_call(int fd, int type, char *data, int size, int *res)
+int nl_cmd_call(int fd, int type, char *data, int size, int *res)
 {
 	int err;
 	struct tgt_event *ev;
@@ -92,12 +92,12 @@ int nl_cmnd_call(int fd, int type, char *data, int size, int *res)
 	return err;
 }
 
-static int cmnd_queue(int fd, char *reqbuf, char *resbuf)
+static int cmd_queue(int fd, char *reqbuf, char *resbuf)
 {
 	int result, len = 0;
 	struct tgt_event *ev_req = (struct tgt_event *) reqbuf;
 	struct tgt_event *ev_res = NLMSG_DATA(resbuf);
-	uint64_t cid = ev_req->k.cmnd_req.cid;
+	uint64_t cid = ev_req->k.cmd_req.cid;
 	uint8_t *scb;
 
 	memset(resbuf, 0, NL_BUFSIZE);
@@ -105,22 +105,22 @@ static int cmnd_queue(int fd, char *reqbuf, char *resbuf)
 	dprintf("%" PRIu64 " %x\n", cid, scb[0]);
 
 	/*
-	 * TODO match tid to protocol and route cmnd to correct userspace
+	 * TODO match tid to protocol and route cmd to correct userspace
 	 * protocol module
 	 */
-	result = scsi_cmnd_process(ev_req->k.cmnd_req.tid,
-				   ev_req->k.cmnd_req.dev_id, scb,
+	result = scsi_cmd_process(ev_req->k.cmd_req.tid,
+				   ev_req->k.cmd_req.dev_id, scb,
 				   (uint8_t *) ev_res->data, &len);
 
 	memset(ev_res, 0, sizeof(*ev_res));
-	ev_res->u.cmnd_res.cid = cid;
-	ev_res->u.cmnd_res.len = len;
-	ev_res->u.cmnd_res.result = result;
+	ev_res->u.cmd_res.cid = cid;
+	ev_res->u.cmd_res.len = len;
+	ev_res->u.cmd_res.result = result;
 
 
-	log_error("scsi_cmnd_process res %d len %d\n", result, len);
+	log_error("scsi_cmd_process res %d len %d\n", result, len);
 
-	return nl_write(fd, TGT_UEVENT_CMND_RES, resbuf,
+	return nl_write(fd, TGT_UEVENT_CMD_RES, resbuf,
 			NLMSG_SPACE(sizeof(*ev_res) + len));
 }
 
@@ -158,8 +158,8 @@ read_again:
 	}
 
 	switch (nlh->nlmsg_type) {
-	case TGT_KEVENT_CMND_REQ:
-		cmnd_queue(fd, NLMSG_DATA(recvbuf), sendbuf);
+	case TGT_KEVENT_CMD_REQ:
+		cmd_queue(fd, NLMSG_DATA(recvbuf), sendbuf);
 		break;
 	default:
 		/* kernel module bug */
@@ -174,7 +174,7 @@ static void nl_start(int fd)
 	int err, res;
 	char nlmsg[NLMSG_SPACE(sizeof(struct tgt_event))];
 
-	err = nl_cmnd_call(fd, TGT_UEVENT_START, nlmsg, 
+	err = nl_cmd_call(fd, TGT_UEVENT_START, nlmsg, 
 			   NLMSG_SPACE(sizeof(struct tgt_event)), &res);
 	if (err < 0 || res < 0) {
 		eprintf("%d %d\n", err, res);

@@ -17,11 +17,11 @@ enum tgt_event_type {
 	TGT_UEVENT_TARGET_PASSTHRU,
 	TGT_UEVENT_DEVICE_CREATE,
 	TGT_UEVENT_DEVICE_DESTROY,
-	TGT_UEVENT_CMND_RES,
+	TGT_UEVENT_CMD_RES,
 
 	/* kernel -> user */
 	TGT_KEVENT_RESPONSE,
-	TGT_KEVENT_CMND_REQ,
+	TGT_KEVENT_CMD_REQ,
 	TGT_KEVENT_TARGET_PASSTHRU,
 };
 
@@ -30,7 +30,7 @@ struct tgt_event {
 	union {
 		struct {
 			char type[32];
-			int nr_cmnds;
+			int nr_cmds;
 		} c_target;
 		struct {
 			int tid;
@@ -54,7 +54,7 @@ struct tgt_event {
 			uint64_t cid;
 			uint32_t len;
 			int result;
-		} cmnd_res;
+		} cmd_res;
 	} u;
 
 	/* kernel -> user */
@@ -66,7 +66,7 @@ struct tgt_event {
 			uint64_t cid;
 			int tid;
 			uint64_t dev_id;
-		} cmnd_req;
+		} cmd_req;
 		struct {
 			int tid;
 			uint32_t len;

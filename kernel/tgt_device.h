@@ -12,17 +12,17 @@
 #include <linux/list.h>
 
 struct tgt_device;
-struct tgt_cmnd;
+struct tgt_cmd;
 
 enum {
-	TGT_CMND_COMPLETED,
-	TGT_CMND_FAILED,
+	TGT_CMD_COMPLETED,
+	TGT_CMD_FAILED,
 	/*
 	 * if the device has queued the command it is responsible for
 	 * for completing it
 	 */
-	TGT_CMND_USPACE_QUEUED,
-	TGT_CMND_KERN_QUEUED
+	TGT_CMD_USPACE_QUEUED,
+	TGT_CMD_KERN_QUEUED
 };
 
 struct tgt_device_template {
@@ -36,25 +36,25 @@ struct tgt_device_template {
 	int (* create)(struct tgt_device *);
 	void (* destroy)(struct tgt_device *);
 	/*
-	 * queue or execute command. Return TGT_CMND*.
-	 * If returning TGT_CMND_COMPLETED or TGT_CMND_FAILED the result
+	 * queue or execute command. Return TGT_CMD*.
+	 * If returning TGT_CMD_COMPLETED or TGT_CMD_FAILED the result
 	 * field must be set.
 	 */
-	int (* queue_cmnd)(struct tgt_cmnd *cmnd);
+	int (* queue_cmd)(struct tgt_cmd *cmd);
 	/*
 	 * complete a userspace command
 	 */
-	void ( *complete_uspace_cmnd)(struct tgt_cmnd *cmnd);
+	void ( *complete_uspace_cmd)(struct tgt_cmd *cmd);
 	/*
 	 * complete a kernel command if your queue_command was async
 	 * and the device used one of the tgt threads to process the
 	 * command
 	 */
-	void (*complete_kern_cmnd)(struct tgt_cmnd *cmnd);
+	void (*complete_kern_cmd)(struct tgt_cmd *cmd);
 	/*
 	 * setup buffer or device fields if needed
 	 */
-	void (* prep_cmnd)(struct tgt_cmnd *cmnd, uint32_t data_len);
+	void (* prep_cmd)(struct tgt_cmd *cmd, uint32_t data_len);
 
 	/*
 	 * Pointer to the sysfs class properties for this host, NULL terminated.

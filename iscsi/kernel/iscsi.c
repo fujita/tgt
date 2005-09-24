@@ -263,7 +263,7 @@ static struct iscsi_cmnd *do_create_sense_rsp(struct iscsi_cmnd *req)
 	struct iscsi_cmnd *rsp;
 	struct iscsi_cmd_rsp *rsp_hdr;
 	struct iscsi_sense_data *sense;
-	struct scsi_tgt_cmnd *stc;
+	struct scsi_tgt_cmd *stc;
 	struct scatterlist *sg = &req->sense_sg;
 
 	rsp = iscsi_cmnd_create_rsp_cmnd(req, 1);
@@ -275,7 +275,7 @@ static struct iscsi_cmnd *do_create_sense_rsp(struct iscsi_cmnd *req)
 	rsp_hdr->cmd_status = SAM_STAT_CHECK_CONDITION;
 	rsp_hdr->itt = cmnd_hdr(req)->itt;
 
-	stc = tgt_cmnd_to_scsi(req->tc);
+	stc = tgt_cmd_to_scsi(req->tc);
 	sense = (struct iscsi_sense_data *) stc->sense_buff;
 	memmove(sense->data, sense, stc->sense_len);
 	/*
@@ -295,7 +295,7 @@ static struct iscsi_cmnd *do_create_sense_rsp(struct iscsi_cmnd *req)
 static struct iscsi_cmnd *create_sense_rsp(struct iscsi_cmnd *req,
 					   u8 sense_key, u8 asc, u8 ascq)
 {
-	struct scsi_tgt_cmnd *stc;
+	struct scsi_tgt_cmd *stc;
 	struct iscsi_cmnd *rsp;
 	struct iscsi_cmd_rsp *rsp_hdr;
 	struct iscsi_sense_data *sense;
@@ -310,7 +310,7 @@ static struct iscsi_cmnd *create_sense_rsp(struct iscsi_cmnd *req,
 	rsp_hdr->cmd_status = SAM_STAT_CHECK_CONDITION;
 	rsp_hdr->itt = cmnd_hdr(req)->itt;
 
-	stc = tgt_cmnd_to_scsi(req->tc);
+	stc = tgt_cmd_to_scsi(req->tc);
 	sg->page = virt_to_page(stc->sense_buff);
 	sg->offset = offset_in_page(stc->sense_buff);
 	sg->length = stc->sense_len;
@@ -368,9 +368,10 @@ void iscsi_cmnd_remove(struct iscsi_cmnd *cmnd)
 	list_del(&cmnd->conn_list);
 	spin_unlock(&conn->list_lock);
 
-	if (cmnd->tc)
-		tgt_cmnd_destroy(cmnd->tc);
-
+	if (cmnd->tc) {
+		struct tgt_protocol *proto = cmnd->tc->session->target->proto;
+		proto->destroy_cmd(cmnd->tc);
+	}
 	kmem_cache_free(iscsi_cmnd_cache, cmnd);
 }
 
@@ -598,7 +599,7 @@ static void cmnd_skip_data(struct iscsi_cmnd *req)
 	cmnd_skip_pdu(req);
 }
 
-static int cmnd_recv_pdu(struct iscsi_conn *conn, struct tgt_cmnd *tc,
+static int cmnd_recv_pdu(struct iscsi_conn *conn, struct tgt_cmd *tc,
 			 u32 offset, u32 size)
 {
 	int idx, i;
@@ -703,7 +704,7 @@ static void send_r2t(struct iscsi_cmnd *req)
 	iscsi_cmnds_init_write(&send);
 }
 
-static void scsi_cmnd_done(struct tgt_cmnd *tc)
+static void scsi_cmnd_done(struct tgt_cmd *tc)
 {
 	struct iscsi_cmnd *cmnd = (struct iscsi_cmnd *) tc->private;
 	struct iscsi_cmd *req = cmnd_hdr(cmnd);
@@ -760,7 +761,7 @@ static void scsi_cmnd_exec(struct iscsi_cmnd *cmnd)
 		set_cmnd_waitio(cmnd);
 		cmnd->tc->private = cmnd;
 
-		proto->queue_cmnd(cmnd->tc, scsi_cmnd_done);
+		proto->queue_cmd(cmnd->tc, scsi_cmnd_done);
 	}
 }
 
@@ -859,10 +860,10 @@ static void scsi_cmnd_start(struct iscsi_conn *conn, struct iscsi_cmnd *req)
 	else
 		data_dir = DMA_NONE;
 
-	req->tc = proto->create_cmnd(conn->session->ts, req_hdr->cdb,
-				     be32_to_cpu(req_hdr->data_length),
-				     data_dir, req_hdr->lun,
-				     sizeof(req_hdr->lun), NULL);
+	req->tc = proto->create_cmd(conn->session->ts, req_hdr->cdb,
+				    be32_to_cpu(req_hdr->data_length),
+				    data_dir, req_hdr->lun,
+				    sizeof(req_hdr->lun), NULL);
 	assert(req->tc);
 
 	switch (req_hdr->cdb[0]) {

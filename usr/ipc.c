@@ -78,9 +78,9 @@ void ipc_event_handle(int accept_fd)
 		goto out;
 	data = NLMSG_DATA(nlh);
 
-	err = nl_cmnd_call(nl_fd, nlh->nlmsg_type, data,
-			   nlh->nlmsg_len - NLMSG_ALIGN(sizeof(struct nlmsghdr)),
-			   &res);
+	err = nl_cmd_call(nl_fd, nlh->nlmsg_type, data,
+			  nlh->nlmsg_len - NLMSG_ALIGN(sizeof(struct nlmsghdr)),
+			  &res);
 
 	dprintf("%s %d %d %d\n", __FUNCTION__, __LINE__, err, res);
 

@@ -56,10 +56,10 @@ static int tgt_pid, daemon_pid;
 static struct sock *nls;
 
 /* TODO: lock per session */
-static spinlock_t cmnd_hash_lock;
+static spinlock_t cmd_hash_lock;
 #define TGT_HASH_ORDER		8
-#define	cmnd_hashfn(key)	hash_long((key), TGT_HASH_ORDER)
-static struct list_head cmnd_hash[1 << TGT_HASH_ORDER];
+#define	cmd_hashfn(key)	hash_long((key), TGT_HASH_ORDER)
+static struct list_head cmd_hash[1 << TGT_HASH_ORDER];
 
 struct target_type_internal {
 	struct list_head list;
@@ -154,7 +154,7 @@ found:
 	return target;
 }
 
-struct tgt_target *tgt_target_create(char *target_type, int queued_cmnds)
+struct tgt_target *tgt_target_create(char *target_type, int queued_cmds)
 {
 	char name[16];
 	static int target_id;
@@ -184,7 +184,7 @@ struct tgt_target *tgt_target_create(char *target_type, int queued_cmnds)
 	INIT_LIST_HEAD(&target->device_list);
 	INIT_LIST_HEAD(&target->work_list);
 
-	target->queued_cmnds = queued_cmnds;
+	target->queued_cmds = queued_cmds;
 
 	snprintf(name, sizeof(name), "tgtd%d", target->tid);
 	target->twq = create_workqueue(name);
@@ -241,15 +241,15 @@ int tgt_target_destroy(struct tgt_target *target)
 }
 EXPORT_SYMBOL_GPL(tgt_target_destroy);
 
-static int session_init(struct tgt_session *session, int max_cmnds)
+static int session_init(struct tgt_session *session, int max_cmds)
 {
 	struct tgt_target *target = session->target;
 	struct tgt_protocol *proto = session->target->proto;
 	unsigned long flags;
 
-	session->cmnd_pool = mempool_create(max_cmnds, mempool_alloc_slab,
-					mempool_free_slab, proto->cmnd_cache);
-	if (!session->cmnd_pool)
+	session->cmd_pool = mempool_create(max_cmds, mempool_alloc_slab,
+					mempool_free_slab, proto->cmd_cache);
+	if (!session->cmd_pool)
 		goto out;
 
 	spin_lock_irqsave(&target->lock, flags);
@@ -258,8 +258,8 @@ static int session_init(struct tgt_session *session, int max_cmnds)
 
 	return 0;
 out:
-	if (session->cmnd_pool)
-		mempool_destroy(session->cmnd_pool);
+	if (session->cmd_pool)
+		mempool_destroy(session->cmd_pool);
 
 	return -ENOMEM;
 }
@@ -287,7 +287,7 @@ static void session_async_create(void *data)
 
 struct tgt_session *
 tgt_session_create(struct tgt_target *target,
-		   int max_cmnds,
+		   int max_cmds,
 		   void (*done)(void *, struct tgt_session *),
 		   void *arg)
 {
@@ -301,7 +301,7 @@ tgt_session_create(struct tgt_target *target,
 		return NULL;
 	}
 
-	dprintk("%p %d\n", target, max_cmnds);
+	dprintk("%p %d\n", target, max_cmds);
 
 	session = kmalloc(sizeof(*session), done ? GFP_ATOMIC : GFP_KERNEL);
 	if (!session)
@@ -316,7 +316,7 @@ tgt_session_create(struct tgt_target *target,
 			goto out;
 
 		async->session = session;
-		async->cmds = max_cmnds;
+		async->cmds = max_cmds;
 		async->done = done;
 		async->arg = arg;
 
@@ -325,7 +325,7 @@ tgt_session_create(struct tgt_target *target,
 		return session;
 	}
 
-	if (session_init(session, max_cmnds) < 0)
+	if (session_init(session, max_cmds) < 0)
 		goto out;
 
 	return session;
@@ -338,7 +338,7 @@ EXPORT_SYMBOL_GPL(tgt_session_create);
 
 int tgt_session_destroy(struct tgt_session *session)
 {
-	mempool_destroy(session->cmnd_pool);
+	mempool_destroy(session->cmd_pool);
 	kfree(session);
 
 	return 0;
@@ -534,57 +534,57 @@ static int tgt_device_destroy(int tid, uint64_t dev_id)
 	return 0;
 }
 
-struct tgt_cmnd *tgt_cmnd_create(struct tgt_session *session)
+struct tgt_cmd *tgt_cmd_create(struct tgt_session *session)
 {
-	struct tgt_cmnd *cmnd;
+	struct tgt_cmd *cmd;
 	unsigned long flags;
 
-	cmnd = mempool_alloc(session->cmnd_pool, GFP_ATOMIC);
-	if (!cmnd) {
-		eprintk("Could not allocate tgt_cmnd for %p\n", session);
+	cmd = mempool_alloc(session->cmd_pool, GFP_ATOMIC);
+	if (!cmd) {
+		eprintk("Could not allocate tgt_cmd for %p\n", session);
 		return NULL;
 	}
 
-	memset(cmnd, 0, sizeof(*cmnd));
-	cmnd->session = session;
-	cmnd->cid = (uint64_t) (unsigned long) cmnd;
-	INIT_LIST_HEAD(&cmnd->clist);
-	INIT_LIST_HEAD(&cmnd->hash_list);
+	memset(cmd, 0, sizeof(*cmd));
+	cmd->session = session;
+	cmd->cid = (uint64_t) (unsigned long) cmd;
+	INIT_LIST_HEAD(&cmd->clist);
+	INIT_LIST_HEAD(&cmd->hash_list);
 
-	dprintk("%p %llu\n", session, cmnd->cid);
+	dprintk("%p %llu\n", session, cmd->cid);
 
-	spin_lock_irqsave(&cmnd_hash_lock, flags);
-	list_add_tail(&cmnd->hash_list, &cmnd_hash[cmnd_hashfn(cmnd->cid)]);
-	spin_unlock_irqrestore(&cmnd_hash_lock, flags);
+	spin_lock_irqsave(&cmd_hash_lock, flags);
+	list_add_tail(&cmd->hash_list, &cmd_hash[cmd_hashfn(cmd->cid)]);
+	spin_unlock_irqrestore(&cmd_hash_lock, flags);
 
-	return cmnd;
+	return cmd;
 }
-EXPORT_SYMBOL_GPL(tgt_cmnd_create);
+EXPORT_SYMBOL_GPL(tgt_cmd_create);
 
-static void tgt_free_buffer(struct tgt_cmnd *cmnd)
+static void tgt_free_buffer(struct tgt_cmd *cmd)
 {
 	int i;
 	
-	for (i = 0; i < cmnd->sg_count; i++)
-		__free_page(cmnd->sg[i].page);
-	kfree(cmnd->sg);
+	for (i = 0; i < cmd->sg_count; i++)
+		__free_page(cmd->sg[i].page);
+	kfree(cmd->sg);
 }
 
-void tgt_cmnd_destroy(struct tgt_cmnd *cmnd)
+void tgt_cmd_destroy(struct tgt_cmd *cmd)
 {
 	unsigned long flags;
 
-	dprintk("cid %llu\n", cmnd->cid);
+	dprintk("cid %llu\n", cmd->cid);
 
-	kfree(cmnd->sg);
+	kfree(cmd->sg);
 
-	spin_lock_irqsave(&cmnd_hash_lock, flags);
-	list_del(&cmnd->hash_list);
-	spin_unlock_irqrestore(&cmnd_hash_lock, flags);
+	spin_lock_irqsave(&cmd_hash_lock, flags);
+	list_del(&cmd->hash_list);
+	spin_unlock_irqrestore(&cmd_hash_lock, flags);
 
-	mempool_free(cmnd, cmnd->session->cmnd_pool);
+	mempool_free(cmd, cmd->session->cmd_pool);
 }
-EXPORT_SYMBOL_GPL(tgt_cmnd_destroy);
+EXPORT_SYMBOL_GPL(tgt_cmd_destroy);
 
 #define pgcnt(size, offset)	((((size) + ((offset) & ~PAGE_CACHE_MASK)) + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT)
 
@@ -593,23 +593,23 @@ EXPORT_SYMBOL_GPL(tgt_cmnd_destroy);
  * but to support passthrough commands we will need to obey the
  * something like's tgt_sd devices's queue's limits.
  */
-void __tgt_alloc_buffer(struct tgt_cmnd *cmnd)
+void __tgt_alloc_buffer(struct tgt_cmd *cmd)
 {
-	uint64_t offset = cmnd->offset;
-	uint32_t len = cmnd->bufflen;
+	uint64_t offset = cmd->offset;
+	uint32_t len = cmd->bufflen;
 	int i;
 
-	cmnd->sg_count = pgcnt(len, offset);
+	cmd->sg_count = pgcnt(len, offset);
 	offset &= ~PAGE_CACHE_MASK;
 
-	dprintk("cid %llu pg_count %d offset %llu len %d\n", cmnd->cid,
-		cmnd->sg_count, cmnd->offset, cmnd->bufflen);
+	dprintk("cid %llu pg_count %d offset %llu len %d\n", cmd->cid,
+		cmd->sg_count, cmd->offset, cmd->bufflen);
 
-	cmnd->sg = kmalloc(cmnd->sg_count * sizeof(struct scatterlist),
+	cmd->sg = kmalloc(cmd->sg_count * sizeof(struct scatterlist),
 			   GFP_KERNEL | __GFP_NOFAIL);
 
-	for (i = 0; i < cmnd->sg_count; i++) {
-		struct scatterlist *sg = &cmnd->sg[i];
+	for (i = 0; i < cmd->sg_count; i++) {
+		struct scatterlist *sg = &cmd->sg[i];
 
 		sg->page = alloc_page(GFP_KERNEL | __GFP_NOFAIL);
 		sg->offset = offset;
@@ -622,37 +622,37 @@ void __tgt_alloc_buffer(struct tgt_cmnd *cmnd)
 
 static void tgt_alloc_buffer(void *data)
 {
-	struct tgt_cmnd *cmnd = data;
+	struct tgt_cmd *cmd = data;
 
-	__tgt_alloc_buffer(cmnd);
+	__tgt_alloc_buffer(cmd);
 
-	if (cmnd->done) {
-		void (*done)(struct tgt_cmnd *) = cmnd->done;
-		cmnd->done = NULL;
-		done(cmnd);
+	if (cmd->done) {
+		void (*done)(struct tgt_cmd *) = cmd->done;
+		cmd->done = NULL;
+		done(cmd);
 	}
 }
 
-void tgt_cmnd_alloc_buffer(struct tgt_cmnd *cmnd, void (*done)(struct tgt_cmnd *))
+void tgt_cmd_alloc_buffer(struct tgt_cmd *cmd, void (*done)(struct tgt_cmd *))
 {
-	BUG_ON(!list_empty(&cmnd->clist));
+	BUG_ON(!list_empty(&cmd->clist));
 
 	if (done) {
-		struct tgt_session *session = cmnd->session;
+		struct tgt_session *session = cmd->session;
 
-		INIT_WORK(&cmnd->work, tgt_alloc_buffer, cmnd);
-		cmnd->done = done;
-		queue_work(session->target->twq, &cmnd->work);
+		INIT_WORK(&cmd->work, tgt_alloc_buffer, cmd);
+		cmd->done = done;
+		queue_work(session->target->twq, &cmd->work);
 		return;
 	}
 
-	tgt_alloc_buffer(cmnd);
+	tgt_alloc_buffer(cmd);
 }
-EXPORT_SYMBOL_GPL(tgt_cmnd_alloc_buffer);
+EXPORT_SYMBOL_GPL(tgt_cmd_alloc_buffer);
 
-int tgt_uspace_cmnd_send(struct tgt_cmnd *cmnd)
+int tgt_uspace_cmd_send(struct tgt_cmd *cmd)
 {
-	struct tgt_protocol *proto = cmnd->session->target->proto;
+	struct tgt_protocol *proto = cmd->session->target->proto;
 	struct sk_buff *skb;
 	struct nlmsghdr *nlh;
 	struct tgt_event *ev;
@@ -665,24 +665,24 @@ int tgt_uspace_cmnd_send(struct tgt_cmnd *cmnd)
 		return -ENOMEM;
 
 	dprintk("%d %Zd %d\n", len, sizeof(*ev), proto_pdu_size);
-	nlh = __nlmsg_put(skb, tgt_pid, 0, TGT_KEVENT_CMND_REQ,
+	nlh = __nlmsg_put(skb, tgt_pid, 0, TGT_KEVENT_CMD_REQ,
 			  len - sizeof(*nlh), 0);
 	ev = NLMSG_DATA(nlh);
 	memset(ev, 0, sizeof(*ev));
 
 	pdu = (char *) ev->data;
-	ev->k.cmnd_req.tid = cmnd->session->target->tid;
-	ev->k.cmnd_req.dev_id = cmnd->dev_id;
-	ev->k.cmnd_req.cid = cmnd->cid;
+	ev->k.cmd_req.tid = cmd->session->target->tid;
+	ev->k.cmd_req.dev_id = cmd->dev_id;
+	ev->k.cmd_req.cid = cmd->cid;
 
-	proto->build_uspace_pdu(cmnd, pdu);
+	proto->build_uspace_pdu(cmd, pdu);
 
 	return netlink_unicast(nls, skb, tgt_pid, 0);
 }
-EXPORT_SYMBOL_GPL(tgt_uspace_cmnd_send);
+EXPORT_SYMBOL_GPL(tgt_uspace_cmd_send);
 
 /*
- * TODO we should make cmnd->done a target callback instead. Maybe
+ * TODO we should make cmd->done a target callback instead. Maybe
  * target->tt->queuecommand. We need this becuase a target driver
  * may not have the resources to execute the command. We also need
  * a real queue, I guess, and some queue limits.
@@ -692,35 +692,35 @@ EXPORT_SYMBOL_GPL(tgt_uspace_cmnd_send);
  * BE ABLE TO EXECUTE FROM A SOFTIRQ SINCE WE WILL EVENTUALLY GO ALL ASYNC
  *
  */
-static void tgt_notify_cmnd_ready(void *data)
+static void tgt_notify_cmd_ready(void *data)
 {
-	struct tgt_cmnd *cmnd = data;
-	void (*done)(struct tgt_cmnd *);
+	struct tgt_cmd *cmd = data;
+	void (*done)(struct tgt_cmd *);
 
-	done = cmnd->done;
-	cmnd->done = NULL;
-	done(cmnd);
+	done = cmd->done;
+	cmd->done = NULL;
+	done(cmd);
 }
 
-void tgt_cmnd_done(struct tgt_cmnd *cmnd)
+void tgt_cmd_done(struct tgt_cmd *cmd)
 {
-	struct tgt_session *session = cmnd->session;
+	struct tgt_session *session = cmd->session;
 
-	INIT_WORK(&cmnd->work, tgt_notify_cmnd_ready, cmnd);
-	queue_work(session->target->twq, &cmnd->work);
+	INIT_WORK(&cmd->work, tgt_notify_cmd_ready, cmd);
+	queue_work(session->target->twq, &cmd->work);
 }
-EXPORT_SYMBOL_GPL(tgt_cmnd_done);
+EXPORT_SYMBOL_GPL(tgt_cmd_done);
 
-static void uspace_cmnd_done(struct tgt_cmnd *cmnd, void *data,
+static void uspace_cmd_done(struct tgt_cmd *cmd, void *data,
 			     int result, uint32_t len)
 {
-	struct tgt_device *device = cmnd->device;
+	struct tgt_device *device = cmd->device;
 	char *p = data;
 	int i;
-	BUG_ON(!cmnd->done);
+	BUG_ON(!cmd->done);
 
 	dprintk("cid %llu result %d len %d bufflen %u\n",
-		cmnd->cid, result, len, cmnd->bufflen);
+		cmd->cid, result, len, cmd->bufflen);
 
 	if (len) {
 		/*
@@ -728,91 +728,91 @@ static void uspace_cmnd_done(struct tgt_cmnd *cmnd, void *data,
 		 * This will happen if we though we were going to do some
 		 * IO but we ended up just gettting some sense back
 		 */
-		if (len != cmnd->bufflen) {
-			tgt_free_buffer(cmnd);
+		if (len != cmd->bufflen) {
+			tgt_free_buffer(cmd);
 
-			cmnd->bufflen = len;
-			cmnd->offset = 0;
+			cmd->bufflen = len;
+			cmd->offset = 0;
 
-			__tgt_alloc_buffer(cmnd);
+			__tgt_alloc_buffer(cmd);
 		}
 
-		for (i = 0; i < cmnd->sg_count; i++) {
+		for (i = 0; i < cmd->sg_count; i++) {
 			uint32_t copy = min_t(uint32_t, len, PAGE_CACHE_SIZE);
 
-			memcpy(page_address(cmnd->sg[i].page), p, copy);
+			memcpy(page_address(cmd->sg[i].page), p, copy);
 			p += copy;
 			len -= copy;
 		}
 	}
 
-	cmnd->result = result;
-	if (device->dt->complete_uspace_cmnd)
-		device->dt->complete_uspace_cmnd(cmnd);
-	tgt_cmnd_done(cmnd);
+	cmd->result = result;
+	if (device->dt->complete_uspace_cmd)
+		device->dt->complete_uspace_cmd(cmd);
+	tgt_cmd_done(cmd);
 }
 
 static void queuecommand(void *data)
 {
 	int err = 0;
-	struct tgt_cmnd *cmnd = data;
-	struct tgt_target *target = cmnd->session->target;
-	struct tgt_device *device = cmnd->device;
+	struct tgt_cmd *cmd = data;
+	struct tgt_target *target = cmd->session->target;
+	struct tgt_device *device = cmd->device;
 
-	dprintk("cid %llu\n", cmnd->cid);
+	dprintk("cid %llu\n", cmd->cid);
 
 	/* Should we do this earlier? */
 	if (!device)
-		cmnd->device = device = tgt_device_find(target, cmnd->dev_id);
+		cmd->device = device = tgt_device_find(target, cmd->dev_id);
 	if (device)
-		dprintk("found %llu\n", cmnd->dev_id);
+		dprintk("found %llu\n", cmd->dev_id);
 
-	err = device->dt->queue_cmnd(cmnd);
+	err = device->dt->queue_cmd(cmd);
 
 	switch (err) {
-	case TGT_CMND_FAILED:
-	case TGT_CMND_COMPLETED:
+	case TGT_CMD_FAILED:
+	case TGT_CMD_COMPLETED:
 		dprintk("command completed %d\n", err);
-		tgt_notify_cmnd_ready(cmnd);
+		tgt_notify_cmd_ready(cmd);
 	default:
-		dprintk("command %llu queued\n", cmnd->cid);
+		dprintk("command %llu queued\n", cmd->cid);
 	};
 }
 
-int tgt_cmnd_queue(struct tgt_cmnd *cmnd, void (*done)(struct tgt_cmnd *))
+int tgt_cmd_queue(struct tgt_cmd *cmd, void (*done)(struct tgt_cmd *))
 {
-	struct tgt_session *session = cmnd->session;
+	struct tgt_session *session = cmd->session;
 
-	BUG_ON(cmnd->done);
+	BUG_ON(cmd->done);
 	BUG_ON(!done);
 
-	cmnd->done = done;
-	INIT_WORK(&cmnd->work, queuecommand, cmnd);
-	queue_work(session->target->twq, &cmnd->work);
+	cmd->done = done;
+	INIT_WORK(&cmd->work, queuecommand, cmd);
+	queue_work(session->target->twq, &cmd->work);
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(tgt_cmnd_queue);
+EXPORT_SYMBOL_GPL(tgt_cmd_queue);
 
-static struct tgt_cmnd *find_cmnd_by_id(uint64_t cid)
+static struct tgt_cmd *find_cmd_by_id(uint64_t cid)
 {
 	struct list_head *head;
-	struct tgt_cmnd *cmnd;
+	struct tgt_cmd *cmd;
 	unsigned long flags;
 
-	head = &cmnd_hash[cmnd_hashfn(cid)];
+	head = &cmd_hash[cmd_hashfn(cid)];
 
-	spin_lock_irqsave(&cmnd_hash_lock, flags);
+	spin_lock_irqsave(&cmd_hash_lock, flags);
 
-	list_for_each_entry(cmnd, head, hash_list) {
-		if (cmnd->cid == cid)
+	list_for_each_entry(cmd, head, hash_list) {
+		if (cmd->cid == cid)
 			goto found;
 	}
-	cmnd = NULL;
+	cmd = NULL;
 found:
-	spin_unlock_irqrestore(&cmnd_hash_lock, flags);
+	spin_unlock_irqrestore(&cmd_hash_lock, flags);
 
-	return cmnd;
+	return cmd;
 }
 
 int tgt_msg_send(struct tgt_target *target, void *data, int data_len,
@@ -846,7 +846,7 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 {
 	int err = 0;
 	struct tgt_event *ev = NLMSG_DATA(nlh);
-	struct tgt_cmnd *cmnd;
+	struct tgt_cmd *cmd;
 	struct tgt_target *target;
 
 	dprintk("%d %d %d %d\n", daemon_pid, nlh->nlmsg_type,
@@ -864,7 +864,7 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 		break;
 	case TGT_UEVENT_TARGET_CREATE:
 		target = tgt_target_create(ev->u.c_target.type,
-					   ev->u.c_target.nr_cmnds);
+					   ev->u.c_target.nr_cmds);
 		if (target)
 			err = target->tid;
 		else
@@ -900,14 +900,14 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 		err = tgt_device_destroy(ev->u.d_device.tid,
 					 ev->u.d_device.dev_id);
 		break;
-	case TGT_UEVENT_CMND_RES:
-		cmnd = find_cmnd_by_id(ev->u.cmnd_res.cid);
-		if (cmnd)
-			uspace_cmnd_done(cmnd, ev->data,
-					 ev->u.cmnd_res.result,
-					 ev->u.cmnd_res.len);
+	case TGT_UEVENT_CMD_RES:
+		cmd = find_cmd_by_id(ev->u.cmd_res.cid);
+		if (cmd)
+			uspace_cmd_done(cmd, ev->data,
+					 ev->u.cmd_res.result,
+					 ev->u.cmd_res.len);
 		else {
-			eprintk("cannot found %llu\n", ev->u.cmnd_res.cid);
+			eprintk("cannot found %llu\n", ev->u.cmd_res.cid);
 			err = -EEXIST;
 		}
 		break;
@@ -954,7 +954,7 @@ static int event_recv_skb(struct sk_buff *skb)
 		 * TODO for passthru commands the lower level should
 		 * probably handle the result or we should modify this
 		 */
-		if (nlh->nlmsg_type != TGT_UEVENT_CMND_RES &&
+		if (nlh->nlmsg_type != TGT_UEVENT_CMD_RES &&
 		    nlh->nlmsg_type != TGT_UEVENT_TARGET_PASSTHRU) {
 			ev->k.event_res.err = err;
 			send_event_res(NETLINK_CREDS(skb)->pid,
@@ -991,7 +991,7 @@ static int __init tgt_init(void)
 	int i, err = -ENOMEM;
 
 	spin_lock_init(&all_targets_lock);
-	spin_lock_init(&cmnd_hash_lock);
+	spin_lock_init(&cmd_hash_lock);
 	spin_lock_init(&target_tmpl_lock);
 	spin_lock_init(&device_tmpl_lock);
 
@@ -1005,8 +1005,8 @@ static int __init tgt_init(void)
 	if (!nls)
 		goto out;
 
-	for (i = 0; i < ARRAY_SIZE(cmnd_hash); i++)
-		INIT_LIST_HEAD(&cmnd_hash[i]);
+	for (i = 0; i < ARRAY_SIZE(cmd_hash); i++)
+		INIT_LIST_HEAD(&cmd_hash[i]);
 
 	return 0;
 out:

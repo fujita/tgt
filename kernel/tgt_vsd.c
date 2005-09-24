@@ -40,10 +40,10 @@ static int tgt_vsd_create(struct tgt_device *device)
 /*
  * is this device specific or common? Should it be moved to the protocol.
  */
-static void tgt_vsd_prep(struct tgt_cmnd *cmnd, uint32_t data_len)
+static void tgt_vsd_prep(struct tgt_cmd *cmd, uint32_t data_len)
 {
-	struct scsi_tgt_cmnd *scmnd = tgt_cmnd_to_scsi(cmnd);
-	uint8_t *scb = scmnd->scb;
+	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
+	uint8_t *scb = scmd->scb;
 	uint64_t off = 0;
 /*	uint32_t len = 0; */
 
@@ -79,15 +79,15 @@ static void tgt_vsd_prep(struct tgt_cmnd *cmnd, uint32_t data_len)
 	/*
 	 * we trust the data_len passed in for now
 	 */
-	cmnd->bufflen = data_len;
-	cmnd->offset = off;
+	cmd->bufflen = data_len;
+	cmd->offset = off;
 }
 
-static void tgt_vsd_uspace_complete(struct tgt_cmnd *cmnd)
+static void tgt_vsd_uspace_complete(struct tgt_cmd *cmd)
 {
 	/* userspace did everything for us just copy the buffer */
-	if (cmnd->result != SAM_STAT_GOOD)
-		scsi_tgt_sense_copy(cmnd);
+	if (cmd->result != SAM_STAT_GOOD)
+		scsi_tgt_sense_copy(cmd);
 }
 
 /*
@@ -114,45 +114,45 @@ static struct iovec* sg_to_iovec(struct scatterlist *sg, int sg_count)
 /*
  * TODO this will move to a io_handler callout
  */
-static int vsd_queue_file_io(struct tgt_cmnd *cmnd, int op)
+static int vsd_queue_file_io(struct tgt_cmd *cmd, int op)
 {
-	struct file *file = cmnd->device->file;
+	struct file *file = cmd->device->file;
 	ssize_t size;
 	struct iovec *iov;
-	loff_t pos = cmnd->offset;
+	loff_t pos = cmd->offset;
 
-	iov = sg_to_iovec(cmnd->sg, cmnd->sg_count);
+	iov = sg_to_iovec(cmd->sg, cmd->sg_count);
 	if (!iov)
 		return -ENOMEM;
 
 	if (op == READ)
-		size = generic_file_readv(file, iov, cmnd->sg_count, &pos);
+		size = generic_file_readv(file, iov, cmd->sg_count, &pos);
 	else
-		size = generic_file_writev(file, iov, cmnd->sg_count, &pos);
+		size = generic_file_writev(file, iov, cmd->sg_count, &pos);
 
 	kfree(iov);
 
 /* not yet used
 	if (sync)
 		err = sync_page_range(inode, inode->i_mapping, pos,
-				      (size_t) cmnd->bufflen);
+				      (size_t) cmd->bufflen);
 */
 	return size;
 }
 
-static int tgt_vsd_queue(struct tgt_cmnd *cmnd)
+static int tgt_vsd_queue(struct tgt_cmd *cmd)
 {
-	struct scsi_tgt_cmnd *scmnd = tgt_cmnd_to_scsi(cmnd);
-	struct tgt_device *device = cmnd->device;
-	loff_t pos = cmnd->offset;
+	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
+	struct tgt_device *device = cmd->device;
+	loff_t pos = cmd->offset;
 	int err = 0, rw;
 
-	if (cmnd->bufflen + pos > device->size) {
-		scsi_tgt_sense_data_build(cmnd, HARDWARE_ERROR, 0, 0);
-		return TGT_CMND_FAILED;
+	if (cmd->bufflen + pos > device->size) {
+		scsi_tgt_sense_data_build(cmd, HARDWARE_ERROR, 0, 0);
+		return TGT_CMD_FAILED;
 	}
 
-	switch (scmnd->scb[0]) {
+	switch (scmd->scb[0]) {
 	case READ_6:
 	case READ_10:
 	case READ_16:
@@ -165,32 +165,32 @@ static int tgt_vsd_queue(struct tgt_cmnd *cmnd)
 		rw = WRITE;
 		break;
 	default:
-		err = tgt_uspace_cmnd_send(cmnd);
+		err = tgt_uspace_cmd_send(cmd);
 		/*
 		 * successfully queued
 		 */
 		if (err >= 0)
-			return TGT_CMND_USPACE_QUEUED;
+			return TGT_CMD_USPACE_QUEUED;
 
-		scsi_tgt_sense_data_build(cmnd, HARDWARE_ERROR, 0, 0);
-		return TGT_CMND_FAILED;
+		scsi_tgt_sense_data_build(cmd, HARDWARE_ERROR, 0, 0);
+		return TGT_CMD_FAILED;
 	};
 
 	/*
-	 * TODO this will become device->io_handler->queue_cmnd
+	 * TODO this will become device->io_handler->queue_cmd
 	 * when we seperate the io_handlers
 	 */
-	err = vsd_queue_file_io(cmnd, rw);
+	err = vsd_queue_file_io(cmd, rw);
 	/*
 	 * we should to a switch but I am not sure of all the err values
 	 * returned. If you find one add it
 	 */
-	if (err != cmnd->bufflen) {
-		scsi_tgt_sense_data_build(cmnd, HARDWARE_ERROR, 0, 0);
-		return TGT_CMND_FAILED;
+	if (err != cmd->bufflen) {
+		scsi_tgt_sense_data_build(cmd, HARDWARE_ERROR, 0, 0);
+		return TGT_CMD_FAILED;
 	} else {
-		cmnd->result = SAM_STAT_GOOD;
-		return TGT_CMND_COMPLETED;
+		cmd->result = SAM_STAT_GOOD;
+		return TGT_CMD_COMPLETED;
 	}
 }
 
@@ -198,9 +198,9 @@ static struct tgt_device_template tgt_vsd = {
 	.name = "tgt_vsd",
 	.module = THIS_MODULE,
 	.create = tgt_vsd_create,
-	.queue_cmnd = tgt_vsd_queue,
-	.prep_cmnd = tgt_vsd_prep,
-	.complete_uspace_cmnd = tgt_vsd_uspace_complete,
+	.queue_cmd = tgt_vsd_queue,
+	.prep_cmd = tgt_vsd_prep,
+	.complete_uspace_cmd = tgt_vsd_uspace_complete,
 };
 
 static int __init tgt_vsd_init(void)
