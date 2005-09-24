@@ -773,7 +773,7 @@ static void queuecommand(void *data)
 	case TGT_CMND_FAILED:
 	case TGT_CMND_COMPLETED:
 		dprintk("command completed %d\n", err);
-		tgt_cmnd_done(cmnd);
+		tgt_notify_cmnd_ready(cmnd);
 	default:
 		dprintk("command %llu queued\n", cmnd->cid);
 	};
