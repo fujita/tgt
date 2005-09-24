@@ -534,7 +534,7 @@ static int tgt_device_destroy(int tid, uint64_t dev_id)
 	return 0;
 }
 
-struct tgt_cmd *tgt_cmd_create(struct tgt_session *session)
+struct tgt_cmd *tgt_cmd_create(struct tgt_session *session, void *tgt_priv)
 {
 	struct tgt_cmd *cmd;
 	unsigned long flags;
@@ -548,6 +548,7 @@ struct tgt_cmd *tgt_cmd_create(struct tgt_session *session)
 	memset(cmd, 0, sizeof(*cmd));
 	cmd->session = session;
 	cmd->cid = (uint64_t) (unsigned long) cmd;
+	cmd->private = tgt_priv;
 	INIT_LIST_HEAD(&cmd->clist);
 	INIT_LIST_HEAD(&cmd->hash_list);
 

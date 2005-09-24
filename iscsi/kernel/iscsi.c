@@ -759,8 +759,6 @@ static void scsi_cmnd_exec(struct iscsi_cmnd *cmnd)
 		struct tgt_protocol *proto = cmnd->tc->session->target->proto;
  
 		set_cmnd_waitio(cmnd);
-		cmnd->tc->private = cmnd;
-
 		proto->queue_cmd(cmnd->tc, scsi_cmnd_done);
 	}
 }
@@ -860,7 +858,7 @@ static void scsi_cmnd_start(struct iscsi_conn *conn, struct iscsi_cmnd *req)
 	else
 		data_dir = DMA_NONE;
 
-	req->tc = proto->create_cmd(conn->session->ts, req_hdr->cdb,
+	req->tc = proto->create_cmd(conn->session->ts, req, req_hdr->cdb,
 				    be32_to_cpu(req_hdr->data_length),
 				    data_dir, req_hdr->lun,
 				    sizeof(req_hdr->lun), NULL);

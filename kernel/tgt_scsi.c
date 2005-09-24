@@ -47,7 +47,7 @@ static uint64_t scsi_tgt_translate_lun(uint8_t *p, int size)
  * differently
  */
 static struct tgt_cmd *
-scsi_tgt_create_cmd(struct tgt_session *session, uint8_t *scb,
+scsi_tgt_create_cmd(struct tgt_session *session, void *tgt_priv, uint8_t *scb,
 		     uint32_t data_len, enum dma_data_direction data_dir,
 		     uint8_t *lun, int lun_size,
 		     void (*done)(struct tgt_cmd *))
@@ -56,7 +56,7 @@ scsi_tgt_create_cmd(struct tgt_session *session, uint8_t *scb,
 	struct tgt_cmd *cmd;
 	struct scsi_tgt_cmd *scmd;
 
-	cmd = tgt_cmd_create(session);
+	cmd = tgt_cmd_create(session, tgt_priv);
 	if (!cmd) {
 		printk(KERN_ERR "Could not allocate command\n");
 		return NULL;

@@ -38,7 +38,8 @@ struct tgt_protocol {
 	 * will be a requirement so we can have a common path.
 	 */
 	struct tgt_cmd *(* create_cmd)(struct tgt_session *session,
-					uint8_t *cmd, uint32_t data_len,
+					void *tgt_priv, uint8_t *cmd,
+					uint32_t data_len,
 					enum dma_data_direction data_dir,
 					uint8_t *dev_id_buff, int id_buff_size,
 					void (*done)(struct tgt_cmd *));
