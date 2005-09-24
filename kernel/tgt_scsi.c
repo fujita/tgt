@@ -48,9 +48,9 @@ static uint64_t scsi_tgt_translate_lun(uint8_t *p, int size)
  */
 static struct tgt_cmd *
 scsi_tgt_create_cmd(struct tgt_session *session, void *tgt_priv, uint8_t *scb,
-		     uint32_t data_len, enum dma_data_direction data_dir,
-		     uint8_t *lun, int lun_size,
-		     void (*done)(struct tgt_cmd *))
+		    uint32_t data_len, enum dma_data_direction data_dir,
+		    uint8_t *lun, int lun_size,
+		    void (*done)(struct tgt_cmd *))
 {
 	struct tgt_device *device;
 	struct tgt_cmd *cmd;

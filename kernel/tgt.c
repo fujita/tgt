@@ -561,7 +561,7 @@ EXPORT_SYMBOL_GPL(tgt_cmd_create);
 static void tgt_free_buffer(struct tgt_cmd *cmd)
 {
 	int i;
-	
+
 	for (i = 0; i < cmd->sg_count; i++)
 		__free_page(cmd->sg[i].page);
 	kfree(cmd->sg);
@@ -573,7 +573,7 @@ void tgt_cmd_destroy(struct tgt_cmd *cmd)
 
 	dprintk("cid %llu\n", cmd->cid);
 
-	kfree(cmd->sg);
+	tgt_free_buffer(cmd);
 
 	spin_lock_irqsave(&cmd_hash_lock, flags);
 	list_del(&cmd->hash_list);

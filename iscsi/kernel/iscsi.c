@@ -757,7 +757,7 @@ static void scsi_cmnd_exec(struct iscsi_cmnd *cmnd)
 			send_r2t(cmnd);
 	} else {
 		struct tgt_protocol *proto = cmnd->tc->session->target->proto;
- 
+
 		set_cmnd_waitio(cmnd);
 		proto->queue_cmd(cmnd->tc, scsi_cmnd_done);
 	}
