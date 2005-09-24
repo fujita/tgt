@@ -63,7 +63,7 @@ struct iscsi_cmnd *cmnd_alloc(struct iscsi_conn *conn, int req)
 	struct iscsi_cmnd *cmnd;
 
 	/* TODO: async interface is necessary ? */
-	cmnd = kmem_cache_alloc(iscsi_cmnd_cache, GFP_KERNEL|__GFP_NOFAIL);
+	cmnd = kmem_cache_alloc(iscsi_cmnd_cache, GFP_KERNEL | __GFP_NOFAIL);
 
 	memset(cmnd, 0, sizeof(*cmnd));
 	INIT_LIST_HEAD(&cmnd->list);

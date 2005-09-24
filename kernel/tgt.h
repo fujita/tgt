@@ -70,6 +70,7 @@ extern void tgt_cmnd_alloc_buffer(struct tgt_cmnd *cmnd,
 				  void (*done)(struct tgt_cmnd *));
 extern int tgt_cmnd_queue(struct tgt_cmnd *cmnd,
 			  void (*done)(struct tgt_cmnd *));
+extern void tgt_cmnd_done(struct tgt_cmnd *cmnd);
 extern int tgt_sysfs_init(void);
 extern void tgt_sysfs_exit(void);
 #endif

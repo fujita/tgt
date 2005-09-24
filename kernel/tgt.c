@@ -588,6 +588,11 @@ EXPORT_SYMBOL_GPL(tgt_cmnd_destroy);
 
 #define pgcnt(size, offset)	((((size) + ((offset) & ~PAGE_CACHE_MASK)) + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT)
 
+/*
+ * TODO: this will have to obey at least the target driver's limits,
+ * but to support passthrough commands we will need to obey the
+ * something like's tgt_sd devices's queue's limits.
+ */
 void __tgt_alloc_buffer(struct tgt_cmnd *cmnd)
 {
 	uint64_t offset = cmnd->offset;
@@ -676,14 +681,35 @@ int tgt_uspace_cmnd_send(struct tgt_cmnd *cmnd)
 }
 EXPORT_SYMBOL_GPL(tgt_uspace_cmnd_send);
 
-static void cmnd_done(struct tgt_cmnd *cmnd)
+/*
+ * TODO we should make cmnd->done a target callback instead. Maybe
+ * target->tt->queuecommand. We need this becuase a target driver
+ * may not have the resources to execute the command. We also need
+ * a real queue, I guess, and some queue limits.
+ *
+ * NOTE THIS WILL NOT EXECUTE FROM A THREAD FOR LONG. IT APPEARS
+ * TO BE HORRIBLE FOR PERF AND ONLY NEEDED BECAUSE OF IET. THE LLD SHOULD
+ * BE ABLE TO EXECUTE FROM A SOFTIRQ SINCE WE WILL EVENTUALLY GO ALL ASYNC
+ *
+ */
+static void tgt_notify_cmnd_ready(void *data)
 {
+	struct tgt_cmnd *cmnd = data;
 	void (*done)(struct tgt_cmnd *);
 
 	done = cmnd->done;
 	cmnd->done = NULL;
 	done(cmnd);
 }
+
+void tgt_cmnd_done(struct tgt_cmnd *cmnd)
+{
+	struct tgt_session *session = cmnd->session;
+
+	INIT_WORK(&cmnd->work, tgt_notify_cmnd_ready, cmnd);
+	queue_work(session->target->twq, &cmnd->work);
+}
+EXPORT_SYMBOL_GPL(tgt_cmnd_done);
 
 static void uspace_cmnd_done(struct tgt_cmnd *cmnd, void *data,
 			     int result, uint32_t len)
@@ -723,7 +749,7 @@ static void uspace_cmnd_done(struct tgt_cmnd *cmnd, void *data,
 	cmnd->result = result;
 	if (device->dt->complete_uspace_cmnd)
 		device->dt->complete_uspace_cmnd(cmnd);
-	cmnd_done(cmnd);
+	tgt_cmnd_done(cmnd);
 }
 
 static void queuecommand(void *data)
@@ -747,9 +773,7 @@ static void queuecommand(void *data)
 	case TGT_CMND_FAILED:
 	case TGT_CMND_COMPLETED:
 		dprintk("command completed %d\n", err);
-		if (device->dt->complete_kern_cmnd)
-			device->dt->complete_kern_cmnd(cmnd);
-		cmnd_done(cmnd);
+		tgt_cmnd_done(cmnd);
 	default:
 		dprintk("command %llu queued\n", cmnd->cid);
 	};
