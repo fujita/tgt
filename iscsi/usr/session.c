@@ -70,77 +70,26 @@ struct session *session_find_id(u32 tid, u64 sid)
 	return NULL;
 }
 
-static int session_test(u32 t_tid, u64 t_sid)
-{
-	FILE *f;
-	char buf[8192], *p;
-	u32 tid;
-	u64 sid;
-	int err = -ENOENT, find = 0;
-
-	if ((f = fopen(PROC_SESSION, "r")) == NULL) {
-		fprintf(stderr, "Can't open %s\n", PROC_SESSION);
-		return -errno;
-	}
-
-	while (fgets(buf, sizeof(buf), f)) {
-		p = buf;
-		while (isspace((int) *p))
-			p++;
-
-		if (!strncmp(p, "tid:", 4)) {
-			if (sscanf(p, "tid:%u", &tid) != 1) {
-				err = -EIO;
-				goto out;
-			}
-			if (tid == t_tid)
-				find = 1;
-			else
-				find = 0;
-		} else if (!strncmp(p, "sid:", 4)) {
-			if (!find)
-				continue;
-			if (sscanf(p, "sid:%" SCNu64, &sid) != 1) {
-				err = -EIO;
-				goto out;
-			}
-
-			if (sid == t_sid) {
-				err = 0;
-				goto out;
-			}
-		}
-	}
-
-out:
-	fclose(f);
-
-	return err;
-}
-
 void session_create(struct connection *conn)
 {
 	struct session *session;
 	uint64_t sid;
-	static u16 tsih = 1;
+	static uint16_t tsih = 1;
 
-	if (!(session = session_alloc(conn->tid)))
+	/* First, we need to get an available sid. */
+	while (1) {
+		sid = sid64(conn->isid, tsih);
+		if (!session_find_id(conn->tid, sid))
+			break;
+		tsih++;
+	}
+
+	session = session_alloc(conn->tid);
+	if (!session)
 		return;
 
 	memcpy(session->isid, conn->isid, sizeof(session->isid));
-	session->tsih = tsih;
-
-	while (1) {
-		sid = sid64(session->isid, session->tsih);
-		int err = session_test(conn->tid, sid);
-
-		if (err == -ENOENT)
-			break;
-		else if (err < 0)
-			return;
-		session->tsih++;
-	}
-	tsih = session->tsih + 1;
+	session->tsih = tsih++;
 
 	conn->session = session;
 	conn->session->initiator = strdup(conn->initiator);
