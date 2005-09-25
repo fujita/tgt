@@ -221,7 +221,6 @@ static int iscsi_session_create(u32 tid, u64 sid, u32 exp_cmd_sn, u32 max_cmd_sn
 	info->sid = sid;
 	info->exp_cmd_sn = exp_cmd_sn;
 	info->max_cmd_sn = max_cmd_sn;
-	strncpy(info->initiator_name, name, sizeof(info->initiator_name) - 1);
 	msg->msg_type = IET_ADD_SESSION;
 
 	err = ipc_cmnd_execute(nlh, nlh->nlmsg_len);

@@ -197,18 +197,6 @@ extern struct iscsi_kernel_interface *ki;
 /* param.c */
 int param_index_by_name(char *name, struct iscsi_key *keys);
 
-/* #define log_error(fmt, args...)						\ */
-/* do {									\ */
-/* } while (0) */
-
-/* #define log_warning(fmt, args...)					\ */
-/* do {									\ */
-/* } while (0) */
-
-/* #define log_debug(fmt, args...)						\ */
-/* do {									\ */
-/* } while (0) */
-
 #define log_pdu(x, y)							\
 do {									\
 } while (0)

@@ -14,7 +14,6 @@ struct session_info {
 	u32 tid;
 
 	u64 sid;
-	char initiator_name[ISCSI_NAME_LEN];
 	u32 exp_cmd_sn;
 	u32 max_cmd_sn;
 };
@@ -59,7 +58,6 @@ enum {
 };
 
 enum {
-	key_target_type,
 	key_queued_cmnds,
 	target_key_last,
 };

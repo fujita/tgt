@@ -39,7 +39,6 @@ struct iscsi_sess_param {
 };
 
 struct iscsi_trgt_param {
-	int target_type;
 	int queued_cmnds;
 };
 
