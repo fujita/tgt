@@ -79,8 +79,8 @@ struct iscsi_cmnd *cmnd_alloc(struct iscsi_conn *conn, int req)
 	cmnd->sg = NULL;
 
 	if (req) {
-		assert(conn->session);
-		assert(conn->session->ts);
+		BUG_ON(!conn->session);
+		BUG_ON(!conn->session->ts);
 	}
 
 	dprintk(D_GENERIC, "%p:%p\n", conn, cmnd);
@@ -127,7 +127,7 @@ static void iscsi_cmnds_init_write(struct list_head *send)
 		dprintk(D_GENERIC, "%p:%x\n", cmnd, cmnd_opcode(cmnd));
 
 		list_del_init(&cmnd->list);
-		assert(conn == cmnd->conn);
+		BUG_ON(conn != cmnd->conn);
 		list_add_tail(&cmnd->list, &conn->write_list);
 	}
 
@@ -149,7 +149,7 @@ static void iscsi_cmnd_init_write(struct iscsi_cmnd *cmnd)
 			cmnd->hdigest, cmnd->ddigest,
 			list_empty(&cmnd->pdu_list), list_empty(&cmnd->hash_list));
 
-		assert(list_empty(&cmnd->list));
+		BUG_ON(!list_empty(&cmnd->list));
 	}
 	list_add(&cmnd->list, &head);
 	iscsi_cmnds_init_write(&head);
@@ -168,13 +168,13 @@ static void do_send_data_rsp(struct iscsi_cmnd *cmnd)
 	dprintk(D_GENERIC, "%p\n", cmnd);
 	pdusize = conn->session->param.max_xmit_data_length;
 	expsize = cmnd_read_size(cmnd);
-	assert(cmnd->tc);
+	BUG_ON(!cmnd->tc);
 	size = min(expsize, cmnd->tc->bufflen);
 	eprintk("%u %u\n", expsize, cmnd->tc->bufflen);
 	offset = 0;
 	sn = 0;
 
-	assert(sg);
+	BUG_ON(!sg);
 
 	while (1) {
 		data_cmnd = iscsi_cmnd_create_rsp_cmnd(cmnd, size <= pdusize);
@@ -383,7 +383,7 @@ static void cmnd_skip_pdu(struct iscsi_cmnd *cmnd)
 /* 	u32 size; */
 /* 	int i; */
 
-	assert(0);
+	BUG_ON(1);
 
 /* 	eprintk("%x %x %x %u\n", cmnd_itt(cmnd), cmnd_opcode(cmnd), */
 /* 		cmnd_hdr(cmnd)->cdb[0], cmnd->pdu.datasize); */
@@ -418,7 +418,7 @@ static void iscsi_cmnd_reject(struct iscsi_cmnd *req, int reason)
 /* 	struct tio *tio; */
 /* 	char *addr; */
 
-	assert(0);
+	BUG_ON(1);
 
 /* 	rsp = iscsi_cmnd_create_rsp_cmnd(req, 1); */
 /* 	rsp_hdr = (struct iscsi_reject_hdr *)&rsp->pdu.bhs; */
@@ -745,7 +745,7 @@ static void scsi_cmnd_done(struct tgt_cmd *tc)
 		send_scsi_rsp(cmnd);
 		break;
 	default:
-		assert(0);
+		BUG_ON(1);
 		break;
 	}
 }
@@ -796,8 +796,8 @@ static int noop_out_start(struct iscsi_conn *conn, struct iscsi_cmnd *cmnd)
 /* 			struct tio *tio; */
 			int pg_cnt = get_pgcnt(size, 0);
 
-			assert(pg_cnt < ISCSI_CONN_IOV_MAX);
-			assert(0);
+			BUG_ON(pg_cnt >= ISCSI_CONN_IOV_MAX);
+			BUG_ON(1);
 /* 			cmnd->tio = tio = tio_alloc(pg_cnt); */
 /* 			tio_set(tio, size, 0); */
 
@@ -818,7 +818,7 @@ static int noop_out_start(struct iscsi_conn *conn, struct iscsi_cmnd *cmnd)
 				size -= tmp;
 			}
 		}
-		assert(!size);
+		BUG_ON(size);
 		conn->read_overflow = size;
 		conn->read_msg.msg_iovlen = i;
 	}
@@ -862,7 +862,7 @@ static void scsi_cmnd_start(struct iscsi_conn *conn, struct iscsi_cmnd *req)
 				    be32_to_cpu(req_hdr->data_length),
 				    data_dir, req_hdr->lun,
 				    sizeof(req_hdr->lun), NULL);
-	assert(req->tc);
+	BUG_ON(!req->tc);
 
 	switch (req_hdr->cdb[0]) {
 	case SERVICE_ACTION_IN:
@@ -931,7 +931,7 @@ static void scsi_cmnd_start(struct iscsi_conn *conn, struct iscsi_cmnd *req)
 
 		if (req->pdu.datasize) {
 			if (cmnd_recv_pdu(conn, req->tc, 0, req->pdu.datasize) < 0)
-				assert(0);
+				BUG_ON(1);
 		}
 		break;
 	}
@@ -1003,17 +1003,16 @@ static void data_out_end(struct iscsi_conn *conn, struct iscsi_cmnd *cmnd)
 	struct iscsi_cmnd *scsi_cmnd;
 	u32 offset;
 
-	assert(cmnd);
+	BUG_ON(!cmnd);
 	scsi_cmnd = cmnd->req;
-	assert(scsi_cmnd);
+	BUG_ON(!scsi_cmnd);
 
 	if (conn->read_overflow) {
 		eprintk("%x %u\n", cmnd_itt(cmnd), conn->read_overflow);
-/* 		assert(scsi_cmnd->tio); */
 		offset = be32_to_cpu(req->offset);
 		offset += cmnd->pdu.datasize - conn->read_overflow;
 		if (cmnd_recv_pdu(conn, scsi_cmnd->tc, offset, conn->read_overflow) < 0)
-			assert(0);
+			BUG_ON(1);
 		return;
 	}
 
@@ -1035,7 +1034,7 @@ static void data_out_end(struct iscsi_conn *conn, struct iscsi_cmnd *cmnd)
 		scsi_cmnd->outstanding_r2t--;
 
 		if (scsi_cmnd->r2t_length == 0)
-			assert(list_empty(&scsi_cmnd->pdu_list));
+			BUG_ON(!list_empty(&scsi_cmnd->pdu_list));
 
 		scsi_cmnd_exec(scsi_cmnd);
 	}
@@ -1199,7 +1198,7 @@ static void noop_out_exec(struct iscsi_cmnd *req)
 /* 			rsp->tio = req->tio; */
 /* 		} */
 
-		assert(get_pgcnt(req->pdu.datasize, 0) < ISCSI_CONN_IOV_MAX);
+		BUG_ON(get_pgcnt(req->pdu.datasize, 0) >= ISCSI_CONN_IOV_MAX);
 		rsp->pdu.datasize = req->pdu.datasize;
 		iscsi_cmnd_init_write(rsp);
 	} else
@@ -1274,7 +1273,7 @@ static void cmnd_send_pdu(struct iscsi_conn *conn, struct iscsi_cmnd *cmnd)
 		return;
 
 	size = (cmnd->pdu.datasize + 3) & -4;
-	assert(cmnd->sg);
+	BUG_ON(!cmnd->sg);
 	__cmnd_send_pdu(conn, cmnd->sg, 0, size);
 }
 
@@ -1320,8 +1319,8 @@ void cmnd_release(struct iscsi_cmnd *cmnd, int force)
 	iscsi_cmnd_remove(cmnd);
 
 	if (is_last) {
-		assert(!force);
-		assert(req);
+		BUG_ON(force);
+		BUG_ON(!req);
 		cmnd_release(req, 0);
 	}
 
@@ -1334,7 +1333,7 @@ void cmnd_tx_start(struct iscsi_cmnd *cmnd)
 	struct iovec *iop;
 
 	dprintk(D_GENERIC, "%p:%x\n", cmnd, cmnd_opcode(cmnd));
-	assert(cmnd);
+	BUG_ON(!cmnd);
 	iscsi_cmnd_set_length(&cmnd->pdu);
 
 	set_cork(conn->sock, 1);
@@ -1368,7 +1367,7 @@ void cmnd_tx_start(struct iscsi_cmnd *cmnd)
 		cmnd_set_sn(cmnd, (rsp->flags & ISCSI_FLAG_CMD_FINAL) ? 1 : 0);
 		offset = rsp->offset;
 		rsp->offset = cpu_to_be32(offset);
-		assert(cmnd->sg);
+		BUG_ON(!cmnd->sg);
 		__cmnd_send_pdu(conn, cmnd->sg, offset, cmnd->pdu.datasize);
 		break;
 	}
@@ -1415,7 +1414,7 @@ void cmnd_tx_end(struct iscsi_cmnd *cmnd)
 		break;
 	default:
 		eprintk("unexpected cmnd op %x\n", cmnd_opcode(cmnd));
-		assert(0);
+		BUG_ON(1);
 		break;
 	}
 
@@ -1483,7 +1482,7 @@ static void iscsi_session_push_cmnd(struct iscsi_cmnd *cmnd)
 				break;
 		}
 
-		assert(list_empty(&cmnd->list));
+		BUG_ON(!list_empty(&cmnd->list));
 
 		list_add_tail(&cmnd->list, entry);
 	}

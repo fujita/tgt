@@ -27,15 +27,6 @@ do {								\
 	printk("%s(%d) " fmt, __FUNCTION__, __LINE__, args);	\
 } while (0)
 
-#define assert(p) do {						\
-	if (!(p)) {						\
-		printk(KERN_CRIT "BUG at %s:%d assert(%s)\n",	\
-		       __FILE__, __LINE__, #p);			\
-		dump_stack();					\
-		BUG();						\
-	}							\
-} while (0)
-
 #ifdef D_IOV
 static inline void iscsi_dump_iov(struct msghdr *msg)
 {

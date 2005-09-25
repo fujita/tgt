@@ -44,7 +44,7 @@ static inline void iscsi_conn_init_read(struct iscsi_conn *conn, void *data, siz
 static void iscsi_conn_read_ahs(struct iscsi_conn *conn, struct iscsi_cmnd *cmnd)
 {
 	cmnd->pdu.ahs = kmalloc(cmnd->pdu.ahssize, __GFP_NOFAIL|GFP_KERNEL);
-	assert(cmnd->pdu.ahs);
+	BUG_ON(!cmnd->pdu.ahs);
 	iscsi_conn_init_read(conn, cmnd->pdu.ahs, cmnd->pdu.ahssize);
 }
 
@@ -207,7 +207,7 @@ static int recv(struct iscsi_conn *conn)
 
 	switch (conn->read_state) {
 	case RX_INIT_BHS:
-		assert(!cmnd);
+		BUG_ON(cmnd);
 		cmnd = conn->read_cmnd = create_cmnd(conn);
 	case RX_BHS:
 		res = do_recv(conn, RX_INIT_AHS);
@@ -259,7 +259,7 @@ static int recv(struct iscsi_conn *conn)
 		break;
 	default:
 		eprintk("%d %d %x\n", res, conn->read_state, cmnd_opcode(cmnd));
-		assert(0);
+		BUG_ON(1);
 	}
 
 	if (res <= 0)
@@ -270,7 +270,7 @@ static int recv(struct iscsi_conn *conn)
 
 	if (conn->read_size) {
 		eprintk("%d %x %d\n", res, cmnd_opcode(cmnd), conn->read_size);
-		assert(0);
+		BUG_ON(1);
 	}
 
 	cmnd_rx_end(cmnd);
@@ -503,7 +503,7 @@ static int send(struct iscsi_conn *conn)
 
 	switch (conn->write_state) {
 	case TX_INIT:
-		assert(!cmnd);
+		BUG_ON(cmnd);
 		cmnd = conn->write_cmnd = iscsi_get_send_cmnd(conn);
 		if (!cmnd)
 			return 0;
@@ -516,7 +516,7 @@ static int send(struct iscsi_conn *conn)
 			break;
 	case TX_INIT_DDIGEST:
 		digest_tx_data(cmnd);
-		assert(!cmnd->conn->write_size);
+		BUG_ON(cmnd->conn->write_size);
 		cmnd->conn->write_size += sizeof(u32);
 		conn->write_state = TX_DDIGEST;
 	case TX_DDIGEST:
@@ -524,7 +524,7 @@ static int send(struct iscsi_conn *conn)
 		break;
 	default:
 		eprintk("%d %d %x\n", res, conn->write_state, cmnd_opcode(cmnd));
-		assert(0);
+		BUG_ON(1);
 	}
 
 	if (res <= 0)
@@ -535,7 +535,7 @@ static int send(struct iscsi_conn *conn)
 
 	if (conn->write_size) {
 		eprintk("%d %x %u\n", res, cmnd_opcode(cmnd), conn->write_size);
-		assert(!conn->write_size);
+		BUG_ON(conn->write_size);
 	}
 	cmnd_tx_end(cmnd);
 	cmnd_release(cmnd, 0);
@@ -577,8 +577,6 @@ static void close_conn(struct iscsi_conn *conn)
 	struct iscsi_session *session = conn->session;
 	struct iscsi_cmnd *cmnd;
 
-	assert(conn);
-
 	conn->sock->ops->shutdown(conn->sock, 2);
 
 	write_lock(&conn->sock->sk->sk_callback_lock);
@@ -604,7 +602,7 @@ static void close_conn(struct iscsi_conn *conn)
 		eprintk("%u\n", atomic_read(&conn->nr_cmnds));
 		list_for_each_entry(cmnd, &conn->pdu_list, conn_list)
 			eprintk("%x %x\n", cmnd_opcode(cmnd), cmnd_itt(cmnd));
-		assert(0);
+		BUG_ON(1);
 	}
 
 	eprintk("%d %llu %u\n", session->target->tid, session->sid, conn->cid);
