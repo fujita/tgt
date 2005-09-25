@@ -47,6 +47,7 @@ struct session {
 	uint8_t isid[6];
 	uint16_t tsih;
 
+	struct qelem conn_list;
 	int conn_cnt;
 };
 
@@ -55,6 +56,7 @@ struct connection {
 	int iostate;
 	int fd;
 
+	struct qelem clist;
 	struct session *session;
 
 	u32 tid;
@@ -150,11 +152,12 @@ extern int cmnd_exec_auth_chap(struct connection *conn);
 /* conn.c */
 extern struct connection *conn_alloc(void);
 extern void conn_free(struct connection *conn);
-extern int conn_test(struct connection *conn);
+extern struct connection * conn_find(struct session *session, u32 cid);
 extern void conn_take_fd(struct connection *conn, int fd);
 extern void conn_read_pdu(struct connection *conn);
 extern void conn_write_pdu(struct connection *conn);
 extern void conn_free_pdu(struct connection *conn);
+extern void conn_add_to_session(struct connection *conn, struct session *session);
 
 /* iscsid.c */
 extern int iscsi_debug;

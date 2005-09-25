@@ -17,6 +17,18 @@
 #define ISCSI_CONN_NEW		1
 #define ISCSI_CONN_EXIT		5
 
+void conn_add_to_session(struct connection *conn, struct session *session)
+{
+	if (!list_empty(&conn->clist)) {
+		eprintf("%" PRIx64 " %u\n",
+			sid64(session->isid, session->tsih), conn->cid);
+		exit(0);
+	}
+
+	conn->session = session;
+	insque(&conn->clist, &session->conn_list);
+}
+
 struct connection *conn_alloc(void)
 {
 	struct connection *conn;
@@ -28,77 +40,28 @@ struct connection *conn_alloc(void)
 	conn->state = STATE_FREE;
 	param_set_defaults(conn->session_param, session_keys);
 
+	INIT_LIST_HEAD(&conn->clist);
+
 	return conn;
 }
 
 void conn_free(struct connection *conn)
 {
+	remque(&conn->clist);
 	free(conn->initiator);
 	free(conn);
 }
 
-int conn_test(struct connection *conn)
+struct connection *conn_find(struct session *session, u32 cid)
 {
-	FILE *f;
-	char buf[8192], *p;
-	u32 tid, t_tid, cid, t_cid;
-	u64 sid, t_sid;
-	int err = -ENOENT, find = 0;
+	struct connection *conn;
 
-	t_tid = conn->tid;
-	t_sid = sid64(conn->session->isid, conn->session->tsih);
-	t_cid = conn->cid;
-
-	if ((f = fopen(PROC_SESSION, "r")) == NULL) {
-		fprintf(stderr, "Can't open %s\n", PROC_SESSION);
-		return -errno;
+	list_for_each_entry(conn, &session->conn_list, clist) {
+		if (conn->cid == cid)
+			return conn;
 	}
 
-	while (fgets(buf, sizeof(buf), f)) {
-		p = buf;
-		while (isspace((int) *p))
-			p++;
-
-		if (!strncmp(p, "tid:", 4)) {
-			if (sscanf(p, "tid:%u", &tid) != 1) {
-				err = -EIO;
-				goto out;
-			}
-			if (tid == t_tid)
-				find = 1;
-			else
-				find = 0;
-		} else if (!strncmp(p, "sid:", 4)) {
-			if (!find)
-				continue;
-			if (sscanf(p, "sid:%" SCNu64, &sid) != 1) {
-				err = -EIO;
-				goto out;
-			}
-
-			if (sid == t_sid)
-				find = 1;
-			else
-				find = 0;
-		} else if (!strncmp(p, "cid:", 4)) {
-			if (!find)
-				continue;
-			if (sscanf(p, "cid:%u", &cid) != 1) {
-				err = -EIO;
-				goto out;
-			}
-
-			if (cid == t_cid) {
-				err = 0;
-				goto out;
-			}
-		}
-	}
-
-out:
-	fclose(f);
-
-	return err;
+	return NULL;
 }
 
 void conn_take_fd(struct connection *conn, int fd)

@@ -31,6 +31,8 @@ static struct session *session_alloc(u32 tid)
 	INIT_LIST_HEAD(&session->slist);
 	insque(&session->slist, &target->sessions_list);
 
+	INIT_LIST_HEAD(&session->conn_list);
+
 	return session;
 }
 
@@ -91,7 +93,7 @@ void session_create(struct connection *conn)
 	memcpy(session->isid, conn->isid, sizeof(session->isid));
 	session->tsih = tsih++;
 
-	conn->session = session;
+	conn_add_to_session(conn, session);
 	conn->session->initiator = strdup(conn->initiator);
 
 	log_debug("session_create: %#" PRIx64, sid);
@@ -105,7 +107,10 @@ void session_remove(struct session *session)
 {
 	uint64_t sid = sid64(session->isid, session->tsih);
 
-	eprintf("session_remove: %#"  PRIx64, sid);
+	eprintf("%#"  PRIx64 "\n", sid);
+
+	if (!list_empty(&session->conn_list))
+		eprintf("%" PRIx64 " conn_list is not null\n", sid);
 
 	if (!session->tsih)
 		ki->session_destroy(session->target->tid, sid);

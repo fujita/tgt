@@ -169,7 +169,6 @@ static void text_scan_security(struct connection *conn)
 
 static void login_security_done(struct connection *conn)
 {
-	int err;
 	struct iscsi_login *req = (struct iscsi_login *)&conn->req.bhs;
 	struct iscsi_login_rsp *rsp = (struct iscsi_login_rsp *) &conn->rsp.bhs;
 	struct session *session;
@@ -177,23 +176,24 @@ static void login_security_done(struct connection *conn)
 	if (!conn->tid)
 		return;
 
-	if ((session = session_find_name(conn->tid, conn->initiator, req->isid))) {
+	session = session_find_name(conn->tid, conn->initiator, req->isid);
+	if (session) {
 		if (!req->tsih) {
-			uint64_t sid = sid64(session->isid, session->tsih);
 			/* do session reinstatement */
+			/* We need to close all connections in this session */
 /* 			session_conns_close(conn->tid, sid); */
-			session = NULL;
+/* 			session = NULL; */
 		} else if (req->tsih != session->tsih) {
 			/* fail the login */
 			rsp->status_class = ISCSI_STATUS_CLS_INITIATOR_ERR;
 			rsp->status_detail = ISCSI_LOGIN_STATUS_TGT_NOT_FOUND;
 			conn->state = STATE_EXIT;
 			return;
-		} else if ((err = conn_test(conn)) == -ENOENT) {
+		} else if (conn_find(session, conn->cid)) {
 			/* do connection reinstatement */
 		}
 		/* add a new connection to the session */
-		conn->session = session;
+		conn_add_to_session(conn, session);
 	} else {
 		if (req->tsih) {
 			/* fail the login */
@@ -202,7 +202,10 @@ static void login_security_done(struct connection *conn)
 			conn->state = STATE_EXIT;
 			return;
 		}
-		/* instantiate a new session */
+		/*
+		 * We do nothing here and instantiate a new session
+		 * later at login_finish().
+		 */
 	}
 }
 
