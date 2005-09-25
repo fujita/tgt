@@ -1593,8 +1593,6 @@ static struct tgt_target_template iet_tgt_target_template = {
 
 static void iscsi_exit(void)
 {
-	iet_procfs_exit();
-
 	if (iscsi_cmnd_cache)
 		kmem_cache_destroy(iscsi_cmnd_cache);
 
@@ -1606,9 +1604,6 @@ static int iscsi_init(void)
 	int err = -ENOMEM;
 
 	printk("iSCSI Enterprise Target Software - version %s\n", IET_VERSION_STRING);
-
-	if ((err = iet_procfs_init()) < 0)
-		goto err;
 
 	iscsi_cmnd_cache = kmem_cache_create("iscsi_cmnd", sizeof(struct iscsi_cmnd),
 					     0, 0, NULL, NULL);

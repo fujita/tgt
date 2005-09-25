@@ -25,8 +25,6 @@
 	(uint64_t) tsih << 48;					\
 })
 
-#define PROC_SESSION	"/proc/net/iet/session"
-
 struct PDU {
 	struct iscsi_hdr bhs;
 	void *ahs;

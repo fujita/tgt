@@ -4,67 +4,12 @@
  * This code is licenced under the GPL.
  */
 
-#include <linux/proc_fs.h>
-
 #include <tgt.h>
 #include <tgt_target.h>
 
 #include "iet_u.h"
 #include "iscsi.h"
 #include "iscsi_dbg.h"
-
-struct proc_entries {
-	const char *name;
-	struct file_operations *fops;
-};
-
-static struct proc_entries iet_proc_entries[] =
-{
-/* 	{"volume", &volume_seq_fops}, */
-	{"session", &session_seq_fops},
-};
-
-static struct proc_dir_entry *proc_iet_dir;
-
-void iet_procfs_exit(void)
-{
-	int i;
-
-	if (!proc_iet_dir)
-		return;
-
-	for (i = 0; i < ARRAY_SIZE(iet_proc_entries); i++)
-		remove_proc_entry(iet_proc_entries[i].name, proc_iet_dir);
-
-	remove_proc_entry(proc_iet_dir->name, proc_iet_dir->parent);
-}
-
-int iet_procfs_init(void)
-{
-	int i;
-	struct proc_dir_entry *ent;
-
-	if (!(proc_iet_dir = proc_mkdir("net/iet", 0)))
-		goto err;
-
-	proc_iet_dir->owner = THIS_MODULE;
-
-	for (i = 0; i < ARRAY_SIZE(iet_proc_entries); i++) {
-		ent = create_proc_entry(iet_proc_entries[i].name, 0, proc_iet_dir);
-		if (ent)
-			ent->proc_fops = iet_proc_entries[i].fops;
-		else
-			goto err;
-	}
-
-	return 0;
-
-err:
-	if (proc_iet_dir)
-		iet_procfs_exit();
-
-	return -ENOMEM;
-}
 
 static int add_conn(struct iscsi_target *target, struct conn_info *info)
 {

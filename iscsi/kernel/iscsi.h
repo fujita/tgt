@@ -8,7 +8,6 @@
 #define __ISCSI_H__
 
 #include <linux/pagemap.h>
-#include <linux/seq_file.h>
 #include <linux/mm.h>
 #include <linux/crypto.h>
 #include <net/sock.h>
@@ -56,7 +55,6 @@ struct network_thread_info {
 };
 
 struct iscsi_cmnd;
-struct tgt_target;
 
 enum iscsi_device_state {
 	IDEV_RUNNING,
@@ -65,15 +63,12 @@ enum iscsi_device_state {
 
 struct iscsi_target {
 	int tid;
-	struct list_head t_list;
 
 	struct iscsi_sess_param sess_param;
 	struct iscsi_trgt_param trgt_param;
 
 	struct list_head session_list;
-
 	struct network_thread_info nthread_info;
-
 	struct semaphore target_sem;
 
 	struct tgt_target *tt;
@@ -164,8 +159,6 @@ struct iscsi_pdu {
 	unsigned int datasize;
 };
 
-typedef void (iet_show_info_t)(struct seq_file *seq, struct iscsi_target *target);
-
 struct iscsi_cmnd {
 	struct list_head list;
 	struct list_head conn_list;
@@ -213,7 +206,6 @@ extern int conn_add(struct iscsi_session *, struct conn_info *);
 extern int conn_del(struct iscsi_session *, struct conn_info *);
 extern int conn_free(struct iscsi_conn *);
 extern void conn_close(struct iscsi_conn *);
-extern void conn_info_show(struct seq_file *, struct iscsi_session *);
 
 /* nthread.c */
 extern int nthread_init(struct iscsi_target *);
@@ -224,19 +216,14 @@ extern void nthread_wakeup(struct iscsi_target *);
 /* target.c */
 extern int target_lock(struct iscsi_target *, int);
 extern void target_unlock(struct iscsi_target *);
-struct iscsi_target *target_lookup_by_id(u32);
 extern int target_add(struct tgt_target *);
 extern void target_del(struct tgt_target *);
 
 /* config.c */
 extern int iet_msg_recv(struct tgt_target *, uint32_t, void *);
-extern int iet_procfs_init(void);
-extern void iet_procfs_exit(void);
-extern int iet_info_show(struct seq_file *, iet_show_info_t *);
 extern int event_send(struct tgt_target *tgt, u32 tid, u64 sid, u32 cid, u32 state);
 
 /* session.c */
-extern struct file_operations session_seq_fops;
 extern struct iscsi_session *session_lookup(struct iscsi_target *, u64);
 extern int session_add(struct iscsi_target *, struct session_info *);
 extern int session_del(struct iscsi_target *, u64);

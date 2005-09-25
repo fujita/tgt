@@ -12,57 +12,6 @@
 #include "iscsi_dbg.h"
 #include "digest.h"
 
-static void print_conn_state(char *p, size_t size, unsigned long state)
-{
-	if (test_bit(CONN_ACTIVE, &state))
-		snprintf(p, size, "%s", "active");
-	else if (test_bit(CONN_CLOSING, &state))
-		snprintf(p, size, "%s", "closing");
-	else
-		snprintf(p, size, "%s", "unknown");
-}
-
-static void print_digest_state(char *p, size_t size, unsigned long flags)
-{
-	if (DIGEST_NONE & flags)
-		snprintf(p, size, "%s", "none");
-	else if (DIGEST_CRC32C & flags)
-		snprintf(p, size, "%s", "crc32c");
-	else
-		snprintf(p, size, "%s", "unknown");
-}
-
-void conn_info_show(struct seq_file *seq, struct iscsi_session *session)
-{
-	struct iscsi_conn *conn;
-	struct sock *sk;
-	char buf[64];
-
-	list_for_each_entry(conn, &session->conn_list, list) {
-		sk = conn->sock->sk;
-		switch (sk->sk_family) {
-		case AF_INET:
-			snprintf(buf, sizeof(buf),
-				 "%u.%u.%u.%u", NIPQUAD(inet_sk(sk)->daddr));
-			break;
-		case AF_INET6:
-			snprintf(buf, sizeof(buf),
-				 "[%04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x]",
-				 NIP6(inet6_sk(sk)->daddr));
-			break;
-		default:
-			break;
-		}
-		seq_printf(seq, "\t\tcid:%u ip:%s ", conn->cid, buf);
-		print_conn_state(buf, sizeof(buf), conn->state);
-		seq_printf(seq, "state:%s ", buf);
-		print_digest_state(buf, sizeof(buf), conn->hdigest_type);
-		seq_printf(seq, "hd:%s ", buf);
-		print_digest_state(buf, sizeof(buf), conn->ddigest_type);
-		seq_printf(seq, "dd:%s\n", buf);
-	}
-}
-
 struct iscsi_conn *conn_lookup(struct iscsi_session *session, u16 cid)
 {
 	struct iscsi_conn *conn;

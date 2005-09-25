@@ -119,32 +119,3 @@ int session_del(struct iscsi_target *target, u64 sid)
 
 	return session_free(session);
 }
-
-static void iet_session_info_show(struct seq_file *seq, struct iscsi_target *target)
-{
-	struct iscsi_session *session;
-
-	list_for_each_entry(session, &target->session_list, list) {
-		seq_printf(seq, "\tsid:%llu initiator:%s\n",
-			   (unsigned long long) session->sid, session->initiator);
-		conn_info_show(seq, session);
-	}
-}
-
-static int iet_sessions_info_show(struct seq_file *seq, void *v)
-{
-	return iet_info_show(seq, iet_session_info_show);
-}
-
-static int iet_session_seq_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, iet_sessions_info_show, NULL);
-}
-
-struct file_operations session_seq_fops = {
-	.owner		= THIS_MODULE,
-	.open		= iet_session_seq_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
-};
