@@ -81,7 +81,6 @@ struct iscsi_session {
 	struct list_head list;
 	struct iscsi_target *target;
 
-	char *initiator;
 	u64 sid;
 
 	u32 exp_cmd_sn;

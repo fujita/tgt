@@ -21,17 +21,21 @@ struct iscsi_session *session_lookup(struct iscsi_target *target, u64 sid)
 	return NULL;
 }
 
-static int iet_session_alloc(struct iscsi_target *target, struct session_info *info)
+int session_add(struct iscsi_target *target, struct session_info *info)
 {
-	int err, i;
 	struct iscsi_session *session;
+	int i;
 
 	dprintk(D_SETUP, "%p %u %#Lx\n", target, target->tid,
 		(unsigned long long) info->sid);
 
-	if (!(session = kmalloc(sizeof(*session), GFP_KERNEL)))
+	session = session_lookup(target, info->sid);
+	if (session)
+		return -EEXIST;
+
+	session = kzalloc(sizeof(*session), GFP_KERNEL);
+	if (!session)
 		return -ENOMEM;
-	memset(session, 0, sizeof(*session));
 
 	session->target = target;
 	session->sid = info->sid;
@@ -40,13 +44,6 @@ static int iet_session_alloc(struct iscsi_target *target, struct session_info *i
 
 	session->exp_cmd_sn = info->exp_cmd_sn;
 	session->max_cmd_sn = info->max_cmd_sn;
-
-	session->initiator = kmalloc(sizeof(info->initiator_name), GFP_KERNEL);
-	if (!session->initiator) {
-		err = -ENOMEM;
-		goto err;
-	}
-	memcpy(session->initiator, info->initiator_name, sizeof(info->initiator_name));
 
 	INIT_LIST_HEAD(&session->conn_list);
 	INIT_LIST_HEAD(&session->pending_list);
@@ -62,34 +59,26 @@ static int iet_session_alloc(struct iscsi_target *target, struct session_info *i
 	session->ts = tgt_session_create(target->tt, 64, NULL, NULL);
 
 	return 0;
-err:
-	if (session) {
-		kfree(session->initiator);
-		kfree(session);
-	}
-	return err;
 }
 
-int session_add(struct iscsi_target *target, struct session_info *info)
-{
-	struct iscsi_session *session;
-	int err = -EEXIST;
-
-	if ((session = session_lookup(target, info->sid)))
-		return err;
-
-	err = iet_session_alloc(target, info);
-
-	return err;
-}
-
-static int session_free(struct iscsi_session *session)
+int session_del(struct iscsi_target *target, u64 sid)
 {
 	int i;
+	struct iscsi_session *session;
+
+	session = session_lookup(target, sid);
+	if (!session)
+		return -ENOENT;
 
 	dprintk(D_SETUP, "%#Lx\n", (unsigned long long) session->sid);
 
-	assert(list_empty(&session->conn_list));
+	if (!list_empty(&session->conn_list)) {
+		eprintk("%llu still have connections\n",
+			(unsigned long long) session->sid);
+		return -EBUSY;
+	}
+
+	BUG_ON(!list_empty(&session->conn_list));
 
 	for (i = 0; i < ARRAY_SIZE(session->cmnd_hash); i++) {
 		if (!list_empty(&session->cmnd_hash[i]))
@@ -97,25 +86,9 @@ static int session_free(struct iscsi_session *session)
 	}
 
 	list_del(&session->list);
-	kfree(session->initiator);
 
 	tgt_session_destroy(session->ts);
 	kfree(session);
 
 	return 0;
-}
-
-int session_del(struct iscsi_target *target, u64 sid)
-{
-	struct iscsi_session *session;
-
-	if (!(session = session_lookup(target, sid)))
-		return -ENOENT;
-
-	if (!list_empty(&session->conn_list)) {
-		eprintk("%llu still have connections\n", (unsigned long long) session->sid);
-		return -EBUSY;
-	}
-
-	return session_free(session);
 }
