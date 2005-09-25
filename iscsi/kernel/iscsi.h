@@ -200,7 +200,6 @@ extern void cmnd_release(struct iscsi_cmnd *, int);
 extern void send_scsi_rsp(struct iscsi_cmnd *);
 
 /* conn.c */
-extern struct iscsi_conn *conn_lookup(struct iscsi_session *, u16);
 extern int conn_add(struct iscsi_session *, struct conn_info *);
 extern int conn_del(struct iscsi_session *, struct conn_info *);
 extern int conn_free(struct iscsi_conn *);

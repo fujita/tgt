@@ -80,10 +80,8 @@ int session_del(struct iscsi_target *target, u64 sid)
 
 	BUG_ON(!list_empty(&session->conn_list));
 
-	for (i = 0; i < ARRAY_SIZE(session->cmnd_hash); i++) {
-		if (!list_empty(&session->cmnd_hash[i]))
-			BUG();
-	}
+	for (i = 0; i < ARRAY_SIZE(session->cmnd_hash); i++)
+		BUG_ON(!list_empty(&session->cmnd_hash[i]));
 
 	list_del(&session->list);
 

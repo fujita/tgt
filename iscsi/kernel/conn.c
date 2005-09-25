@@ -12,7 +12,7 @@
 #include "iscsi_dbg.h"
 #include "digest.h"
 
-struct iscsi_conn *conn_lookup(struct iscsi_session *session, u16 cid)
+static struct iscsi_conn *conn_lookup(struct iscsi_session *session, u16 cid)
 {
 	struct iscsi_conn *conn;
 
@@ -23,7 +23,7 @@ struct iscsi_conn *conn_lookup(struct iscsi_session *session, u16 cid)
 	return NULL;
 }
 
-static void iet_state_change(struct sock *sk)
+static void state_change(struct sock *sk)
 {
 	struct iscsi_conn *conn = sk->sk_user_data;
 	struct iscsi_target *target = conn->session->target;
@@ -36,7 +36,7 @@ static void iet_state_change(struct sock *sk)
 	target->nthread_info.old_state_change(sk);
 }
 
-static void iet_data_ready(struct sock *sk, int len)
+static void data_ready(struct sock *sk, int len)
 {
 	struct iscsi_conn *conn = sk->sk_user_data;
 	struct iscsi_target *target = conn->session->target;
@@ -45,7 +45,7 @@ static void iet_data_ready(struct sock *sk, int len)
 	target->nthread_info.old_data_ready(sk, len);
 }
 
-static void iet_socket_bind(struct iscsi_conn *conn)
+static void socket_bind(struct iscsi_conn *conn)
 {
 	int opt = 1;
 	mm_segment_t oldfs;
@@ -59,15 +59,16 @@ static void iet_socket_bind(struct iscsi_conn *conn)
 
 	write_lock(&conn->sock->sk->sk_callback_lock);
 	target->nthread_info.old_state_change = conn->sock->sk->sk_state_change;
-	conn->sock->sk->sk_state_change = iet_state_change;
+	conn->sock->sk->sk_state_change = state_change;
 
 	target->nthread_info.old_data_ready = conn->sock->sk->sk_data_ready;
-	conn->sock->sk->sk_data_ready = iet_data_ready;
+	conn->sock->sk->sk_data_ready = data_ready;
 	write_unlock(&conn->sock->sk->sk_callback_lock);
 
 	oldfs = get_fs();
 	set_fs(get_ds());
-	conn->sock->ops->setsockopt(conn->sock, SOL_TCP, TCP_NODELAY, (void *)&opt, sizeof(opt));
+	conn->sock->ops->setsockopt(conn->sock, SOL_TCP, TCP_NODELAY,
+				    (void *)&opt, sizeof(opt));
 	set_fs(oldfs);
 }
 
@@ -76,9 +77,9 @@ int conn_free(struct iscsi_conn *conn)
 	dprintk(D_GENERIC, "%p %#Lx %u\n", conn->session,
 		(unsigned long long) conn->session->sid, conn->cid);
 
-	assert(atomic_read(&conn->nr_cmnds) == 0);
-	assert(list_empty(&conn->pdu_list));
-	assert(list_empty(&conn->write_list));
+	BUG_ON(atomic_read(&conn->nr_cmnds));
+	BUG_ON(!list_empty(&conn->pdu_list));
+	BUG_ON(!list_empty(&conn->write_list));
 
 	list_del(&conn->list);
 	list_del(&conn->poll_list);
@@ -89,16 +90,28 @@ int conn_free(struct iscsi_conn *conn)
 	return 0;
 }
 
-static int iet_conn_alloc(struct iscsi_session *session, struct conn_info *info)
+void conn_close(struct iscsi_conn *conn)
+{
+	if (test_and_clear_bit(CONN_ACTIVE, &conn->state))
+		set_bit(CONN_CLOSING, &conn->state);
+
+	nthread_wakeup(conn->session->target);
+}
+
+int conn_add(struct iscsi_session *session, struct conn_info *info)
 {
 	struct iscsi_conn *conn;
 
-	dprintk(D_SETUP, "%#Lx:%u\n", (unsigned long long) session->sid, info->cid);
+	dprintk(D_SETUP, "%#Lx:%u\n",
+		(unsigned long long) session->sid, info->cid);
 
-	conn = kmalloc(sizeof(*conn), GFP_KERNEL);
+	conn = conn_lookup(session, info->cid);
+	if (conn)
+		return -EEXIST;
+
+	conn = kzalloc(sizeof(*conn), GFP_KERNEL);
 	if (!conn)
 		return -ENOMEM;
-	memset(conn, 0, sizeof(*conn));
 
 	conn->session = session;
 	conn->cid = info->cid;
@@ -124,32 +137,13 @@ static int iet_conn_alloc(struct iscsi_session *session, struct conn_info *info)
 	set_bit(CONN_ACTIVE, &conn->state);
 
 	conn->file = fget(info->fd);
-	iet_socket_bind(conn);
+	socket_bind(conn);
 
 	list_add(&conn->poll_list, &session->target->nthread_info.active_conns);
 
 	nthread_wakeup(conn->session->target);
 
 	return 0;
-}
-
-void conn_close(struct iscsi_conn *conn)
-{
-	if (test_and_clear_bit(CONN_ACTIVE, &conn->state))
-		set_bit(CONN_CLOSING, &conn->state);
-
-	nthread_wakeup(conn->session->target);
-}
-
-int conn_add(struct iscsi_session *session, struct conn_info *info)
-{
-	struct iscsi_conn *conn;
-	int err = -EEXIST;
-
-	if ((conn = conn_lookup(session, info->cid)))
-		return err;
-
-	return iet_conn_alloc(session, info);
 }
 
 int conn_del(struct iscsi_session *session, struct conn_info *info)
