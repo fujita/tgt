@@ -98,7 +98,6 @@ static void dl_config_load(int nr)
 
 static void dl_poll_init(int nr, struct pollfd *poll_array)
 {
-	int i;
 	void (* fn)(struct pollfd *, int);
 
 	fn = dlsym(dl_handles[0], "poll_init");

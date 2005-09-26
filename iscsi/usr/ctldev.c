@@ -205,6 +205,73 @@ static int iscsi_param_set(u32 tid, u64 sid, int type, u32 partial, struct iscsi
 	return err;
 }
 
+static int iscsi_param_partial_set(u32 tid, u64 sid, int type, int key, u32 val)
+{
+	struct iscsi_param *param;
+	struct iscsi_param s_param[session_key_last];
+	struct iscsi_param t_param[target_key_last];
+
+	if (type == key_session)
+		param = s_param;
+	else
+		param = t_param;
+
+	param[key].val = val;
+
+	return iscsi_param_set(tid, sid, type, 1 << key, param);
+}
+
+static int trgt_mgmt_params(int tid, uint64_t sid, char *params)
+{
+	char *p, *q;
+	uint32_t s_partial = 0, t_partial = 0;
+	struct iscsi_param s_param[session_key_last];
+	struct iscsi_param t_param[target_key_last];
+
+	while ((p = strsep(&params, ",")) != NULL) {
+		int idx;
+		u32 val;
+		if (!*p)
+			continue;
+		if (!(q = strchr(p, '=')))
+			continue;
+		*q++ = '\0';
+		val = strtol(q, NULL, 0);
+
+		if (!((idx = param_index_by_name(p, target_keys)) < 0)) {
+			if (!param_check_val(target_keys, idx, &val))
+				t_partial |= (1 << idx);
+			else
+				eprintf("invalid val %s, %u\n",
+					target_keys[idx].name, val);
+			t_param[idx].val = val;
+
+			continue;
+		}
+
+		if (!((idx = param_index_by_name(p, session_keys)) < 0)) {
+			if (!param_check_val(session_keys, idx, &val))
+				s_partial |= (1 << idx);
+			else
+				eprintf("invalid val %s, %u\n",
+					session_keys[idx].name, val);
+			s_param[idx].val = val;
+		}
+	}
+
+	if (t_partial && s_partial) {
+		eprintf("%s", "Cannot change both at the same time\n");
+		return -EINVAL;
+	} else if (t_partial)
+		return iscsi_param_set(tid, sid, key_target, t_partial, t_param);
+	else if (s_partial)
+		return iscsi_param_set(tid, sid, key_session, s_partial, s_param);
+	else
+		eprintf("%s", "Nothing to do\n");
+
+	return 0;
+}
+
 static int iscsi_session_create(u32 tid, u64 sid, u32 exp_cmd_sn, u32 max_cmd_sn, char *name)
 {
 	struct iet_msg *msg;
@@ -426,7 +493,6 @@ static int iscsi_lunit_destroy(u32 tid, u32 lun)
 	return err;
 }
 
-
 static int target_mgmt(struct tgtadm_req *req, char *params, char *rbuf, int *rlen)
 {
 	int err = -EINVAL, tid = req->tid;
@@ -437,6 +503,9 @@ static int target_mgmt(struct tgtadm_req *req, char *params, char *rbuf, int *rl
 		break;
 	case OP_DELETE:
 		err = target_del(tid);
+		break;
+	case OP_UPDATE:
+		err = trgt_mgmt_params(tid, req->sid, params);
 		break;
 	default:
 		break;
@@ -650,17 +719,17 @@ void initial_config_load(void)
 			eprintf("creaing lun %d %u %s\n", tid, lun, p);
 			iscsi_lunit_create(tid, lun, q);
 		} else if (!((idx = param_index_by_name(p, target_keys)) < 0) && tid >= 0) {
-/* 			val = strtol(q, &q, 0); */
-/* 			if (param_check_val(target_keys, idx, &val) < 0) */
-/* 				log_warning("%s, %u\n", target_keys[idx].name, val); */
-/* 			iscsi_param_partial_set(tid, 0, key_target, idx, val); */
+			val = strtol(q, &q, 0);
+			if (param_check_val(target_keys, idx, &val) < 0)
+				log_warning("%s, %u\n", target_keys[idx].name, val);
+			iscsi_param_partial_set(tid, 0, key_target, idx, val);
 		} else if (!((idx = param_index_by_name(p, session_keys)) < 0) && tid >= 0) {
-/* 			char *str = target_sep_string(&q); */
-/* 			if (param_str_to_val(session_keys, idx, str, &val) < 0) */
-/* 				continue; */
-/* 			if (param_check_val(session_keys, idx, &val) < 0) */
-/* 				log_warning("%s, %u\n", session_keys[idx].name, val); */
-/* 			iscsi_param_partial_set(tid, 0, key_session, idx, val); */
+			char *str = target_sep_string(&q);
+			if (param_str_to_val(session_keys, idx, str, &val) < 0)
+				continue;
+			if (param_check_val(session_keys, idx, &val) < 0)
+				log_warning("%s, %u\n", session_keys[idx].name, val);
+			iscsi_param_partial_set(tid, 0, key_session, idx, val);
 		}
 	}
 
