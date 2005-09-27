@@ -1,9 +1,14 @@
 /*
- * ietadm - manage iSCSI Enterprise Target software.
+ * tgtadm - manage Target Framework software.
  *
- * (C) 2004 - 2005 FUJITA Tomonori <tomof@acm.org>
- *
+ * (C) 2005 FUJITA Tomonori <tomof@acm.org>
+ * (C) 2005 Mike Christie <michaelc@cs.wisc.edu>
  * This code is licenced under the GPL.
+ */
+
+/*
+ * This is just taken from ietadm. Possibly, we need to redesign the
+ * greater part of this to handle every target driver.
  */
 
 #include <ctype.h>
@@ -48,7 +53,7 @@ static void usage(int status)
 	else {
 		printf("Usage: %s [OPTION]\n", program_name);
 		printf("\
-iSCSI Enterprise Target Administration Utility.\n\
+Linux Target Framework Administration Utility.\n\
 \n\
   --op new --tid=[id] --params [name]\n\
                         add a new target with [id]. [id] must not be zero.\n\
@@ -71,9 +76,8 @@ iSCSI Enterprise Target Administration Utility.\n\
                         automatically.\n\
   --op delete           stop all activity.\n\
   --op update --tid=[id] --params=key1=value1,key2=value2,...\n\
-                        change iSCSI IET target parameters of specific\n\
-                        target with [id]. You can use parameters in ietd.conf\n\
-                        as a key.\n\
+                        change the target parameters of specific\n\
+                        target with [id].\n\
   --op new --tid=[id] --user --params=[user]=[name],Password=[pass]\n\
                         add a new account with [pass] for specific target.\n\
                         [user] could be [IncomingUser] or [OutgoingUser].\n\
@@ -88,7 +92,7 @@ iSCSI Enterprise Target Administration Utility.\n\
   --version             display version and exit\n\
   --help                display this help and exit\n\
 \n\
-Report bugs to <iscsitarget-devel@sourceforge.net>.\n");
+Report bugs to <stgt-devel@lists.berlios.de>.\n");
 	}
 	exit(status == 0 ? 0 : -1);
 }
