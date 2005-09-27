@@ -93,10 +93,10 @@ int tgt_target_template_register(struct tgt_target_template *tt)
 	unsigned long flags;
 	struct target_type_internal *ti;
 
-	ti = kmalloc(sizeof(*ti), GFP_KERNEL);
+	ti = kzalloc(sizeof(*ti), GFP_KERNEL);
 	if (!ti)
 		return -ENOMEM;
-	memset(ti, 0, sizeof(*ti));
+
 	INIT_LIST_HEAD(&ti->list);
 	ti->tt = tt;
 
@@ -162,10 +162,9 @@ struct tgt_target *tgt_target_create(char *target_type, int queued_cmds)
 		return NULL;
 	}
 
-	target = kmalloc(sizeof(*target), GFP_KERNEL);
+	target = kzalloc(sizeof(*target), GFP_KERNEL);
 	if (!target)
 		return NULL;
-	memset(target, 0, sizeof(*target));
 
 	ti = target_template_get(target_type);
 	if (!ti)
@@ -187,7 +186,7 @@ struct tgt_target *tgt_target_create(char *target_type, int queued_cmds)
 	if (!target->twq)
 		goto put_template;
 
-	target->tt_data = kmalloc(target->tt->priv_data_size, GFP_KERNEL);
+	target->tt_data = kzalloc(target->tt->priv_data_size, GFP_KERNEL);
 	if (!target->tt_data)
 		goto free_workqueue;
 
@@ -299,10 +298,10 @@ tgt_session_create(struct tgt_target *target,
 
 	dprintk("%p %d\n", target, max_cmds);
 
-	session = kmalloc(sizeof(*session), done ? GFP_ATOMIC : GFP_KERNEL);
+	session = kzalloc(sizeof(*session), done ? GFP_ATOMIC : GFP_KERNEL);
 	if (!session)
 		return NULL;
-	memset(session, 0, sizeof(*session));
+
 	session->target = target;
 	INIT_LIST_HEAD(&session->slist);
 
@@ -376,10 +375,10 @@ int tgt_device_template_register(struct tgt_device_template *sdt)
 	unsigned long flags;
 	struct device_type_internal *ti;
 
-	ti = kmalloc(sizeof(*ti), GFP_KERNEL);
+	ti = kzalloc(sizeof(*ti), GFP_KERNEL);
 	if (!ti)
 		return -ENOMEM;
-	memset(ti, 0, sizeof(*ti));
+
 	INIT_LIST_HEAD(&ti->list);
 	ti->sdt = sdt;
 
@@ -451,11 +450,10 @@ static int tgt_device_create(int tid, uint64_t dev_id, char *device_type,
 	if (!target)
 		return -EINVAL;
 
-	device = kmalloc(sizeof(*device), GFP_KERNEL);
+	device = kzalloc(sizeof(*device), GFP_KERNEL);
 	if (!device)
 		return -ENOMEM;
 
-	memset(device, 0, sizeof(*device));
 	device->dev_id = dev_id;
 	device->target = target;
 	device->fd = fd;
@@ -472,7 +470,7 @@ static int tgt_device_create(int tid, uint64_t dev_id, char *device_type,
 		goto put_fd;
 	}
 
-	device->dt_data = kmalloc(device->dt->priv_data_size, GFP_KERNEL);
+	device->dt_data = kzalloc(device->dt->priv_data_size, GFP_KERNEL);
 	if (!device->dt_data)
 		goto put_template;
 

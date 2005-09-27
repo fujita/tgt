@@ -46,10 +46,9 @@ int tgt_protocol_register(struct tgt_protocol *proto)
 	unsigned long flags;
 	struct tgt_proto_internal *tp;
 
-	tp = kmalloc(sizeof(*tp), GFP_KERNEL);
+	tp = kzalloc(sizeof(*tp), GFP_KERNEL);
 	if (!tp)
 		return -ENOMEM;
-	memset(tp, 0, sizeof(*tp));
 	INIT_LIST_HEAD(&tp->list);
 	tp->proto = proto;
 

@@ -65,8 +65,6 @@ int target_add(struct tgt_target *tt)
 
 	down(&target_list_sem);
 
-	memset(target, 0, sizeof(*target));
-
 	target->tt = tt;
 	target->tid = target->tt->tid;
 
