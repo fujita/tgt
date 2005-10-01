@@ -180,6 +180,9 @@ struct iscsi_cmnd {
 	u32 hdigest;
 	u32 ddigest;
 
+	struct work_struct work;
+	struct completion event;
+
 	struct iscsi_cmnd *req;
 	struct tgt_cmd *tc;
 };

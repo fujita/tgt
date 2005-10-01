@@ -73,6 +73,7 @@ struct iscsi_cmnd *cmnd_alloc(struct iscsi_conn *conn, int req)
 	cmnd->conn = conn;
 	spin_lock(&conn->list_lock);
 	atomic_inc(&conn->nr_cmnds);
+	init_completion(&cmnd->event);
 	if (req)
 		list_add_tail(&cmnd->conn_list, &conn->pdu_list);
 	spin_unlock(&conn->list_lock);
@@ -368,10 +369,8 @@ void iscsi_cmnd_remove(struct iscsi_cmnd *cmnd)
 	list_del(&cmnd->conn_list);
 	spin_unlock(&conn->list_lock);
 
-	if (cmnd->tc) {
-		struct tgt_protocol *proto = cmnd->tc->session->target->proto;
-		proto->destroy_cmd(cmnd->tc);
-	}
+	if (cmnd->tc)
+		cmnd->tc->done(cmnd->tc);
 	kmem_cache_free(iscsi_cmnd_cache, cmnd);
 }
 
@@ -704,9 +703,10 @@ static void send_r2t(struct iscsi_cmnd *req)
 	iscsi_cmnds_init_write(&send);
 }
 
-static void scsi_cmnd_done(struct tgt_cmd *tc)
+static void __scsi_cmnd_done(void *data)
 {
-	struct iscsi_cmnd *cmnd = (struct iscsi_cmnd *) tc->private;
+	struct tgt_cmd *tc = (struct tgt_cmd *) data;
+	struct iscsi_cmnd *cmnd = (struct iscsi_cmnd *) tc->private;;
 	struct iscsi_cmd *req = cmnd_hdr(cmnd);
 
 	if (tc->result != SAM_STAT_GOOD) {
@@ -750,16 +750,70 @@ static void scsi_cmnd_done(struct tgt_cmd *tc)
 	}
 }
 
+/* TODO : merge this with nthread. */
+static int scsi_cmnd_done(struct tgt_cmd *tc)
+{
+	int err;
+	struct iscsi_cmnd *cmnd = (struct iscsi_cmnd *) tc->private;
+
+	INIT_WORK(&cmnd->work, __scsi_cmnd_done, tc);
+	err = schedule_work(&cmnd->work);
+	BUG_ON(!err);
+
+	return TGT_CMD_XMIT_OK;
+}
+
+static void tgt_scsi_cmd_create(struct iscsi_cmnd *req)
+{
+	struct iscsi_cmd *req_hdr = cmnd_hdr(req);
+	struct iscsi_conn *conn = req->conn;
+	struct tgt_protocol *proto = conn->session->ts->target->proto;
+	enum dma_data_direction data_dir;
+
+	/*
+	 * handle bidi later
+	 */
+	if (req_hdr->flags & ISCSI_FLAG_CMD_WRITE)
+		data_dir = DMA_TO_DEVICE;
+	else if (req_hdr->flags & ISCSI_FLAG_CMD_READ)
+		data_dir = DMA_FROM_DEVICE;
+	else
+		data_dir = DMA_NONE;
+
+	req->tc = proto->create_cmd(conn->session->ts, req, req_hdr->cdb,
+				    be32_to_cpu(req_hdr->data_length),
+				    data_dir, req_hdr->lun,
+				    sizeof(req_hdr->lun),
+				    req->pdu.bhs.flags & ISCSI_FLAG_CMD_ATTR_MASK);
+	BUG_ON(!req->tc);
+
+	if (data_dir == DMA_TO_DEVICE && be32_to_cpu(req_hdr->data_length)) {
+		switch (req_hdr->cdb[0]) {
+		case WRITE_6:
+		case WRITE_10:
+		case WRITE_16:
+		case WRITE_VERIFY:
+			break;
+		default:
+			eprintk("%x\n", req_hdr->cdb[0]);
+			break;
+		}
+	}
+}
+
 static void scsi_cmnd_exec(struct iscsi_cmnd *cmnd)
 {
+	struct tgt_cmd *cmd = cmnd->tc;
+
 	if (cmnd->r2t_length) {
 		if (!cmnd->is_unsolicited_data)
 			send_r2t(cmnd);
 	} else {
-		struct tgt_protocol *proto = cmnd->tc->session->target->proto;
-
 		set_cmnd_waitio(cmnd);
-		proto->queue_cmd(cmnd->tc, scsi_cmnd_done);
+		if (cmnd->tc)
+			cmd->done(cmd);
+		else
+			tgt_scsi_cmd_create(cmnd);
 	}
 }
 
@@ -840,29 +894,9 @@ static u32 get_next_ttt(struct iscsi_session *session)
 
 static void scsi_cmnd_start(struct iscsi_conn *conn, struct iscsi_cmnd *req)
 {
-	struct tgt_protocol *proto = conn->session->ts->target->proto;
 	struct iscsi_cmd *req_hdr = cmnd_hdr(req);
-	enum dma_data_direction data_dir;
 
 	dprintk(D_GENERIC, "scsi command: %02x\n", req_hdr->cdb[0]);
-
-	eprintk("scsi command: %02x\n", req_hdr->cdb[0]);
-
-	/*
-	 * handle bidi later
-	 */
-	if (req_hdr->flags & ISCSI_FLAG_CMD_WRITE)
-		data_dir = DMA_TO_DEVICE;
-	else if (req_hdr->flags & ISCSI_FLAG_CMD_READ)
-		data_dir = DMA_FROM_DEVICE;
-	else
-		data_dir = DMA_NONE;
-
-	req->tc = proto->create_cmd(conn->session->ts, req, req_hdr->cdb,
-				    be32_to_cpu(req_hdr->data_length),
-				    data_dir, req_hdr->lun,
-				    sizeof(req_hdr->lun), NULL);
-	BUG_ON(!req->tc);
 
 	switch (req_hdr->cdb[0]) {
 	case SERVICE_ACTION_IN:
@@ -883,16 +917,6 @@ static void scsi_cmnd_start(struct iscsi_conn *conn, struct iscsi_cmnd *req)
 	case RELEASE:
 	case RESERVE_10:
 	case RELEASE_10:
-	{
-		if (!(req_hdr->flags & ISCSI_FLAG_CMD_FINAL) ||
-		      req->pdu.datasize) {
-			/* unexpected unsolicited data */
-			eprintk("%x %x\n", cmnd_itt(req), req_hdr->cdb[0]);
-			create_sense_rsp(req, ABORTED_COMMAND, 0xc, 0xc);
-			cmnd_skip_data(req);
-		}
-		break;
-	}
 	case READ_6:
 	case READ_10:
 	case READ_16:
@@ -904,7 +928,6 @@ static void scsi_cmnd_start(struct iscsi_conn *conn, struct iscsi_cmnd *req)
 			create_sense_rsp(req, ABORTED_COMMAND, 0xc, 0xc);
 			cmnd_skip_data(req);
 		}
-
 		break;
 	}
 	case WRITE_6:
@@ -913,6 +936,16 @@ static void scsi_cmnd_start(struct iscsi_conn *conn, struct iscsi_cmnd *req)
 	case WRITE_VERIFY:
 	{
 		struct iscsi_sess_param *param = &conn->session->param;
+
+		/*
+		 * We don't know this command arrives in order,
+		 * however we need to allocate buffer for immediate
+		 * and unsolicited data. tgt will not start to perform
+		 * this command until we call cmd->done so we don't
+		 * need to worry about the order of the command.
+		 */
+		tgt_scsi_cmd_create(req);
+		wait_for_completion(&req->event);
 
 		req->r2t_length = be32_to_cpu(req_hdr->data_length) - req->pdu.datasize;
 		req->is_unsolicited_data = !(req_hdr->flags &
@@ -1580,6 +1613,15 @@ void cmnd_rx_end(struct iscsi_cmnd *cmnd)
 	}
 }
 
+static int buffer_ready(struct tgt_cmd *tc)
+{
+	struct iscsi_cmnd *cmnd = (struct iscsi_cmnd *) tc->private;
+
+	complete(&cmnd->event);
+
+	return 0;
+}
+
 static struct tgt_target_template iet_tgt_target_template = {
 	.name = "iet",
 	.module = THIS_MODULE,
@@ -1587,6 +1629,8 @@ static struct tgt_target_template iet_tgt_target_template = {
 	.target_create = target_add,
 	.target_destroy = target_del,
 	.msg_recv = iet_msg_recv,
+	.transfer_response = scsi_cmnd_done,
+	.transfer_write_data = buffer_ready,
 	.priv_data_size = sizeof(struct iscsi_target),
 };
 
