@@ -22,6 +22,14 @@ struct tgt_session {
 	mempool_t *cmd_pool;
 };
 
+enum {
+	TGT_CMD_CREATE,
+	TGT_CMD_RECV,
+	TGT_CMD_QUEUED,
+	TGT_CMD_XMIT,
+	TGT_CMD_DONE,
+};
+
 struct tgt_cmd {
 	struct tgt_session *session;
 	struct tgt_device *device;
@@ -66,11 +74,8 @@ extern int tgt_msg_send(struct tgt_target *target, void *data, int data_len,
 extern int tgt_uspace_cmd_send(struct tgt_cmd *cmd);
 extern struct tgt_cmd *tgt_cmd_create(struct tgt_session *session, void *priv);
 extern void tgt_cmd_destroy(struct tgt_cmd *cmd);
-extern void tgt_cmd_alloc_buffer(struct tgt_cmd *cmd,
-				  void (*done)(struct tgt_cmd *));
-extern int tgt_cmd_queue(struct tgt_cmd *cmd,
-			  void (*done)(struct tgt_cmd *));
-extern void tgt_cmd_done(struct tgt_cmd *cmd);
+extern int tgt_cmd_queue(struct tgt_cmd *cmd);
+extern void tgt_transfer_response(void *cmd);
 extern int tgt_sysfs_init(void);
 extern void tgt_sysfs_exit(void);
 #endif

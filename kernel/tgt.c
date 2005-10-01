@@ -501,6 +501,56 @@ free_device:
 	return -EINVAL;
 }
 
+void tgt_transfer_response(void *data)
+{
+	struct tgt_cmd *cmd = data;
+	struct tgt_target *target = cmd->session->target;
+	int err;
+
+	cmd->done = tgt_cmd_destroy;
+	err = target->tt->transfer_response(cmd);
+	switch (err) {
+	case TGT_CMD_XMIT_FAILED:
+	case TGT_CMD_XMIT_REQUEUE:
+		/*
+		 * TODO add a real queue to avoid re-orders and starvation
+		 * for now just reschedule.
+		 */
+		INIT_WORK(&cmd->work, tgt_transfer_response, cmd);
+		queue_delayed_work(cmd->session->target->twq, &cmd->work,
+				   10 * HZ);
+		break;
+	};
+}
+EXPORT_SYMBOL_GPL(tgt_transfer_response);
+
+static void queuecommand(void *data)
+{
+	int err = 0;
+	struct tgt_cmd *cmd = data;
+	struct tgt_target *target = cmd->session->target;
+	struct tgt_device *device = cmd->device;
+
+	dprintk("cid %llu\n", cmd->cid);
+
+	/* Should we do this earlier? */
+	if (!device)
+		cmd->device = device = tgt_device_find(target, cmd->dev_id);
+	if (device)
+		dprintk("found %llu\n", cmd->dev_id);
+
+	err = device->dt->queue_cmd(cmd);
+
+	switch (err) {
+	case TGT_CMD_FAILED:
+	case TGT_CMD_COMPLETED:
+		dprintk("command completed %d\n", err);
+		tgt_transfer_response(cmd);
+	default:
+		dprintk("command %llu queued\n", cmd->cid);
+	};
+}
+
 static int tgt_device_destroy(int tid, uint64_t dev_id)
 {
 	struct tgt_device *device;
@@ -581,6 +631,34 @@ void tgt_cmd_destroy(struct tgt_cmd *cmd)
 }
 EXPORT_SYMBOL_GPL(tgt_cmd_destroy);
 
+static int __tgt_cmd_queue(struct tgt_cmd *cmd)
+{
+	struct tgt_session *session = cmd->session;
+
+	/*
+	 * we may need to code so that other layers can override this
+	 * done function
+	 */
+	cmd->done = tgt_cmd_destroy;
+	INIT_WORK(&cmd->work, queuecommand, cmd);
+	queue_work(session->target->twq, &cmd->work);
+	return 0;
+}
+
+static void tgt_write_data_transfer_done(struct tgt_cmd *cmd)
+{
+	/*
+	 * TODO check for errors and add state checking. we may have
+	 * to internally queue for the target driver
+	 */
+
+	/*
+	 * we are normally called from a irq so since the tgt_vsd blocks
+	 * we must queue this cmd
+	 */
+	__tgt_cmd_queue(cmd);
+}
+
 #define pgcnt(size, offset)	((((size) + ((offset) & ~PAGE_CACHE_MASK)) + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT)
 
 /*
@@ -621,29 +699,41 @@ static void tgt_alloc_buffer(void *data)
 
 	__tgt_alloc_buffer(cmd);
 
-	if (cmd->done) {
-		void (*done)(struct tgt_cmd *) = cmd->done;
-		cmd->done = NULL;
-		done(cmd);
-	}
+	/*
+	 * we probably will not be able to rely on the target
+	 * driver knowing the data_dir so this may have to move
+	 * the devices or protocol if it becomes command specific
+	 */
+	if (cmd->data_dir == DMA_TO_DEVICE) {
+		cmd->done = tgt_write_data_transfer_done;
+		/*
+		 * TODO handle errors and possibly requeue for the
+		 * target driver
+		 */
+		cmd->session->target->tt->transfer_write_data(cmd);
+	} else
+		queuecommand(cmd);
 }
 
-void tgt_cmd_alloc_buffer(struct tgt_cmd *cmd, void (*done)(struct tgt_cmd *))
+void tgt_cmd_alloc_buffer(struct tgt_cmd *cmd)
 {
+	struct tgt_session *session = cmd->session;
 	BUG_ON(!list_empty(&cmd->clist));
 
-	if (done) {
-		struct tgt_session *session = cmd->session;
-
-		INIT_WORK(&cmd->work, tgt_alloc_buffer, cmd);
-		cmd->done = done;
-		queue_work(session->target->twq, &cmd->work);
-		return;
-	}
-
-	tgt_alloc_buffer(cmd);
+	INIT_WORK(&cmd->work, tgt_alloc_buffer, cmd);
+	queue_work(session->target->twq, &cmd->work);
 }
 EXPORT_SYMBOL_GPL(tgt_cmd_alloc_buffer);
+
+int tgt_cmd_queue(struct tgt_cmd *cmd)
+{
+	if (cmd->bufflen)
+		tgt_cmd_alloc_buffer(cmd);
+	else
+		__tgt_cmd_queue(cmd);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(tgt_cmd_queue);
 
 int tgt_uspace_cmd_send(struct tgt_cmd *cmd)
 {
@@ -676,43 +766,12 @@ int tgt_uspace_cmd_send(struct tgt_cmd *cmd)
 }
 EXPORT_SYMBOL_GPL(tgt_uspace_cmd_send);
 
-/*
- * TODO we should make cmd->done a target callback instead. Maybe
- * target->tt->queuecommand. We need this becuase a target driver
- * may not have the resources to execute the command. We also need
- * a real queue, I guess, and some queue limits.
- *
- * NOTE THIS WILL NOT EXECUTE FROM A THREAD FOR LONG. IT APPEARS
- * TO BE HORRIBLE FOR PERF AND ONLY NEEDED BECAUSE OF IET. THE LLD SHOULD
- * BE ABLE TO EXECUTE FROM A SOFTIRQ SINCE WE WILL EVENTUALLY GO ALL ASYNC
- *
- */
-static void tgt_notify_cmd_ready(void *data)
-{
-	struct tgt_cmd *cmd = data;
-	void (*done)(struct tgt_cmd *);
-
-	done = cmd->done;
-	cmd->done = NULL;
-	done(cmd);
-}
-
-void tgt_cmd_done(struct tgt_cmd *cmd)
-{
-	struct tgt_session *session = cmd->session;
-
-	INIT_WORK(&cmd->work, tgt_notify_cmd_ready, cmd);
-	queue_work(session->target->twq, &cmd->work);
-}
-EXPORT_SYMBOL_GPL(tgt_cmd_done);
-
 static void uspace_cmd_done(struct tgt_cmd *cmd, void *data,
 			     int result, uint32_t len)
 {
 	struct tgt_device *device = cmd->device;
 	char *p = data;
 	int i;
-	BUG_ON(!cmd->done);
 
 	dprintk("cid %llu result %d len %d bufflen %u\n",
 		cmd->cid, result, len, cmd->bufflen);
@@ -744,50 +803,8 @@ static void uspace_cmd_done(struct tgt_cmd *cmd, void *data,
 	cmd->result = result;
 	if (device->dt->complete_uspace_cmd)
 		device->dt->complete_uspace_cmd(cmd);
-	tgt_cmd_done(cmd);
+	tgt_transfer_response(cmd);
 }
-
-static void queuecommand(void *data)
-{
-	int err = 0;
-	struct tgt_cmd *cmd = data;
-	struct tgt_target *target = cmd->session->target;
-	struct tgt_device *device = cmd->device;
-
-	dprintk("cid %llu\n", cmd->cid);
-
-	/* Should we do this earlier? */
-	if (!device)
-		cmd->device = device = tgt_device_find(target, cmd->dev_id);
-	if (device)
-		dprintk("found %llu\n", cmd->dev_id);
-
-	err = device->dt->queue_cmd(cmd);
-
-	switch (err) {
-	case TGT_CMD_FAILED:
-	case TGT_CMD_COMPLETED:
-		dprintk("command completed %d\n", err);
-		tgt_notify_cmd_ready(cmd);
-	default:
-		dprintk("command %llu queued\n", cmd->cid);
-	};
-}
-
-int tgt_cmd_queue(struct tgt_cmd *cmd, void (*done)(struct tgt_cmd *))
-{
-	struct tgt_session *session = cmd->session;
-
-	BUG_ON(cmd->done);
-	BUG_ON(!done);
-
-	cmd->done = done;
-	INIT_WORK(&cmd->work, queuecommand, cmd);
-	queue_work(session->target->twq, &cmd->work);
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(tgt_cmd_queue);
 
 static struct tgt_cmd *find_cmd_by_id(uint64_t cid)
 {

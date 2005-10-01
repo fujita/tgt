@@ -49,8 +49,7 @@ static uint64_t scsi_tgt_translate_lun(uint8_t *p, int size)
 static struct tgt_cmd *
 scsi_tgt_create_cmd(struct tgt_session *session, void *tgt_priv, uint8_t *scb,
 		    uint32_t data_len, enum dma_data_direction data_dir,
-		    uint8_t *lun, int lun_size,
-		    void (*done)(struct tgt_cmd *))
+		    uint8_t *lun, int lun_size, int tags)
 {
 	struct tgt_device *device;
 	struct tgt_cmd *cmd;
@@ -63,6 +62,7 @@ scsi_tgt_create_cmd(struct tgt_session *session, void *tgt_priv, uint8_t *scb,
 	}
 	scmd = tgt_cmd_to_scsi(cmd);
 	memcpy(scmd->scb, scb, sizeof(scmd->scb));
+	scmd->tags = tags;
 
 	/* translate target driver LUN to device id */
 	cmd->dev_id = scsi_tgt_translate_lun(lun, lun_size);
@@ -83,8 +83,9 @@ scsi_tgt_create_cmd(struct tgt_session *session, void *tgt_priv, uint8_t *scb,
 	cmd->bufflen = data_len;
 	/* do scsi device specific setup */
 	device->dt->prep_cmd(cmd, data_len);
-	if (cmd->bufflen)
-		tgt_cmd_alloc_buffer(cmd, done);
+
+	tgt_cmd_queue(cmd);
+
 	return cmd;
 }
 
@@ -138,8 +139,6 @@ static struct tgt_protocol scsi_tgt_proto = {
 	.name = "scsi",
 	.module = THIS_MODULE,
 	.create_cmd = scsi_tgt_create_cmd,
-	.destroy_cmd = tgt_cmd_destroy,
-	.queue_cmd = tgt_cmd_queue,
 	.build_uspace_pdu = scsi_tgt_build_uspace_pdu,
 	.uspace_pdu_size = MAX_COMMAND_SIZE,
 };

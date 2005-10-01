@@ -96,8 +96,7 @@ static void tgt_sd_end_rq(struct request *rq)
 	} else
 		cmd->result = SAM_STAT_GOOD;
 
-
-	tgt_cmd_done(cmd);
+	tgt_transfer_response(cmd);
 	__blk_put_request(rq->q, rq);
 }
 

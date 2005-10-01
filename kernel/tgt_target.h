@@ -13,15 +13,50 @@
 
 struct tgt_protocol;
 struct tgt_target;
+struct tgt_cmd;
+
+enum {
+	TGT_CMD_XMIT_OK,
+	TGT_CMD_XMIT_FAILED,
+	TGT_CMD_XMIT_REQUEUE,
+};
 
 struct tgt_target_template {
 	const char *name;
 	struct module *module;
 	unsigned priv_data_size;
 
+	/*
+	 * Target creation/destroy callbacks useful when userspace
+	 * initiates these operations
+	 */
 	int (* target_create) (struct tgt_target *);
 	void (* target_destroy) (struct tgt_target *);
+	/*
+	 * Called when userspace sends the target a driver specific
+	 * message. To send a response the target driver should call
+	 * tgt_msg_send.
+	 */
 	int (* msg_recv) (struct tgt_target *, uint32_t, void *);
+	/*
+	 * Transfer command response and/or data. If the target driver
+	 * cannot queue the request and would like it requeued then it
+	 * should return an appropriate TGT_CMD_XMIT_*. When the
+	 * the transfer is complete and the target driver is finished with
+	 * the command the cmd->done() callback must be called. After the
+	 * the cmd->done callback has been called tgt_core owns the cmd and
+	 * may free it.
+	 *
+	 * TODO rename this
+	 */
+	int (* transfer_response) (struct tgt_cmd *);
+	/*
+	 * Transfer write data to the sg buffer.
+	 *
+	 * TODO rename
+	 */
+	int (* transfer_write_data) (struct tgt_cmd *);
+
 	/*
 	 * name of protocol to use
 	 */

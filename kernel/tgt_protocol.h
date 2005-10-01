@@ -28,33 +28,20 @@ struct tgt_protocol {
 	int uspace_pdu_size;
 
 	/*
-	 * create a command and allocate a buffer of size data_len for
+	 * Create a command and allocate a buffer of size data_len for
 	 * for transfer. The buffer will be allocated with GFP_KERNEL
-	 * so if you cannot sleep the caller must pass in a done() function.
-	 * The done function will be called from process context.
-	 *
-	 * TODO: This dual behavior is a little strange. We will convert
-	 * iet to open-iscsi's model so eventually the done() function
-	 * will be a requirement so we can have a common path.
+	 * and preprocesed by tgt/scsi_proto so the next time
+	 * the target driver is notified about the cmd is when
+	 * the transfer* is called.
 	 */
 	struct tgt_cmd *(* create_cmd)(struct tgt_session *session,
-					void *tgt_priv, uint8_t *cmd,
-					uint32_t data_len,
-					enum dma_data_direction data_dir,
-					uint8_t *dev_id_buff, int id_buff_size,
-					void (*done)(struct tgt_cmd *));
+				       void *tgt_priv, uint8_t *cmd,
+				       uint32_t data_len,
+				       enum dma_data_direction data_dir,
+				       uint8_t *dev_id_buff, int id_buff_size,
+				       int flags);
 	/*
-	 * destroy a command. This will free the command and buffer
-	 */
-	void (* destroy_cmd)(struct tgt_cmd *cmd); 
-	/*
-	 * queue a command to be executed in a workqueue. A done() callback
-	 * must be passed in.
-	 */
-	int (* queue_cmd)(struct tgt_cmd *cmd,
-			   void (*done)(struct tgt_cmd *));
-	/*
-	 * build userspace packet
+	 * Build userspace packet
 	 */
 	void (* build_uspace_pdu)(struct tgt_cmd *cmd, void *data);
 };
