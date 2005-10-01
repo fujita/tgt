@@ -5,7 +5,6 @@
  * (C) 2005 Mike Christie <michaelc@cs.wisc.edu>
  * This code is licenced under the GPL.
  */
-#include <linux/fs.h>
 #include <linux/module.h>
 #include <linux/mm.h>
 #include <linux/highmem.h>
@@ -119,7 +118,7 @@ int scsi_tgt_sense_copy(struct tgt_cmd *cmd)
 	int len;
 
 	memset(data, 0, sizeof(scmd->sense_buff));
-	len = min(cmd->bufflen, sizeof(scmd->sense_buff));
+	len = min_t(int, cmd->bufflen, sizeof(scmd->sense_buff));
 
 	/* userspace did everything for us */
 	memcpy(data, page_address(cmd->sg[0].page), len);
