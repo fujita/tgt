@@ -14,7 +14,7 @@ start_server()
 #	insmod ${PWD}/kernel/tgt_sd.ko
 
 	modprobe -q crc32c
-	insmod ${PWD}/iscsi/kernel/iscsi_trgt.ko
+	insmod ${PWD}/istgt/kernel/iscsi_trgt.ko
 
 	${PWD}/usr/tgtd
 }
