@@ -199,7 +199,7 @@ static int iscsi_param_set(u32 tid, u64 sid, int type, u32 partial, struct iscsi
 
 	err = ipc_cmnd_execute(nlh, nlh->nlmsg_len);
 	if (err)
-		fprintf(stderr, "%d %d %u %llu %d %u\n",
+		fprintf(stderr, "%d %d %u %" PRIx64 "%d %u\n",
 			err, errno, tid, sid, type, partial);
 	free(nlh);
 	return err;
@@ -637,7 +637,7 @@ int ipc_mgmt(char *sbuf, char *rbuf)
 	req = NLMSG_DATA(nlh);
 	params = (char *) req + sizeof(*req);
 
-	eprintf("%d %d %d %d %llu %llu %s\n", nlh->nlmsg_len,
+	eprintf("%d %d %d %d %" PRIx64 " %" PRIx64 " %s\n", nlh->nlmsg_len,
 		req->set, req->op, req->tid, req->sid, req->lun, params);
 
 	if (req->set & SET_USER)
