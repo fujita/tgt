@@ -71,8 +71,7 @@ static int dl_init(void)
 {
 	char path[PATH_MAX];
 
-	getcwd(path, sizeof(path));
-	strcat(path, "/istgt/usr/istgt.so");
+	strcat(path, "istgt.so");
 
 	dl_handles[0] = dlopen(path, RTLD_LAZY);
 	if (!dl_handles[0]) {

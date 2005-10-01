@@ -1340,10 +1340,7 @@ void cmnd_release(struct iscsi_cmnd *cmnd, int force)
 			iscsi_cmnd_remove(rsp);
 		}
 		list_del_init(&cmnd->list);
-	} else
-		if (cmnd_queued(cmnd))
-			;
-/* 			iscsi_scsi_dequeuecmnd(cmnd); */
+	}
 
 	if (cmnd_hashed(cmnd))
 		cmnd_remove_hash(cmnd);
@@ -1622,8 +1619,8 @@ static int buffer_ready(struct tgt_cmd *tc)
 	return 0;
 }
 
-static struct tgt_target_template iet_tgt_target_template = {
-	.name = "iet",
+static struct tgt_target_template istgt_template = {
+	.name = THIS_NAME,
 	.module = THIS_MODULE,
 	.protocol = "scsi",
 	.target_create = target_add,
@@ -1639,21 +1636,22 @@ static void iscsi_exit(void)
 	if (iscsi_cmnd_cache)
 		kmem_cache_destroy(iscsi_cmnd_cache);
 
-	tgt_target_template_unregister(&iet_tgt_target_template);
+	tgt_target_template_unregister(&istgt_template);
 }
 
 static int iscsi_init(void)
 {
 	int err = -ENOMEM;
 
-	printk("iSCSI Enterprise Target Software - version %s\n", IET_VERSION_STRING);
+	printk("iSCSI Target Software for Linux Target Framework %s\n",
+	       VERSION_STRING);
 
 	iscsi_cmnd_cache = kmem_cache_create("iscsi_cmnd", sizeof(struct iscsi_cmnd),
 					     0, 0, NULL, NULL);
 	if (!iscsi_cmnd_cache)
 		goto err;
 
-	err = tgt_target_template_register(&iet_tgt_target_template);
+	err = tgt_target_template_register(&istgt_template);
 	if (err < 0)
 		goto err;
 

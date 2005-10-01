@@ -255,7 +255,6 @@ static inline void iscsi_cmnd_set_length(struct iscsi_pdu *pdu)
 
 enum cmnd_flags {
 	CMND_hashed,
-	CMND_queued,
 	CMND_final,
 	CMND_waitio,
 	CMND_close,
@@ -265,9 +264,6 @@ enum cmnd_flags {
 
 #define set_cmnd_hashed(cmnd)	set_bit(CMND_hashed, &(cmnd)->flags)
 #define cmnd_hashed(cmnd)	test_bit(CMND_hashed, &(cmnd)->flags)
-
-#define set_cmnd_queued(cmnd)	set_bit(CMND_queued, &(cmnd)->flags)
-#define cmnd_queued(cmnd)	test_bit(CMND_queued, &(cmnd)->flags)
 
 #define set_cmnd_final(cmnd)	set_bit(CMND_final, &(cmnd)->flags)
 #define cmnd_final(cmnd)	test_bit(CMND_final, &(cmnd)->flags)

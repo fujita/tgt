@@ -5,6 +5,7 @@
 
 PATH=/sbin:/bin:/usr/sbin:/usr/bin
 MEM_SIZE=1048576
+export LD_LIBRARY_PATH=${PWD}/istgt/usr:${LD_LIBRARY_PATH}
 
 start_server()
 {

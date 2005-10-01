@@ -426,11 +426,6 @@ static int sync_cache(int tid, uint64_t lun, uint8_t *scb, uint8_t *data,
 	fd = 0;
 	sscanf(buf, "%d\n", &fd);
 
-	/*
-	 * this will work when we merge the daemons (fd's are associated
-	 * with procssess so this will fail when ietd opens the fd and
-	 * this thread syncs it).
-	 */
 	err = fsync(fd);
 	if (err) {
 		log_error("scsi sync_cache fsync of fd %d failed err %d",

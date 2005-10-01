@@ -356,7 +356,7 @@ static int iscsi_target_create(int *tid, char *name)
 		   NLMSG_SPACE(sizeof(*ev)), 0);
 
 	ev = NLMSG_DATA(nlh);
-	sprintf(ev->u.c_target.type, "%s", "iet");
+	sprintf(ev->u.c_target.type, "%s", THIS_NAME);
 	ev->u.c_target.nr_cmds = DEFAULT_NR_QUEUED_CMNDS;
 
 	err = ipc_cmnd_execute(nlh, nlh->nlmsg_len);
@@ -608,7 +608,7 @@ static int system_mgmt(struct tgtadm_req *req, char *params, char *rbuf, int *rl
 		if (err < 0)
 			continue;
 		eprintf("%s\n", buf);
-		if (!strncmp(buf, "iet", 3)) {
+		if (!strncmp(buf, THIS_NAME, strlen(THIS_NAME))) {
 			int tid;
 
 			for (p = namelist[i]->d_name; !isdigit((int) *p); p++)

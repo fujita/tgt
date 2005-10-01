@@ -1,11 +1,11 @@
 #ifndef _IET_U_H
 #define _IET_U_H
 
-#define IET_VERSION_STRING	"0.4.12"
+#define VERSION_STRING	"0.4.12"
+#define	THIS_NAME		"istgt"
 
 /* The maximum length of 223 bytes in the RFC. */
 #define ISCSI_NAME_LEN	256
-#define ISCSI_ARGS_LEN	2048
 
 #define VENDOR_ID_LEN	8
 #define SCSI_ID_LEN	24
