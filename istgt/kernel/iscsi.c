@@ -8,6 +8,7 @@
 #include <linux/hash.h>
 #include <net/tcp.h>
 #include <scsi/scsi.h>
+#include <scsi/scsi_tcq.h>
 #include <linux/mempool.h>
 
 #include <tgt.h>
@@ -769,6 +770,7 @@ static void tgt_scsi_cmd_create(struct iscsi_cmnd *req)
 	struct iscsi_conn *conn = req->conn;
 	struct tgt_protocol *proto = conn->session->ts->target->proto;
 	enum dma_data_direction data_dir;
+	int tags = MSG_SIMPLE_TAG;;
 
 	/*
 	 * handle bidi later
@@ -780,11 +782,26 @@ static void tgt_scsi_cmd_create(struct iscsi_cmnd *req)
 	else
 		data_dir = DMA_NONE;
 
+	switch (req->pdu.bhs.flags & ISCSI_FLAG_CMD_ATTR_MASK) {
+	case ISCSI_ATTR_UNTAGGED:
+	case ISCSI_ATTR_SIMPLE:
+		tags = MSG_SIMPLE_TAG;
+		break;
+	case ISCSI_ATTR_ORDERED:
+		tags = MSG_ORDERED_TAG;
+		break;
+	case ISCSI_ATTR_HEAD_OF_QUEUE:
+		tags = MSG_HEAD_TAG;
+		break;
+	case ISCSI_ATTR_ACA:
+		break;
+	}
+
 	req->tc = proto->create_cmd(conn->session->ts, req, req_hdr->cdb,
 				    be32_to_cpu(req_hdr->data_length),
 				    data_dir, req_hdr->lun,
 				    sizeof(req_hdr->lun),
-				    req->pdu.bhs.flags & ISCSI_FLAG_CMD_ATTR_MASK);
+				    tags);
 	BUG_ON(!req->tc);
 
 	if (data_dir == DMA_TO_DEVICE && be32_to_cpu(req_hdr->data_length)) {

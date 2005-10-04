@@ -9,12 +9,29 @@
 #include <linux/mm.h>
 #include <linux/highmem.h>
 #include <scsi/scsi.h>
-#include <scsi/scsi_cmnd.h>
+#include <scsi/scsi_tcq.h>
 
 #include <tgt.h>
 #include <tgt_scsi.h>
 #include <tgt_device.h>
 #include <tgt_protocol.h>
+#include <tgt_target.h>
+
+enum scsi_tgt_device_state_bit {
+	STDEV_ORDERED,
+	STDEV_HEAD,
+};
+
+/*
+ * The ordering stuff can be generic for all protocols. If so, should
+ * these be moved into struct tgt_device?
+ */
+struct scsi_tgt_device {
+	spinlock_t lock;
+	struct list_head pending_cmds;
+	unsigned long state;
+	unsigned active_cmds;
+};
 
 static kmem_cache_t *scsi_tgt_cmd_cache;
 
@@ -128,10 +145,161 @@ int scsi_tgt_sense_copy(struct tgt_cmd *cmd)
 }
 EXPORT_SYMBOL_GPL(scsi_tgt_sense_copy);
 
-void scsi_tgt_build_uspace_pdu(struct tgt_cmd *cmd, void *data)
+#define	device_blocked(x)	((x)->state & (1 << STDEV_ORDERED | 1 << STDEV_HEAD))
+
+static int scsi_tgt_task_state(struct tgt_cmd *cmd, int queue, int *more)
+{
+	struct tgt_device *device = cmd->device;
+	struct scsi_tgt_device *stdev = device->pt_data;
+	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
+	int enabled = 0;
+
+	*more = 0;
+	switch (scmd->tags) {
+	case MSG_SIMPLE_TAG:
+		if (!device_blocked(stdev) &&
+		    queue ? list_empty(&stdev->pending_cmds) : 1) {
+			enabled = 1;
+			*more = 1;
+		}
+
+		break;
+	case MSG_ORDERED_TAG:
+		if (!device_blocked(stdev) &&
+		    !stdev->active_cmds &&
+		    queue ? list_empty(&stdev->pending_cmds) : 1) {
+			enabled = 1;
+			stdev->state |= 1 << STDEV_ORDERED;
+		}
+		break;
+	case MSG_HEAD_TAG:
+		BUG_ON(!queue);
+		stdev->state |= 1 << STDEV_HEAD;
+		enabled = 1;
+		break;
+	default:
+		printk("unknown scsi tag %x\n", scmd->tags);
+		enabled = 1;
+		*more = 1;
+		break;
+	}
+
+	return enabled;
+}
+
+static void device_queue_cmd(void *data)
+{
+	struct tgt_cmd *cmd = data;
+	cmd->device->dt->queue_cmd(cmd);
+}
+
+static void scsi_tgt_dequeue_pending_cmd(struct tgt_device *device)
+{
+	struct scsi_tgt_device *stdev = device->pt_data;
+	struct tgt_cmd *cmd, *tmp;
+	struct scsi_tgt_cmd *scmd;
+	int enabled, more;
+
+	list_for_each_entry_safe(cmd, tmp, &stdev->pending_cmds, clist) {
+		scmd = tgt_cmd_to_scsi(cmd);
+
+		enabled = scsi_tgt_task_state(cmd, 0, &more);
+		BUG_ON(!enabled && more);
+
+		if (enabled) {
+			list_del(&cmd->clist);
+			stdev->active_cmds++;
+			INIT_WORK(&cmd->work, device_queue_cmd, cmd);
+			queue_work(cmd->session->target->twq, &cmd->work);
+		}
+
+		if (!more)
+			break;
+	}
+}
+
+static void scsi_tgt_dequeue_cmd(struct tgt_cmd *cmd)
+{
+	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
+	struct tgt_device *device = cmd->device;
+	struct scsi_tgt_device *stdev = device->pt_data;
+	unsigned long flags;
+
+	spin_lock_irqsave(&stdev->lock, flags);
+
+	stdev->active_cmds--;
+
+	switch (scmd->tags) {
+	case MSG_SIMPLE_TAG:
+		break;
+	case MSG_ORDERED_TAG:
+		stdev->state &= ~(1 << STDEV_ORDERED);
+		break;
+	case MSG_HEAD_TAG:
+		stdev->state &= ~(1 << STDEV_HEAD);
+		break;
+	default:
+		break;
+	}
+
+	if (!list_empty(&stdev->pending_cmds))
+		scsi_tgt_dequeue_pending_cmd(device);
+
+	spin_unlock_irqrestore(&stdev->lock, flags);
+}
+
+static int scsi_tgt_queue_cmd(struct tgt_cmd *cmd)
+{
+	struct tgt_device *device = cmd->device;
+	struct scsi_tgt_device *stdev = device->pt_data;
+	unsigned long flags;
+	int err, enabled, more;
+
+	/* FIXME: we need some tricks here. */
+	BUG_ON(!device);
+
+	spin_lock_irqsave(&stdev->lock, flags);
+
+	/* Do we need our own list_head? */
+	BUG_ON(!list_empty(&cmd->clist));
+
+	enabled = scsi_tgt_task_state(cmd, 1, &more);
+	if (enabled)
+		stdev->active_cmds++;
+	else
+		list_add_tail(&cmd->clist, &stdev->pending_cmds);
+
+	spin_unlock_irqrestore(&stdev->lock, flags);
+
+	if (enabled)
+		err = device->dt->queue_cmd(cmd);
+	else
+		err = TGT_CMD_KERN_QUEUED;
+
+	return err;
+}
+
+static void scsi_tgt_build_uspace_pdu(struct tgt_cmd *cmd, void *data)
 {
 	struct scsi_tgt_cmd *scmd = (struct scsi_tgt_cmd *)cmd->proto_priv;
 	memcpy(data, scmd->scb, sizeof(scmd->scb));
+}
+
+static void scsi_tgt_attach_device(void *data)
+{
+	struct scsi_tgt_device *stdev = data;
+
+	spin_lock_init(&stdev->lock);
+	INIT_LIST_HEAD(&stdev->pending_cmds);
+	stdev->active_cmds = 0;
+}
+
+static void scsi_tgt_detach_device(void *data)
+{
+	struct scsi_tgt_device *stdev = data;
+
+	/* TODO */
+	BUG_ON(!list_empty(&stdev->pending_cmds));
 }
 
 static struct tgt_protocol scsi_tgt_proto = {
@@ -139,16 +307,23 @@ static struct tgt_protocol scsi_tgt_proto = {
 	.module = THIS_MODULE,
 	.create_cmd = scsi_tgt_create_cmd,
 	.build_uspace_pdu = scsi_tgt_build_uspace_pdu,
+	.queue_cmd = scsi_tgt_queue_cmd,
+	.dequeue_cmd = scsi_tgt_dequeue_cmd,
+	.attach_device = scsi_tgt_attach_device,
+	.detach_device = scsi_tgt_detach_device,
+	.priv_dev_data_size = sizeof(struct scsi_tgt_device),
 	.uspace_pdu_size = MAX_COMMAND_SIZE,
 };
 
 static int __init scsi_tgt_init(void)
 {
 	int err;
+	size_t size = sizeof(struct tgt_cmd) + sizeof(struct scsi_tgt_cmd);
 
 	scsi_tgt_cmd_cache = kmem_cache_create("scsi_tgt_cmd",
-			sizeof(struct tgt_cmd) + sizeof(struct scsi_tgt_cmd),
-			0, SLAB_HWCACHE_ALIGN | SLAB_NO_REAP, NULL, NULL);
+					       size, 0,
+					       SLAB_HWCACHE_ALIGN | SLAB_NO_REAP,
+					       NULL, NULL);
 	if (!scsi_tgt_cmd_cache)
 		return -ENOMEM;
 	scsi_tgt_proto.cmd_cache = scsi_tgt_cmd_cache;

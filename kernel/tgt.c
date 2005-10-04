@@ -474,9 +474,17 @@ static int tgt_device_create(int tid, uint64_t dev_id, char *device_type,
 	if (!device->dt_data)
 		goto put_template;
 
+	device->pt_data =
+		kzalloc(target->proto->priv_dev_data_size, GFP_KERNEL);
+	if (!device->pt_data)
+		goto free_priv_dt_data;
+
 	if (device->dt->create)
 		if (device->dt->create(device))
-			goto free_priv_dt_data;
+			goto free_priv_pt_data;
+
+	if (target->proto->attach_device)
+		target->proto->attach_device(device->pt_data);
 
 	if (tgt_sysfs_register_device(device))
 		goto dt_destroy;
@@ -490,6 +498,8 @@ static int tgt_device_create(int tid, uint64_t dev_id, char *device_type,
 dt_destroy:
 	if (device->dt->destroy)
 		device->dt->destroy(device);
+free_priv_pt_data:
+	kfree(device->pt_data);
 free_priv_dt_data:
 	kfree(device->dt_data);
 put_template:
@@ -501,11 +511,44 @@ free_device:
 	return -EINVAL;
 }
 
+static int tgt_device_destroy(int tid, uint64_t dev_id)
+{
+	struct tgt_device *device;
+	struct tgt_target *target;
+	unsigned long flags;
+
+	target = target_find(tid);
+	if (!target)
+		return -ENOENT;
+
+	spin_lock_irqsave(&target->lock, flags);
+	device = tgt_device_find_nolock(target, dev_id);
+	spin_unlock_irqrestore(&target->lock, flags);
+	if (!device)
+		return -EINVAL;
+
+	list_del(&device->dlist);
+	if (device->dt->destroy)
+		device->dt->destroy(device);
+
+	if (target->proto->detach_device)
+		target->proto->detach_device(device->pt_data);
+
+	fput(device->file);
+	device_template_put(device->dt);
+	tgt_sysfs_unregister_device(device);
+
+	return 0;
+}
+
 void tgt_transfer_response(void *data)
 {
 	struct tgt_cmd *cmd = data;
 	struct tgt_target *target = cmd->session->target;
 	int err;
+
+	if (target->proto->dequeue_cmd)
+		target->proto->dequeue_cmd(cmd);
 
 	cmd->done = tgt_cmd_destroy;
 	err = target->tt->transfer_response(cmd);
@@ -539,7 +582,7 @@ static void queuecommand(void *data)
 	if (device)
 		dprintk("found %llu\n", cmd->dev_id);
 
-	err = device->dt->queue_cmd(cmd);
+	err = target->proto->queue_cmd(cmd);
 
 	switch (err) {
 	case TGT_CMD_FAILED:
@@ -549,33 +592,6 @@ static void queuecommand(void *data)
 	default:
 		dprintk("command %llu queued\n", cmd->cid);
 	};
-}
-
-static int tgt_device_destroy(int tid, uint64_t dev_id)
-{
-	struct tgt_device *device;
-	struct tgt_target *target;
-	unsigned long flags;
-
-	target = target_find(tid);
-	if (!target)
-		return -ENOENT;
-
-	spin_lock_irqsave(&target->lock, flags);
-	device = tgt_device_find_nolock(target, dev_id);
-	spin_unlock_irqrestore(&target->lock, flags);
-	if (!device)
-		return -EINVAL;
-
-	list_del(&device->dlist);
-	if (device->dt->destroy)
-		device->dt->destroy(device);
-
-	fput(device->file);
-	device_template_put(device->dt);
-	tgt_sysfs_unregister_device(device);
-
-	return 0;
 }
 
 struct tgt_cmd *tgt_cmd_create(struct tgt_session *session, void *tgt_priv)

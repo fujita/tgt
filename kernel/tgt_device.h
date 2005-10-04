@@ -44,13 +44,13 @@ struct tgt_device_template {
 	/*
 	 * complete a userspace command
 	 */
-	void ( *complete_uspace_cmd)(struct tgt_cmd *cmd);
+	void (* complete_uspace_cmd)(struct tgt_cmd *cmd);
 	/*
 	 * complete a kernel command if your queue_command was async
 	 * and the device used one of the tgt threads to process the
 	 * command
 	 */
-	void (*complete_kern_cmd)(struct tgt_cmd *cmd);
+	void (* complete_kern_cmd)(struct tgt_cmd *cmd);
 	/*
 	 * setup buffer or device fields if needed
 	 */
@@ -65,6 +65,7 @@ struct tgt_device_template {
 struct tgt_device {
 	struct tgt_device_template *dt;
 	void *dt_data;
+	void *pt_data;
 
 	struct class_device cdev;
 

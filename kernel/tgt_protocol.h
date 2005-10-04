@@ -25,7 +25,8 @@ struct tgt_protocol {
 	struct module *module;
 
 	kmem_cache_t *cmd_cache;
-	int uspace_pdu_size;
+	unsigned uspace_pdu_size;
+	unsigned priv_dev_data_size;
 
 	/*
 	 * Create a command and allocate a buffer of size data_len for
@@ -40,10 +41,19 @@ struct tgt_protocol {
 				       enum dma_data_direction data_dir,
 				       uint8_t *dev_id_buff, int id_buff_size,
 				       int flags);
+
+	int (* queue_cmd) (struct tgt_cmd *cmd);
+	void (* dequeue_cmd) (struct tgt_cmd *cmd);
 	/*
 	 * Build userspace packet
 	 */
 	void (* build_uspace_pdu)(struct tgt_cmd *cmd, void *data);
+
+	/*
+	 * Initialize protocol specific data per device
+	 */
+	void (* attach_device)(void *data);
+	void (* detach_device)(void *data);
 };
 
 extern void tgt_protocol_init(void);

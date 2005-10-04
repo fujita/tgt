@@ -163,7 +163,6 @@ static struct class_device_attribute *tgt_device_attrs[] = {
 	NULL,
 };
 
-
 static void tgt_device_class_release(struct class_device *cdev)
 {
 	struct tgt_device *device = cdev_to_tgt_device(cdev);
@@ -171,6 +170,7 @@ static void tgt_device_class_release(struct class_device *cdev)
 
 	class_device_put(&target->cdev);
 	kfree(device->dt_data);
+	kfree(device->pt_data);
 	kfree(device);
 }
 
