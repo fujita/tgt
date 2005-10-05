@@ -4,8 +4,10 @@
  * This code is licensed under the GPL.
  */
 
+#include <linux/mm.h>
 #include <asm/types.h>
 #include <asm/scatterlist.h>
+#include <linux/scatterlist.h>
 
 #include <tgt.h>
 #include "iscsi.h"
@@ -20,14 +22,6 @@ void digest_alg_available(unsigned int *val)
 	}
 }
 
-/**
- * initialize support for digest calculation.
- *
- * digest_init -
- * @conn: ptr to connection to make use of digests
- *
- * @return: 0 on success, < 0 on error
- */
 int digest_init(struct iscsi_conn *conn)
 {
 	int err = 0;
@@ -59,12 +53,6 @@ out:
 	return err;
 }
 
-/**
- * free resources used for digest calculation.
- *
- * digest_cleanup -
- * @conn: ptr to connection that made use of digests
- */
 void digest_cleanup(struct iscsi_conn *conn)
 {
 	if (conn->tx_digest_tfm)
@@ -73,22 +61,15 @@ void digest_cleanup(struct iscsi_conn *conn)
 		crypto_free_tfm(conn->rx_digest_tfm);
 }
 
-/* Copied from linux-iscsi initiator and slightly adjusted */
-#define SETSG(sg, p, l) do {					\
-	(sg).page = virt_to_page((p));				\
-	(sg).offset = ((unsigned long)(p) & ~PAGE_CACHE_MASK);	\
-	(sg).length = (l);					\
-} while (0)
-
 static void digest_header(struct crypto_tfm *tfm, struct iscsi_pdu *pdu, u8 *crc)
 {
 	struct scatterlist sg[2];
 	int i = 0;
 
-	SETSG(sg[i], &pdu->bhs, sizeof(struct iscsi_hdr));
+	sg_init_one(&sg[i], (u8 *) &pdu->bhs, sizeof(struct iscsi_hdr));
 	i++;
 	if (pdu->ahssize) {
-		SETSG(sg[i], pdu->ahs, pdu->ahssize);
+		sg_init_one(&sg[i], pdu->ahs, pdu->ahssize);
 		i++;
 	}
 
