@@ -7,6 +7,7 @@
 #include <asm/types.h>
 #include <asm/scatterlist.h>
 
+#include <tgt.h>
 #include "iscsi.h"
 #include "digest.h"
 #include "iscsi_dbg.h"
@@ -72,87 +73,6 @@ void digest_cleanup(struct iscsi_conn *conn)
 		crypto_free_tfm(conn->rx_digest_tfm);
 }
 
-/**
- * debug handling of header digest errors:
- * simulates a digest error after n PDUs / every n-th PDU of type
- * HDIGEST_ERR_CORRUPT_PDU_TYPE.
- */
-static inline void __dbg_simulate_header_digest_error(struct iscsi_cmnd *cmnd)
-{
-#define HDIGEST_ERR_AFTER_N_CMNDS 1000
-#define HDIGEST_ERR_ONLY_ONCE     1
-#define HDIGEST_ERR_CORRUPT_PDU_TYPE ISCSI_OP_SCSI_CMD
-#define HDIGEST_ERR_CORRUPT_PDU_WITH_DATA_ONLY 0
-
-	static int num_cmnds = 0;
-	static int num_errs = 0;
-
-	if (cmnd_opcode(cmnd) == HDIGEST_ERR_CORRUPT_PDU_TYPE) {
-		if (HDIGEST_ERR_CORRUPT_PDU_WITH_DATA_ONLY) {
-			if (cmnd->pdu.datasize)
-				num_cmnds++;
-		} else
-			num_cmnds++;
-	}
-
-	if ((num_cmnds == HDIGEST_ERR_AFTER_N_CMNDS)
-	    && (!(HDIGEST_ERR_ONLY_ONCE && num_errs))) {
-		printk("*** Faking header digest error ***\n");
-		printk("\tcmnd: 0x%x, itt 0x%x, sn 0x%x\n",
-		       cmnd_opcode(cmnd),
-		       be32_to_cpu(cmnd->pdu.bhs.itt),
-		       be32_to_cpu(cmnd->pdu.bhs.statsn));
-		cmnd->hdigest = ~cmnd->hdigest;
-		/* make things even worse by manipulating header fields */
-		cmnd->pdu.datasize += 8;
-		num_errs++;
-		num_cmnds = 0;
-	}
-	return;
-}
-
-/**
- * debug handling of data digest errors:
- * simulates a digest error after n PDUs / every n-th PDU of type
- * DDIGEST_ERR_CORRUPT_PDU_TYPE.
- */
-static inline void __dbg_simulate_data_digest_error(struct iscsi_cmnd *cmnd)
-{
-#define DDIGEST_ERR_AFTER_N_CMNDS 50
-#define DDIGEST_ERR_ONLY_ONCE     1
-#define DDIGEST_ERR_CORRUPT_PDU_TYPE   ISCSI_OP_SCSI_DATA_OUT
-#define DDIGEST_ERR_CORRUPT_UNSOL_DATA_ONLY 0
-
-	static int num_cmnds = 0;
-	static int num_errs = 0;
-
-	if ((cmnd->pdu.datasize)
-	    && (cmnd_opcode(cmnd) == DDIGEST_ERR_CORRUPT_PDU_TYPE)) {
-		switch (cmnd_opcode(cmnd)) {
-		case ISCSI_OP_SCSI_DATA_OUT:
-			if ((DDIGEST_ERR_CORRUPT_UNSOL_DATA_ONLY)
-			    && (cmnd->pdu.bhs.ttt != ISCSI_RESERVED_TAG))
-				break;
-		default:
-			num_cmnds++;
-		}
-	}
-
-	if ((num_cmnds == DDIGEST_ERR_AFTER_N_CMNDS)
-	    && (!(DDIGEST_ERR_ONLY_ONCE && num_errs))
-	    && (cmnd->pdu.datasize)
-	    && (!cmnd->conn->read_overflow)) {
-		printk("*** Faking data digest error: ***");
-		printk("\tcmnd 0x%x, itt 0x%x, sn 0x%x\n",
-		       cmnd_opcode(cmnd),
-		       be32_to_cpu(cmnd->pdu.bhs.itt),
-		       be32_to_cpu(cmnd->pdu.bhs.statsn));
-		cmnd->ddigest = ~cmnd->ddigest;
-		num_errs++;
-		num_cmnds = 0;
-	}
-}
-
 /* Copied from linux-iscsi initiator and slightly adjusted */
 #define SETSG(sg, p, l) do {					\
 	(sg).page = virt_to_page((p));				\
@@ -193,75 +113,74 @@ void digest_tx_header(struct iscsi_cmnd *cmnd)
 	digest_header(cmnd->conn->tx_digest_tfm, &cmnd->pdu, (u8 *) &cmnd->hdigest);
 }
 
-/* static void digest_data(struct crypto_tfm *tfm, struct iscsi_cmnd *cmnd, */
-/* 			struct tio *tio, u32 offset, u8 *crc) */
-/* { */
-/* 	struct scatterlist sg[ISCSI_CONN_IOV_MAX]; */
-/* 	u32 size, length; */
-/* 	int i, idx, count; */
+static void digest_data(struct crypto_tfm *tfm, struct iscsi_cmnd *cmnd,
+			struct scatterlist *sgv, u32 offset, u8 *crc)
+{
+	struct scatterlist sg[ISCSI_CONN_IOV_MAX];
+	u32 size, length;
+	int i, idx, count;
 
-/* 	size = cmnd->pdu.datasize; */
-/* 	size = (size + 3) & ~3; */
+	size = cmnd->pdu.datasize;
+	size = (size + 3) & ~3;
 
-/* 	offset += tio->offset; */
-/* 	idx = offset >> PAGE_CACHE_SHIFT; */
-/* 	offset &= ~PAGE_CACHE_MASK; */
-/* 	count = get_pgcnt(size, offset); */
+	offset += sgv->offset;
+	idx = offset >> PAGE_CACHE_SHIFT;
+	offset &= ~PAGE_CACHE_MASK;
+	count = get_pgcnt(size, offset);
+	BUG_ON(count > ISCSI_CONN_IOV_MAX);
 /* 	assert(idx + count <= tio->pg_cnt); */
 
-/* 	assert(count < ISCSI_CONN_IOV_MAX); */
+	crypto_digest_init(tfm);
 
-/* 	crypto_digest_init(tfm); */
+	for (i = 0; size; i++) {
+		if (offset + size > PAGE_CACHE_SIZE)
+			length = PAGE_CACHE_SIZE - offset;
+		else
+			length = size;
 
-/* 	for (i = 0; size; i++) { */
-/* 		if (offset + size > PAGE_CACHE_SIZE) */
-/* 			length = PAGE_CACHE_SIZE - offset; */
-/* 		else */
-/* 			length = size; */
+		sg[i].page = sgv[idx + i].page;
+		sg[i].offset = offset;
+		sg[i].length = length;
+		size -= length;
+		offset = 0;
+	}
 
-/* 		sg[i].page = tio->pvec[idx + i]; */
-/* 		sg[i].offset = offset; */
-/* 		sg[i].length = length; */
-/* 		size -= length; */
-/* 		offset = 0; */
-/* 	} */
-
-/* 	crypto_digest_update(tfm, sg, count); */
-/* 	crypto_digest_final(tfm, crc); */
-/* } */
+	crypto_digest_update(tfm, sg, count);
+	crypto_digest_final(tfm, crc);
+}
 
 int digest_rx_data(struct iscsi_cmnd *cmnd)
 {
-/* 	struct tio *tio; */
-/* 	u32 offset, crc; */
+	struct scatterlist *sg;
+	u32 offset, crc;
 
-/* 	if (cmnd_opcode(cmnd) == ISCSI_OP_SCSI_DATA_OUT) { */
-/* 		struct iscsi_cmnd *scsi_cmnd = cmnd->req; */
-/* 		struct iscsi_data_out_hdr *req = (struct iscsi_data_out_hdr *)&cmnd->pdu.bhs; */
+	if (cmnd_opcode(cmnd) == ISCSI_OP_SCSI_DATA_OUT) {
+		struct iscsi_cmnd *scsi_cmnd = cmnd->req;
+		struct iscsi_data *req = (struct iscsi_data *) &cmnd->pdu.bhs;
 
-/* 		tio = scsi_cmnd->tio; */
-/* 		offset = be32_to_cpu(req->buffer_offset); */
-/* 	} else { */
-/* 		tio = cmnd->tio; */
-/* 		offset = 0; */
-/* 	} */
+		sg = scsi_cmnd->tc->sg;
+		offset = be32_to_cpu(req->offset);
+	} else {
+		sg = cmnd->tc->sg;
+		offset = 0;
+	}
 
-/* /\* 	digest_data(cmnd->conn->rx_digest_tfm, cmnd, tio, offset, (u8 *) &crc); *\/ */
+	BUG_ON(!sg);
+	digest_data(cmnd->conn->rx_digest_tfm, cmnd, sg, offset, (u8 *) &crc);
 
-/* 	if (!cmnd->conn->read_overflow && (cmnd_opcode(cmnd) != ISCSI_OP_PDU_REJECT)) { */
-/* 		if (crc != cmnd->ddigest) */
-/* 			return -EIO; */
-/* 	} */
+	if (!cmnd->conn->read_overflow && (cmnd_opcode(cmnd) != ISCSI_OP_PDU_REJECT)) {
+		if (crc != cmnd->ddigest)
+			return -EIO;
+	}
 
 	return 0;
 }
 
 void digest_tx_data(struct iscsi_cmnd *cmnd)
 {
-/* 	struct tio *tio = cmnd->tio; */
-/* 	struct iscsi_data_out_hdr *req = (struct iscsi_data_out_hdr *)&cmnd->pdu.bhs; */
+	struct iscsi_data *req = (struct iscsi_data *) &cmnd->pdu.bhs;
 
-/* 	assert(tio); */
-/* 	digest_data(cmnd->conn->tx_digest_tfm, cmnd, tio, */
-/* 		    be32_to_cpu(req->buffer_offset), (u8 *) &cmnd->ddigest); */
+	BUG_ON(!cmnd->sg);
+	digest_data(cmnd->conn->tx_digest_tfm, cmnd, cmnd->sg,
+		    be32_to_cpu(req->offset), (u8 *) &cmnd->ddigest);
 }
