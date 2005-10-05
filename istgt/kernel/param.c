@@ -4,9 +4,8 @@
  * This code is licenced under the GPL.
  */
 
-#include "iscsi.h"
-#include "iscsi_dbg.h"
-#include "digest.h"
+#include <iscsi.h>
+#include <digest.h>
 
 #define	CHECK_PARAM(info, iparam, word, min, max)			\
 do {									\

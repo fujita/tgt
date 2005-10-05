@@ -9,10 +9,9 @@
 #include <asm/scatterlist.h>
 #include <linux/scatterlist.h>
 
+#include <iscsi.h>
+#include <digest.h>
 #include <tgt.h>
-#include "iscsi.h"
-#include "digest.h"
-#include "iscsi_dbg.h"
 
 void digest_alg_available(unsigned int *val)
 {

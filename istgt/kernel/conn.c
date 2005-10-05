@@ -8,9 +8,8 @@
 #include <linux/ip.h>
 #include <net/tcp.h>
 
-#include "iscsi.h"
-#include "iscsi_dbg.h"
-#include "digest.h"
+#include <iscsi.h>
+#include <digest.h>
 
 static struct iscsi_conn *conn_lookup(struct iscsi_session *session, u16 cid)
 {

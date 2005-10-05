@@ -1,5 +1,5 @@
-#ifndef _IET_U_H
-#define _IET_U_H
+#ifndef _ISTGT_U_H
+#define _ISTGT_U_H
 
 #define VERSION_STRING	"0.4.12"
 #define	THIS_NAME		"istgt"

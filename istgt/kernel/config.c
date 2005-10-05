@@ -4,12 +4,9 @@
  * This code is licenced under the GPL.
  */
 
+#include <iscsi.h>
 #include <tgt.h>
 #include <tgt_target.h>
-
-#include "iet_u.h"
-#include "iscsi.h"
-#include "iscsi_dbg.h"
 
 static int add_conn(struct iscsi_target *target, struct conn_info *info)
 {

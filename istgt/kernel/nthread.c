@@ -10,9 +10,8 @@
 #include <asm/ioctls.h>
 #include <asm/scatterlist.h>
 
-#include "iscsi.h"
-#include "iscsi_dbg.h"
-#include "digest.h"
+#include <iscsi.h>
+#include <digest.h>
 
 DECLARE_WAIT_QUEUE_HEAD(iscsi_ctl_wait);
 

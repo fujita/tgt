@@ -8,7 +8,6 @@
 
 #include <iscsi.h>
 #include <digest.h>
-#include <iscsi_dbg.h>
 #include <tgt.h>
 #include <tgt_device.h>
 #include <tgt_target.h>

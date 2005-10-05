@@ -11,13 +11,11 @@
 #include <scsi/scsi_tcq.h>
 #include <linux/mempool.h>
 
+#include <iscsi.h>
 #include <tgt.h>
 #include <tgt_target.h>
 #include <tgt_scsi.h>
 #include <tgt_protocol.h>
-
-#include <iscsi.h>
-#include <iscsi_dbg.h>
 
 unsigned long debug_enable_flags;
 
@@ -1440,7 +1438,6 @@ void cmnd_tx_start(struct iscsi_cmnd *cmnd)
 	iop->iov_len = 0;
 	// move this?
 	conn->write_size = (conn->write_size + 3) & -4;
-	iscsi_dump_pdu(&cmnd->pdu);
 }
 
 void cmnd_tx_end(struct iscsi_cmnd *cmnd)
@@ -1557,8 +1554,6 @@ void cmnd_rx_start(struct iscsi_cmnd *cmnd)
 {
 	struct iscsi_conn *conn = cmnd->conn;
 	int err = 0;
-
-	iscsi_dump_pdu(&cmnd->pdu);
 
 	if (check_segment_length(cmnd) < 0)
 		return;
