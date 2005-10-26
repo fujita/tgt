@@ -157,11 +157,6 @@ struct tgt_target *tgt_target_create(char *target_type, int queued_cmds)
 	struct tgt_target *target;
 	struct target_type_internal *ti;
 
-	if (!tgtd_pid) {
-		eprintk("%s\n", "Run the user-space daemon first!");
-		return NULL;
-	}
-
 	target = kzalloc(sizeof(*target), GFP_KERNEL);
 	if (!target)
 		return NULL;
