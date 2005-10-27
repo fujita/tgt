@@ -238,7 +238,7 @@ static int session_init(struct tgt_session *session, int max_cmds)
 	unsigned long flags;
 
 	session->cmd_pool = mempool_create(max_cmds, mempool_alloc_slab,
-					mempool_free_slab, proto->cmd_cache);
+					   mempool_free_slab, proto->cmd_cache);
 	if (!session->cmd_pool)
 		goto out;
 

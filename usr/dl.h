@@ -9,5 +9,6 @@ extern void *dl_poll_init_fn(int idx);
 extern void *dl_poll_fn(int idx);
 extern void *dl_ipc_fn(char *driver);
 extern void *dl_event_fn(int tid);
+extern void *dl_proto_cmd_process(int tid);
 
 #endif

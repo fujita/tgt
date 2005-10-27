@@ -37,11 +37,37 @@ static int driver_find_by_name(char *name)
 {
 	int i;
 
-	for (i = 0; i < MAX_DL_HANDLES; i++)
-		if (!strncmp(dinfo[i].name, name, strlen(dinfo[i].name)))
+	for (i = 0; i < MAX_DL_HANDLES; i++) {
+		if (dinfo[i].dl &&
+		    !strncmp(dinfo[i].name, name, strlen(dinfo[i].name)))
 			return i;
+	}
 
 	return -ENOENT;
+}
+
+static int tid_to_did(int tid)
+{
+	char path[PATH_MAX], name[PATH_MAX];
+	int idx, fd, err;
+
+	memset(path, 0, sizeof(path));
+
+	sprintf(path, "/sys/class/tgt_target/target%d/name", tid);
+	fd = open(path, O_RDONLY);
+	if (fd < 0)
+		return fd;
+
+	err = read(fd, name, sizeof(name));
+	close(fd);
+	if (err < 0)
+		return err;
+
+	idx = driver_find_by_name(name);
+	if (idx < 0)
+		eprintf("%d %s\n", idx, name);
+
+	return idx;
 }
 
 int dl_init(char *p)
@@ -60,11 +86,19 @@ int dl_init(char *p)
 		memset(path, 0, sizeof(path));
 		strcpy(path, driver);
 		strcat(path, ".so");
-
 		dinfo[i].name = strdup(driver);
 		dinfo[i].dl = dlopen(path, RTLD_LAZY);
-		if (!dinfo[i].dl)
-			fprintf(stderr, "%s\n", dlerror());
+		if (!dinfo[i].dl) {
+			fprintf(stderr, "%s %s\n", path, dlerror());
+			continue;
+		}
+
+		memset(path, 0, sizeof(path));
+		strcpy(path, proto);
+		strcat(path, ".so");
+		dinfo[i].pdl = dlopen(path, RTLD_LAZY);
+		if (!dinfo[i].pdl)
+			fprintf(stderr, "%s %s\n", path, dlerror());
 	}
 
 	return i;
@@ -104,36 +138,39 @@ void *dl_poll_fn(int idx)
 void *dl_ipc_fn(char *name)
 {
 	int idx = driver_find_by_name(name);
-	if (idx < 0)
-		eprintf("%d %s\n", idx, name);
 
-	if (idx >= 0 && dinfo[idx].dl)
+	if (idx < 0) {
+		eprintf("%d %s\n", idx, name);
+		return NULL;
+	}
+
+	if (dinfo[idx].dl)
 		return dlsym(dinfo[idx].dl, "ipc_mgmt");
+
+	return NULL;
+}
+
+void *dl_proto_cmd_process(int tid)
+{
+	int idx = tid_to_did(tid);
+
+	if (idx < 0)
+		return NULL;
+
+	if (dinfo[idx].pdl)
+		return dlsym(dinfo[idx].pdl, "cmd_process");
+
 	return NULL;
 }
 
 void *dl_event_fn(int tid)
 {
-	char path[PATH_MAX], name[PATH_MAX];
-	int idx, fd, err;
+	int idx = tid_to_did(tid);
 
-	memset(path, 0, sizeof(path));
-
-	sprintf(path, "/sys/class/tgt_target/target%d/name", tid);
-	fd = open(path, O_RDONLY);
-	if (fd < 0)
-		return NULL;
-
-	err = read(fd, name, sizeof(name));
-	close(fd);
-	if (err < 0)
-		return NULL;
-
-	idx = driver_find_by_name(name);
 	if (idx < 0)
-		eprintf("%d %s %d\n", idx, name, tid);
+		return NULL;
 
-	if (idx >= 0 && dinfo[idx].dl)
+	if (dinfo[idx].dl)
 		return dlsym(dinfo[idx].dl, "async_event");
 
 	return NULL;
