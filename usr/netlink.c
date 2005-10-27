@@ -127,7 +127,7 @@ static int cmd_queue(int fd, char *reqbuf, char *resbuf)
 			    (uint8_t *) ev_res->data, &len);
 	else {
 		result = -EINVAL;
-		eprintf("Cannot process cmd %d %llu %llu\n",
+		eprintf("Cannot process cmd %d %" PRIu64 " %" PRIu64 "\n",
 			ev_req->k.cmd_req.tid, ev_req->k.cmd_req.dev_id, cid);
 	}
 
