@@ -838,30 +838,39 @@ found:
 	return cmd;
 }
 
-int tgt_msg_send(struct tgt_target *target, void *data, int data_len,
-		 unsigned int gfp_flags)
+static int send_event_res(uint16_t type, struct tgt_event *p,
+			  void *data, int dlen, gfp_t flags)
 {
 	struct tgt_event *ev;
-	struct sk_buff *skb;
 	struct nlmsghdr *nlh;
-	int len;
+	struct sk_buff *skb;
+	uint32_t len;
 
-	len = NLMSG_SPACE(sizeof(*ev) + data_len);
-	skb = alloc_skb(len, gfp_flags);
+	len = NLMSG_SPACE(sizeof(*ev) + dlen);
+	skb = alloc_skb(len, flags);
 	if (!skb)
 		return -ENOMEM;
 
-	dprintk("%d %Zd %d\n", len, sizeof(*ev), data_len);
-	nlh = __nlmsg_put(skb, tgtd_pid, 0, TGT_KEVENT_TARGET_PASSTHRU,
-			 len - sizeof(*nlh), 0);
-	ev = NLMSG_DATA(nlh);
-	memset(ev, 0, sizeof(*ev));
+	nlh = __nlmsg_put(skb, tgtd_pid, 0, type, len - sizeof(*nlh), 0);
 
-	memcpy(ev->data, data, data_len);
-	ev->k.tgt_passthru.tid = target->tid;
-	ev->k.tgt_passthru.len = data_len;
+	ev = NLMSG_DATA(nlh);
+	memcpy(ev, p, sizeof(*ev));
+	if (dlen)
+		memcpy(ev->data, data, dlen);
 
 	return netlink_unicast(nls, skb, tgtd_pid, 0);
+}
+
+int tgt_msg_send(struct tgt_target *target, void *data, int dlen, gfp_t flags)
+{
+	struct tgt_event ev;
+
+	memset(&ev, 0, sizeof(ev));
+	ev.k.tgt_passthru.tid = target->tid;
+	ev.k.tgt_passthru.len = dlen;
+
+	return send_event_res(TGT_KEVENT_TARGET_PASSTHRU,
+			      &ev, data, dlen, flags);
 }
 EXPORT_SYMBOL_GPL(tgt_msg_send);
 
@@ -937,31 +946,16 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 	return err;
 }
 
-static int send_event_res(uint32_t pid, uint16_t type, void *data, uint32_t size)
-{
-	struct nlmsghdr *nlh;
-	struct sk_buff *skb;
-	uint32_t len = NLMSG_SPACE(size);
-
-	skb = alloc_skb(len, GFP_KERNEL | __GFP_NOFAIL);
-	nlh = __nlmsg_put(skb, pid, 0, type, size, 0);
-	memcpy(NLMSG_DATA(nlh), data, size);
-
-	return netlink_unicast(nls, skb, pid, 0);
-}
-
 static int event_recv_skb(struct sk_buff *skb)
 {
 	int err;
 	uint32_t rlen;
 	struct nlmsghdr	*nlh;
-	struct tgt_event *ev;
 
 	while (skb->len >= NLMSG_SPACE(0)) {
 		nlh = (struct nlmsghdr *) skb->data;
 		if (nlh->nlmsg_len < sizeof(*nlh) || skb->len < nlh->nlmsg_len)
 			return 0;
-		ev = NLMSG_DATA(nlh);
 		rlen = NLMSG_ALIGN(nlh->nlmsg_len);
 		if (rlen > skb->len)
 			rlen = skb->len;
@@ -974,10 +968,12 @@ static int event_recv_skb(struct sk_buff *skb)
 		 */
 		if (nlh->nlmsg_type != TGT_UEVENT_CMD_RES &&
 		    nlh->nlmsg_type != TGT_UEVENT_TARGET_PASSTHRU) {
-			ev->k.event_res.err = err;
-			send_event_res(NETLINK_CREDS(skb)->pid,
-				       TGT_KEVENT_RESPONSE,
-				       ev, sizeof(*ev));
+			struct tgt_event ev;
+
+			memset(&ev, 0, sizeof(ev));
+			ev.k.event_res.err = err;
+			send_event_res(TGT_KEVENT_RESPONSE, &ev, NULL, 0,
+				       GFP_KERNEL | __GFP_NOFAIL);
 		}
 		skb_pull(skb, rlen);
 	}

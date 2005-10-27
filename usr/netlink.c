@@ -124,8 +124,8 @@ static int cmd_queue(int fd, char *reqbuf, char *resbuf)
 	 * protocol module
 	 */
 	result = scsi_cmd_process(ev_req->k.cmd_req.tid,
-				   ev_req->k.cmd_req.dev_id, scb,
-				   (uint8_t *) ev_res->data, &len);
+				  ev_req->k.cmd_req.dev_id, scb,
+				  (uint8_t *) ev_res->data, &len);
 
 	memset(ev_res, 0, sizeof(*ev_res));
 	ev_res->u.cmd_res.cid = cid;
