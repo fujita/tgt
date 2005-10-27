@@ -1,12 +1,11 @@
-#ifndef __SCSI_TARGET_DAEMON_H
-#define __SCSI_TARGET_DAEMON_H
+#ifndef __TARGET_DAEMON_H
+#define __TARGET_DAEMON_H
 
 #include "log.h"
 
 extern int nl_fd;
-extern void *dl_handles[];
 
-extern int nl_open(void);
+extern int nl_open(int *nr_drivers);
 extern void nl_event_handle(int fd);
 extern int nl_cmd_call(int fd, int type, char *data, int size, char *rbuf);
 

@@ -34,6 +34,7 @@ static char program_name[] = "tgtadm";
 
 static struct option const long_options[] =
 {
+	{"driver", required_argument, NULL, 'n'},
 	{"op", required_argument, NULL, 'o'},
 	{"tid", required_argument, NULL, 't'},
 	{"sid", required_argument, NULL, 's'},
@@ -204,18 +205,21 @@ int main(int argc, char **argv)
 	int tid = -1;
 	uint32_t cid = 0, set = 0;
 	uint64_t sid = 0, lun = 0;
-	char *params = NULL;
+	char *params = NULL, *driver = NULL;
 	struct tgtadm_req *req;
 	char sbuf[8192], rbuf[8912];
 
-	while ((ch = getopt_long(argc, argv, "o:t:s:c:l:p:uvh",
+	while ((ch = getopt_long(argc, argv, "n:o:t:s:c:l:p:uvh",
 				 long_options, &longindex)) >= 0) {
 		switch (ch) {
+		case 'n':
+			driver = optarg;
+			break;
 		case 'o':
 			op = str_to_op(optarg);
 			break;
 		case 't':
-			tid = strtoul(optarg, NULL, 10);
+			tid = strtol(optarg, NULL, 10);
 			set |= SET_TARGET;
 			break;
 		case 's':
@@ -253,6 +257,11 @@ int main(int argc, char **argv)
 		goto out;
 	}
 
+	if (!driver) {
+		fprintf(stderr, "You must specify the driver name\n");
+		goto out;
+	}
+
 	if (optind < argc) {
 		fprintf(stderr, "unrecognized: ");
 		while (optind < argc)
@@ -265,6 +274,7 @@ int main(int argc, char **argv)
 	memset(rbuf, 0, sizeof(rbuf));
 
 	req = (struct tgtadm_req *) sbuf;
+	strncpy(req->driver, driver, sizeof(req->driver));
 	req->op = op;
 	req->set = set;
 	req->tid = tid;

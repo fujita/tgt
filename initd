@@ -22,7 +22,7 @@ start_server()
 	
 stop_server()
 {
-	${PWD}/usr/tgtadm --op delete
+	${PWD}/usr/tgtadm --driver istgt --op delete
 	killall -9 tgtd
 
 	rmmod iscsi_trgt

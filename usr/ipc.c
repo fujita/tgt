@@ -9,7 +9,6 @@
 #include <errno.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <dlfcn.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <sys/socket.h>
@@ -21,6 +20,7 @@
 
 #include "tgtd.h"
 #include "tgtadm.h"
+#include "dl.h"
 
 static int ipc_accept(int afd)
 {
@@ -58,6 +58,7 @@ void ipc_event_handle(int accept_fd)
 	struct iovec iov;
 	struct msghdr msg;
 	struct tgtadm_res *res;
+	struct tgtadm_req *req;
 	int (*fn) (char *, char *);
 
 	fd = ipc_accept(accept_fd);
@@ -96,11 +97,13 @@ void ipc_event_handle(int accept_fd)
 	if (err < 0)
 		goto fail;
 
-	eprintf("%s %d %d %d\n", __FUNCTION__, __LINE__, err, nlh->nlmsg_len);
+	req = NLMSG_DATA(nlh);
 
-	fn = dlsym(dl_handles[0], "ipc_mgmt");
+	dprintf("%s %d %d\n", req->driver, err, nlh->nlmsg_len);
+
+	fn = dl_ipc_fn(req->driver);
 	if (!fn) {
-		eprintf("%s\n", dlerror());
+		eprintf("Cannot handle event %s\n", req->driver);
 		err = -EINVAL;
 		goto fail;
 	}

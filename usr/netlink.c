@@ -21,10 +21,10 @@
 #include <sys/socket.h>
 #include <asm/types.h>
 #include <linux/netlink.h>
-#include <dlfcn.h>
 
 #include <tgt_if.h>
 #include "tgtd.h"
+#include "dl.h"
 
 #define	NL_BUFSIZE	8192
 
@@ -158,9 +158,12 @@ void nl_event_handle(int fd)
 		cmd_queue(fd, NLMSG_DATA(recvbuf), sendbuf);
 		break;
 	case TGT_KEVENT_TARGET_PASSTHRU:
-		fn = dlsym(dl_handles[0], "async_event");
+		fn = dl_event_fn(ev->k.tgt_passthru.tid);
 		if (fn)
 			fn(NLMSG_DATA(recvbuf));
+		else
+			eprintf("Cannot handle async event %d\n",
+				ev->k.tgt_passthru.tid);
 		break;
 	default:
 		/* kernel module bug */
@@ -189,7 +192,7 @@ int nl_cmd_call(int fd, int type, char *data, int size, char *rbuf)
 	return err;
 }
 
-static void nl_start(int fd)
+static int nl_start(int fd)
 {
 	int err;
 	struct tgt_event *ev;
@@ -207,9 +210,11 @@ static void nl_start(int fd)
 		eprintf("%d %d\n", err, ev->k.event_res.err);
 		exit(-1);
 	}
+
+	return dl_init((char *) ev->data);
 }
 
-int nl_open(void)
+int nl_open(int *nr)
 {
 	int fd, err;
 
@@ -240,7 +245,7 @@ int nl_open(void)
 	dest_addr.nl_pid = 0; /* kernel */
 	dest_addr.nl_groups = 0; /* unicast */
 
-	nl_start(fd);
+	*nr = nl_start(fd);
 
 	return fd;
 

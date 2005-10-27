@@ -874,6 +874,44 @@ int tgt_msg_send(struct tgt_target *target, void *data, int dlen, gfp_t flags)
 }
 EXPORT_SYMBOL_GPL(tgt_msg_send);
 
+static void tgt_start(void)
+{
+	struct tgt_event ev;
+	struct target_type_internal *ti;
+	unsigned long flags;
+	int n, err, done, rest = PAGE_SIZE;
+	char *p;
+
+	p = kzalloc(rest, GFP_KERNEL);
+	if (!p)
+		rest = 0;
+
+	n = done = 0;
+
+	spin_lock_irqsave(&target_tmpl_lock, flags);
+	list_for_each_entry(ti, &target_tmpl_list, list) {
+		dprintk("%s %s\n", ti->tt->name, ti->proto->name);
+		if (strlen(ti->tt->name) + strlen(ti->proto->name) + 2 > rest)
+			break;
+		err = snprintf(p + done, rest, "%s:%s,",
+			       ti->tt->name, ti->proto->name);
+		if (err < 0)
+			break;
+		rest -= err;
+		done += err;
+		n++;
+	}
+	spin_unlock_irqrestore(&target_tmpl_lock, flags);
+
+	memset(&ev, 0, sizeof(ev));
+	send_event_res(TGT_KEVENT_RESPONSE, &ev, p, done,
+		       GFP_KERNEL | __GFP_NOFAIL);
+
+	kfree(p);
+
+	eprintk("start %d target drivers\n", n);
+}
+
 static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 {
 	int err = 0;
@@ -887,7 +925,7 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 	switch (nlh->nlmsg_type) {
 	case TGT_UEVENT_START:
 		tgtd_pid  = NETLINK_CREDS(skb)->pid;
-		dprintk("start %d\n", tgtd_pid);
+		tgt_start();
 		break;
 	case TGT_UEVENT_TARGET_CREATE:
 		target = tgt_target_create(ev->u.c_target.type,
@@ -966,7 +1004,8 @@ static int event_recv_skb(struct sk_buff *skb)
 		 * TODO for passthru commands the lower level should
 		 * probably handle the result or we should modify this
 		 */
-		if (nlh->nlmsg_type != TGT_UEVENT_CMD_RES &&
+		if (nlh->nlmsg_type != TGT_UEVENT_START &&
+		    nlh->nlmsg_type != TGT_UEVENT_CMD_RES &&
 		    nlh->nlmsg_type != TGT_UEVENT_TARGET_PASSTHRU) {
 			struct tgt_event ev;
 
