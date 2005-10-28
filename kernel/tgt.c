@@ -24,19 +24,6 @@
 #include <tgt_if.h>
 #include <tgt_protocol.h>
 
-#define DEBUG_TGT
-
-#define eprintk(fmt, args...)					\
-do {								\
-	printk("%s(%d) " fmt, __FUNCTION__, __LINE__, args);	\
-} while (0)
-
-#ifdef DEBUG_TGT
-#define dprintk eprintk
-#else
-#define dprintk(fmt, args...)
-#endif
-
 MODULE_LICENSE("GPL");
 
 static spinlock_t all_targets_lock;

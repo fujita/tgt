@@ -16,6 +16,11 @@
 #include <iscsi_proto.h>
 #include <istgt_u.h>
 
+#include <tgt.h>
+#include <tgt_target.h>
+#include <tgt_scsi.h>
+#include <tgt_protocol.h>
+
 struct iscsi_sess_param {
 	int initial_r2t;
 	int immediate_data;
@@ -283,33 +288,6 @@ enum cmnd_flags {
 #define VENDOR_ID	"IET"
 #define PRODUCT_ID	"VIRTUAL-DISK"
 #define PRODUCT_REV	"0"
-
-
-#define D_SETUP		(1UL << 0)
-#define D_EXIT		(1UL << 1)
-#define D_GENERIC	(1UL << 2)
-#define D_READ		(1UL << 3)
-#define D_WRITE 	(1UL << 4)
-#define D_IOD		(1UL << 5)
-#define D_THREAD	(1UL << 6)
-#define D_TASK_MGT	(1UL << 7)
-#define D_IOMODE	(1UL << 8)
-
-#define D_DATA		(D_READ | D_WRITE)
-
-extern unsigned long debug_enable_flags;
-
-#define dprintk(debug, fmt, args...)					\
-do {									\
-	if ((debug) & debug_enable_flags) {				\
-		printk("%s(%d) " fmt, __FUNCTION__, __LINE__, args);	\
-	}								\
-} while (0)
-
-#define eprintk(fmt, args...)					\
-do {								\
-	printk("%s(%d) " fmt, __FUNCTION__, __LINE__, args);	\
-} while (0)
 
 #define show_param(param)\
 {\

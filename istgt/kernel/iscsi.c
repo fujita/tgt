@@ -12,10 +12,6 @@
 #include <linux/mempool.h>
 
 #include <iscsi.h>
-#include <tgt.h>
-#include <tgt_target.h>
-#include <tgt_scsi.h>
-#include <tgt_protocol.h>
 
 unsigned long debug_enable_flags;
 
@@ -83,7 +79,7 @@ struct iscsi_cmnd *cmnd_alloc(struct iscsi_conn *conn, int req)
 		BUG_ON(!conn->session->ts);
 	}
 
-	dprintk(D_GENERIC, "%p:%p\n", conn, cmnd);
+	dprintk("%p:%p\n", conn, cmnd);
 
 	return cmnd;
 }
@@ -124,7 +120,7 @@ static void iscsi_cmnds_init_write(struct list_head *send)
 	list_for_each_safe(pos, next, send) {
 		cmnd = list_entry(pos, struct iscsi_cmnd, list);
 
-		dprintk(D_GENERIC, "%p:%x\n", cmnd, cmnd_opcode(cmnd));
+		dprintk("%p:%x\n", cmnd, cmnd_opcode(cmnd));
 
 		list_del_init(&cmnd->list);
 		BUG_ON(conn != cmnd->conn);
@@ -165,7 +161,7 @@ static void do_send_data_rsp(struct iscsi_cmnd *cmnd)
 	u32 pdusize, expsize, scsisize, size, offset, sn;
 	LIST_HEAD(send);
 
-	dprintk(D_GENERIC, "%p\n", cmnd);
+	dprintk("%p\n", cmnd);
 	pdusize = conn->session->param.max_xmit_data_length;
 	expsize = cmnd_read_size(cmnd);
 	BUG_ON(!cmnd->tc);
@@ -343,7 +339,7 @@ void iscsi_cmnd_remove(struct iscsi_cmnd *cmnd)
 
 	if (!cmnd)
 		return;
-	dprintk(D_GENERIC, "%p\n", cmnd);
+	dprintk("%p\n", cmnd);
 	conn = cmnd->conn;
 	kfree(cmnd->pdu.ahs);
 
@@ -453,7 +449,7 @@ static void update_stat_sn(struct iscsi_cmnd *cmnd)
 	u32 exp_stat_sn;
 
 	cmnd->pdu.bhs.exp_statsn = exp_stat_sn = be32_to_cpu(cmnd->pdu.bhs.exp_statsn);
-	dprintk(D_GENERIC, "%x,%x\n", cmnd_opcode(cmnd), exp_stat_sn);
+	dprintk("%x,%x\n", cmnd_opcode(cmnd), exp_stat_sn);
 	if ((int)(exp_stat_sn - conn->exp_stat_sn) > 0 &&
 	    (int)(exp_stat_sn - conn->stat_sn) <= 0) {
 		// free pdu resources
@@ -467,7 +463,7 @@ static int check_cmd_sn(struct iscsi_cmnd *cmnd)
 	u32 cmd_sn;
 
 	cmnd->pdu.bhs.statsn = cmd_sn = be32_to_cpu(cmnd->pdu.bhs.statsn);
-	dprintk(D_GENERIC, "%d(%d)\n", cmd_sn, session->exp_cmd_sn);
+	dprintk("%d(%d)\n", cmd_sn, session->exp_cmd_sn);
 	if ((s32)(cmd_sn - session->exp_cmd_sn) >= 0)
 		return 0;
 	eprintk("sequence error (%x,%x)\n", cmd_sn, session->exp_cmd_sn);
@@ -513,7 +509,7 @@ static int cmnd_insert_hash(struct iscsi_cmnd *cmnd)
 	int err = 0;
 	u32 itt = cmnd->pdu.bhs.itt;
 
-	dprintk(D_GENERIC, "%p:%x\n", cmnd, itt);
+	dprintk("%p:%x\n", cmnd, itt);
 	if (itt == ISCSI_RESERVED_TAG) {
 		err = -ISCSI_PROTOCOL_ERROR;
 		goto out;
@@ -604,7 +600,7 @@ static int cmnd_recv_pdu(struct iscsi_conn *conn, struct tgt_cmd *tc,
 	char *addr;
 	struct scatterlist *sg;
 
-	dprintk(D_GENERIC, "%u,%u\n", offset, size);
+	dprintk("%u,%u\n", offset, size);
 
 	BUG_ON(!tc);
 	BUG_ON(!tc->sg);
@@ -687,7 +683,7 @@ static void send_r2t(struct iscsi_cmnd *req)
 			length = 0;
 		}
 
-		dprintk(D_WRITE, "%x %u %u %u %u\n", cmnd_itt(req),
+		dprintk("%x %u %u %u %u\n", cmnd_itt(req),
 			be32_to_cpu(rsp_hdr->data_length),
 			be32_to_cpu(rsp_hdr->data_offset),
 			be32_to_cpu(rsp_hdr->r2tsn), req->outstanding_r2t);
@@ -911,7 +907,7 @@ static void scsi_cmnd_start(struct iscsi_conn *conn, struct iscsi_cmnd *req)
 {
 	struct iscsi_cmd *req_hdr = cmnd_hdr(req);
 
-	dprintk(D_GENERIC, "scsi command: %02x\n", req_hdr->cdb[0]);
+	dprintk("scsi command: %02x\n", req_hdr->cdb[0]);
 
 	switch (req_hdr->cdb[0]) {
 	case SERVICE_ACTION_IN:
@@ -1032,7 +1028,7 @@ static void data_out_start(struct iscsi_conn *conn, struct iscsi_cmnd *cmnd)
 		}
 	}
 
-	dprintk(D_WRITE, "%u %p %p %u %u\n", req->ttt, cmnd, scsi_cmnd,
+	dprintk("%u %p %p %u %u\n", req->ttt, cmnd, scsi_cmnd,
 		offset, cmnd->pdu.datasize);
 
 	if (cmnd_recv_pdu(conn, scsi_cmnd->tc, offset, cmnd->pdu.datasize) < 0)
@@ -1271,7 +1267,7 @@ static void logout_exec(struct iscsi_cmnd *req)
 
 static void iscsi_cmnd_exec(struct iscsi_cmnd *cmnd)
 {
-	dprintk(D_GENERIC, "%p,%x,%u\n", cmnd, cmnd_opcode(cmnd),
+	dprintk("%p,%x,%u\n", cmnd, cmnd_opcode(cmnd),
 		cmnd->pdu.bhs.statsn);
 
 	switch (cmnd_opcode(cmnd)) {
@@ -1377,7 +1373,7 @@ void cmnd_tx_start(struct iscsi_cmnd *cmnd)
 	struct iscsi_conn *conn = cmnd->conn;
 	struct iovec *iop;
 
-	dprintk(D_GENERIC, "%p:%x\n", cmnd, cmnd_opcode(cmnd));
+	dprintk("%p:%x\n", cmnd, cmnd_opcode(cmnd));
 	BUG_ON(!cmnd);
 	iscsi_cmnd_set_length(&cmnd->pdu);
 
@@ -1444,7 +1440,7 @@ void cmnd_tx_end(struct iscsi_cmnd *cmnd)
 {
 	struct iscsi_conn *conn = cmnd->conn;
 
-	dprintk(D_GENERIC, "%p:%x\n", cmnd, cmnd_opcode(cmnd));
+	dprintk("%p:%x\n", cmnd, cmnd_opcode(cmnd));
 	switch (cmnd_opcode(cmnd)) {
 	case ISCSI_OP_NOOP_IN:
 	case ISCSI_OP_SCSI_CMD_RSP:
@@ -1484,7 +1480,7 @@ static void iscsi_session_push_cmnd(struct iscsi_cmnd *cmnd)
 	struct list_head *entry;
 	u32 cmd_sn;
 
-	dprintk(D_GENERIC, "%p:%x %u,%u\n",
+	dprintk("%p:%x %u,%u\n",
 		cmnd, cmnd_opcode(cmnd), cmnd->pdu.bhs.statsn,
 		session->exp_cmd_sn);
 
@@ -1594,7 +1590,7 @@ void cmnd_rx_end(struct iscsi_cmnd *cmnd)
 {
 	struct iscsi_conn *conn = cmnd->conn;
 
-	dprintk(D_GENERIC, "%p:%x\n", cmnd, cmnd_opcode(cmnd));
+	dprintk("%p:%x\n", cmnd, cmnd_opcode(cmnd));
 	switch (cmnd_opcode(cmnd)) {
 	case ISCSI_OP_SCSI_REJECT:
 	case ISCSI_OP_NOOP_OUT:

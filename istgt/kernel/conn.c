@@ -51,7 +51,7 @@ static void socket_bind(struct iscsi_conn *conn)
 	struct iscsi_session *session = conn->session;
 	struct iscsi_target *target = session->target;
 
-	dprintk(D_GENERIC, "%llu\n", (unsigned long long) session->sid);
+	dprintk("%llu\n", (unsigned long long) session->sid);
 
 	conn->sock = SOCKET_I(conn->file->f_dentry->d_inode);
 	conn->sock->sk->sk_user_data = conn;
@@ -73,7 +73,7 @@ static void socket_bind(struct iscsi_conn *conn)
 
 int conn_free(struct iscsi_conn *conn)
 {
-	dprintk(D_GENERIC, "%p %#Lx %u\n", conn->session,
+	dprintk("%p %#Lx %u\n", conn->session,
 		(unsigned long long) conn->session->sid, conn->cid);
 
 	BUG_ON(atomic_read(&conn->nr_cmnds));
@@ -101,8 +101,7 @@ int conn_add(struct iscsi_session *session, struct conn_info *info)
 {
 	struct iscsi_conn *conn;
 
-	dprintk(D_SETUP, "%#Lx:%u\n",
-		(unsigned long long) session->sid, info->cid);
+	dprintk("%#Lx:%u\n", (unsigned long long) session->sid, info->cid);
 
 	conn = conn_lookup(session, info->cid);
 	if (conn)

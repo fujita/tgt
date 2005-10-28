@@ -25,7 +25,7 @@ int session_add(struct iscsi_target *target, struct session_info *info)
 	struct iscsi_session *session;
 	int i;
 
-	dprintk(D_SETUP, "%p %u %#Lx\n", target, target->tid,
+	dprintk("%p %u %#Lx\n", target, target->tid,
 		(unsigned long long) info->sid);
 
 	session = session_lookup(target, info->sid);
@@ -69,7 +69,7 @@ int session_del(struct iscsi_target *target, u64 sid)
 	if (!session)
 		return -ENOENT;
 
-	dprintk(D_SETUP, "%#Lx\n", (unsigned long long) session->sid);
+	dprintk("%#Lx\n", (unsigned long long) session->sid);
 
 	if (!list_empty(&session->conn_list)) {
 		eprintk("%llu still have connections\n",

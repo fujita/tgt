@@ -134,7 +134,7 @@ static int do_recv(struct iscsi_conn *conn, int state)
 	}
 
 out:
-	dprintk(D_IOD, "%d\n", res);
+	dprintk("%d\n", res);
 
 	return res;
 }
@@ -315,7 +315,7 @@ static int write_data(struct iscsi_conn *conn)
 		set_fs(KERNEL_DS);
 		res = vfs_writev(file, (struct iovec __user *) iop, count, &off);
 		set_fs(oldfs);
-		dprintk(D_DATA, "%#Lx:%u: %d(%ld)\n",
+		dprintk("%#Lx:%u: %d(%ld)\n",
 			(unsigned long long) conn->session->sid, conn->cid,
 			res, (long) iop->iov_len);
 		if (unlikely(res <= 0)) {
@@ -359,7 +359,7 @@ static int write_data(struct iscsi_conn *conn)
 		sendsize = PAGE_CACHE_SIZE - offset;
 		if (size <= sendsize) {
 			res = sendpage(sock, sg[idx].page, offset, size, flags);
-			dprintk(D_DATA, "%s %#Lx:%u: %d(%lu,%u,%u)\n",
+			dprintk("%s %#Lx:%u: %d(%lu,%u,%u)\n",
 				sock->ops->sendpage ? "sendpage" : "writepage",
 				(unsigned long long ) conn->session->sid, conn->cid,
 				res, sg[idx].page->index, offset, size);
@@ -380,7 +380,7 @@ static int write_data(struct iscsi_conn *conn)
 		}
 
 		res = sendpage(sock, sg[idx].page, offset, sendsize, flags | MSG_MORE);
-		dprintk(D_DATA, "%s %#Lx:%u: %d(%lu,%u,%u)\n",
+		dprintk("%s %#Lx:%u: %d(%lu,%u,%u)\n",
 			sock->ops->sendpage ? "sendpage" : "writepage",
 			(unsigned long long ) conn->session->sid, conn->cid,
 			res, sg[idx].page->index, offset, sendsize);
