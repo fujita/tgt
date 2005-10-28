@@ -438,7 +438,7 @@ static int tgt_device_create(int tid, uint64_t dev_id, char *device_type,
 	struct tgt_device *device;
 	unsigned long flags;
 
-	dprintk("tid %d dev_id %llu type %s fd %d\n",
+	dprintk("tid %d dev_id %" PRIu64 " type %s fd %d\n",
 		tid, dev_id, device_type, fd);
 
 	target = target_find(tid);
@@ -569,13 +569,13 @@ static void queuecommand(void *data)
 	struct tgt_target *target = cmd->session->target;
 	struct tgt_device *device = cmd->device;
 
-	dprintk("cid %llu\n", cmd->cid);
+	dprintk("cid %" PRIx64 "\n", cmd->cid);
 
 	/* Should we do this earlier? */
 	if (!device)
 		cmd->device = device = tgt_device_find(target, cmd->dev_id);
 	if (device)
-		dprintk("found %llu\n", cmd->dev_id);
+		dprintk("found %" PRIu64 "\n", cmd->dev_id);
 
 	err = target->proto->queue_cmd(cmd);
 
@@ -585,7 +585,7 @@ static void queuecommand(void *data)
 		dprintk("command completed %d\n", err);
 		tgt_transfer_response(cmd);
 	default:
-		dprintk("command %llu queued\n", cmd->cid);
+		dprintk("command %" PRIx64 " queued\n", cmd->cid);
 	};
 }
 
@@ -607,7 +607,7 @@ struct tgt_cmd *tgt_cmd_create(struct tgt_session *session, void *tgt_priv)
 	INIT_LIST_HEAD(&cmd->clist);
 	INIT_LIST_HEAD(&cmd->hash_list);
 
-	dprintk("%p %llu\n", session, cmd->cid);
+	dprintk("%p %" PRIx64 "\n", session, cmd->cid);
 
 	spin_lock_irqsave(&cmd_hash_lock, flags);
 	list_add_tail(&cmd->hash_list, &cmd_hash[cmd_hashfn(cmd->cid)]);
@@ -630,7 +630,7 @@ void tgt_cmd_destroy(struct tgt_cmd *cmd)
 {
 	unsigned long flags;
 
-	dprintk("cid %llu\n", cmd->cid);
+	dprintk("cid %" PRIx64 "\n", cmd->cid);
 
 	tgt_free_buffer(cmd);
 
@@ -686,8 +686,8 @@ void __tgt_alloc_buffer(struct tgt_cmd *cmd)
 	cmd->sg_count = pgcnt(len, offset);
 	offset &= ~PAGE_CACHE_MASK;
 
-	dprintk("cid %llu pg_count %d offset %llu len %d\n", cmd->cid,
-		cmd->sg_count, cmd->offset, cmd->bufflen);
+	dprintk("cid %" PRIx64 " pg_count %d offset %" PRIu64 " len %d\n",
+		cmd->cid, cmd->sg_count, cmd->offset, cmd->bufflen);
 
 	cmd->sg = kmalloc(cmd->sg_count * sizeof(struct scatterlist),
 			   GFP_KERNEL | __GFP_NOFAIL);
@@ -784,7 +784,7 @@ static void uspace_cmd_done(struct tgt_cmd *cmd, void *data,
 	char *p = data;
 	int i;
 
-	dprintk("cid %llu result %d len %d bufflen %u\n",
+	dprintk("cid %" PRIx64 " result %d len %d bufflen %u\n",
 		cmd->cid, result, len, cmd->bufflen);
 
 	if (len) {
@@ -972,7 +972,8 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 					 ev->u.cmd_res.result,
 					 ev->u.cmd_res.len);
 		else {
-			eprintk("cannot found %llu\n", ev->u.cmd_res.cid);
+			eprintk("cannot found %" PRIx64 "\n",
+				ev->u.cmd_res.cid);
 			err = -EEXIST;
 		}
 		break;

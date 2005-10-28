@@ -12,6 +12,8 @@
 #include <linux/mempool.h>
 #include <linux/dma-mapping.h>
 
+#include <tgt_types.h>
+
 struct tgt_device;
 struct tgt_protocol;
 

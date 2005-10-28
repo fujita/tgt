@@ -5,6 +5,7 @@
  * (C) 2005 Mike Christie <michaelc@cs.wisc.edu>
  * This code is licenced under the GPL.
  */
+#include <tgt_types.h>
 #include <tgt_target.h>
 #include <tgt_device.h>
 
@@ -155,7 +156,7 @@ show_##field (struct class_device *cdev, char *buf)			\
 static CLASS_DEVICE_ATTR(field, S_IRUGO, show_##field, NULL);
 
 tgt_device_rd_attr(fd, "%d\n");
-tgt_device_rd_attr(size, "%llu\n");
+tgt_device_rd_attr(size, "%" PRIu64 "\n");
 
 static struct class_device_attribute *tgt_device_attrs[] = {
 	&class_device_attr_fd,
@@ -186,7 +187,7 @@ int tgt_sysfs_register_device(struct tgt_device *device)
 	int err, i;
 
 	cdev->class = &tgt_device_class;
-	snprintf(cdev->class_id, BUS_ID_SIZE, "device%d:%llu",
+	snprintf(cdev->class_id, BUS_ID_SIZE, "device%d:%" PRIu64,
 		 target->tid, device->dev_id);
 	err = class_device_register(cdev);
 	if (err)

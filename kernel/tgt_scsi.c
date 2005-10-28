@@ -84,7 +84,7 @@ scsi_tgt_create_cmd(struct tgt_session *session, void *tgt_priv, uint8_t *scb,
 	cmd->dev_id = scsi_tgt_translate_lun(lun, lun_size);
 	device = tgt_device_find(session->target, cmd->dev_id);
 	if (!device) {
-		printk(KERN_ERR "Could not find device if %llu\n",
+		printk(KERN_ERR "Could not find device if %" PRIu64 "\n",
 		       cmd->dev_id);
 		return NULL;
 	}
