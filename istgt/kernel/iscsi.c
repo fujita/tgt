@@ -703,7 +703,7 @@ static void send_r2t(struct iscsi_cmnd *req)
 static void __scsi_cmnd_done(void *data)
 {
 	struct tgt_cmd *tc = (struct tgt_cmd *) data;
-	struct iscsi_cmnd *cmnd = (struct iscsi_cmnd *) tc->private;;
+	struct iscsi_cmnd *cmnd = (struct iscsi_cmnd *) tc->private;
 	struct iscsi_cmd *req = cmnd_hdr(cmnd);
 
 	if (tc->result != SAM_STAT_GOOD) {

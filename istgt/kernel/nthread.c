@@ -604,7 +604,8 @@ static void close_conn(struct iscsi_conn *conn)
 		BUG_ON(1);
 	}
 
-	eprintk("%d %llu %u\n", session->target->tid, session->sid, conn->cid);
+	eprintk("%d %" PRIu64 " %u\n",
+		session->target->tid, session->sid, conn->cid);
 
 	event_send(session->target->tt, session->target->tid,
 		   session->sid, conn->cid, E_CONN_CLOSE);
