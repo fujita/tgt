@@ -15,7 +15,7 @@ start_server()
 #	insmod ${PWD}/kernel/tgt_sd.ko
 
 	modprobe -q crc32c
-	insmod ${PWD}/istgt/kernel/iscsi_trgt.ko
+	insmod ${PWD}/istgt/kernel/istgt.ko
 
 	${PWD}/usr/tgtd
 }
@@ -25,7 +25,7 @@ stop_server()
 	${PWD}/usr/tgtadm --driver istgt --op delete
 	killall -9 tgtd
 
-	rmmod iscsi_trgt
+	rmmod istgt
 
 #	rmmod tgt_sd
 	rmmod tgt_vsd
