@@ -1,0 +1,37 @@
+This driver is a SCSI target that interoperates according to the PAPR
+(POWER Architecture Platform Requirements) document.  Currently it is
+specific to POWER logical partitioning, however in the future it would
+be nice to extend this to other virtualized environments.
+
+The architecture defines virtual adapters, whose configuration is
+reported in the Open Firmware device tree.  There area number of power
+hypervisor calls (such as h_reg_crq, to register the inter-OS queue)
+that support the virtual adapters.
+
+Messages are sent between partitions on a "Command/Response Queue"
+(CRQ), which is just a buffer of 16 byte entries in the receiver's
+Senders cannot access the buffer directly, but send messages by making
+a hypervisor call and passing in the 16 bytes.  The hypervisor puts
+the message in the next 16 byte space in round-robbin fashion, turns
+on the high order bit of the message (the valid bit), and generates an
+interrupt to the receiver (if interrupts are turned on.)  The receiver
+just turns off the valid bit when they have copied out the message.
+
+The VSCSI client builds a SCSI Remote Protocol (SRP) Information Unit
+(IU) (as defined in the T10 standard available at www.t10.org), gets a
+DMA address for the message, and sends it to the target as the payload
+of a CRQ message.  The target DMAs the SRP IU and processes it,
+including doing any additional data transfers.  When it is done, it
+DMAs the SRP response back to the same address as the request came
+from and sends a CRQ message back to inform the client that the
+request has completed.
+
+This target interoperates not only with the Linux client (ibmvscsi.c)
+but also with AIX and OS/400 clients.  Thus, while the implementation
+can be changed, the underlying behaviour (protocol) is fixed.
+
+Configuration of the target is done via sysfs.  The target driver maps
+either block devices (e.g. IDE CD drive, loopback file, etc) to SCSI
+LUNs, in which case it emulates the SCSI protocol and issues kernel
+block device calls, or maps real SCSI devices, in which case the SCSI
+commands are just passed on to the real SCSI device.
