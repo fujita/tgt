@@ -60,11 +60,11 @@ static void tgt_sd_prep(struct tgt_cmd *cmd, uint32_t data_len)
 	case READ_10:
 	case WRITE_10:
 	case WRITE_VERIFY:
-		off = be32_to_cpu(*(u32 *) &scb[2]);
+		off = be32_to_cpu(*(uint32_t *) &scb[2]);
 		break;
 	case READ_16:
 	case WRITE_16:
-		off = be64_to_cpu(*(u64 *)&scb[2]);
+		off = be64_to_cpu(*(uint64_t *) &scb[2]);
 		break;
 	default:
 		break;

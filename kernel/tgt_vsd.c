@@ -45,7 +45,6 @@ static void tgt_vsd_prep(struct tgt_cmd *cmd, uint32_t data_len)
 	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
 	uint8_t *scb = scmd->scb;
 	uint64_t off = 0;
-/*	uint32_t len = 0; */
 
 	/*
 	 * set bufflen and offset
@@ -54,27 +53,21 @@ static void tgt_vsd_prep(struct tgt_cmd *cmd, uint32_t data_len)
 	case READ_6:
 	case WRITE_6:
 		off = ((scb[1] & 0x1f) << 16) + (scb[2] << 8) + scb[3];
-/*		len = scb[4];
-		if (!len)
-			len = 256;*/
 		break;
 	case READ_10:
 	case WRITE_10:
 	case WRITE_VERIFY:
-		off = be32_to_cpu(*(u32 *) &scb[2]);
-/*		len = (scb[7] << 8) + scb[8]; */
+		off = be32_to_cpu(*(uint32_t *) &scb[2]);
 		break;
 	case READ_16:
 	case WRITE_16:
-		off = be64_to_cpu(*(u64 *)&scb[2]);
-/*		len = be32_to_cpu(*(u32 *)&scb[10]); */
+		off = be64_to_cpu(*(uint64_t *) &scb[2]);
 		break;
 	default:
 		break;
 	}
 
 	off <<= 9;
-/*	len <<= 9; */
 
 	/*
 	 * we trust the data_len passed in for now
