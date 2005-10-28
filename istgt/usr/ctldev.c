@@ -200,7 +200,7 @@ static int iscsi_param_set(int tid, uint64_t sid, int type, uint32_t partial,
 
 	err = ipc_cmnd_execute(nlh, nlh->nlmsg_len);
 	if (err)
-		fprintf(stderr, "%d %d %u %" PRIx64 "%d %u\n",
+		eprintf("%d %d %u %" PRIx64 "%d %u\n",
 			err, errno, tid, sid, type, partial);
 	free(nlh);
 	return err;
@@ -399,7 +399,7 @@ static int iscsi_lunit_create(int tid, uint64_t lun, char *args)
 	struct tgt_event *ev;
 	struct nlmsghdr *nlh;
 
-	fprintf(stderr, "%s %d %s\n", __FUNCTION__, __LINE__, args);
+	dprintf("%s\n", args);
 
 	if (isspace(*args))
 		args++;
@@ -423,16 +423,15 @@ static int iscsi_lunit_create(int tid, uint64_t lun, char *args)
 	if (!type)
 		type = dtype;
 	if (!path) {
-		fprintf(stderr, "%s %d NULL path\n", __FUNCTION__, __LINE__);
+		eprintf("%d %" PRIu64 "\n", tid, lun);
 		return -EINVAL;
 	}
 
-	fprintf(stderr, "%s %d %s %s %Zd %Zd\n",
-		__FUNCTION__, __LINE__, type, path, strlen(path), sizeof(*ev));
+	dprintf("%s %s %Zd\n", type, path, strlen(path));
 
 	fd = open(path, O_RDWR | O_LARGEFILE);
 	if (fd < 0) {
-		log_error("Could not open %s errno %d\n", path, errno);
+		eprintf("Could not open %s errno %d\n", path, errno);
 		return errno;
 	}
 

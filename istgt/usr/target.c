@@ -58,16 +58,6 @@ struct target* target_find_by_id(int tid)
 	return NULL;
 }
 
-static void all_accounts_del(int tid, int dir)
-{
-/* 	char name[ISCSI_NAME_LEN], pass[ISCSI_NAME_LEN]; */
-
-/* 	for (memset(name, 0, sizeof(name)); */
-/* 	     cops->account_query(tid, dir, name, pass) != -ENOENT;) { */
-/* 		cops->account_del(tid, dir, name); */
-/* 	} */
-}
-
 int target_del(int tid)
 {
 	int err;
@@ -88,9 +78,6 @@ int target_del(int tid)
 		fprintf(stderr, "%s still have sessions %d\n", __FUNCTION__, tid);
 		exit(-1);
 	}
-
-	all_accounts_del(tid, AUTH_DIR_INCOMING);
-	all_accounts_del(tid, AUTH_DIR_OUTGOING);
 
 	free(target);
 
