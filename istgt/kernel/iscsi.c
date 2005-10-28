@@ -18,7 +18,7 @@ unsigned long debug_enable_flags;
 static kmem_cache_t *iscsi_cmnd_cache;
 static char dummy_data[1024];
 
-static u32 cmnd_write_size(struct iscsi_cmnd *cmnd)
+static uint32_t cmnd_write_size(struct iscsi_cmnd *cmnd)
 {
 	struct iscsi_cmd *hdr = cmnd_hdr(cmnd);
 
@@ -27,7 +27,7 @@ static u32 cmnd_write_size(struct iscsi_cmnd *cmnd)
 	return 0;
 }
 
-static u32 cmnd_read_size(struct iscsi_cmnd *cmnd)
+static uint32_t cmnd_read_size(struct iscsi_cmnd *cmnd)
 {
 	struct iscsi_cmd *hdr = cmnd_hdr(cmnd);
 
@@ -158,7 +158,7 @@ static void do_send_data_rsp(struct iscsi_cmnd *cmnd)
 	struct scatterlist *sg = cmnd->tc->sg;
 	struct iscsi_cmd *req = cmnd_hdr(cmnd);
 	struct iscsi_data_rsp *rsp;
-	u32 pdusize, expsize, scsisize, size, offset, sn;
+	uint32_t pdusize, expsize, scsisize, size, offset, sn;
 	LIST_HEAD(send);
 
 	dprintk("%p\n", cmnd);
@@ -237,7 +237,7 @@ void send_scsi_rsp(struct iscsi_cmnd *req)
 {
 	struct iscsi_cmnd *rsp;
 	struct iscsi_cmd_rsp *rsp_hdr;
-	u32 size;
+	uint32_t size;
 
 	rsp = create_scsi_rsp(req);
 	rsp_hdr = (struct iscsi_cmd_rsp *) &rsp->pdu.bhs;
@@ -250,8 +250,8 @@ void send_scsi_rsp(struct iscsi_cmnd *req)
 }
 
 struct iscsi_sense_data {
-	u16 length;
-	u8  data[0];
+	uint16_t length;
+	uint8_t  data[0];
 } __packed;
 
 static struct iscsi_cmnd *do_create_sense_rsp(struct iscsi_cmnd *req)
@@ -289,7 +289,7 @@ static struct iscsi_cmnd *do_create_sense_rsp(struct iscsi_cmnd *req)
 }
 
 static struct iscsi_cmnd *create_sense_rsp(struct iscsi_cmnd *req,
-					   u8 sense_key, u8 asc, u8 ascq)
+					   uint8_t sense_key, uint8_t asc, uint8_t ascq)
 {
 	struct scsi_tgt_cmd *stc;
 	struct iscsi_cmnd *rsp;
@@ -446,12 +446,12 @@ static void cmnd_set_sn(struct iscsi_cmnd *cmnd, int set_stat_sn)
 static void update_stat_sn(struct iscsi_cmnd *cmnd)
 {
 	struct iscsi_conn *conn = cmnd->conn;
-	u32 exp_stat_sn;
+	uint32_t exp_stat_sn;
 
 	cmnd->pdu.bhs.exp_statsn = exp_stat_sn = be32_to_cpu(cmnd->pdu.bhs.exp_statsn);
 	dprintk("%x,%x\n", cmnd_opcode(cmnd), exp_stat_sn);
-	if ((int)(exp_stat_sn - conn->exp_stat_sn) > 0 &&
-	    (int)(exp_stat_sn - conn->stat_sn) <= 0) {
+	if ((int32_t) (exp_stat_sn - conn->exp_stat_sn) > 0 &&
+	    (int32_t) (exp_stat_sn - conn->stat_sn) <= 0) {
 		// free pdu resources
 		cmnd->conn->exp_stat_sn = exp_stat_sn;
 	}
@@ -460,17 +460,18 @@ static void update_stat_sn(struct iscsi_cmnd *cmnd)
 static int check_cmd_sn(struct iscsi_cmnd *cmnd)
 {
 	struct iscsi_session *session = cmnd->conn->session;
-	u32 cmd_sn;
+	uint32_t cmd_sn;
 
 	cmnd->pdu.bhs.statsn = cmd_sn = be32_to_cpu(cmnd->pdu.bhs.statsn);
 	dprintk("%d(%d)\n", cmd_sn, session->exp_cmd_sn);
-	if ((s32)(cmd_sn - session->exp_cmd_sn) >= 0)
+	if ((int32_t) (cmd_sn - session->exp_cmd_sn) >= 0)
 		return 0;
 	eprintk("sequence error (%x,%x)\n", cmd_sn, session->exp_cmd_sn);
 	return -ISCSI_PROTOCOL_ERROR;
 }
 
-static struct iscsi_cmnd *__cmnd_find_hash(struct iscsi_session *session, u32 itt, u32 ttt)
+static struct iscsi_cmnd *__cmnd_find_hash(struct iscsi_session *session,
+					   uint32_t itt, uint32_t ttt)
 {
 	struct list_head *head;
 	struct iscsi_cmnd *cmnd;
@@ -488,7 +489,8 @@ static struct iscsi_cmnd *__cmnd_find_hash(struct iscsi_session *session, u32 it
 	return NULL;
 }
 
-static struct iscsi_cmnd *cmnd_find_hash(struct iscsi_session *session, u32 itt, u32 ttt)
+static struct iscsi_cmnd *cmnd_find_hash(struct iscsi_session *session,
+					 uint32_t itt, uint32_t ttt)
 {
 	struct iscsi_cmnd *cmnd;
 
@@ -507,7 +509,7 @@ static int cmnd_insert_hash(struct iscsi_cmnd *cmnd)
 	struct iscsi_cmnd *tmp;
 	struct list_head *head;
 	int err = 0;
-	u32 itt = cmnd->pdu.bhs.itt;
+	uint32_t itt = cmnd->pdu.bhs.itt;
 
 	dprintk("%p:%x\n", cmnd, itt);
 	if (itt == ISCSI_RESERVED_TAG) {
@@ -563,7 +565,7 @@ static void cmnd_skip_data(struct iscsi_cmnd *req)
 {
 	struct iscsi_cmnd *rsp;
 	struct iscsi_cmd_rsp *rsp_hdr;
-	u32 size;
+	uint32_t size;
 
 	rsp = get_rsp_cmnd(req);
 	rsp_hdr = (struct iscsi_cmd_rsp *)&rsp->pdu.bhs;
@@ -594,7 +596,7 @@ static void cmnd_skip_data(struct iscsi_cmnd *req)
 }
 
 static int cmnd_recv_pdu(struct iscsi_conn *conn, struct tgt_cmd *tc,
-			 u32 offset, u32 size)
+			 uint32_t offset, uint32_t size)
 {
 	int idx, i;
 	char *addr;
@@ -656,7 +658,7 @@ static void send_r2t(struct iscsi_cmnd *req)
 {
 	struct iscsi_cmnd *rsp;
 	struct iscsi_r2t_rsp *rsp_hdr;
-	u32 length, offset, burst;
+	uint32_t length, offset, burst;
 	LIST_HEAD(send);
 
 	length = req->r2t_length;
@@ -830,7 +832,7 @@ static void scsi_cmnd_exec(struct iscsi_cmnd *cmnd)
 
 static int noop_out_start(struct iscsi_conn *conn, struct iscsi_cmnd *cmnd)
 {
-	u32 size, tmp;
+	uint32_t size, tmp;
 	int i = 0, err = 0;
 
 	if (cmnd_ttt(cmnd) != cpu_to_be32(ISCSI_RESERVED_TAG)) {
@@ -877,7 +879,7 @@ static int noop_out_start(struct iscsi_conn *conn, struct iscsi_cmnd *cmnd)
 		} else {
 			for (i = 0; i < ISCSI_CONN_IOV_MAX; i++) {
 				conn->read_iov[i].iov_base = dummy_data;
-				tmp = min_t(u32, size, sizeof(dummy_data));
+				tmp = min_t(uint32_t, size, sizeof(dummy_data));
 				conn->read_iov[i].iov_len = tmp;
 				conn->read_size += tmp;
 				size -= tmp;
@@ -892,9 +894,9 @@ out:
 	return err;
 }
 
-static u32 get_next_ttt(struct iscsi_session *session)
+static uint32_t get_next_ttt(struct iscsi_session *session)
 {
-	u32 ttt;
+	uint32_t ttt;
 
 	if (session->next_ttt == ISCSI_RESERVED_TAG)
 		session->next_ttt++;
@@ -994,7 +996,7 @@ static void data_out_start(struct iscsi_conn *conn, struct iscsi_cmnd *cmnd)
 {
 	struct iscsi_data *req = (struct iscsi_data *)&cmnd->pdu.bhs;
 	struct iscsi_cmnd *scsi_cmnd = NULL;
-	u32 offset = be32_to_cpu(req->offset);
+	uint32_t offset = be32_to_cpu(req->offset);
 
 	update_stat_sn(cmnd);
 
@@ -1045,7 +1047,7 @@ static void data_out_end(struct iscsi_conn *conn, struct iscsi_cmnd *cmnd)
 {
 	struct iscsi_data *req = (struct iscsi_data *) &cmnd->pdu.bhs;
 	struct iscsi_cmnd *scsi_cmnd;
-	u32 offset;
+	uint32_t offset;
 
 	BUG_ON(!cmnd);
 	scsi_cmnd = cmnd->req;
@@ -1296,7 +1298,7 @@ static void iscsi_cmnd_exec(struct iscsi_cmnd *cmnd)
 }
 
 static void __cmnd_send_pdu(struct iscsi_conn *conn, struct scatterlist *sg,
-			    u32 offset, u32 size)
+			    uint32_t offset, uint32_t size)
 {
 /* 	dprintk(D_GENERIC, "%p %u,%u\n", tio, offset, size); */
 	offset += sg->offset;
@@ -1311,7 +1313,7 @@ static void __cmnd_send_pdu(struct iscsi_conn *conn, struct scatterlist *sg,
 
 static void cmnd_send_pdu(struct iscsi_conn *conn, struct iscsi_cmnd *cmnd)
 {
-	u32 size;
+	uint32_t size;
 
 	if (!cmnd->pdu.datasize)
 		return;
@@ -1403,7 +1405,7 @@ void cmnd_tx_start(struct iscsi_cmnd *cmnd)
 	case ISCSI_OP_SCSI_DATA_IN:
 	{
 		struct iscsi_data_rsp *rsp = (struct iscsi_data_rsp *)&cmnd->pdu.bhs;
-		u32 offset;
+		uint32_t offset;
 
 		cmnd_set_sn(cmnd, (rsp->flags & ISCSI_FLAG_CMD_FINAL) ? 1 : 0);
 		offset = rsp->offset;
@@ -1478,7 +1480,7 @@ static void iscsi_session_push_cmnd(struct iscsi_cmnd *cmnd)
 {
 	struct iscsi_session *session = cmnd->conn->session;
 	struct list_head *entry;
-	u32 cmd_sn;
+	uint32_t cmd_sn;
 
 	dprintk("%p:%x %u,%u\n",
 		cmnd, cmnd_opcode(cmnd), cmnd->pdu.bhs.statsn,

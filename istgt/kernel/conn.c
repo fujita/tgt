@@ -11,7 +11,8 @@
 #include <iscsi.h>
 #include <digest.h>
 
-static struct iscsi_conn *conn_lookup(struct iscsi_session *session, u16 cid)
+static struct iscsi_conn *conn_lookup(struct iscsi_session *session,
+				      uint16_t cid)
 {
 	struct iscsi_conn *conn;
 

@@ -81,8 +81,8 @@ void async_event(char *data)
 	}
 }
 
-static void nlmsg_init(struct nlmsghdr *nlh, u32 pid, u32 seq, int type,
-		       int len, int flags)
+static void nlmsg_init(struct nlmsghdr *nlh, uint32_t pid, uint32_t seq,
+		       uint16_t type, uint32_t len, uint16_t flags)
 {
 	nlh->nlmsg_pid = pid;
 	nlh->nlmsg_len = len;
@@ -94,7 +94,7 @@ static void nlmsg_init(struct nlmsghdr *nlh, u32 pid, u32 seq, int type,
 /*
  * this will have to be redone and made generic when we move it
  */
-static struct nlmsghdr *get_iet_msg(u32 tid, struct iet_msg **msg)
+static struct nlmsghdr *get_iet_msg(int tid, struct iet_msg **msg)
 {
 	int len;
 	struct nlmsghdr *nlh;
@@ -115,7 +115,7 @@ static struct nlmsghdr *get_iet_msg(u32 tid, struct iet_msg **msg)
 }
 
 
-static int iscsi_conn_destroy(u32 tid, u64 sid, u32 cid)
+static int iscsi_conn_destroy(int tid, uint64_t sid, uint32_t cid)
 {
 	struct iet_msg *msg;
 	struct nlmsghdr *nlh;
@@ -137,7 +137,7 @@ static int iscsi_conn_destroy(u32 tid, u64 sid, u32 cid)
 	return err;
 }
 
-static int iscsi_param_get(u32 tid, u64 sid, struct iscsi_param *param)
+static int iscsi_param_get(int tid, uint64_t sid, struct iscsi_param *param)
 {
 	struct iet_msg *msg;
 	struct nlmsghdr *nlh;
@@ -172,7 +172,8 @@ static int iscsi_param_get(u32 tid, u64 sid, struct iscsi_param *param)
 	return err;
 }
 
-static int iscsi_param_set(u32 tid, u64 sid, int type, u32 partial, struct iscsi_param *param)
+static int iscsi_param_set(int tid, uint64_t sid, int type, uint32_t partial,
+			   struct iscsi_param *param)
 {
 	struct iet_msg *msg;
 	struct nlmsghdr *nlh;
@@ -205,7 +206,8 @@ static int iscsi_param_set(u32 tid, u64 sid, int type, u32 partial, struct iscsi
 	return err;
 }
 
-static int iscsi_param_partial_set(u32 tid, u64 sid, int type, int key, u32 val)
+static int iscsi_param_partial_set(int tid, uint64_t sid, int type, int key,
+				   uint32_t val)
 {
 	struct iscsi_param *param;
 	struct iscsi_param s_param[session_key_last];
@@ -230,7 +232,7 @@ static int trgt_mgmt_params(int tid, uint64_t sid, char *params)
 
 	while ((p = strsep(&params, ",")) != NULL) {
 		int idx;
-		u32 val;
+		uint32_t val;
 		if (!*p)
 			continue;
 		if (!(q = strchr(p, '=')))
@@ -272,7 +274,8 @@ static int trgt_mgmt_params(int tid, uint64_t sid, char *params)
 	return 0;
 }
 
-static int iscsi_session_create(u32 tid, u64 sid, u32 exp_cmd_sn, u32 max_cmd_sn, char *name)
+static int iscsi_session_create(int tid, uint64_t sid,
+				uint32_t exp_cmd_sn, uint32_t max_cmd_sn)
 {
 	struct iet_msg *msg;
 	struct nlmsghdr *nlh;
@@ -295,7 +298,7 @@ static int iscsi_session_create(u32 tid, u64 sid, u32 exp_cmd_sn, u32 max_cmd_sn
 	return err;
 }
 
-static int iscsi_session_destroy(u32 tid, u64 sid)
+static int iscsi_session_destroy(int tid, uint64_t sid)
 {
 	struct iet_msg *msg;
 	struct nlmsghdr *nlh;
@@ -316,8 +319,9 @@ static int iscsi_session_destroy(u32 tid, u64 sid)
 	return err;
 }
 
-static int iscsi_conn_create(u32 tid, u64 sid, u32 cid, u32 stat_sn, u32 exp_stat_sn,
-			     int fd, u32 hdigest, u32 ddigest)
+static int iscsi_conn_create(int tid, uint64_t sid, uint32_t cid,
+			     uint32_t stat_sn, uint32_t exp_stat_sn,
+			     int fd, uint32_t hdigest, uint32_t ddigest)
 {
 	struct iet_msg *msg;
 	struct nlmsghdr *nlh;
@@ -344,7 +348,7 @@ static int iscsi_conn_create(u32 tid, u64 sid, u32 cid, u32 stat_sn, u32 exp_sta
 	return err;
 }
 
-static int iscsi_target_create(int *tid, char *name)
+static int iscsi_target_create(int *tid)
 {
 	int err;
 	char nlm_ev[8912];
@@ -368,7 +372,7 @@ static int iscsi_target_create(int *tid, char *name)
 	return err;
 }
 
-static int iscsi_target_destroy(u32 tid)
+static int iscsi_target_destroy(int tid)
 {
 	int err;
 	char nlm_ev[8912];
@@ -387,7 +391,7 @@ static int iscsi_target_destroy(u32 tid)
 	return err;
 }
 
-static int iscsi_lunit_create(u32 tid, u32 lun, char *args)
+static int iscsi_lunit_create(int tid, uint64_t lun, char *args)
 {
 	int err, fd;
 	char *p, *q, *type = NULL, *path = NULL;
@@ -455,7 +459,7 @@ close_fd:
 	return err;
 }
 
-static int iscsi_lunit_destroy(u32 tid, u32 lun)
+static int iscsi_lunit_destroy(int tid, uint64_t lun)
 {
 	int err, fd;
 	char nlm_ev[8912];
@@ -463,7 +467,7 @@ static int iscsi_lunit_destroy(u32 tid, u32 lun)
 	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
 	char path[PATH_MAX], buf[PATH_MAX];
 
-	fprintf(stderr, "%s %d %d %u\n", __FUNCTION__, __LINE__, tid, lun);
+	dprintf("%d %" PRIu64 "\n",tid, lun);
 
 	memset(nlm_ev, 0, sizeof(nlm_ev));
 	nlmsg_init(nlh, getpid(), 0, TGT_UEVENT_DEVICE_DESTROY,
@@ -473,7 +477,8 @@ static int iscsi_lunit_destroy(u32 tid, u32 lun)
 	ev->u.d_device.tid = tid;
 	ev->u.d_device.dev_id = lun;
 
-	sprintf(path, "/sys/class/tgt_device/device%d:%d/fd", tid, lun);
+	sprintf(path, "/sys/class/tgt_device/device%d:%" PRIu64 "/fd",
+		tid, lun);
 	fd = open(path, O_RDONLY);
 	if (fd < 0) {
 		perror("iscsi_lunit_destroy could not open fd file");
@@ -689,8 +694,8 @@ void initial_config_load(void)
 	FILE *config;
 	char buf[BUFSIZE];
 	char *p, *q;
-	int idx;
-	u32 tid, val;
+	int idx, tid;
+	uint32_t val;
 
 	eprintf("%s\n", "load config");
 
@@ -715,8 +720,8 @@ void initial_config_load(void)
 		} else if (!strcasecmp(p, "MaxSessions") && tid >= 0) {
 			/* target->max_sessions = strtol(q, &q, 0); */
 		} else if (!strcasecmp(p, "Lun") && tid >= 0) {
-			u32 lun = strtol(q, &q, 10);
-			eprintf("creaing lun %d %u %s\n", tid, lun, p);
+			uint64_t lun = strtoull(q, &q, 10);
+			eprintf("creaing lun %d %" PRIu64 " %s\n", tid, lun, p);
 			iscsi_lunit_create(tid, lun, q);
 		} else if (!((idx = param_index_by_name(p, target_keys)) < 0) && tid >= 0) {
 			val = strtol(q, &q, 0);

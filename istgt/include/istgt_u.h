@@ -11,11 +11,11 @@
 #define SCSI_ID_LEN	24
 
 struct session_info {
-	u32 tid;
+	int tid;
 
-	u64 sid;
-	u32 exp_cmd_sn;
-	u32 max_cmd_sn;
+	uint64_t sid;
+	uint32_t exp_cmd_sn;
+	uint32_t max_cmd_sn;
 };
 
 #define DIGEST_ALL	(DIGEST_NONE | DIGEST_CRC32C)
@@ -23,12 +23,12 @@ struct session_info {
 #define DIGEST_CRC32C           (1 << 1)
 
 struct conn_info {
-	u32 tid;
-	u64 sid;
+	int tid;
+	uint64_t sid;
 
-	u32 cid;
-	u32 stat_sn;
-	u32 exp_stat_sn;
+	uint32_t cid;
+	uint32_t stat_sn;
+	uint32_t exp_stat_sn;
 	int header_digest;
 	int data_digest;
 	int fd;
@@ -68,14 +68,14 @@ enum {
 };
 
 struct iscsi_param_info {
-	u32 tid;
-	u64 sid;
+	int tid;
+	uint64_t sid;
 
-	u32 param_type;
-	u32 partial;
+	uint32_t param_type;
+	uint32_t partial;
 
-	u32 session_param[session_key_last];
-	u32 target_param[target_key_last];
+	uint32_t session_param[session_key_last];
+	uint32_t target_param[target_key_last];
 };
 
 enum iet_event_state {
@@ -108,10 +108,10 @@ struct iet_msg {
 	/* kernel -> user */
 	union {
 		struct {
-			u32 tid;
-			u64 sid;
-			u32 cid;
-			u32 state;
+			int tid;
+			uint64_t sid;
+			uint32_t cid;
+			uint32_t state;
 		} conn_state_change;
 	} k;
 } __attribute__ ((aligned (sizeof(uint64_t))));

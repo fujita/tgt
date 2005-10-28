@@ -32,7 +32,7 @@ void target_list_build(struct connection *conn, char *addr, char *name)
 	}
 }
 
-int target_find_by_name(const char *name, u32 *tid)
+int target_find_by_name(const char *name, int *tid)
 {
 	struct target *target;
 
@@ -46,7 +46,7 @@ int target_find_by_name(const char *name, u32 *tid)
 	return -ENOENT;
 }
 
-struct target* target_find_by_id(u32 tid)
+struct target* target_find_by_id(int tid)
 {
 	struct target *target;
 
@@ -58,7 +58,7 @@ struct target* target_find_by_id(u32 tid)
 	return NULL;
 }
 
-static void all_accounts_del(u32 tid, int dir)
+static void all_accounts_del(int tid, int dir)
 {
 /* 	char name[ISCSI_NAME_LEN], pass[ISCSI_NAME_LEN]; */
 
@@ -111,7 +111,7 @@ int target_add(int *tid, char *name)
 	memset(target, 0, sizeof(*target));
 	memcpy(target->name, name, sizeof(target->name) - 1);
 
-	if ((err = ki->target_create(tid, name)) < 0) {
+	if ((err = ki->target_create(tid)) < 0) {
 		log_warning("can't create a target %d %u\n", err, *tid);
 		goto out;
 	}

@@ -3,9 +3,9 @@
 
 #include <linux/types.h>
 
-/* taken from inttypes.h */
+/* Is there a smart way? */
 
-#if BITS_PER_LONG == 64
+#if defined(CONFIG_ALPAH) || defined(CONFIG_IA64) || defined(CONFIG_PPC64) || (defined(CONFIG_S390) && defined(__x390x__)) || defined(CONFIG_SPARC64)
 #  define __PRI64_PREFIX	"l"
 # else
 #  define __PRI64_PREFIX	"ll"

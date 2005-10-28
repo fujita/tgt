@@ -60,12 +60,13 @@ void digest_cleanup(struct iscsi_conn *conn)
 		crypto_free_tfm(conn->rx_digest_tfm);
 }
 
-static void digest_header(struct crypto_tfm *tfm, struct iscsi_pdu *pdu, u8 *crc)
+static void digest_header(struct crypto_tfm *tfm, struct iscsi_pdu *pdu,
+			  uint8_t *crc)
 {
 	struct scatterlist sg[2];
 	int i = 0;
 
-	sg_init_one(&sg[i], (u8 *) &pdu->bhs, sizeof(struct iscsi_hdr));
+	sg_init_one(&sg[i], (uint8_t *) &pdu->bhs, sizeof(struct iscsi_hdr));
 	i++;
 	if (pdu->ahssize) {
 		sg_init_one(&sg[i], pdu->ahs, pdu->ahssize);
@@ -79,9 +80,9 @@ static void digest_header(struct crypto_tfm *tfm, struct iscsi_pdu *pdu, u8 *crc
 
 int digest_rx_header(struct iscsi_cmnd *cmnd)
 {
-	u32 crc;
+	uint32_t crc;
 
-	digest_header(cmnd->conn->rx_digest_tfm, &cmnd->pdu, (u8 *) &crc);
+	digest_header(cmnd->conn->rx_digest_tfm, &cmnd->pdu, (uint8_t *) &crc);
 	if (crc != cmnd->hdigest)
 		return -EIO;
 
@@ -90,14 +91,15 @@ int digest_rx_header(struct iscsi_cmnd *cmnd)
 
 void digest_tx_header(struct iscsi_cmnd *cmnd)
 {
-	digest_header(cmnd->conn->tx_digest_tfm, &cmnd->pdu, (u8 *) &cmnd->hdigest);
+	digest_header(cmnd->conn->tx_digest_tfm, &cmnd->pdu,
+		      (uint8_t *) &cmnd->hdigest);
 }
 
 static void digest_data(struct crypto_tfm *tfm, struct iscsi_cmnd *cmnd,
-			struct scatterlist *sgv, u32 offset, u8 *crc)
+			struct scatterlist *sgv, uint32_t offset, uint8_t *crc)
 {
 	struct scatterlist sg[ISCSI_CONN_IOV_MAX];
-	u32 size, length;
+	uint32_t size, length;
 	int i, idx, count;
 
 	size = cmnd->pdu.datasize;
@@ -132,7 +134,7 @@ static void digest_data(struct crypto_tfm *tfm, struct iscsi_cmnd *cmnd,
 int digest_rx_data(struct iscsi_cmnd *cmnd)
 {
 	struct scatterlist *sg;
-	u32 offset, crc;
+	uint32_t offset, crc;
 
 	if (cmnd_opcode(cmnd) == ISCSI_OP_SCSI_DATA_OUT) {
 		struct iscsi_cmnd *scsi_cmnd = cmnd->req;
@@ -146,7 +148,8 @@ int digest_rx_data(struct iscsi_cmnd *cmnd)
 	}
 
 	BUG_ON(!sg);
-	digest_data(cmnd->conn->rx_digest_tfm, cmnd, sg, offset, (u8 *) &crc);
+	digest_data(cmnd->conn->rx_digest_tfm, cmnd, sg, offset,
+		    (uint8_t *) &crc);
 
 	if (!cmnd->conn->read_overflow && (cmnd_opcode(cmnd) != ISCSI_OP_PDU_REJECT)) {
 		if (crc != cmnd->ddigest)
@@ -162,5 +165,5 @@ void digest_tx_data(struct iscsi_cmnd *cmnd)
 
 	BUG_ON(!cmnd->sg);
 	digest_data(cmnd->conn->tx_digest_tfm, cmnd, cmnd->sg,
-		    be32_to_cpu(req->offset), (u8 *) &cmnd->ddigest);
+		    be32_to_cpu(req->offset), (uint8_t *) &cmnd->ddigest);
 }

@@ -227,7 +227,7 @@ static int recv(struct iscsi_conn *conn)
 		if (res <= 0 || conn->read_state != RX_INIT_HDIGEST)
 			break;
 	case RX_INIT_HDIGEST:
-		iscsi_conn_init_read(conn, &cmnd->hdigest, sizeof(u32));
+		iscsi_conn_init_read(conn, &cmnd->hdigest, sizeof(uint32_t));
 		conn->read_state = RX_HDIGEST;
 	case RX_HDIGEST:
 		res = do_recv(conn, RX_CHECK_HDIGEST);
@@ -247,7 +247,7 @@ static int recv(struct iscsi_conn *conn)
 		if (res <= 0 || conn->read_state != RX_INIT_DDIGEST)
 			break;
 	case RX_INIT_DDIGEST:
-		iscsi_conn_init_read(conn, &cmnd->ddigest, sizeof(u32));
+		iscsi_conn_init_read(conn, &cmnd->ddigest, sizeof(uint32_t));
 		conn->read_state = RX_DDIGEST;
 	case RX_DDIGEST:
 		res = do_recv(conn, RX_CHECK_DDIGEST);
@@ -434,7 +434,7 @@ static int tx_ddigest(struct iscsi_cmnd *cmnd, int state)
 	struct msghdr msg = {.msg_flags = MSG_NOSIGNAL | MSG_DONTWAIT};
 	struct kvec iov;
 
-	iov.iov_base = (char *) (&cmnd->ddigest) + (sizeof(u32) - rest);
+	iov.iov_base = (char *) (&cmnd->ddigest) + (sizeof(uint32_t) - rest);
 	iov.iov_len = rest;
 
 	res = kernel_sendmsg(cmnd->conn->sock, &msg, &iov, 1, rest);
@@ -462,8 +462,8 @@ static void init_tx_hdigest(struct iscsi_cmnd *cmnd)
 	for (iop = conn->write_iop; iop->iov_len; iop++)
 		;
 	iop->iov_base = &(cmnd->hdigest);
-	iop->iov_len = sizeof(u32);
-	conn->write_size += sizeof(u32);
+	iop->iov_len = sizeof(uint32_t);
+	conn->write_size += sizeof(uint32_t);
 	iop++;
 	iop->iov_len = 0;
 
@@ -516,7 +516,7 @@ static int send(struct iscsi_conn *conn)
 	case TX_INIT_DDIGEST:
 		digest_tx_data(cmnd);
 		BUG_ON(cmnd->conn->write_size);
-		cmnd->conn->write_size += sizeof(u32);
+		cmnd->conn->write_size += sizeof(uint32_t);
 		conn->write_state = TX_DDIGEST;
 	case TX_DDIGEST:
 		res = tx_ddigest(cmnd, TX_END);

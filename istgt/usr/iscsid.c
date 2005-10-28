@@ -113,7 +113,7 @@ static void text_key_add_reject(struct connection *conn, char *key)
 	text_key_add(conn, key, "Reject");
 }
 
-static int account_empty(u32 tid, int dir)
+static int account_empty(int tid, int dir)
 {
 	char pass[ISCSI_NAME_LEN];
 

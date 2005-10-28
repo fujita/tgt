@@ -272,7 +272,7 @@ void poll_event(struct pollfd *pfds, int nr)
 					o = conn->rwsize & 3;
 					if (o) {
 						for (o = 4 - o; o; o--)
-							*((u8 *)conn->buffer + conn->rwsize++) = 0;
+							*((uint8_t *)conn->buffer + conn->rwsize++) = 0;
 					}
 					goto write_again;
 				}

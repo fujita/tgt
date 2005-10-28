@@ -57,7 +57,7 @@ static inline int decode_hex_digit(char c)
 	return 0;
 }
 
-static void decode_hex_string(char *hex_string, u8 *intnum, int intlen)
+static void decode_hex_string(char *hex_string, uint8_t *intnum, int intlen)
 {
 	char *ptr;
 	int j;
@@ -77,7 +77,7 @@ static void decode_hex_string(char *hex_string, u8 *intnum, int intlen)
 
 
 /* Base64 decoding, taken from UNH-iSCSI "Base64codeToNumber()" */
-static u8 decode_base64_digit(char base64)
+static uint8_t decode_base64_digit(char base64)
 {
 	switch (base64) {
 	case '=':
@@ -99,12 +99,12 @@ static u8 decode_base64_digit(char base64)
 }
 
 /* Base64 decoding, taken from UNH-iSCSI "Base64StringToInteger()" */
-static void decode_base64_string(char *string, u8 *intnum, int int_len)
+static void decode_base64_string(char *string, uint8_t *intnum, int int_len)
 {
 	int len;
 	int count;
 	int intptr;
-	u8 num[4];
+	uint8_t num[4];
 	int octets;
 
 	if ((string == NULL) || (intnum == NULL))
@@ -153,7 +153,7 @@ static void decode_base64_string(char *string, u8 *intnum, int int_len)
 	}
 }
 
-static inline void encode_hex_string(u8 *intnum, long length, char *string)
+static inline void encode_hex_string(uint8_t *intnum, long length, char *string)
 {
 	int i;
 	char *strptr;
@@ -164,7 +164,7 @@ static inline void encode_hex_string(u8 *intnum, long length, char *string)
 }
 
 /* Base64 encoding, taken from UNH iSCSI "IntegerToBase64String()" */
-static void encode_base64_string(u8 *intnum, long length, char *string)
+static void encode_base64_string(uint8_t *intnum, long length, char *string)
 {
 	int count, octets, strptr, delta;
 	static const char base64code[] = { 'A', 'B', 'C', 'D', 'E', 'F', 'G',
@@ -229,7 +229,7 @@ static inline int chap_check_encoding_format(char *encoded)
 	return encoding_fmt;
 }
 
-static int chap_alloc_decode_buffer(char *encoded, u8 **decode_buf, int encoding_fmt)
+static int chap_alloc_decode_buffer(char *encoded, uint8_t **decode_buf, int encoding_fmt)
 {
 	int i;
 	int decode_len = 0;
@@ -260,7 +260,7 @@ static int chap_alloc_decode_buffer(char *encoded, u8 **decode_buf, int encoding
 	return decode_len;
 }
 
-static int chap_decode_string(char *encoded, u8 *decode_buf, int buf_len, int encoding_fmt)
+static int chap_decode_string(char *encoded, uint8_t *decode_buf, int buf_len, int encoding_fmt)
 {
 	if (encoding_fmt == HEX_FORMAT) {
 		if ((strlen(encoded) - 2) > (2 * buf_len)) {
@@ -286,7 +286,7 @@ static int chap_decode_string(char *encoded, u8 *decode_buf, int buf_len, int en
 	return 0;
 }
 
-static inline void chap_encode_string(u8 *intnum, int buf_len, char *encode_buf, int encoding_fmt)
+static inline void chap_encode_string(uint8_t *intnum, int buf_len, char *encode_buf, int encoding_fmt)
 {
 	encode_buf[0] = '0';
 	if (encoding_fmt == HEX_FORMAT) {
@@ -298,7 +298,7 @@ static inline void chap_encode_string(u8 *intnum, int buf_len, char *encode_buf,
 	}
 }
 
-static inline void chap_calc_digest_md5(char chap_id, char *secret, int secret_len, u8 *challenge, int challenge_len, u8 *digest)
+static inline void chap_calc_digest_md5(char chap_id, char *secret, int secret_len, uint8_t *challenge, int challenge_len, uint8_t *digest)
 {
 	MD5_CTX ctx;
 
@@ -309,7 +309,7 @@ static inline void chap_calc_digest_md5(char chap_id, char *secret, int secret_l
 	MD5_Final(digest, &ctx);
 }
 
-static inline void chap_calc_digest_sha1(char chap_id, char *secret, int secret_len, u8 *challenge, int challenge_len, u8 *digest)
+static inline void chap_calc_digest_sha1(char chap_id, char *secret, int secret_len, uint8_t *challenge, int challenge_len, uint8_t *digest)
 {
 	SHA_CTX ctx;
 
@@ -376,7 +376,7 @@ static int chap_initiator_auth_create_challenge(struct connection *conn)
 static int chap_initiator_auth_check_response(struct connection *conn)
 {
 	char *value;
-	u8 *his_digest = NULL, *our_digest = NULL;
+	uint8_t *his_digest = NULL, *our_digest = NULL;
 	int digest_len = 0, retval = 0, encoding_format;
 	char pass[ISCSI_NAME_LEN];
 
@@ -476,7 +476,7 @@ static int chap_initiator_auth_check_response(struct connection *conn)
 static int chap_target_auth_create_response(struct connection *conn)
 {
 	char chap_id, *value, *response = NULL;
-	u8 *challenge = NULL, *digest = NULL;
+	uint8_t *challenge = NULL, *digest = NULL;
 	int encoding_format, response_len;
 	int challenge_len = 0, digest_len = 0, retval = 0;
 	char pass[ISCSI_NAME_LEN], name[ISCSI_NAME_LEN];

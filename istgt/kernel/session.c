@@ -9,7 +9,7 @@
 #include <iscsi.h>
 #include <tgt.h>
 
-struct iscsi_session *session_lookup(struct iscsi_target *target, u64 sid)
+struct iscsi_session *session_lookup(struct iscsi_target *target, uint64_t sid)
 {
 	struct iscsi_session *session;
 
@@ -25,8 +25,7 @@ int session_add(struct iscsi_target *target, struct session_info *info)
 	struct iscsi_session *session;
 	int i;
 
-	dprintk("%p %u %#Lx\n", target, target->tid,
-		(unsigned long long) info->sid);
+	dprintk("%p %u %" PRIx64 "\n", target, target->tid, info->sid);
 
 	session = session_lookup(target, info->sid);
 	if (session)
@@ -60,7 +59,7 @@ int session_add(struct iscsi_target *target, struct session_info *info)
 	return 0;
 }
 
-int session_del(struct iscsi_target *target, u64 sid)
+int session_del(struct iscsi_target *target, uint64_t sid)
 {
 	int i;
 	struct iscsi_session *session;
@@ -69,11 +68,10 @@ int session_del(struct iscsi_target *target, u64 sid)
 	if (!session)
 		return -ENOENT;
 
-	dprintk("%#Lx\n", (unsigned long long) session->sid);
+	dprintk("%" PRIx64 "\n", session->sid);
 
 	if (!list_empty(&session->conn_list)) {
-		eprintk("%llu still have connections\n",
-			(unsigned long long) session->sid);
+		eprintk("%" PRIx64 " still have connections\n", session->sid);
 		return -EBUSY;
 	}
 

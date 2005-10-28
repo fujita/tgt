@@ -85,13 +85,13 @@ struct iscsi_session {
 	struct list_head list;
 	struct iscsi_target *target;
 
-	u64 sid;
+	uint64_t sid;
 
-	u32 exp_cmd_sn;
-	u32 max_cmd_sn;
+	uint32_t exp_cmd_sn;
+	uint32_t max_cmd_sn;
 
 	struct iscsi_sess_param param;
-	u32 max_queued_cmnds;
+	uint32_t max_queued_cmnds;
 
 	struct list_head conn_list;
 	struct list_head pending_list;
@@ -99,7 +99,7 @@ struct iscsi_session {
 	spinlock_t cmnd_hash_lock;
 	struct list_head cmnd_hash[1 << IET_HASH_ORDER];
 
-	u32 next_ttt;
+	uint32_t next_ttt;
 
 	struct tgt_session *ts;
 };
@@ -115,11 +115,11 @@ struct iscsi_conn {
 	struct list_head list;			/* list entry in session list */
 	struct iscsi_session *session;		/* owning session */
 
-	u16 cid;
+	uint16_t cid;
 	unsigned long state;
 
-	u32 stat_sn;
-	u32 exp_stat_sn;
+	uint32_t stat_sn;
+	uint32_t exp_stat_sn;
 
 	int hdigest_type;
 	int ddigest_type;
@@ -137,8 +137,8 @@ struct iscsi_conn {
 	struct iscsi_cmnd *read_cmnd;
 	struct msghdr read_msg;
 	struct iovec read_iov[ISCSI_CONN_IOV_MAX];
-	u32 read_size;
-	u32 read_overflow;
+	uint32_t read_size;
+	uint32_t read_overflow;
 	int read_state;
 
 	struct iscsi_cmnd *write_cmnd;
@@ -147,8 +147,8 @@ struct iscsi_conn {
 
 	struct scatterlist *write_tcmnd;
 
-	u32 write_size;
-	u32 write_offset;
+	uint32_t write_size;
+	uint32_t write_offset;
 	int write_state;
 
 	struct crypto_tfm *rx_digest_tfm;
@@ -176,14 +176,14 @@ struct iscsi_cmnd {
 
 	struct scatterlist *sg, sense_sg;
 
-	u32 r2t_sn;
-	u32 r2t_length;
-	u32 is_unsolicited_data;
-	u32 target_task_tag;
-	u32 outstanding_r2t;
+	uint32_t r2t_sn;
+	uint32_t r2t_length;
+	uint32_t is_unsolicited_data;
+	uint32_t target_task_tag;
+	uint32_t outstanding_r2t;
 
-	u32 hdigest;
-	u32 ddigest;
+	uint32_t hdigest;
+	uint32_t ddigest;
 
 	struct work_struct work;
 	struct completion event;
@@ -226,12 +226,13 @@ extern void target_del(struct tgt_target *);
 
 /* config.c */
 extern int iet_msg_recv(struct tgt_target *, uint32_t, void *);
-extern int event_send(struct tgt_target *tgt, u32 tid, u64 sid, u32 cid, u32 state);
+extern int event_send(struct tgt_target *tgt, int tid, uint64_t sid,
+		      uint32_t cid, uint32_t state);
 
 /* session.c */
-extern struct iscsi_session *session_lookup(struct iscsi_target *, u64);
+extern struct iscsi_session *session_lookup(struct iscsi_target *, uint64_t);
 extern int session_add(struct iscsi_target *, struct session_info *);
-extern int session_del(struct iscsi_target *, u64);
+extern int session_del(struct iscsi_target *, uint64_t);
 
 /* params.c */
 extern int iscsi_param_set(struct iscsi_target *, struct iscsi_param_info *, int);

@@ -16,7 +16,7 @@
 
 #include "iscsid.h"
 
-static struct session *session_alloc(u32 tid)
+static struct session *session_alloc(int tid)
 {
 	struct session *session;
 	struct target *target = target_find_by_id(tid);
@@ -36,7 +36,7 @@ static struct session *session_alloc(u32 tid)
 	return session;
 }
 
-struct session *session_find_name(u32 tid, const char *iname, uint8_t *isid)
+struct session *session_find_name(int tid, const char *iname, uint8_t *isid)
 {
 	struct session *session;
 	struct target *target;
@@ -55,7 +55,7 @@ struct session *session_find_name(u32 tid, const char *iname, uint8_t *isid)
 	return NULL;
 }
 
-struct session *session_find_id(u32 tid, u64 sid)
+struct session *session_find_id(int tid, uint64_t sid)
 {
 	struct session *session;
 	struct target *target;
@@ -99,7 +99,7 @@ void session_create(struct connection *conn)
 	log_debug("session_create: %#" PRIx64, sid);
 
 	ki->session_create(conn->tid, sid, conn->exp_cmd_sn,
-			   conn->max_cmd_sn, session->initiator);
+			   conn->max_cmd_sn);
 	ki->param_set(conn->tid, sid, key_session, 0, conn->session_param);
 }
 

@@ -27,11 +27,6 @@
 #error "unknown endianess!"
 #endif
 
-typedef u_int8_t u8;
-typedef u_int16_t u16;
-typedef u_int32_t u32;
-typedef u_int64_t u64;
-
 typedef uint16_t __be16;
 typedef uint32_t __be32;
 

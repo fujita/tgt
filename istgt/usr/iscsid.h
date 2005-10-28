@@ -57,23 +57,23 @@ struct connection {
 	struct qelem clist;
 	struct session *session;
 
-	u32 tid;
+	int tid;
 	struct iscsi_param session_param[session_key_last];
 
 	char *initiator;
 	uint8_t isid[6];
 	uint16_t tsih;
-	u16 cid;
-	u16 pad;
+	uint16_t cid;
+	uint16_t pad;
 	int session_type;
 	int auth_method;
 
-	u32 stat_sn;
-	u32 exp_stat_sn;
+	uint32_t stat_sn;
+	uint32_t exp_stat_sn;
 
-	u32 cmd_sn;
-	u32 exp_cmd_sn;
-	u32 max_cmd_sn;
+	uint32_t cmd_sn;
+	uint32_t exp_cmd_sn;
+	uint32_t max_cmd_sn;
 
 	struct PDU req;
 	void *req_buffer;
@@ -136,7 +136,7 @@ struct target {
 
 	struct qelem sessions_list;
 
-	u32 tid;
+	int tid;
 	char name[ISCSI_NAME_LEN];
 	char *alias;
 
@@ -150,7 +150,7 @@ extern int cmnd_exec_auth_chap(struct connection *conn);
 /* conn.c */
 extern struct connection *conn_alloc(void);
 extern void conn_free(struct connection *conn);
-extern struct connection * conn_find(struct session *session, u32 cid);
+extern struct connection * conn_find(struct session *session, uint32_t cid);
 extern void conn_take_fd(struct connection *conn, int fd);
 extern void conn_read_pdu(struct connection *conn);
 extern void conn_write_pdu(struct connection *conn);
@@ -166,30 +166,33 @@ extern char *text_key_find(struct connection *conn, char *searchKey);
 extern void text_key_add(struct connection *conn, char *key, char *value);
 
 /* session.c */
-extern struct session *session_find_name(u32 tid, const char *iname, uint8_t *isid);
-extern struct session *session_find_id(u32 tid, u64 sid);
+extern struct session *session_find_name(int tid, const char *iname, uint8_t *isid);
+extern struct session *session_find_id(int tid, uint64_t sid);
 extern void session_create(struct connection *conn);
 extern void session_remove(struct session *session);
 
 /* target.c */
 extern int target_add(int *tid, char *name);
 extern int target_del(int tid);
-extern int target_find_by_name(const char *name, u32 *tid);
-struct target * target_find_by_id(u32);
+extern int target_find_by_name(const char *name, int *tid);
+struct target * target_find_by_id(int tid);
 extern void target_list_build(struct connection *, char *, char *);
 
 /* ctldev.c */
 struct iscsi_kernel_interface {
-	int (*lunit_create) (u32 tid, u32 lun, char *args);
-	int (*lunit_destroy) (u32 tid, u32 lun);
-	int (*param_get) (u32, u64, struct iscsi_param *);
-	int (*param_set) (u32, u64, int, u32, struct iscsi_param *);
-	int (*target_create) (int *, char *);
-	int (*target_destroy) (u32);
-	int (*session_create) (u32, u64, u32, u32, char *);
-	int (*session_destroy) (u32, u64);
-	int (*conn_create) (u32, u64, u32, u32, u32, int, u32, u32);
-	int (*conn_destroy) (u32 tid, u64 sid, u32 cid);
+	int (*lunit_create) (int tid, uint64_t lun, char *args);
+	int (*lunit_destroy) (int tid, uint64_t lun);
+	int (*param_get) (int tid, uint64_t sid, struct iscsi_param *);
+	int (*param_set) (int tid, uint64_t sid, int type, uint32_t flags,
+			  struct iscsi_param *);
+	int (*target_create) (int *tid);
+	int (*target_destroy) (int tid);
+	int (*session_create) (int tid, uint64_t sid, uint32_t exp,
+			       uint32_t max);
+	int (*session_destroy) (int tid, uint64_t sid);
+	int (*conn_create) (int tid, uint64_t sid, uint32_t cid, uint32_t sn,
+			    uint32_t exp_sn, int fd, uint32_t hd, uint32_t dd);
+	int (*conn_destroy) (int tid, uint64_t sid, uint32_t cid);
 };
 
 extern struct iscsi_kernel_interface *ki;

@@ -79,7 +79,8 @@ done:
 	return err;
 }
 
-int event_send(struct tgt_target *tgt, u32 tid, u64 sid, u32 cid, u32 state)
+int event_send(struct tgt_target *tgt, int tid, uint64_t sid, uint32_t cid,
+	       uint32_t state)
 {
 	struct iet_msg msg;
 

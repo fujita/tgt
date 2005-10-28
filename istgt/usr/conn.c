@@ -52,7 +52,7 @@ void conn_free(struct connection *conn)
 	free(conn);
 }
 
-struct connection *conn_find(struct session *session, u32 cid)
+struct connection *conn_find(struct session *session, uint32_t cid)
 {
 	struct connection *conn;
 
