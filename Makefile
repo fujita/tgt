@@ -7,6 +7,9 @@ endif
 export KERNELSRC
 
 all:
+ifeq ($(ARCH), ppc64)
+	make -C ibmvstgt
+endif
 	make -C istgt
 
 	make -C usr
@@ -15,4 +18,7 @@ clean:
 	make -C usr clean
 	make -C kernel clean
 
+ifeq ($(ARCH), ppc64)
+	make -C ibmvstgt clean
+endif
 	make -C istgt clean
