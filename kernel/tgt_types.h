@@ -15,18 +15,4 @@
 # define PRIu64		__PRI64_PREFIX "u"
 # define PRIx64		__PRI64_PREFIX "x"
 
-
-#define DEBUG_TGT
-
-#define eprintk(fmt, args...)					\
-do {								\
-	printk("%s(%d) " fmt, __FUNCTION__, __LINE__, args);	\
-} while (0)
-
-#ifdef DEBUG_TGT
-#define dprintk eprintk
-#else
-#define dprintk(fmt, args...)
-#endif
-
 #endif

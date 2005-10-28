@@ -310,4 +310,14 @@ enum cmnd_flags {
 		(param)->data_digest);\
 }
 
+#undef dprintk
+
+#undef DEBUG_ISTGT
+
+#ifdef DEBUG_ISTGT
+#define dprintk eprintk
+#else
+#define dprintk(fmt, args...)
+#endif
+
 #endif	/* __ISCSI_H__ */

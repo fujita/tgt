@@ -11,7 +11,6 @@
 
 #include <iscsi.h>
 #include <digest.h>
-#include <tgt.h>
 
 void digest_alg_available(unsigned int *val)
 {

@@ -5,8 +5,6 @@
  */
 
 #include <iscsi.h>
-#include <tgt.h>
-#include <tgt_target.h>
 
 static int add_conn(struct iscsi_target *target, struct conn_info *info)
 {

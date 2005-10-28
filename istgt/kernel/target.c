@@ -8,9 +8,6 @@
 
 #include <iscsi.h>
 #include <digest.h>
-#include <tgt.h>
-#include <tgt_device.h>
-#include <tgt_target.h>
 
 static DECLARE_MUTEX(target_list_sem);
 

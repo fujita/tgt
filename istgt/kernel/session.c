@@ -7,7 +7,6 @@
 #include <linux/mempool.h>
 
 #include <iscsi.h>
-#include <tgt.h>
 
 struct iscsi_session *session_lookup(struct iscsi_target *target, uint64_t sid)
 {

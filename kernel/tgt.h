@@ -80,4 +80,19 @@ extern int tgt_cmd_queue(struct tgt_cmd *cmd);
 extern void tgt_transfer_response(void *cmd);
 extern int tgt_sysfs_init(void);
 extern void tgt_sysfs_exit(void);
+
+
+#define DEBUG_TGT
+
+#define eprintk(fmt, args...)					\
+do {								\
+	printk("%s(%d) " fmt, __FUNCTION__, __LINE__, args);	\
+} while (0)
+
+#ifdef DEBUG_TGT
+#define dprintk eprintk
+#else
+#define dprintk(fmt, args...)
+#endif
+
 #endif
