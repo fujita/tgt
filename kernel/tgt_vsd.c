@@ -32,7 +32,7 @@ static int tgt_vsd_create(struct tgt_device *device)
 		return -EINVAL;
 
 	device->size = inode->i_size;
-	printk("%d %llu\n", device->fd, inode->i_size >> 9);
+	dprintk("%d %llu\n", device->fd, inode->i_size >> 9);
 
 	return 0;
 }
@@ -110,7 +110,7 @@ static struct iovec* sg_to_iovec(struct scatterlist *sg, int sg_count)
 static int vsd_queue_file_io(struct tgt_cmd *cmd, int op)
 {
 	struct file *file = cmd->device->file;
-	ssize_t size;
+	ssize_t ret;
 	struct iovec *iov;
 	loff_t pos = cmd->offset;
 
@@ -119,31 +119,27 @@ static int vsd_queue_file_io(struct tgt_cmd *cmd, int op)
 		return -ENOMEM;
 
 	if (op == READ)
-		size = generic_file_readv(file, iov, cmd->sg_count, &pos);
+		ret = generic_file_readv(file, iov, cmd->sg_count, &pos);
 	else
-		size = generic_file_writev(file, iov, cmd->sg_count, &pos);
+		ret = generic_file_writev(file, iov, cmd->sg_count, &pos);
 
 	kfree(iov);
 
-/* not yet used
-	if (sync)
-		err = sync_page_range(inode, inode->i_mapping, pos,
-				      (size_t) cmd->bufflen);
-*/
-	return size;
+	if (ret < 0 || ret != cmd->bufflen) {
+		eprintk("I/O error %d %Zd %u %lld %" PRIu64 "\n",
+			op, ret, cmd->bufflen, pos, cmd->device->size);
+		return -EINVAL;
+	}
+
+	/* sync_page_range(inode, inode->i_mapping, pos, (size_t) cmd->bufflen); */
+
+	return 0;
 }
 
 static int tgt_vsd_queue(struct tgt_cmd *cmd)
 {
 	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
-	struct tgt_device *device = cmd->device;
-	loff_t pos = cmd->offset;
-	int err = 0, rw;
-
-	if (cmd->bufflen + pos > device->size) {
-		scsi_tgt_sense_data_build(cmd, HARDWARE_ERROR, 0, 0);
-		return TGT_CMD_FAILED;
-	}
+	int err, rw;
 
 	switch (scmd->scb[0]) {
 	case READ_6:
@@ -165,8 +161,7 @@ static int tgt_vsd_queue(struct tgt_cmd *cmd)
 		if (err >= 0)
 			return TGT_CMD_USPACE_QUEUED;
 
-		scsi_tgt_sense_data_build(cmd, HARDWARE_ERROR, 0, 0);
-		return TGT_CMD_FAILED;
+		goto failed;
 	};
 
 	/*
@@ -174,17 +169,18 @@ static int tgt_vsd_queue(struct tgt_cmd *cmd)
 	 * when we seperate the io_handlers
 	 */
 	err = vsd_queue_file_io(cmd, rw);
+	if (!err) {
+		cmd->result = SAM_STAT_GOOD;
+		return TGT_CMD_COMPLETED;
+	}
+
 	/*
 	 * we should to a switch but I am not sure of all the err values
 	 * returned. If you find one add it
 	 */
-	if (err != cmd->bufflen) {
-		scsi_tgt_sense_data_build(cmd, HARDWARE_ERROR, 0, 0);
-		return TGT_CMD_FAILED;
-	} else {
-		cmd->result = SAM_STAT_GOOD;
-		return TGT_CMD_COMPLETED;
-	}
+failed:
+	scsi_tgt_sense_data_build(cmd, HARDWARE_ERROR, 0, 0);
+	return TGT_CMD_FAILED;
 }
 
 static struct tgt_device_template tgt_vsd = {

@@ -40,7 +40,7 @@ static kmem_cache_t *scsi_tgt_cmd_cache;
  */
 static uint64_t scsi_tgt_translate_lun(uint8_t *p, int size)
 {
-	uint64_t lun = ~0U;
+	uint64_t lun = ~0ULL;
 
 	switch (*p >> 6) {
 	case 0:
@@ -84,9 +84,19 @@ scsi_tgt_create_cmd(struct tgt_session *session, void *tgt_priv, uint8_t *scb,
 	cmd->dev_id = scsi_tgt_translate_lun(lun, lun_size);
 	device = tgt_device_find(session->target, cmd->dev_id);
 	if (!device) {
-		printk(KERN_ERR "Could not find device if %" PRIu64 "\n",
-		       cmd->dev_id);
-		return NULL;
+		switch (scmd->scb[0]) {
+		case INQUIRY:
+		case REPORT_LUNS:
+			/* we assume that we have lun 0. */
+			device = tgt_device_find(session->target, 0);
+			break;
+		}
+
+		if (!device) {
+			eprintk("Could not find device %x %" PRIu64 "\n",
+				scmd->scb[0], cmd->dev_id);
+			return NULL;
+		}
 	}
 	cmd->device = device;
 
@@ -255,7 +265,6 @@ static int scsi_tgt_queue_cmd(struct tgt_cmd *cmd)
 	unsigned long flags;
 	int err, enabled, more;
 
-	/* FIXME: we need some tricks here. */
 	BUG_ON(!device);
 
 	spin_lock_irqsave(&stdev->lock, flags);
