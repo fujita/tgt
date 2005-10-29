@@ -86,7 +86,7 @@ extern void tgt_sysfs_exit(void);
 
 #define eprintk(fmt, args...)					\
 do {								\
-	printk("%s(%d) " fmt, __FUNCTION__, __LINE__, args);	\
+	printk("%s(%d) " fmt, __FUNCTION__, __LINE__, ##args);	\
 } while (0)
 
 #ifdef DEBUG_TGT
