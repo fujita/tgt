@@ -1,7 +1,9 @@
 #ifndef __DL_H
 #define __DL_H
 
-extern int dl_init(char *data);
+#define	MAX_DL_HANDLES	16
+
+extern int dl_init(void);
 extern void dl_config_load(void);
 extern struct pollfd * dl_poll_init(int *nr);
 

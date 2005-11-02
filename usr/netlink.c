@@ -200,25 +200,22 @@ static int nl_start(int fd)
 {
 	int err;
 	struct tgt_event *ev;
-	struct nlmsghdr *nlh;
-	char rbuf[8192];
 	char nlmsg[NLMSG_SPACE(sizeof(struct tgt_event))];
 
 	err = nl_cmd_call(fd, TGT_UEVENT_START, nlmsg,
-			  NLMSG_SPACE(sizeof(struct tgt_event)), rbuf);
+			  NLMSG_SPACE(sizeof(struct tgt_event)), NULL);
 
-	nlh = (struct nlmsghdr *) rbuf;
-	ev = (struct tgt_event *) NLMSG_DATA(nlh);
+	ev = (struct tgt_event *) NLMSG_DATA(nlmsg);
 
 	if (err < 0 || ev->k.event_res.err < 0) {
 		eprintf("%d %d\n", err, ev->k.event_res.err);
-		exit(-1);
+		return -EINVAL;
 	}
 
-	return dl_init((char *) ev->data);
+	return 0;
 }
 
-int nl_open(int *nr)
+int nl_open(void)
 {
 	int fd, err;
 
@@ -249,7 +246,9 @@ int nl_open(int *nr)
 	dest_addr.nl_pid = 0; /* kernel */
 	dest_addr.nl_groups = 0; /* unicast */
 
-	*nr = nl_start(fd);
+	err = nl_start(fd);
+	if (err < 0)
+		goto out;
 
 	return fd;
 

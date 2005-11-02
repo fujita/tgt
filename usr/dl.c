@@ -12,6 +12,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <dlfcn.h>
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -22,11 +23,11 @@
 
 #include "log.h"
 #include "dl.h"
-
-#define	MAX_DL_HANDLES	32
+#include "tgtd.h"
 
 struct driver_info {
 	char *name;
+	char *proto;
 	void *dl;
 	void *pdl;
 };
@@ -46,62 +47,102 @@ static int driver_find_by_name(char *name)
 	return -ENOENT;
 }
 
+/* This function will be killed soon. */
 static int tid_to_did(int tid)
 {
-	char path[PATH_MAX], name[PATH_MAX];
-	int idx, fd, err;
+	char path[PATH_MAX], buf[PATH_MAX];
+	int fd, err;
 
-	memset(path, 0, sizeof(path));
-
-	sprintf(path, "/sys/class/tgt_target/target%d/name", tid);
+	sprintf(path, TGT_TARGET_SYSFSDIR "/target%d/typeid", tid);
 	fd = open(path, O_RDONLY);
 	if (fd < 0)
 		return fd;
 
-	err = read(fd, name, sizeof(name));
+	err = read(fd, buf, sizeof(buf));
 	close(fd);
 	if (err < 0)
 		return err;
 
-	idx = driver_find_by_name(name);
-	if (idx < 0)
-		eprintf("%d %s\n", idx, name);
-
-	return idx;
+	return atoi(buf);
 }
 
-int dl_init(char *p)
+static char *dlname(char *d_name, char *entry)
 {
-	int i;
-	char path[PATH_MAX], *driver, *proto;
+	int fd, err;
+	char *p, path[PATH_MAX], buf[PATH_MAX];
 
-	for (i = 0; (driver = strsep(&p, ",")); i++) {
-		proto = strchr(driver, ':');
-		if (!proto)
-			continue;
+	snprintf(path, sizeof(path),
+		 TGT_TYPE_SYSFSDIR "/%s/%s", d_name, entry);
+	fd = open(path, O_RDONLY);
+	if (fd < 0) {
+		eprintf("%s\n", path);
+		return NULL;
+	}
+	memset(buf, 0, sizeof(buf));
+	err = read(fd, buf, sizeof(buf));
+	close(fd);
+	if (err < 0) {
+		eprintf("%s %d\n", path, errno);
+		return NULL;
+	}
 
-		*proto++ = '\0';
-		dprintf("%s %s\n", driver, proto);
+	p = strchr(buf, '\n');
+	if (p)
+		*p = '\0';
 
-		memset(path, 0, sizeof(path));
-		strcpy(path, driver);
-		strcat(path, ".so");
-		dinfo[i].name = strdup(driver);
-		dinfo[i].dl = dlopen(path, RTLD_LAZY);
-		if (!dinfo[i].dl) {
-			fprintf(stderr, "%s %s\n", path, dlerror());
+	return strdup(buf);
+}
+
+static int filter(const struct dirent *dir)
+{
+	return strcmp(dir->d_name, ".") && strcmp(dir->d_name, "..");
+}
+
+int dl_init(void)
+{
+	int i, nr, idx;
+	char path[PATH_MAX], *p;
+	struct dirent **namelist;
+	struct driver_info *di;
+
+	nr = scandir(TGT_TYPE_SYSFSDIR, &namelist, filter, alphasort);
+	for (i = 0; i < nr; i++) {
+		for (p = namelist[i]->d_name; !isdigit((int) *p); p++)
+			;
+		idx = atoi(p);
+		if (idx > MAX_DL_HANDLES) {
+			eprintf("Cannot load %s %d\n",
+				namelist[i]->d_name, idx);
 			continue;
 		}
 
-		memset(path, 0, sizeof(path));
-		strcpy(path, proto);
-		strcat(path, ".so");
-		dinfo[i].pdl = dlopen(path, RTLD_LAZY);
-		if (!dinfo[i].pdl)
-			fprintf(stderr, "%s %s\n", path, dlerror());
+		p = dlname(namelist[i]->d_name, "name");
+		if (!p)
+			continue;
+
+		di = &dinfo[idx];
+
+		di->name = p;
+		snprintf(path, sizeof(path), "%s.so", p);
+		di->dl = dlopen(path, RTLD_LAZY);
+		if (!di->dl) {
+			eprintf("%s %s\n", path, dlerror());
+			continue;
+		}
+
+		p = dlname(namelist[i]->d_name, "protocol");
+		if (!p)
+			continue;
+		di->proto = p;
+		snprintf(path, sizeof(path), "%s.so", p);
+		di->pdl = dlopen(path, RTLD_LAZY);
+		if (!di->pdl) {
+			eprintf("%s %s\n", path, dlerror());
+			continue;
+		}
 	}
 
-	return i;
+	return 0;
 }
 
 void dl_config_load(void)

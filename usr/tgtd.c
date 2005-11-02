@@ -26,7 +26,7 @@
 #include "tgtd.h"
 #include "dl.h"
 
-#define	POLLS_PER_DRV	64
+#define	POLLS_PER_DRV	32
 
 int nl_fd, ipc_fd;
 
@@ -154,9 +154,8 @@ static struct pollfd * poll_init(int nr)
 
 int main(int argc, char **argv)
 {
-	int ch, longindex;
+	int ch, longindex, nr;
 	int is_daemon = 1, is_debug = 1;
-	int nr;
 	pid_t pid;
 	struct pollfd *poll_array;
 
@@ -198,7 +197,7 @@ int main(int argc, char **argv)
 		setsid();
 	}
 
-	nl_fd = nl_open(&nr);
+	nl_fd = nl_open();
 	if (nl_fd < 0)
 		exit(nl_fd);
 
@@ -206,6 +205,9 @@ int main(int argc, char **argv)
 	if (ipc_fd < 0)
 		exit(ipc_fd);
 
+	dl_init();
+
+	nr = MAX_DL_HANDLES;
 	poll_array = poll_init(nr);
 
 	dl_config_load();
