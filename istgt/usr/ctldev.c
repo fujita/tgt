@@ -585,22 +585,19 @@ static void all_devices_destroy(int tid)
 	free(namelist);
 }
 
-static int system_mgmt(struct tgtadm_req *req, char *params, char *rbuf, int *rlen)
+static int get_typeid(void)
 {
-	int err = -EINVAL, i, nr, fd;
+	int err = -EINVAL, i, nr, fd, typeid = -EINVAL;
 	struct dirent **namelist;
 	char path[PATH_MAX], buf[PATH_MAX], *p;
 
-	if (req->op != OP_DELETE)
-		return err;
-
-	nr = scandir("/sys/class/tgt_target", &namelist, filter, alphasort);
+	nr = scandir("/sys/class/tgt_type", &namelist, filter, alphasort);
 	if (!nr)
 		return -ENOENT;
 
 	for (i = 0; i < nr; i++) {
 		memset(path, 0, sizeof(path));
-		strncpy(path, "/sys/class/tgt_target/", sizeof(path));
+		strncpy(path, "/sys/class/tgt_type/", sizeof(path));
 		strncat(&path[strlen(path)], namelist[i]->d_name, sizeof(path));
 		strncat(&path[strlen(path)], "/name", sizeof(path));
 		eprintf("%s\n", path);
@@ -613,6 +610,49 @@ static int system_mgmt(struct tgtadm_req *req, char *params, char *rbuf, int *rl
 			continue;
 		eprintf("%s\n", buf);
 		if (!strncmp(buf, THIS_NAME, strlen(THIS_NAME))) {
+			for (p = namelist[i]->d_name; !isdigit((int) *p); p++)
+				;
+			typeid = atoi(p);
+		}
+	}
+
+	for (i = 0; i < nr; i++)
+		free(namelist[i]);
+	free(namelist);
+
+	return typeid;
+}
+
+static int system_mgmt(struct tgtadm_req *req, char *params, char *rbuf, int *rlen)
+{
+	int err = -EINVAL, i, nr, fd, typeid;
+	struct dirent **namelist;
+	char path[PATH_MAX], buf[PATH_MAX], *p;
+
+	if (req->op != OP_DELETE)
+		return err;
+
+	typeid = get_typeid();
+
+	nr = scandir("/sys/class/tgt_target", &namelist, filter, alphasort);
+	if (!nr)
+		return -ENOENT;
+
+	for (i = 0; i < nr; i++) {
+		memset(path, 0, sizeof(path));
+		strncpy(path, "/sys/class/tgt_target/", sizeof(path));
+		strncat(&path[strlen(path)], namelist[i]->d_name, sizeof(path));
+		strncat(&path[strlen(path)], "/typeid", sizeof(path));
+		eprintf("%s\n", path);
+		fd = open(path, O_RDONLY);
+		if (fd < 0)
+			continue;
+		err = read(fd, buf, sizeof(buf));
+		close(fd);
+		if (err < 0)
+			continue;
+		eprintf("%s\n", buf);
+		if (typeid == atoi(buf)) {
 			int tid;
 
 			for (p = namelist[i]->d_name; !isdigit((int) *p); p++)

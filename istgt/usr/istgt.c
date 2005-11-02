@@ -114,9 +114,8 @@ static void listen_socket_create(struct pollfd *pfds)
 	freeaddrinfo(res0);
 }
 
-void poll_init(struct pollfd *pfds, int nr)
+void poll_init(struct pollfd *pfds)
 {
-	eprintf("%d\n", nr);
 	listen_socket_create(pfds + POLL_LISTEN);
 }
 
