@@ -120,7 +120,8 @@ static int cmd_queue(int fd, char *reqbuf, char *resbuf)
 	scb = (uint8_t *) ev_req->data;
 	dprintf("%" PRIu64 " %x\n", cid, scb[0]);
 
-	fn = dl_proto_cmd_process(ev_req->k.cmd_req.tid);
+	fn = dl_proto_cmd_process(ev_req->k.cmd_req.tid,
+				  ev_req->k.cmd_req.typeid);
 	if (fn)
 		result = fn(ev_req->k.cmd_req.tid,
 			    ev_req->k.cmd_req.dev_id, scb,
@@ -135,7 +136,6 @@ static int cmd_queue(int fd, char *reqbuf, char *resbuf)
 	ev_res->u.cmd_res.cid = cid;
 	ev_res->u.cmd_res.len = len;
 	ev_res->u.cmd_res.result = result;
-
 
 	log_error("scsi_cmd_process res %d len %d\n", result, len);
 
@@ -162,7 +162,8 @@ void nl_event_handle(int fd)
 		cmd_queue(fd, NLMSG_DATA(recvbuf), sendbuf);
 		break;
 	case TGT_KEVENT_TARGET_PASSTHRU:
-		fn = dl_event_fn(ev->k.tgt_passthru.tid);
+		fn = dl_event_fn(ev->k.tgt_passthru.tid,
+				 ev->k.tgt_passthru.typeid);
 		if (fn)
 			fn(NLMSG_DATA(recvbuf));
 		else

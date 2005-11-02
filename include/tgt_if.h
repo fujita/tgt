@@ -64,10 +64,12 @@ struct tgt_event {
 			uint64_t cid;
 			int tid;
 			uint64_t dev_id;
+			int typeid;
 		} cmd_req;
 		struct {
 			int tid;
 			uint32_t len;
+			int typeid;
 		} tgt_passthru;
 	} k;
 

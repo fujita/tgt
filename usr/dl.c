@@ -47,25 +47,6 @@ static int driver_find_by_name(char *name)
 	return -ENOENT;
 }
 
-/* This function will be killed soon. */
-static int tid_to_did(int tid)
-{
-	char path[PATH_MAX], buf[PATH_MAX];
-	int fd, err;
-
-	sprintf(path, TGT_TARGET_SYSFSDIR "/target%d/typeid", tid);
-	fd = open(path, O_RDONLY);
-	if (fd < 0)
-		return fd;
-
-	err = read(fd, buf, sizeof(buf));
-	close(fd);
-	if (err < 0)
-		return err;
-
-	return atoi(buf);
-}
-
 static char *dlname(char *d_name, char *entry)
 {
 	int fd, err;
@@ -191,28 +172,18 @@ void *dl_ipc_fn(char *name)
 	return NULL;
 }
 
-void *dl_proto_cmd_process(int tid)
+void *dl_proto_cmd_process(int tid, int typeid)
 {
-	int idx = tid_to_did(tid);
-
-	if (idx < 0)
-		return NULL;
-
-	if (dinfo[idx].pdl)
-		return dlsym(dinfo[idx].pdl, "cmd_process");
+	if (dinfo[typeid].pdl)
+		return dlsym(dinfo[typeid].pdl, "cmd_process");
 
 	return NULL;
 }
 
-void *dl_event_fn(int tid)
+void *dl_event_fn(int tid, int typeid)
 {
-	int idx = tid_to_did(tid);
-
-	if (idx < 0)
-		return NULL;
-
-	if (dinfo[idx].dl)
-		return dlsym(dinfo[idx].dl, "async_event");
+	if (dinfo[typeid].dl)
+		return dlsym(dinfo[typeid].dl, "async_event");
 
 	return NULL;
 }

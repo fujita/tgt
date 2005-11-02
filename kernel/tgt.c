@@ -71,7 +71,7 @@ static void target_template_put(struct tgt_target_template *tt)
 
 int tgt_target_template_register(struct tgt_target_template *tt)
 {
-	static int target_type_id;
+	static atomic_t target_type_id = ATOMIC_INIT(0);
 	unsigned long flags;
 	struct target_type_internal *ti;
 	int err;
@@ -90,13 +90,14 @@ int tgt_target_template_register(struct tgt_target_template *tt)
 		return -EINVAL;
 	}
 
+	ti->typeid = atomic_add_return(1, &target_type_id);
+
 	err = tgt_sysfs_register_type(ti);
 	if (err)
 		goto proto_put;
 
 	spin_lock_irqsave(&target_tmpl_lock, flags);
 	list_add_tail(&ti->list, &target_tmpl_list);
-	ti->typeid = target_type_id++;
 	spin_unlock_irqrestore(&target_tmpl_lock, flags);
 
 	return 0;
@@ -769,6 +770,7 @@ int tgt_uspace_cmd_send(struct tgt_cmd *cmd)
 	ev->k.cmd_req.tid = cmd->session->target->tid;
 	ev->k.cmd_req.dev_id = cmd->dev_id;
 	ev->k.cmd_req.cid = cmd->cid;
+	ev->k.cmd_req.typeid = cmd->session->target->typeid;
 
 	proto->build_uspace_pdu(cmd, pdu);
 
@@ -866,6 +868,7 @@ int tgt_msg_send(struct tgt_target *target, void *data, int dlen, gfp_t flags)
 
 	memset(&ev, 0, sizeof(ev));
 	ev.k.tgt_passthru.tid = target->tid;
+	ev.k.tgt_passthru.typeid = target->typeid;
 	ev.k.tgt_passthru.len = dlen;
 
 	return send_event_res(TGT_KEVENT_TARGET_PASSTHRU,
