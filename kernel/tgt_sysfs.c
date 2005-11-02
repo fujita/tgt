@@ -9,56 +9,6 @@
 #include <tgt_target.h>
 #include <tgt_device.h>
 
-/*
- * Target files
- */
-#define tgt_target_show_fn(field, format_string)			\
-static ssize_t								\
-show_##field (struct class_device *cdev, char *buf)			\
-{									\
-	struct tgt_target *target = cdev_to_tgt_target(cdev);		\
-	return snprintf (buf, 20, format_string, target->field);	\
-}
-
-#define tgt_target_rd_attr(field, format_string)		\
-	tgt_target_show_fn(field, format_string)		\
-static CLASS_DEVICE_ATTR(field, S_IRUGO, show_##field, NULL);
-
-#define tgt_target_template_show_fn(field, format_string)		\
-static ssize_t								\
-show_##field (struct class_device *cdev, char *buf)			\
-{									\
-	struct tgt_target *target = cdev_to_tgt_target(cdev);		\
-	return snprintf (buf, 20, format_string, target->tt->field);	\
-}
-
-#define tgt_target_template_rd_attr(field, format_string)		\
-	tgt_target_template_show_fn(field, format_string)		\
-static CLASS_DEVICE_ATTR(field, S_IRUGO, show_##field, NULL);
-
-tgt_target_rd_attr(queued_cmds, "%u\n");
-tgt_target_template_rd_attr(name, "%s\n");
-tgt_target_template_rd_attr(protocol, "%s\n");
-
-static struct class_device_attribute *tgt_target_attrs[] = {
-	&class_device_attr_queued_cmds,
-	&class_device_attr_name,
-	&class_device_attr_protocol,
-	NULL
-};
-
-static void tgt_target_class_release(struct class_device *cdev)
-{
-	struct tgt_target *target = cdev_to_tgt_target(cdev);
-	kfree(target->tt_data);
-	kfree(target);
-}
-
-static struct class tgt_target_class = {
-	.name = "tgt_target",
-	.release = tgt_target_class_release,
-};
-
 static struct class_device_attribute *class_attr_overridden(
 				struct class_device_attribute **attrs,
 				struct class_device_attribute *attr)
@@ -75,6 +25,7 @@ static struct class_device_attribute *class_attr_overridden(
 }
 
 static int class_attr_add(struct class_device *classdev,
+			  struct class_device_attribute **attrs,
 			  struct class_device_attribute *attr)
 {
 	struct class_device_attribute *base_attr;
@@ -82,7 +33,7 @@ static int class_attr_add(struct class_device *classdev,
 	/*
 	 * Spare the caller from having to copy things it's not interested in.
 	*/
-	base_attr = class_attr_overridden(tgt_target_attrs, attr);
+	base_attr = class_attr_overridden(attrs, attr);
 	if (base_attr) {
 		/* extend permissions */
 		attr->attr.mode |= base_attr->attr.mode;
@@ -96,6 +47,109 @@ static int class_attr_add(struct class_device *classdev,
 
 	return class_device_create_file(classdev, attr);
 }
+
+#define cdev_to_tgt_type(cdev) \
+	container_of(cdev, struct target_type_internal, cdev)
+
+#define tgt_target_template_show_fn(field, format_string)		\
+static ssize_t								\
+show_##field (struct class_device *cdev, char *buf)			\
+{									\
+	struct target_type_internal *ti = cdev_to_tgt_type(cdev);	\
+	return snprintf (buf, 20, format_string, ti->tt->field);	\
+}
+
+#define tgt_target_template_rd_attr(field, format_string)		\
+	tgt_target_template_show_fn(field, format_string)		\
+static CLASS_DEVICE_ATTR(field, S_IRUGO, show_##field, NULL);
+
+tgt_target_template_rd_attr(name, "%s\n");
+tgt_target_template_rd_attr(protocol, "%s\n");
+
+static struct class_device_attribute *tgt_type_attrs[] = {
+	&class_device_attr_name,
+	&class_device_attr_protocol,
+	NULL,
+};
+
+static void tgt_type_class_release(struct class_device *cdev)
+{
+	struct target_type_internal *ti = cdev_to_tgt_type(cdev);
+	kfree(ti);
+}
+
+static struct class tgt_type_class = {
+	.name = "tgt_type",
+	.release = tgt_type_class_release,
+};
+
+int tgt_sysfs_register_type(struct target_type_internal *ti)
+{
+	struct class_device *cdev = &ti->cdev;
+	int i, err;
+
+	cdev->class = &tgt_type_class;
+	snprintf(cdev->class_id, BUS_ID_SIZE, "driver%d", ti->typeid);
+
+	err = class_device_register(cdev);
+	if (err)
+		return err;
+
+	for (i = 0; tgt_type_attrs[i]; i++) {
+		err = class_device_create_file(&ti->cdev,
+					       tgt_type_attrs[i]);
+		if (err)
+			goto cleanup;
+	}
+
+	return 0;
+
+cleanup:
+	class_device_unregister(cdev);
+
+	return err;
+}
+
+void tgt_sysfs_unregister_type(struct target_type_internal *ti)
+{
+	class_device_unregister(&ti->cdev);
+}
+
+/*
+ * Target files
+ */
+#define tgt_target_show_fn(field, format_string)			\
+static ssize_t								\
+show_##field (struct class_device *cdev, char *buf)			\
+{									\
+	struct tgt_target *target = cdev_to_tgt_target(cdev);		\
+	return snprintf (buf, 20, format_string, target->field);	\
+}
+
+#define tgt_target_rd_attr(field, format_string)		\
+	tgt_target_show_fn(field, format_string)		\
+static CLASS_DEVICE_ATTR(field, S_IRUGO, show_##field, NULL);
+
+tgt_target_rd_attr(queued_cmds, "%u\n");
+tgt_target_rd_attr(typeid, "%d\n");
+
+static struct class_device_attribute *tgt_target_attrs[] = {
+	&class_device_attr_queued_cmds,
+	&class_device_attr_typeid,
+	NULL
+};
+
+static void tgt_target_class_release(struct class_device *cdev)
+{
+	struct tgt_target *target = cdev_to_tgt_target(cdev);
+	kfree(target->tt_data);
+	kfree(target);
+}
+
+static struct class tgt_target_class = {
+	.name = "tgt_target",
+	.release = tgt_target_class_release,
+};
 
 int tgt_sysfs_register_target(struct tgt_target *target)
 {
@@ -112,9 +166,10 @@ int tgt_sysfs_register_target(struct tgt_target *target)
 	if (target->tt->target_attrs) {
 		for (i = 0; target->tt->target_attrs[i]; i++) {
 			err = class_attr_add(&target->cdev,
+					     tgt_target_attrs,
 					     target->tt->target_attrs[i]);
-                        if (err)
-                                goto cleanup;
+			if (err)
+				goto cleanup;
 		}
 	}
 
@@ -203,6 +258,7 @@ int tgt_sysfs_register_device(struct tgt_device *device)
 	if (device->dt->device_attrs) {
 		for (i = 0; device->dt->device_attrs[i]; i++) {
 			err = class_attr_add(&device->cdev,
+					     tgt_target_attrs,
 					     device->dt->device_attrs[i]);
                         if (err)
                                 goto cleanup;
@@ -237,18 +293,31 @@ int tgt_sysfs_init(void)
 {
 	int err;
 
-	err = class_register(&tgt_target_class);
+	err = class_register(&tgt_type_class);
 	if (err)
 		return err;
 
+	err = class_register(&tgt_target_class);
+	if (err)
+		goto unregister_type;
+
 	err = class_register(&tgt_device_class);
 	if (err)
-		class_unregister(&tgt_target_class);
+		goto unregister_target;
+
+	return 0;
+
+unregister_target:
+	class_unregister(&tgt_target_class);
+unregister_type:
+	class_unregister(&tgt_type_class);
+
 	return err;
 }
 
 void tgt_sysfs_exit(void)
 {
+	class_unregister(&tgt_type_class);
 	class_unregister(&tgt_target_class);
 	class_unregister(&tgt_device_class);
 }

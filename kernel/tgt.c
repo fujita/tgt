@@ -44,12 +44,6 @@ static spinlock_t cmd_hash_lock;
 #define	cmd_hashfn(key)	hash_long((key), TGT_HASH_ORDER)
 static struct list_head cmd_hash[1 << TGT_HASH_ORDER];
 
-struct target_type_internal {
-	struct list_head list;
-	struct tgt_target_template *tt;
-	struct tgt_protocol *proto;
-};
-
 static struct target_type_internal *target_template_get(const char *name)
 {
 	unsigned long flags;
@@ -77,8 +71,10 @@ static void target_template_put(struct tgt_target_template *tt)
 
 int tgt_target_template_register(struct tgt_target_template *tt)
 {
+	static int target_type_id;
 	unsigned long flags;
 	struct target_type_internal *ti;
+	int err;
 
 	ti = kzalloc(sizeof(*ti), GFP_KERNEL);
 	if (!ti)
@@ -94,11 +90,22 @@ int tgt_target_template_register(struct tgt_target_template *tt)
 		return -EINVAL;
 	}
 
+	err = tgt_sysfs_register_type(ti);
+	if (err)
+		goto proto_put;
+
 	spin_lock_irqsave(&target_tmpl_lock, flags);
 	list_add_tail(&ti->list, &target_tmpl_list);
+	ti->typeid = target_type_id++;
 	spin_unlock_irqrestore(&target_tmpl_lock, flags);
 
 	return 0;
+
+proto_put:
+	tgt_protocol_put(ti->proto);
+	kfree(ti);
+
+	return err;
 }
 EXPORT_SYMBOL_GPL(tgt_target_template_register);
 
@@ -112,12 +119,16 @@ void tgt_target_template_unregister(struct tgt_target_template *tt)
 	list_for_each_entry(ti, &target_tmpl_list, list)
 		if (ti->tt == tt) {
 			list_del(&ti->list);
-			tgt_protocol_put(ti->proto);
-			kfree(ti);
-			break;
+			goto found;
 		}
-
+	ti = NULL;
+found:
 	spin_unlock_irqrestore(&target_tmpl_lock, flags);
+
+	if (ti) {
+		tgt_protocol_put(ti->proto);
+		tgt_sysfs_unregister_type(ti);
+	}
 }
 EXPORT_SYMBOL_GPL(tgt_target_template_unregister);
 
@@ -154,6 +165,7 @@ struct tgt_target *tgt_target_create(char *target_type, int queued_cmds)
 
 	target->tt = ti->tt;
 	target->proto = ti->proto;
+	target->typeid = ti->typeid;
 	target->tid = target_id++;
 	spin_lock_init(&target->lock);
 
@@ -861,44 +873,6 @@ int tgt_msg_send(struct tgt_target *target, void *data, int dlen, gfp_t flags)
 }
 EXPORT_SYMBOL_GPL(tgt_msg_send);
 
-static void tgt_start(void)
-{
-	struct tgt_event ev;
-	struct target_type_internal *ti;
-	unsigned long flags;
-	int n, err, done, rest = PAGE_SIZE;
-	char *p;
-
-	p = kzalloc(rest, GFP_KERNEL);
-	if (!p)
-		rest = 0;
-
-	n = done = 0;
-
-	spin_lock_irqsave(&target_tmpl_lock, flags);
-	list_for_each_entry(ti, &target_tmpl_list, list) {
-		dprintk("%s %s\n", ti->tt->name, ti->proto->name);
-		if (strlen(ti->tt->name) + strlen(ti->proto->name) + 2 > rest)
-			break;
-		err = snprintf(p + done, rest, "%s:%s,",
-			       ti->tt->name, ti->proto->name);
-		if (err < 0)
-			break;
-		rest -= err;
-		done += err;
-		n++;
-	}
-	spin_unlock_irqrestore(&target_tmpl_lock, flags);
-
-	memset(&ev, 0, sizeof(ev));
-	send_event_res(TGT_KEVENT_RESPONSE, &ev, p, done,
-		       GFP_KERNEL | __GFP_NOFAIL);
-
-	kfree(p);
-
-	eprintk("start %d target drivers\n", n);
-}
-
 static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 {
 	int err = 0;
@@ -912,7 +886,7 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 	switch (nlh->nlmsg_type) {
 	case TGT_UEVENT_START:
 		tgtd_pid  = NETLINK_CREDS(skb)->pid;
-		tgt_start();
+		eprintk("start target drivers\n");
 		break;
 	case TGT_UEVENT_TARGET_CREATE:
 		target = tgt_target_create(ev->u.c_target.type,
@@ -992,8 +966,7 @@ static int event_recv_skb(struct sk_buff *skb)
 		 * TODO for passthru commands the lower level should
 		 * probably handle the result or we should modify this
 		 */
-		if (nlh->nlmsg_type != TGT_UEVENT_START &&
-		    nlh->nlmsg_type != TGT_UEVENT_CMD_RES &&
+		if (nlh->nlmsg_type != TGT_UEVENT_CMD_RES &&
 		    nlh->nlmsg_type != TGT_UEVENT_TARGET_PASSTHRU) {
 			struct tgt_event ev;
 
