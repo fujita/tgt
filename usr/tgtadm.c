@@ -12,16 +12,16 @@
  */
 
 #include <ctype.h>
+#include <dirent.h>
+#include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <dirent.h>
-#include <string.h>
-#include <dlfcn.h>
 #include <inttypes.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -152,6 +152,36 @@ static int driver_to_typeid(char *name)
 	return id;
 }
 
+static int driver_dl_init(int argc, char **argv)
+{
+	int ch, longindex, id;
+	char *name = NULL;
+
+	while ((ch = getopt_long(argc, argv, "n:", long_options,
+				 &longindex)) >= 0) {
+		switch (ch) {
+		case 'n':
+			name = optarg;
+			break;
+		}
+	}
+
+	if (!name) {
+		eprintf("You must specify the driver name\n");
+		goto out;
+	}
+
+	id = driver_to_typeid(name);
+	if (id < 0) {
+		eprintf("Invalid driver name %s\n", name);
+		goto out;
+	}
+
+	return id;
+out:
+	exit(0);
+}
+
 static int ipc_mgmt_connect(void)
 {
 	int fd, err;
@@ -259,15 +289,19 @@ int main(int argc, char **argv)
 	int tid = -1, typeid;
 	uint32_t cid = 0, set = 0;
 	uint64_t sid = 0, lun = 0;
-	char *params = NULL, *driver = NULL;
+	char *params = NULL;
 	struct tgtadm_req *req;
 	char sbuf[8192], rbuf[8912];
 
+	typeid = driver_dl_init(argc, argv);
+	if (typeid < 0)
+		goto out;
+
+	optind = 1;
 	while ((ch = getopt_long(argc, argv, "n:o:t:s:c:l:p:uvh",
 				 long_options, &longindex)) >= 0) {
 		switch (ch) {
 		case 'n':
-			driver = optarg;
 			break;
 		case 'o':
 			op = str_to_op(optarg);
@@ -295,7 +329,7 @@ int main(int argc, char **argv)
 			set |= SET_USER;
 			break;
 		case 'v':
-/* 			printf("%s version %s\n", program_name, IET_VERSION_STRING); */
+			printf("%s\n", program_name);
 			exit(0);
 			break;
 		case 'h':
@@ -305,20 +339,8 @@ int main(int argc, char **argv)
 			usage(-1);
 		}
 	}
-
 	if (op < 0) {
 		eprintf("You must specify the operation type\n");
-		goto out;
-	}
-
-	if (!driver) {
-		eprintf("You must specify the driver name\n");
-		goto out;
-	}
-
-	typeid = driver_to_typeid(driver);
-	if (typeid < 0) {
-		eprintf("Invalid driver name %s\n", driver);
 		goto out;
 	}
 

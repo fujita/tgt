@@ -23,7 +23,6 @@
 
 #include "log.h"
 #include "dl.h"
-#include "tgtd.h"
 #include "tgt_sysfs.h"
 
 struct driver_info {
