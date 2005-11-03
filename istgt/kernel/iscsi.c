@@ -1633,6 +1633,7 @@ static struct tgt_target_template istgt_template = {
 	.name = THIS_NAME,
 	.module = THIS_MODULE,
 	.protocol = "scsi",
+	.subprotocol = "iscsi",
 	.target_create = target_add,
 	.target_destroy = target_del,
 	.msg_recv = iet_msg_recv,

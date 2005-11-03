@@ -65,10 +65,12 @@ static CLASS_DEVICE_ATTR(field, S_IRUGO, show_##field, NULL);
 
 tgt_target_template_rd_attr(name, "%s\n");
 tgt_target_template_rd_attr(protocol, "%s\n");
+tgt_target_template_rd_attr(subprotocol, "%s\n");
 
 static struct class_device_attribute *tgt_type_attrs[] = {
 	&class_device_attr_name,
 	&class_device_attr_protocol,
+	&class_device_attr_subprotocol,
 	NULL,
 };
 

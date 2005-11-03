@@ -1160,6 +1160,7 @@ static struct tgt_target_template ibmvstgt_template = {
 	.name = TGT_NAME,
 	.module = THIS_MODULE,
 	.protocol = "scsi",
+	.subprotocol = "rdma",
 	.transfer_response = ibmvstgt_cmd_done,
 	.transfer_write_data = recv_cmd_data,
 	.priv_data_size = sizeof(struct server_adapter),

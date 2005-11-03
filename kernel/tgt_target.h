@@ -71,6 +71,11 @@ struct tgt_target_template {
 	const char *protocol;
 
 	/*
+	 * name of sub-protocol to use
+	 */
+	const char *subprotocol;
+
+	/*
 	 * Pointer to the sysfs class properties for this host, NULL terminated.
 	 */
 	struct class_device_attribute **target_attrs;
