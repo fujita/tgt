@@ -99,11 +99,11 @@ void ipc_event_handle(int accept_fd)
 
 	req = NLMSG_DATA(nlh);
 
-	dprintf("%s %d %d\n", req->driver, err, nlh->nlmsg_len);
+	dprintf("%d %d %d\n", req->typeid, err, nlh->nlmsg_len);
 
-	fn = dl_ipc_fn(req->driver);
+	fn = dl_ipc_fn(req->typeid);
 	if (!fn) {
-		eprintf("Cannot handle event %s\n", req->driver);
+		eprintf("Cannot handle event %d\n", req->typeid);
 		err = -EINVAL;
 		goto fail;
 	}

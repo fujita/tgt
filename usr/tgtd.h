@@ -12,7 +12,4 @@ extern int nl_cmd_call(int fd, int type, char *data, int size, char *rbuf);
 extern int ipc_open(void);
 extern void ipc_event_handle(int fd);
 
-#define	TGT_TYPE_SYSFSDIR	"/sys/class/tgt_type"
-#define	TGT_TARGET_SYSFSDIR	"/sys/class/tgt_target"
-
 #endif

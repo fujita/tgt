@@ -24,6 +24,7 @@
 #include "log.h"
 #include "dl.h"
 #include "tgtd.h"
+#include "tgt_sysfs.h"
 
 struct driver_info {
 	char *name;
@@ -33,19 +34,6 @@ struct driver_info {
 };
 
 static struct driver_info dinfo[MAX_DL_HANDLES];
-
-static int driver_find_by_name(char *name)
-{
-	int i;
-
-	for (i = 0; i < MAX_DL_HANDLES; i++) {
-		if (dinfo[i].dl &&
-		    !strncmp(dinfo[i].name, name, strlen(dinfo[i].name)))
-			return i;
-	}
-
-	return -ENOENT;
-}
 
 static char *dlname(char *d_name, char *entry)
 {
@@ -123,6 +111,10 @@ int dl_init(void)
 		}
 	}
 
+	for (i = 0; i < nr; i++)
+		free(namelist[i]);
+	free(namelist);
+
 	return 0;
 }
 
@@ -157,17 +149,10 @@ void *dl_poll_fn(int idx)
 	return NULL;
 }
 
-void *dl_ipc_fn(char *name)
+void *dl_ipc_fn(int typeid)
 {
-	int idx = driver_find_by_name(name);
-
-	if (idx < 0) {
-		eprintf("%d %s\n", idx, name);
-		return NULL;
-	}
-
-	if (dinfo[idx].dl)
-		return dlsym(dinfo[idx].dl, "ipc_mgmt");
+	if (dinfo[typeid].dl)
+		return dlsym(dinfo[typeid].dl, "ipc_mgmt");
 
 	return NULL;
 }

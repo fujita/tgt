@@ -9,8 +9,6 @@
 #define	SET_DEVICE	(1 << 3)
 #define	SET_USER	(1 << 4)
 
-#define	TGT_DNAME_LEN	64
-
 enum tgtadm_op {
 	OP_NEW,
 	OP_DELETE,
@@ -19,7 +17,7 @@ enum tgtadm_op {
 };
 
 struct tgtadm_req {
-	char driver[TGT_DNAME_LEN];
+	int typeid;
 	int op;
 	uint32_t set;
 

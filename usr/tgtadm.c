@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <dirent.h>
 #include <string.h>
 #include <dlfcn.h>
 #include <inttypes.h>
@@ -29,6 +30,14 @@
 #include <linux/netlink.h>
 
 #include "tgtadm.h"
+#include "tgt_sysfs.h"
+
+#define eprintf(fmt, args...)					\
+do {								\
+	fprintf(stderr, "%s(%d) " fmt, __FUNCTION__, __LINE__, ##args);	\
+} while (0)
+
+#define dprintf eprintf
 
 static char program_name[] = "tgtadm";
 
@@ -96,6 +105,51 @@ Linux Target Framework Administration Utility.\n\
 Report bugs to <stgt-devel@lists.berlios.de>.\n");
 	}
 	exit(status == 0 ? 0 : -1);
+}
+
+static int filter(const struct dirent *dir)
+{
+	return strcmp(dir->d_name, ".") && strcmp(dir->d_name, "..");
+}
+
+static int driver_to_typeid(char *name)
+{
+	int i, nr, err, fd, id = -ENOENT;
+	char *p, path[PATH_MAX], buf[PATH_MAX];
+	struct dirent **namelist;
+
+	nr = scandir(TGT_TYPE_SYSFSDIR, &namelist, filter, alphasort);
+	for (i = 0; i < nr; i++) {
+		snprintf(path, sizeof(path), TGT_TYPE_SYSFSDIR "/%s/name",
+			 namelist[i]->d_name);
+
+		fd = open(path, O_RDONLY);
+		if (fd < 0) {
+			eprintf("%s %d\n", path, errno);
+			continue;
+		}
+
+		err = read(fd, buf, sizeof(buf));
+		close(fd);
+		if (err < 0) {
+			eprintf("%s %d\n", path, err);
+			continue;
+		}
+
+		if (strncmp(name, buf, strlen(name)))
+			continue;
+
+		for (p = namelist[i]->d_name; !isdigit((int) *p); p++)
+			;
+		id = atoi(p);
+		break;
+	}
+
+	for (i = 0; i < nr; i++)
+		free(namelist[i]);
+	free(namelist);
+
+	return id;
 }
 
 static int ipc_mgmt_connect(void)
@@ -202,7 +256,7 @@ int main(int argc, char **argv)
 {
 	int ch, longindex;
 	int err = -EINVAL, op = -1, len;
-	int tid = -1;
+	int tid = -1, typeid;
 	uint32_t cid = 0, set = 0;
 	uint64_t sid = 0, lun = 0;
 	char *params = NULL, *driver = NULL;
@@ -253,12 +307,18 @@ int main(int argc, char **argv)
 	}
 
 	if (op < 0) {
-		fprintf(stderr, "You must specify the operation type\n");
+		eprintf("You must specify the operation type\n");
 		goto out;
 	}
 
 	if (!driver) {
-		fprintf(stderr, "You must specify the driver name\n");
+		eprintf("You must specify the driver name\n");
+		goto out;
+	}
+
+	typeid = driver_to_typeid(driver);
+	if (typeid < 0) {
+		eprintf("Invalid driver name %s\n", driver);
 		goto out;
 	}
 
@@ -274,7 +334,7 @@ int main(int argc, char **argv)
 	memset(rbuf, 0, sizeof(rbuf));
 
 	req = (struct tgtadm_req *) sbuf;
-	strncpy(req->driver, driver, sizeof(req->driver));
+	req->typeid = typeid;
 	req->op = op;
 	req->set = set;
 	req->tid = tid;
