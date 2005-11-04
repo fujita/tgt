@@ -60,7 +60,7 @@ int tgt_event_execute(struct tgtadm_req *req, int event, init_tgt_event_t *func)
 	func(ev, req);
 
 	err = nl_cmd_call(nl_fd, nlh->nlmsg_type, (char *) nlh,
-			  nlh->nlmsg_len, nlm_rev);
+			  nlh->nlmsg_len, nlm_rev, sizeof(nlm_rev));
 	if (err < 0)
 		eprintf("%d\n", err);
 	else

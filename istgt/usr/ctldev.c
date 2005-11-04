@@ -38,7 +38,7 @@ static int ipc_cmnd_execute(struct nlmsghdr *nlm_send, int len)
 	struct iet_msg *msg;
 
 	err = nl_cmd_call(nl_fd, nlm_send->nlmsg_type,
-			  (char *) nlm_send, len, rbuf);
+			  (char *) nlm_send, len, rbuf, sizeof(rbuf));
 
 	nlm_recv = (struct nlmsghdr *) rbuf;
 	ev = NLMSG_DATA(nlm_recv);

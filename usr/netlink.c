@@ -178,12 +178,12 @@ void nl_event_handle(int fd)
 	}
 }
 
-int nl_cmd_call(int fd, int type, char *data, int size, char *rbuf)
+int nl_cmd_call(int fd, int type, char *sbuf, int slen, char *rbuf, int rlen)
 {
 	int err;
 	struct nlmsghdr *nlh;
 
-	err = __nl_write(fd, type, data, size);
+	err = __nl_write(fd, type, sbuf, slen);
 	if (err < 0)
 		return err;
 
@@ -191,7 +191,12 @@ int nl_cmd_call(int fd, int type, char *data, int size, char *rbuf)
 
 	if (rbuf) {
 		nlh = (struct nlmsghdr *) recvbuf;
-		memcpy(rbuf, nlh, nlh->nlmsg_len);
+		if (rlen < nlh->nlmsg_len)
+			eprintf("Too small rbuf %d %d\n", rlen, nlh->nlmsg_len);
+		else
+			rlen = nlh->nlmsg_len;
+
+		memcpy(rbuf, nlh, rlen);
 	}
 
 	return err;
@@ -204,7 +209,7 @@ static int nl_start(int fd)
 	char nlmsg[NLMSG_SPACE(sizeof(struct tgt_event))];
 
 	err = nl_cmd_call(fd, TGT_UEVENT_START, nlmsg,
-			  NLMSG_SPACE(sizeof(struct tgt_event)), NULL);
+			  NLMSG_SPACE(sizeof(struct tgt_event)), NULL, 0);
 
 	ev = (struct tgt_event *) NLMSG_DATA(nlmsg);
 
