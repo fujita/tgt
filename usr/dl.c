@@ -84,35 +84,29 @@ int dl_init(void)
 			;
 		idx = atoi(p);
 		if (idx > MAX_DL_HANDLES) {
-			eprintf("Cannot load %s %d\n",
+			eprintf("Too large dl idx %s %d\n",
 				namelist[i]->d_name, idx);
 			continue;
 		}
-
-		p = dlname(namelist[i]->d_name, "name");
-		if (!p)
-			continue;
-
 		di = &dinfo[idx];
 
-		di->name = p;
-		snprintf(path, sizeof(path), "%s.so", p);
-		di->dl = dlopen(path, RTLD_LAZY);
-		if (!di->dl) {
-			eprintf("%s %s\n", path, dlerror());
+		di->name = dlname(namelist[i]->d_name, "name");
+		if (!di->name)
 			continue;
-		}
 
-		p = dlname(namelist[i]->d_name, "protocol");
-		if (!p)
-			continue;
-		di->proto = p;
-		snprintf(path, sizeof(path), "%s.so", p);
-		di->pdl = dlopen(path, RTLD_LAZY);
-		if (!di->pdl) {
+		snprintf(path, sizeof(path), "%s.so", di->name);
+		di->dl = dlopen(path, RTLD_LAZY);
+		if (!di->dl)
 			eprintf("%s %s\n", path, dlerror());
+
+		di->proto = dlname(namelist[i]->d_name, "protocol");
+		if (!di->proto)
 			continue;
-		}
+
+		snprintf(path, sizeof(path), "%s.so", di->proto);
+		di->pdl = dlopen(path, RTLD_LAZY);
+		if (!di->pdl)
+			eprintf("%s %s\n", path, dlerror());
 	}
 
 	for (i = 0; i < nr; i++)
