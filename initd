@@ -33,7 +33,7 @@ stop_server()
 	if [ $TARGET = "istgt" ] ; then
 		${PWD}/usr/tgtadm --driver istgt --op delete
 	else
-		${PWD}/usr/tgtadm --driver istgt --op delete
+		${PWD}/usr/tgtadm --driver ibmvstgt --op delete
 	fi
 
 	killall -9 tgtd
