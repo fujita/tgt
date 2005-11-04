@@ -21,18 +21,12 @@
 #include <linux/netlink.h>
 
 #include "iscsid.h"
+#include "tgtd.h"
 #include "tgt_if.h"
 #include "tgtadm.h"
 #include "tgt_sysfs.h"
 
-#ifndef O_LARGEFILE
-#define O_LARGEFILE	0100000
-#endif
-
 extern struct qelem targets_list;
-extern int nl_fd;
-extern int nl_cmd_call(int fd, int type, char *data, int size, char *rbuf);
-
 static int typeid;
 
 static int ipc_cmnd_execute(struct nlmsghdr *nlm_send, int len)
