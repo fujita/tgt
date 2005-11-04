@@ -172,21 +172,15 @@ extern void session_create(struct connection *conn);
 extern void session_remove(struct session *session);
 
 /* target.c */
-extern int target_add(int *tid, char *name);
-extern int target_del(int tid);
 extern int target_find_by_name(const char *name, int *tid);
 struct target * target_find_by_id(int tid);
 extern void target_list_build(struct connection *, char *, char *);
 
 /* ctldev.c */
 struct iscsi_kernel_interface {
-	int (*lunit_create) (int tid, uint64_t lun, char *args);
-	int (*lunit_destroy) (int tid, uint64_t lun);
 	int (*param_get) (int tid, uint64_t sid, struct iscsi_param *);
 	int (*param_set) (int tid, uint64_t sid, int type, uint32_t flags,
 			  struct iscsi_param *);
-	int (*target_create) (int *tid);
-	int (*target_destroy) (int tid);
 	int (*session_create) (int tid, uint64_t sid, uint32_t exp,
 			       uint32_t max);
 	int (*session_destroy) (int tid, uint64_t sid);

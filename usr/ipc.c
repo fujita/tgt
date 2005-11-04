@@ -102,21 +102,18 @@ void ipc_event_handle(int accept_fd)
 	dprintf("%d %d %d\n", req->typeid, err, nlh->nlmsg_len);
 
 	fn = dl_ipc_fn(req->typeid);
-	if (!fn) {
-		eprintf("Cannot handle event %d\n", req->typeid);
-		err = -EINVAL;
-		goto fail;
-	}
-	err = fn((char *) nlh, rbuf);
+	if (fn)
+		err = fn((char *) nlh, rbuf);
+	else
+		err = tgt_mgmt((char *) nlh, rbuf);
 
 send:
 	err = write(fd, nlh, nlh->nlmsg_len);
+	if (err < 0)
+		eprintf("%d\n", err);
 
 	if (fd > 0)
 		close(fd);
-
-	if (err < 0)
-		eprintf("%d\n", err);
 
 	return;
 fail:

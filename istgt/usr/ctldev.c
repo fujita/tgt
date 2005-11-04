@@ -23,13 +23,17 @@
 #include "iscsid.h"
 #include "tgt_if.h"
 #include "tgtadm.h"
+#include "tgt_sysfs.h"
 
 #ifndef O_LARGEFILE
 #define O_LARGEFILE	0100000
 #endif
 
+extern struct qelem targets_list;
 extern int nl_fd;
 extern int nl_cmd_call(int fd, int type, char *data, int size, char *rbuf);
+
+static int typeid;
 
 static int ipc_cmnd_execute(struct nlmsghdr *nlm_send, int len)
 {
@@ -348,186 +352,77 @@ static int iscsi_conn_create(int tid, uint64_t sid, uint32_t cid,
 	return err;
 }
 
-static int iscsi_target_create(int *tid)
+static int istgt_ktarget_destroy(int tid)
 {
 	int err;
-	char nlm_ev[8912];
-	struct tgt_event *ev;
-	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
+	struct target* target;
 
-	memset(nlm_ev, 0, sizeof(nlm_ev));
-	nlmsg_init(nlh, getpid(), 0, TGT_UEVENT_TARGET_CREATE,
-		   NLMSG_SPACE(sizeof(*ev)), 0);
+	if (!(target = target_find_by_id(tid)))
+		return -ENOENT;
 
-	ev = NLMSG_DATA(nlh);
-	sprintf(ev->u.c_target.type, "%s", THIS_NAME);
-	ev->u.c_target.nr_cmds = DEFAULT_NR_QUEUED_CMNDS;
+	if (target->nr_sessions)
+		return -EBUSY;
 
-	err = ipc_cmnd_execute(nlh, nlh->nlmsg_len);
-	if (err > 0) {
-		*tid = err;
-		err = 0;
+	if (!list_empty(&target->sessions_list)) {
+		eprintf("bug still have sessions %d\n", tid);
+		exit(-1);
 	}
 
-	return err;
+	err = ktarget_destroy(tid);
+	if (err < 0)
+		return err;
+
+	remque(&target->tlist);
+
+	free(target);
+
+	return 0;
 }
 
-static int iscsi_target_destroy(int tid)
+static int istgt_ktarget_create(int typeid, char *name)
 {
+	struct target *target;
 	int err;
-	char nlm_ev[8912];
-	struct tgt_event *ev;
-	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
 
-	memset(nlm_ev, 0, sizeof(nlm_ev));
-	nlmsg_init(nlh, getpid(), 0, TGT_UEVENT_TARGET_DESTROY,
-		   NLMSG_SPACE(sizeof(*ev)), 0);
-
-	ev = NLMSG_DATA(nlh);
-	ev->u.d_target.tid = tid;
-
-	err = ipc_cmnd_execute(nlh, nlh->nlmsg_len);
-
-	return err;
-}
-
-static int iscsi_lunit_create(int tid, uint64_t lun, char *args)
-{
-	int err, fd;
-	char *p, *q, *type = NULL, *path = NULL;
-	char dtype[] = "tgt_vsd";
-	struct tgt_event *ev;
-	struct nlmsghdr *nlh;
-
-	dprintf("%s\n", args);
-
-	if (isspace(*args))
-		args++;
-	if ((p = strchr(args, '\n')))
-		*p = '\0';
-
-	while ((p = strsep(&args, ","))) {
-		if (!p)
-			continue;
-
-		if (!(q = strchr(p, '=')))
-			continue;
-		*q++ = '\0';
-
-		if (!strcmp(p, "Path"))
-			path = q;
-		else if (!strcmp(p, "Type"))
-			type = q;
-	}
-
-	if (!type)
-		type = dtype;
-	if (!path) {
-		eprintf("%d %" PRIu64 "\n", tid, lun);
+	if (!name)
 		return -EINVAL;
-	}
 
-	dprintf("%s %s %Zd\n", type, path, strlen(path));
+	if (!(target = malloc(sizeof(*target))))
+		return -ENOMEM;
 
-	fd = open(path, O_RDWR | O_LARGEFILE);
-	if (fd < 0) {
-		eprintf("Could not open %s errno %d\n", path, errno);
-		return errno;
-	}
+	memset(target, 0, sizeof(*target));
+	memcpy(target->name, name, sizeof(target->name) - 1);
 
-	nlh = calloc(1, NLMSG_SPACE(sizeof(*ev)));
-	if (!nlh) {
-		err = -ENOMEM;
-		goto close_fd;
-	}
-	nlmsg_init(nlh, getpid(), 0, TGT_UEVENT_DEVICE_CREATE,
-		   NLMSG_SPACE(sizeof(*ev)), 0);
-
-	ev = NLMSG_DATA(nlh);
-	ev->u.c_device.tid = tid;
-	ev->u.c_device.dev_id = lun;
-	ev->u.c_device.fd = fd;
-	strncpy(ev->u.c_device.type, type, sizeof(ev->u.c_device.type));
-
-	err = ipc_cmnd_execute(nlh, nlh->nlmsg_len);
-close_fd:
-	if (err) {
-		close(fd);
-		free(nlh);
-	}
-	return err;
-}
-
-static int iscsi_lunit_destroy(int tid, uint64_t lun)
-{
-	int err, fd;
-	char nlm_ev[8912];
-	struct tgt_event *ev;
-	struct nlmsghdr *nlh = (struct nlmsghdr *) nlm_ev;
-	char path[PATH_MAX], buf[PATH_MAX];
-
-	dprintf("%d %" PRIu64 "\n",tid, lun);
-
-	memset(nlm_ev, 0, sizeof(nlm_ev));
-	nlmsg_init(nlh, getpid(), 0, TGT_UEVENT_DEVICE_DESTROY,
-		   NLMSG_SPACE(sizeof(*ev)), 0);
-
-	ev = NLMSG_DATA(nlh);
-	ev->u.d_device.tid = tid;
-	ev->u.d_device.dev_id = lun;
-
-	sprintf(path, "/sys/class/tgt_device/device%d:%" PRIu64 "/fd",
-		tid, lun);
-	fd = open(path, O_RDONLY);
-	if (fd < 0) {
-		perror("iscsi_lunit_destroy could not open fd file");
-		return errno;
-	}
-
-	err = read(fd, buf, sizeof(buf));
-	close(fd);
+	err = ktarget_create(typeid);
 	if (err < 0) {
-		perror("iscsi_lunit_destroy could not read fd file");
-		return errno;
+		eprintf("can't create a target %d\n", err);
+		goto out;
 	}
-	sscanf(buf, "%d\n", &fd);
 
-	err = ipc_cmnd_execute(nlh, nlh->nlmsg_len);
-	close(fd);
+	INIT_LIST_HEAD(&target->tlist);
+	INIT_LIST_HEAD(&target->sessions_list);
+	target->tid = err;
+	insque(&target->tlist, &targets_list);
+
+	return err;
+out:
+	free(target);
 	return err;
 }
 
-static int target_mgmt(struct tgtadm_req *req, char *params, char *rbuf, int *rlen)
+static int istgt_target_mgmt(struct tgtadm_req *req, char *params, char *rbuf, int *rlen)
 {
 	int err = -EINVAL, tid = req->tid;
 
 	switch (req->op) {
 	case OP_NEW:
-		err = target_add(&tid, params);
+		err = istgt_ktarget_create(typeid, params);
 		break;
 	case OP_DELETE:
-		err = target_del(tid);
+		err = istgt_ktarget_destroy(tid);
 		break;
 	case OP_UPDATE:
 		err = trgt_mgmt_params(tid, req->sid, params);
-		break;
-	default:
-		break;
-	}
-
-	return err;
-}
-
-static int device_mgmt(struct tgtadm_req *req, char *params, char *rbuf, int *rlen)
-{
-	int err = -EINVAL;
-
-	switch (req->op) {
-	case OP_NEW:
-		err = iscsi_lunit_create(req->tid, req->lun, params);
-		break;
-	case OP_DELETE:
-		err = iscsi_lunit_destroy(req->tid, req->lun);
 		break;
 	default:
 		break;
@@ -551,125 +446,6 @@ static int session_mgmt(struct tgtadm_req *req, char *params, char *rbuf, int *r
 	return 0;
 }
 
-static int filter(const struct dirent *dir)
-{
-	return strcmp(dir->d_name, ".") && strcmp(dir->d_name, "..");
-}
-
-static void all_devices_destroy(int tid)
-{
-	struct dirent **namelist;
-	char *p;
-	int i, nr;
-	uint32_t lun;
-
-	nr = scandir("/sys/class/tgt_device", &namelist, filter, alphasort);
-	if (!nr)
-		return;
-
-	for (i = 0; i < nr; i++) {
-		for (p = namelist[i]->d_name; !isdigit((int) *p); p++)
-			;
-		eprintf("%d\n", atoi(p));
-		if (tid != atoi(p))
-			continue;
-		p = strchr(p, ':');
-		if (!p)
-			continue;
-		lun = strtoul(++p, NULL, 10);
-		iscsi_lunit_destroy(tid, lun);
-	}
-
-	for (i = 0; i < nr; i++)
-		free(namelist[i]);
-	free(namelist);
-}
-
-static int get_typeid(void)
-{
-	int err = -EINVAL, i, nr, fd, typeid = -EINVAL;
-	struct dirent **namelist;
-	char path[PATH_MAX], buf[PATH_MAX], *p;
-
-	nr = scandir("/sys/class/tgt_type", &namelist, filter, alphasort);
-	if (!nr)
-		return -ENOENT;
-
-	for (i = 0; i < nr; i++) {
-		memset(path, 0, sizeof(path));
-		strncpy(path, "/sys/class/tgt_type/", sizeof(path));
-		strncat(&path[strlen(path)], namelist[i]->d_name, sizeof(path));
-		strncat(&path[strlen(path)], "/name", sizeof(path));
-		eprintf("%s\n", path);
-		fd = open(path, O_RDONLY);
-		if (fd < 0)
-			continue;
-		err = read(fd, buf, sizeof(buf));
-		close(fd);
-		if (err < 0)
-			continue;
-		eprintf("%s\n", buf);
-		if (!strncmp(buf, THIS_NAME, strlen(THIS_NAME))) {
-			for (p = namelist[i]->d_name; !isdigit((int) *p); p++)
-				;
-			typeid = atoi(p);
-		}
-	}
-
-	for (i = 0; i < nr; i++)
-		free(namelist[i]);
-	free(namelist);
-
-	return typeid;
-}
-
-static int system_mgmt(struct tgtadm_req *req, char *params, char *rbuf, int *rlen)
-{
-	int err = -EINVAL, i, nr, fd, typeid;
-	struct dirent **namelist;
-	char path[PATH_MAX], buf[PATH_MAX], *p;
-
-	if (req->op != OP_DELETE)
-		return err;
-
-	typeid = get_typeid();
-
-	nr = scandir("/sys/class/tgt_target", &namelist, filter, alphasort);
-	if (!nr)
-		return -ENOENT;
-
-	for (i = 0; i < nr; i++) {
-		memset(path, 0, sizeof(path));
-		strncpy(path, "/sys/class/tgt_target/", sizeof(path));
-		strncat(&path[strlen(path)], namelist[i]->d_name, sizeof(path));
-		strncat(&path[strlen(path)], "/typeid", sizeof(path));
-		eprintf("%s\n", path);
-		fd = open(path, O_RDONLY);
-		if (fd < 0)
-			continue;
-		err = read(fd, buf, sizeof(buf));
-		close(fd);
-		if (err < 0)
-			continue;
-		eprintf("%s\n", buf);
-		if (typeid == atoi(buf)) {
-			int tid;
-
-			for (p = namelist[i]->d_name; !isdigit((int) *p); p++)
-				;
-			tid = atoi(p);
-			all_devices_destroy(tid);
-			target_del(tid);
-		}
-	}
-
-	for (i = 0; i < nr; i++)
-		free(namelist[i]);
-	free(namelist);
-
-	return 0;
-}
-
 int ipc_mgmt(char *sbuf, char *rbuf)
 {
 	struct nlmsghdr *nlh = (struct nlmsghdr *) sbuf;
@@ -681,21 +457,30 @@ int ipc_mgmt(char *sbuf, char *rbuf)
 	req = NLMSG_DATA(nlh);
 	params = (char *) req + sizeof(*req);
 
-	eprintf("%d %d %d %d %" PRIx64 " %" PRIx64 " %s\n", nlh->nlmsg_len,
-		req->set, req->op, req->tid, req->sid, req->lun, params);
+	eprintf("%d %d %d %d %d %" PRIx64 " %" PRIx64 " %s\n", nlh->nlmsg_len,
+		req->typeid, req->mode, req->op, req->tid, req->sid, req->lun, params);
 
-	if (req->set & SET_USER)
-		err = user_mgmt(req, params, rbuf, &rlen);
-	else if (req->set & SET_DEVICE)
-		err = device_mgmt(req, params, rbuf, &rlen);
-	else if (req->set & SET_CONNECTION)
-		err = conn_mgmt(req, params, rbuf, &rlen);
-	else if (req->set & SET_SESSION)
+	switch (req->mode) {
+	case MODE_DEVICE:
+	case MODE_SYSTEM:
+		err = tgt_mgmt(sbuf, rbuf);
+		break;
+	case MODE_TARGET:
+		err = istgt_target_mgmt(req, params, rbuf, &rlen);
+		break;
+	case MODE_SESSION:
 		err = session_mgmt(req, params, rbuf, &rlen);
-	else if (req->set & SET_TARGET)
-		err = target_mgmt(req, params, rbuf, &rlen);
-	else if (!req->set)
-		err = system_mgmt(req, params, rbuf, &rlen);
+		break;
+	case MODE_CONNECTION:
+		err = conn_mgmt(req, params, rbuf, &rlen);
+		break;
+	case MODE_USER:
+		err = user_mgmt(req, params, rbuf, &rlen);
+		break;
+	default:
+		eprintf("Unknown mode %d\n", req->mode);
+		break;
+	}
 
 	nlh = (struct nlmsghdr *) rbuf;
 	nlh->nlmsg_len = NLMSG_LENGTH(rlen);
@@ -728,6 +513,61 @@ static char *target_sep_string(char **pp)
 	return p;
 }
 
+static int filter(const struct dirent *dir)
+{
+	return strcmp(dir->d_name, ".") && strcmp(dir->d_name, "..");
+}
+
+static int driver_to_typeid(char *name)
+{
+	int i, nr, err, fd, id = -ENOENT;
+	char *p, path[PATH_MAX], buf[PATH_MAX];
+	struct dirent **namelist;
+
+	nr = scandir(TGT_TYPE_SYSFSDIR, &namelist, filter, alphasort);
+	for (i = 0; i < nr; i++) {
+		snprintf(path, sizeof(path), TGT_TYPE_SYSFSDIR "/%s/name",
+			 namelist[i]->d_name);
+
+		fd = open(path, O_RDONLY);
+		if (fd < 0) {
+			eprintf("%s %d\n", path, errno);
+			continue;
+		}
+
+		err = read(fd, buf, sizeof(buf));
+		close(fd);
+		if (err < 0) {
+			eprintf("%s %d\n", path, err);
+			continue;
+		}
+
+		if (strncmp(name, buf, strlen(name)))
+			continue;
+
+		for (p = namelist[i]->d_name; !isdigit((int) *p); p++)
+			;
+		id = atoi(p);
+		break;
+	}
+
+	for (i = 0; i < nr; i++)
+		free(namelist[i]);
+	free(namelist);
+
+	return id;
+}
+
+void initial_device_create(int tid, int64_t lun, char *params)
+{
+	char *path, *devtype;
+	char d[] = "tgt_vsd";
+
+	path = devtype = NULL;
+	kdevice_create_parser(params, &path, &devtype);
+	kdevice_create(tid, lun, path, devtype ? : d);
+}
+
 void initial_config_load(void)
 {
 	FILE *config;
@@ -736,7 +576,9 @@ void initial_config_load(void)
 	int idx, tid;
 	uint32_t val;
 
-	eprintf("%s\n", "load config");
+	typeid = driver_to_typeid(THIS_NAME);
+
+	dprintf("%d\n", typeid);
 
 	if (!(config = fopen(CONFIG_FILE, "r")))
 		return;
@@ -751,17 +593,15 @@ void initial_config_load(void)
 			tid = 0;
 			if (!(p = target_sep_string(&q)))
 				continue;
-			eprintf("creaing target %s\n", p);
-			if (target_add(&tid, p) < 0)
-				tid = -1;
+			dprintf("creaing target %s\n", p);
+			tid = istgt_ktarget_create(typeid, p);
 		} else if (!strcasecmp(p, "Alias") && tid >= 0) {
 			;
 		} else if (!strcasecmp(p, "MaxSessions") && tid >= 0) {
 			/* target->max_sessions = strtol(q, &q, 0); */
 		} else if (!strcasecmp(p, "Lun") && tid >= 0) {
 			uint64_t lun = strtoull(q, &q, 10);
-			eprintf("creaing lun %d %" PRIu64 " %s\n", tid, lun, p);
-			iscsi_lunit_create(tid, lun, q);
+			initial_device_create(tid, lun, q);
 		} else if (!((idx = param_index_by_name(p, target_keys)) < 0) && tid >= 0) {
 			val = strtol(q, &q, 0);
 			if (param_check_val(target_keys, idx, &val) < 0)
@@ -783,12 +623,8 @@ void initial_config_load(void)
 }
 
 struct iscsi_kernel_interface ioctl_ki = {
-	.lunit_create = iscsi_lunit_create,
-	.lunit_destroy = iscsi_lunit_destroy,
 	.param_get = iscsi_param_get,
 	.param_set = iscsi_param_set,
-	.target_create = iscsi_target_create,
-	.target_destroy = iscsi_target_destroy,
 	.session_create = iscsi_session_create,
 	.session_destroy = iscsi_session_destroy,
 	.conn_create = iscsi_conn_create,

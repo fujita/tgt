@@ -34,6 +34,11 @@ struct driver_info {
 
 static struct driver_info dinfo[MAX_DL_HANDLES];
 
+char *typeid_to_name(int typeid)
+{
+	return dinfo[typeid].name;
+}
+
 static char *dlname(char *d_name, char *entry)
 {
 	int fd, err;

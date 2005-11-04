@@ -32,8 +32,8 @@
 #include "tgtadm.h"
 #include "tgt_sysfs.h"
 
-#define eprintf(fmt, args...)					\
-do {								\
+#define eprintf(fmt, args...)						\
+do {									\
 	fprintf(stderr, "%s(%d) " fmt, __FUNCTION__, __LINE__, ##args);	\
 } while (0)
 
@@ -264,6 +264,24 @@ out:
 	return err;
 }
 
+static int set_to_mode(uint32_t set)
+{
+	int mode = MODE_SYSTEM;
+
+	if (set & (1 << MODE_USER))
+		mode = MODE_USER;
+	else if (set & (1 << MODE_DEVICE))
+		mode = MODE_DEVICE;
+	else if (set & (1 << MODE_CONNECTION))
+		mode = MODE_CONNECTION;
+	else if (set & (1 << MODE_SESSION))
+		mode = MODE_SESSION;
+	else if (set & (1 << MODE_TARGET))
+		mode = MODE_TARGET;
+
+	return mode;
+}
+
 static int str_to_op(char *str)
 {
 	int op;
@@ -308,25 +326,25 @@ int main(int argc, char **argv)
 			break;
 		case 't':
 			tid = strtol(optarg, NULL, 10);
-			set |= SET_TARGET;
+			set |= (1 << MODE_TARGET);
 			break;
 		case 's':
 			sid = strtoull(optarg, NULL, 10);
-			set |= SET_SESSION;
+			set |= (1 << MODE_SESSION);
 			break;
 		case 'c':
 			cid = strtoul(optarg, NULL, 10);
-			set |= SET_CONNECTION;
+			set |= (1 << MODE_CONNECTION);
 			break;
 		case 'l':
 			lun = strtoull(optarg, NULL, 10);
-			set |= SET_DEVICE;
+			set |= (1 << MODE_DEVICE);
 			break;
 		case 'p':
 			params = optarg;
 			break;
 		case 'u':
-			set |= SET_USER;
+			set |= (1 << MODE_USER);
 			break;
 		case 'v':
 			printf("%s\n", program_name);
@@ -357,8 +375,8 @@ int main(int argc, char **argv)
 
 	req = (struct tgtadm_req *) sbuf;
 	req->typeid = typeid;
+	req->mode = set_to_mode(set);
 	req->op = op;
-	req->set = set;
 	req->tid = tid;
 	req->sid = sid;
 	req->lun = lun;

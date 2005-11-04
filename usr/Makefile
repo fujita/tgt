@@ -3,7 +3,7 @@ PROGRAMS = tgtd tgtadm scsi.so
 
 all: $(PROGRAMS)
 
-tgtd: tgtd.o netlink.o ipc.o dl.o log.o
+tgtd: tgtd.o netlink.o ipc.o dl.o mgmt.o log.o
 	$(CC) -rdynamic -ldl $^ -o $@
 
 tgtadm: tgtadm.o

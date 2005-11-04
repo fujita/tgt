@@ -15,7 +15,7 @@
 #include "iscsid.h"
 #include "tgtadm.h"
 
-static struct qelem targets_list = LIST_HEAD_INIT(targets_list);
+struct qelem targets_list = LIST_HEAD_INIT(targets_list);
 
 void target_list_build(struct connection *conn, char *addr, char *name)
 {
@@ -56,60 +56,4 @@ struct target* target_find_by_id(int tid)
 	}
 
 	return NULL;
-}
-
-int target_del(int tid)
-{
-	int err;
-	struct target* target;
-
-	if (!(target = target_find_by_id(tid)))
-		return -ENOENT;
-
-	if (target->nr_sessions)
-		return -EBUSY;
-
-	if ((err = ki->target_destroy(tid)) < 0)
-		return err;
-
-	remque(&target->tlist);
-
-	if (!list_empty(&target->sessions_list)) {
-		fprintf(stderr, "%s still have sessions %d\n", __FUNCTION__, tid);
-		exit(-1);
-	}
-
-	free(target);
-
-	return 0;
-}
-
-int target_add(int *tid, char *name)
-{
-	struct target *target;
-	int err;
-
-	if (!name)
-		return -EINVAL;
-
-	if (!(target = malloc(sizeof(*target))))
-		return -ENOMEM;
-
-	memset(target, 0, sizeof(*target));
-	memcpy(target->name, name, sizeof(target->name) - 1);
-
-	if ((err = ki->target_create(tid)) < 0) {
-		log_warning("can't create a target %d %u\n", err, *tid);
-		goto out;
-	}
-
-	INIT_LIST_HEAD(&target->tlist);
-	INIT_LIST_HEAD(&target->sessions_list);
-	target->tid = *tid;
-	insque(&target->tlist, &targets_list);
-
-	return 0;
-out:
-	free(target);
-	return err;
 }
