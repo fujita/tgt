@@ -7,6 +7,10 @@ PATH=/sbin:/bin:/usr/sbin:/usr/bin
 MEM_SIZE=1048576
 export LD_LIBRARY_PATH=${PWD}/usr:${PWD}/istgt/usr:${LD_LIBRARY_PATH}
 
+if [ -f ${PWD}/istgt/kernel/istgt.ko ] ; then
+	TARGET=istgt
+fi
+
 start_server()
 {
 	insmod ${PWD}/kernel/tgt_core.ko
@@ -14,18 +18,31 @@ start_server()
 	insmod ${PWD}/kernel/tgt_vsd.ko
 #	insmod ${PWD}/kernel/tgt_sd.ko
 
-	modprobe -q crc32c
-	insmod ${PWD}/istgt/kernel/istgt.ko
+	if [ $TARGET = "istgt" ] ; then
+		modprobe -q crc32c
+		insmod ${PWD}/istgt/kernel/istgt.ko
+	else
+		insmod ${PWD}/ibmvstgt/kernel/ibmvstgt.ko
+	fi
 
 	${PWD}/usr/tgtd
 }
 	
 stop_server()
 {
-	${PWD}/usr/tgtadm --driver istgt --op delete
+	if [ $TARGET = "istgt" ] ; then
+		${PWD}/usr/tgtadm --driver istgt --op delete
+	else
+		${PWD}/usr/tgtadm --driver istgt --op delete
+	fi
+
 	killall -9 tgtd
 
-	rmmod istgt
+	if [ $TARGET = "istgt" ] ; then
+		rmmod istgt
+	else
+		rmmod ibmvstgt
+	fi
 
 #	rmmod tgt_sd
 	rmmod tgt_vsd
