@@ -96,7 +96,7 @@ static struct iscsi_cmnd *iscsi_cmnd_create_rsp_cmnd(struct iscsi_cmnd *cmnd, in
 	struct iscsi_cmnd *rsp = cmnd_alloc(cmnd->conn, 0);
 
 	if (final)
-		set_cmnd_final(rsp);
+		set_cmd_final(rsp);
 	list_add_tail(&rsp->pdu_list, &cmnd->pdu_list);
 	rsp->req = cmnd;
 	return rsp;
@@ -522,7 +522,7 @@ static int cmnd_insert_hash(struct iscsi_cmnd *cmnd)
 	tmp = __cmnd_find_hash(session, itt, ISCSI_RESERVED_TAG);
 	if (!tmp) {
 		list_add_tail(&cmnd->hash_list, head);
-		set_cmnd_hashed(cmnd);
+		set_cmd_hashed(cmnd);
 	} else
 		err = -TASK_IN_PROGRESS;
 
@@ -820,7 +820,7 @@ static void scsi_cmnd_exec(struct iscsi_cmnd *cmnd)
 		if (!cmnd->is_unsolicited_data)
 			send_r2t(cmnd);
 	} else {
-		set_cmnd_waitio(cmnd);
+		set_cmd_waitio(cmnd);
 		if (cmnd->tc)
 			cmd->done(cmd);
 		else
@@ -1063,7 +1063,7 @@ static void data_out_end(struct iscsi_conn *conn, struct iscsi_cmnd *cmnd)
 	if (req->ttt == cpu_to_be32(ISCSI_RESERVED_TAG)) {
 		if (req->flags & ISCSI_FLAG_CMD_FINAL) {
 			scsi_cmnd->is_unsolicited_data = 0;
-			if (!cmnd_pending(scsi_cmnd))
+			if (!cmd_pending(scsi_cmnd))
 				scsi_cmnd_exec(scsi_cmnd);
 		}
 	} else {
@@ -1261,7 +1261,7 @@ static void logout_exec(struct iscsi_cmnd *req)
 	rsp_hdr->opcode = ISCSI_OP_LOGOUT_RSP;
 	rsp_hdr->flags = ISCSI_FLAG_CMD_FINAL;
 	rsp_hdr->itt = req_hdr->itt;
-	set_cmnd_close(rsp);
+	set_cmd_close(rsp);
 	iscsi_cmnd_init_write(rsp);
 }
 
@@ -1341,7 +1341,7 @@ void cmnd_release(struct iscsi_cmnd *cmnd, int force)
 		return;
 
 	req = cmnd->req;
-	is_last = cmnd_final(cmnd);
+	is_last = cmd_final(cmnd);
 
 	if (force) {
 		while (!list_empty(&cmnd->pdu_list)) {
@@ -1353,7 +1353,7 @@ void cmnd_release(struct iscsi_cmnd *cmnd, int force)
 		list_del_init(&cmnd->list);
 	}
 
-	if (cmnd_hashed(cmnd))
+	if (cmd_hashed(cmnd))
 		cmnd_remove_hash(cmnd);
 
 	list_del_init(&cmnd->pdu_list);
@@ -1458,7 +1458,7 @@ void cmnd_tx_end(struct iscsi_cmnd *cmnd)
 		break;
 	}
 
-	if (cmnd_close(cmnd))
+	if (cmd_close(cmnd))
 		conn_close(conn);
 
 	list_del_init(&cmnd->list);
@@ -1503,13 +1503,13 @@ static void iscsi_session_push_cmnd(struct iscsi_cmnd *cmnd)
 /* 			eprintk("find out-of-order %x %u %u\n", */
 /* 				cmd_itt(cmnd), cmd_sn, cmnd->pdu.bhs.statsn); */
 			list_del_init(&cmnd->list);
-			clear_cmnd_pending(cmnd);
+			clear_cmd_pending(cmnd);
 		}
 	} else {
 /* 		eprintk("out-of-order %x %u %u\n", */
 /* 			cmd_itt(cmnd), cmd_sn, session->exp_cmd_sn); */
 
-		set_cmnd_pending(cmnd);
+		set_cmd_pending(cmnd);
 		if (before(cmd_sn, session->exp_cmd_sn)) /* close the conn */
 			eprintk("unexpected cmd_sn (%u,%u)\n", cmd_sn, session->exp_cmd_sn);
 

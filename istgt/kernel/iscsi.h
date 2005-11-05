@@ -253,30 +253,30 @@ static inline void iscsi_cmnd_set_length(struct iscsi_pdu *pdu)
 
 #define	SECTOR_SIZE_BITS	9
 
-enum cmnd_flags {
-	CMND_hashed,
-	CMND_final,
-	CMND_waitio,
-	CMND_close,
-	CMND_lunit,
-	CMND_pending,
+enum istgt_cmd_flags {
+	CMD_hashed,
+	CMD_final,
+	CMD_waitio,
+	CMD_close,
+	CMD_lunit,
+	CMD_pending,
 };
 
-#define set_cmnd_hashed(cmnd)	set_bit(CMND_hashed, &(cmnd)->flags)
-#define cmnd_hashed(cmnd)	test_bit(CMND_hashed, &(cmnd)->flags)
+#define set_cmd_hashed(cmd)	set_bit(CMD_hashed, &(cmd)->flags)
+#define cmd_hashed(cmd)	test_bit(CMD_hashed, &(cmd)->flags)
 
-#define set_cmnd_final(cmnd)	set_bit(CMND_final, &(cmnd)->flags)
-#define cmnd_final(cmnd)	test_bit(CMND_final, &(cmnd)->flags)
+#define set_cmd_final(cmd)	set_bit(CMD_final, &(cmd)->flags)
+#define cmd_final(cmd)	test_bit(CMD_final, &(cmd)->flags)
 
-#define set_cmnd_waitio(cmnd)	set_bit(CMND_waitio, &(cmnd)->flags)
-#define cmnd_waitio(cmnd)	test_bit(CMND_waitio, &(cmnd)->flags)
+#define set_cmd_waitio(cmd)	set_bit(CMD_waitio, &(cmd)->flags)
+#define cmd_waitio(cmd)	test_bit(CMD_waitio, &(cmd)->flags)
 
-#define set_cmnd_close(cmnd)	set_bit(CMND_close, &(cmnd)->flags)
-#define cmnd_close(cmnd)	test_bit(CMND_close, &(cmnd)->flags)
+#define set_cmd_close(cmd)	set_bit(CMD_close, &(cmd)->flags)
+#define cmd_close(cmd)	test_bit(CMD_close, &(cmd)->flags)
 
-#define set_cmnd_pending(cmnd)	set_bit(CMND_pending, &(cmnd)->flags)
-#define clear_cmnd_pending(cmnd)	clear_bit(CMND_pending, &(cmnd)->flags)
-#define cmnd_pending(cmnd)	test_bit(CMND_pending, &(cmnd)->flags)
+#define set_cmd_pending(cmd)	set_bit(CMD_pending, &(cmd)->flags)
+#define clear_cmd_pending(cmd)	clear_bit(CMD_pending, &(cmd)->flags)
+#define cmd_pending(cmd)	test_bit(CMD_pending, &(cmd)->flags)
 
 /* We still use 'IET' id. Maybe someday, we get own id. */
 
