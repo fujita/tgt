@@ -231,7 +231,7 @@ static struct istgt_cmd *create_scsi_rsp(struct istgt_cmd *req)
 	return rsp;
 }
 
-void send_scsi_rsp(struct istgt_cmd *req)
+static void send_scsi_rsp(struct istgt_cmd *req)
 {
 	struct istgt_cmd *rsp;
 	struct iscsi_cmd_rsp *rsp_hdr;

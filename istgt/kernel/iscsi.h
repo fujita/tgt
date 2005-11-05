@@ -198,7 +198,6 @@ extern void cmnd_rx_end(struct istgt_cmd *);
 extern void cmnd_tx_start(struct istgt_cmd *);
 extern void cmnd_tx_end(struct istgt_cmd *);
 extern void cmnd_release(struct istgt_cmd *, int);
-extern void send_scsi_rsp(struct istgt_cmd *);
 
 /* conn.c */
 extern int conn_add(struct iscsi_session *, struct conn_info *);
