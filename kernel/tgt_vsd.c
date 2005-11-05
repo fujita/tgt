@@ -107,7 +107,7 @@ static struct iovec* sg_to_iovec(struct scatterlist *sg, int sg_count)
 /*
  * TODO this will move to a io_handler callout
  */
-static int vsd_queue_file_io(struct tgt_cmd *cmd, int op)
+static int vsd_execute_file_io(struct tgt_cmd *cmd, int op)
 {
 	struct file *file = cmd->device->file;
 	ssize_t ret;
@@ -136,7 +136,7 @@ static int vsd_queue_file_io(struct tgt_cmd *cmd, int op)
 	return 0;
 }
 
-static int tgt_vsd_queue(struct tgt_cmd *cmd)
+static int tgt_vsd_execute(struct tgt_cmd *cmd)
 {
 	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
 	int err, rw;
@@ -168,7 +168,7 @@ static int tgt_vsd_queue(struct tgt_cmd *cmd)
 	 * TODO this will become device->io_handler->queue_cmd
 	 * when we seperate the io_handlers
 	 */
-	err = vsd_queue_file_io(cmd, rw);
+	err = vsd_execute_file_io(cmd, rw);
 	if (!err) {
 		cmd->result = SAM_STAT_GOOD;
 		return TGT_CMD_COMPLETED;
@@ -187,7 +187,7 @@ static struct tgt_device_template tgt_vsd = {
 	.name = "tgt_vsd",
 	.module = THIS_MODULE,
 	.create = tgt_vsd_create,
-	.queue_cmd = tgt_vsd_queue,
+	.execute_cmd = tgt_vsd_execute,
 	.prep_cmd = tgt_vsd_prep,
 	.complete_uspace_cmd = tgt_vsd_uspace_complete,
 };

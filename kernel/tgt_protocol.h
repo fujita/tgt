@@ -42,8 +42,8 @@ struct tgt_protocol {
 				       uint8_t *dev_id_buff, int id_buff_size,
 				       int flags);
 
-	int (* queue_cmd) (struct tgt_cmd *cmd);
-	void (* dequeue_cmd) (struct tgt_cmd *cmd);
+	int (* execute_cmd) (struct tgt_cmd *cmd);
+	void (* complete_cmd) (struct tgt_cmd *cmd);
 	/*
 	 * Build userspace packet
 	 */

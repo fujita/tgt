@@ -192,7 +192,7 @@ static int req_map_sg(request_queue_t *q, struct request *rq,
 /*
  * TODO part of this will move to a io_handler callout
  */
-static int tgt_sd_queue_rq(struct tgt_cmd *cmd)
+static int tgt_sd_execute_rq(struct tgt_cmd *cmd)
 {
 	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
 	struct file *file = cmd->device->file;
@@ -226,7 +226,7 @@ static int tgt_sd_queue_rq(struct tgt_cmd *cmd)
 	return -ENOMEM;
 }
 
-static int tgt_sd_queue(struct tgt_cmd *cmd)
+static int tgt_sd_execute(struct tgt_cmd *cmd)
 {
 	struct tgt_device *device = cmd->device;
 	loff_t pos = cmd->offset;
@@ -239,14 +239,14 @@ static int tgt_sd_queue(struct tgt_cmd *cmd)
 	 * TODO this will become device->io_handler->queue_cmd
 	 * when we seperate the io_handlers
 	 */
-	return tgt_sd_queue_rq(cmd) ? TGT_CMD_FAILED : TGT_CMD_KERN_QUEUED;
+	return tgt_sd_execute_rq(cmd) ? TGT_CMD_FAILED : TGT_CMD_KERN_QUEUED;
 }
 
 static struct tgt_device_template tgt_sd = {
 	.name = "tgt_sd",
 	.module = THIS_MODULE,
 	.create = tgt_sd_create,
-	.queue_cmd = tgt_sd_queue,
+	.execute_cmd = tgt_sd_execute,
 	.prep_cmd = tgt_sd_prep,
 };
 

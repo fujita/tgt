@@ -40,7 +40,7 @@ struct tgt_device_template {
 	 * If returning TGT_CMD_COMPLETED or TGT_CMD_FAILED the result
 	 * field must be set.
 	 */
-	int (* queue_cmd)(struct tgt_cmd *cmd);
+	int (* execute_cmd)(struct tgt_cmd *cmd);
 	/*
 	 * complete a userspace command
 	 */

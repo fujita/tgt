@@ -200,10 +200,10 @@ static int scsi_tgt_task_state(struct tgt_cmd *cmd, int queue, int *more)
 static void device_queue_cmd(void *data)
 {
 	struct tgt_cmd *cmd = data;
-	cmd->device->dt->queue_cmd(cmd);
+	cmd->device->dt->execute_cmd(cmd);
 }
 
-static void scsi_tgt_dequeue_pending_cmd(struct tgt_device *device)
+static void scsi_tgt_execute_pending_cmds(struct tgt_device *device)
 {
 	struct scsi_tgt_device *stdev = device->pt_data;
 	struct tgt_cmd *cmd, *tmp;
@@ -228,7 +228,7 @@ static void scsi_tgt_dequeue_pending_cmd(struct tgt_device *device)
 	}
 }
 
-static void scsi_tgt_dequeue_cmd(struct tgt_cmd *cmd)
+static void scsi_tgt_complete_cmd(struct tgt_cmd *cmd)
 {
 	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
 	struct tgt_device *device = cmd->device;
@@ -253,12 +253,12 @@ static void scsi_tgt_dequeue_cmd(struct tgt_cmd *cmd)
 	}
 
 	if (!list_empty(&stdev->pending_cmds))
-		scsi_tgt_dequeue_pending_cmd(device);
+		scsi_tgt_execute_pending_cmds(device);
 
 	spin_unlock_irqrestore(&stdev->lock, flags);
 }
 
-static int scsi_tgt_queue_cmd(struct tgt_cmd *cmd)
+static int scsi_tgt_execute_cmd(struct tgt_cmd *cmd)
 {
 	struct tgt_device *device = cmd->device;
 	struct scsi_tgt_device *stdev = device->pt_data;
@@ -281,7 +281,7 @@ static int scsi_tgt_queue_cmd(struct tgt_cmd *cmd)
 	spin_unlock_irqrestore(&stdev->lock, flags);
 
 	if (enabled)
-		err = device->dt->queue_cmd(cmd);
+		err = device->dt->execute_cmd(cmd);
 	else
 		err = TGT_CMD_KERN_QUEUED;
 
@@ -316,8 +316,8 @@ static struct tgt_protocol scsi_tgt_proto = {
 	.module = THIS_MODULE,
 	.create_cmd = scsi_tgt_create_cmd,
 	.build_uspace_pdu = scsi_tgt_build_uspace_pdu,
-	.queue_cmd = scsi_tgt_queue_cmd,
-	.dequeue_cmd = scsi_tgt_dequeue_cmd,
+	.execute_cmd = scsi_tgt_execute_cmd,
+	.complete_cmd = scsi_tgt_complete_cmd,
 	.attach_device = scsi_tgt_attach_device,
 	.detach_device = scsi_tgt_detach_device,
 	.priv_dev_data_size = sizeof(struct scsi_tgt_device),

@@ -542,8 +542,8 @@ void tgt_transfer_response(void *data)
 	struct tgt_target *target = cmd->session->target;
 	int err;
 
-	if (target->proto->dequeue_cmd)
-		target->proto->dequeue_cmd(cmd);
+	if (target->proto->complete_cmd)
+		target->proto->complete_cmd(cmd);
 
 	cmd->done = tgt_cmd_destroy;
 	err = target->tt->transfer_response(cmd);
@@ -577,7 +577,7 @@ static void queuecommand(void *data)
 	if (device)
 		dprintk("found %" PRIu64 "\n", cmd->dev_id);
 
-	err = target->proto->queue_cmd(cmd);
+	err = target->proto->execute_cmd(cmd);
 
 	switch (err) {
 	case TGT_CMD_FAILED:
