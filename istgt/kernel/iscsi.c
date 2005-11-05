@@ -16,7 +16,7 @@
 static kmem_cache_t *istgt_cmd_cache;
 static char dummy_data[1024];
 
-static uint32_t cmnd_write_size(struct iscsi_cmnd *cmnd)
+static uint32_t cmnd_write_size(struct istgt_cmd *cmnd)
 {
 	struct iscsi_cmd *hdr = cmd_hdr(cmnd);
 
@@ -25,7 +25,7 @@ static uint32_t cmnd_write_size(struct iscsi_cmnd *cmnd)
 	return 0;
 }
 
-static uint32_t cmnd_read_size(struct iscsi_cmnd *cmnd)
+static uint32_t cmnd_read_size(struct istgt_cmd *cmnd)
 {
 	struct iscsi_cmd *hdr = cmd_hdr(cmnd);
 
@@ -51,9 +51,9 @@ static uint32_t cmnd_read_size(struct iscsi_cmnd *cmnd)
  * @return    ptr to command or NULL
  */
 
-struct iscsi_cmnd *cmnd_alloc(struct iscsi_conn *conn, int req)
+struct istgt_cmd *cmnd_alloc(struct iscsi_conn *conn, int req)
 {
-	struct iscsi_cmnd *cmnd;
+	struct istgt_cmd *cmnd;
 
 	/* TODO: async interface is necessary ? */
 	cmnd = kmem_cache_alloc(istgt_cmd_cache, GFP_KERNEL | __GFP_NOFAIL);
@@ -91,9 +91,9 @@ struct iscsi_cmnd *cmnd_alloc(struct iscsi_conn *conn, int req)
  * @return    ptr to response command or NULL
  */
 
-static struct iscsi_cmnd *iscsi_cmnd_create_rsp_cmnd(struct iscsi_cmnd *cmnd, int final)
+static struct istgt_cmd *iscsi_cmnd_create_rsp_cmnd(struct istgt_cmd *cmnd, int final)
 {
-	struct iscsi_cmnd *rsp = cmnd_alloc(cmnd->conn, 0);
+	struct istgt_cmd *rsp = cmnd_alloc(cmnd->conn, 0);
 
 	if (final)
 		set_cmd_final(rsp);
@@ -102,21 +102,21 @@ static struct iscsi_cmnd *iscsi_cmnd_create_rsp_cmnd(struct iscsi_cmnd *cmnd, in
 	return rsp;
 }
 
-static struct iscsi_cmnd *get_rsp_cmnd(struct iscsi_cmnd *req)
+static struct istgt_cmd *get_rsp_cmnd(struct istgt_cmd *req)
 {
-	return list_entry(req->pdu_list.prev, struct iscsi_cmnd, pdu_list);
+	return list_entry(req->pdu_list.prev, struct istgt_cmd, pdu_list);
 }
 
 static void iscsi_cmnds_init_write(struct list_head *send)
 {
-	struct iscsi_cmnd *cmnd = list_entry(send->next, struct iscsi_cmnd, list);
+	struct istgt_cmd *cmnd = list_entry(send->next, struct istgt_cmd, list);
 	struct iscsi_conn *conn = cmnd->conn;
 	struct list_head *pos, *next;
 
 	spin_lock(&conn->list_lock);
 
 	list_for_each_safe(pos, next, send) {
-		cmnd = list_entry(pos, struct iscsi_cmnd, list);
+		cmnd = list_entry(pos, struct istgt_cmd, list);
 
 		dprintk("%p:%x\n", cmnd, cmnd_opcode(cmnd));
 
@@ -130,7 +130,7 @@ static void iscsi_cmnds_init_write(struct list_head *send)
 	nthread_wakeup(conn->session->target);
 }
 
-static void iscsi_cmnd_init_write(struct iscsi_cmnd *cmnd)
+static void iscsi_cmnd_init_write(struct istgt_cmd *cmnd)
 {
 	LIST_HEAD(head);
 
@@ -149,10 +149,10 @@ static void iscsi_cmnd_init_write(struct iscsi_cmnd *cmnd)
 	iscsi_cmnds_init_write(&head);
 }
 
-static void do_send_data_rsp(struct iscsi_cmnd *cmnd)
+static void do_send_data_rsp(struct istgt_cmd *cmnd)
 {
 	struct iscsi_conn *conn = cmnd->conn;
-	struct iscsi_cmnd *data_cmnd;
+	struct istgt_cmd *data_cmnd;
 	struct scatterlist *sg = cmnd->tc->sg;
 	struct iscsi_cmd *req = cmd_hdr(cmnd);
 	struct iscsi_data_rsp *rsp;
@@ -213,9 +213,9 @@ static void do_send_data_rsp(struct iscsi_cmnd *cmnd)
 	iscsi_cmnds_init_write(&send);
 }
 
-static struct iscsi_cmnd *create_scsi_rsp(struct iscsi_cmnd *req)
+static struct istgt_cmd *create_scsi_rsp(struct istgt_cmd *req)
 {
-	struct iscsi_cmnd *rsp;
+	struct istgt_cmd *rsp;
 	struct iscsi_cmd *req_hdr = cmd_hdr(req);
 	struct iscsi_cmd_rsp *rsp_hdr;
 
@@ -231,9 +231,9 @@ static struct iscsi_cmnd *create_scsi_rsp(struct iscsi_cmnd *req)
 	return rsp;
 }
 
-void send_scsi_rsp(struct iscsi_cmnd *req)
+void send_scsi_rsp(struct istgt_cmd *req)
 {
-	struct iscsi_cmnd *rsp;
+	struct istgt_cmd *rsp;
 	struct iscsi_cmd_rsp *rsp_hdr;
 	uint32_t size;
 
@@ -252,9 +252,9 @@ struct iscsi_sense_data {
 	uint8_t  data[0];
 } __packed;
 
-static struct iscsi_cmnd *do_create_sense_rsp(struct iscsi_cmnd *req)
+static struct istgt_cmd *do_create_sense_rsp(struct istgt_cmd *req)
 {
-	struct iscsi_cmnd *rsp;
+	struct istgt_cmd *rsp;
 	struct iscsi_cmd_rsp *rsp_hdr;
 	struct iscsi_sense_data *sense;
 	struct scsi_tgt_cmd *stc;
@@ -286,11 +286,11 @@ static struct iscsi_cmnd *do_create_sense_rsp(struct iscsi_cmnd *req)
 	return rsp;
 }
 
-static struct iscsi_cmnd *create_sense_rsp(struct iscsi_cmnd *req,
+static struct istgt_cmd *create_sense_rsp(struct istgt_cmd *req,
 					   uint8_t sense_key, uint8_t asc, uint8_t ascq)
 {
 	struct scsi_tgt_cmd *stc;
-	struct iscsi_cmnd *rsp;
+	struct istgt_cmd *rsp;
 	struct iscsi_cmd_rsp *rsp_hdr;
 	struct iscsi_sense_data *sense;
 	struct scatterlist *sg = &req->sense_sg;
@@ -331,7 +331,7 @@ static struct iscsi_cmnd *create_sense_rsp(struct iscsi_cmnd *req,
  * @cmnd: ptr to command
  */
 
-void iscsi_cmnd_remove(struct iscsi_cmnd *cmnd)
+void iscsi_cmnd_remove(struct istgt_cmd *cmnd)
 {
 	struct iscsi_conn *conn;
 
@@ -367,7 +367,7 @@ void iscsi_cmnd_remove(struct iscsi_cmnd *cmnd)
 	kmem_cache_free(istgt_cmd_cache, cmnd);
 }
 
-static void cmnd_skip_pdu(struct iscsi_cmnd *cmnd)
+static void cmnd_skip_pdu(struct istgt_cmd *cmnd)
 {
 /* 	struct iscsi_conn *conn = cmnd->conn; */
 /* 	struct tio *tio = cmnd->tio; */
@@ -403,9 +403,9 @@ static void cmnd_skip_pdu(struct iscsi_cmnd *cmnd)
 /* 	conn->read_msg.msg_iovlen = ++i; */
 }
 
-static void iscsi_cmnd_reject(struct iscsi_cmnd *req, int reason)
+static void iscsi_cmnd_reject(struct istgt_cmd *req, int reason)
 {
-/* 	struct iscsi_cmnd *rsp; */
+/* 	struct istgt_cmd *rsp; */
 /* 	struct iscsi_reject_hdr *rsp_hdr; */
 /* 	struct tio *tio; */
 /* 	char *addr; */
@@ -429,7 +429,7 @@ static void iscsi_cmnd_reject(struct iscsi_cmnd *req, int reason)
 /* 	req->pdu.bhs.opcode = ISCSI_OP_PDU_REJECT; */
 }
 
-static void cmnd_set_sn(struct iscsi_cmnd *cmnd, int set_stat_sn)
+static void cmnd_set_sn(struct istgt_cmd *cmnd, int set_stat_sn)
 {
 	struct iscsi_conn *conn = cmnd->conn;
 	struct iscsi_session *sess = conn->session;
@@ -441,7 +441,7 @@ static void cmnd_set_sn(struct iscsi_cmnd *cmnd, int set_stat_sn)
 						sess->max_queued_cmnds);
 }
 
-static void update_stat_sn(struct iscsi_cmnd *cmnd)
+static void update_stat_sn(struct istgt_cmd *cmnd)
 {
 	struct iscsi_conn *conn = cmnd->conn;
 	uint32_t exp_stat_sn;
@@ -455,7 +455,7 @@ static void update_stat_sn(struct iscsi_cmnd *cmnd)
 	}
 }
 
-static int check_cmd_sn(struct iscsi_cmnd *cmnd)
+static int check_cmd_sn(struct istgt_cmd *cmnd)
 {
 	struct iscsi_session *session = cmnd->conn->session;
 	uint32_t cmd_sn;
@@ -468,11 +468,11 @@ static int check_cmd_sn(struct iscsi_cmnd *cmnd)
 	return -ISCSI_PROTOCOL_ERROR;
 }
 
-static struct iscsi_cmnd *__cmnd_find_hash(struct iscsi_session *session,
+static struct istgt_cmd *__cmnd_find_hash(struct iscsi_session *session,
 					   uint32_t itt, uint32_t ttt)
 {
 	struct list_head *head;
-	struct iscsi_cmnd *cmnd;
+	struct istgt_cmd *cmnd;
 
 	head = &session->cmnd_hash[cmnd_hashfn(itt)];
 
@@ -487,10 +487,10 @@ static struct iscsi_cmnd *__cmnd_find_hash(struct iscsi_session *session,
 	return NULL;
 }
 
-static struct iscsi_cmnd *cmnd_find_hash(struct iscsi_session *session,
+static struct istgt_cmd *cmnd_find_hash(struct iscsi_session *session,
 					 uint32_t itt, uint32_t ttt)
 {
-	struct iscsi_cmnd *cmnd;
+	struct istgt_cmd *cmnd;
 
 	spin_lock(&session->cmnd_hash_lock);
 
@@ -501,10 +501,10 @@ static struct iscsi_cmnd *cmnd_find_hash(struct iscsi_session *session,
 	return cmnd;
 }
 
-static int cmnd_insert_hash(struct iscsi_cmnd *cmnd)
+static int cmnd_insert_hash(struct istgt_cmd *cmnd)
 {
 	struct iscsi_session *session = cmnd->conn->session;
-	struct iscsi_cmnd *tmp;
+	struct istgt_cmd *tmp;
 	struct list_head *head;
 	int err = 0;
 	uint32_t itt = cmnd->pdu.bhs.itt;
@@ -537,15 +537,15 @@ out:
 	return err;
 }
 
-static void __cmnd_remove_hash(struct iscsi_cmnd *cmnd)
+static void __cmnd_remove_hash(struct istgt_cmd *cmnd)
 {
 	list_del(&cmnd->hash_list);
 }
 
-static void cmnd_remove_hash(struct iscsi_cmnd *cmnd)
+static void cmnd_remove_hash(struct istgt_cmd *cmnd)
 {
 	struct iscsi_session *session = cmnd->conn->session;
-	struct iscsi_cmnd *tmp;
+	struct istgt_cmd *tmp;
 
 	spin_lock(&session->cmnd_hash_lock);
 
@@ -559,9 +559,9 @@ static void cmnd_remove_hash(struct iscsi_cmnd *cmnd)
 	spin_unlock(&session->cmnd_hash_lock);
 }
 
-static void cmnd_skip_data(struct iscsi_cmnd *req)
+static void cmnd_skip_data(struct istgt_cmd *req)
 {
-	struct iscsi_cmnd *rsp;
+	struct istgt_cmd *rsp;
 	struct iscsi_cmd_rsp *rsp_hdr;
 	uint32_t size;
 
@@ -652,9 +652,9 @@ static int cmnd_recv_pdu(struct iscsi_conn *conn, struct tgt_cmd *tc,
 	return 0;
 }
 
-static void send_r2t(struct iscsi_cmnd *req)
+static void send_r2t(struct istgt_cmd *req)
 {
-	struct iscsi_cmnd *rsp;
+	struct istgt_cmd *rsp;
 	struct iscsi_r2t_rsp *rsp_hdr;
 	uint32_t length, offset, burst;
 	LIST_HEAD(send);
@@ -701,11 +701,11 @@ static void send_r2t(struct iscsi_cmnd *req)
 static void __scsi_cmnd_done(void *data)
 {
 	struct tgt_cmd *tc = (struct tgt_cmd *) data;
-	struct iscsi_cmnd *cmnd = (struct iscsi_cmnd *) tc->private;
+	struct istgt_cmd *cmnd = (struct istgt_cmd *) tc->private;
 	struct iscsi_cmd *req = cmd_hdr(cmnd);
 
 	if (tc->result != SAM_STAT_GOOD) {
-		struct iscsi_cmnd *rsp;
+		struct istgt_cmd *rsp;
 
 		rsp = do_create_sense_rsp(cmnd);
 		iscsi_cmnd_init_write(rsp);
@@ -749,7 +749,7 @@ static void __scsi_cmnd_done(void *data)
 static int scsi_cmnd_done(struct tgt_cmd *tc)
 {
 	int err;
-	struct iscsi_cmnd *cmnd = (struct iscsi_cmnd *) tc->private;
+	struct istgt_cmd *cmnd = (struct istgt_cmd *) tc->private;
 
 	INIT_WORK(&cmnd->work, __scsi_cmnd_done, tc);
 	err = schedule_work(&cmnd->work);
@@ -758,7 +758,7 @@ static int scsi_cmnd_done(struct tgt_cmd *tc)
 	return TGT_CMD_XMIT_OK;
 }
 
-static void tgt_scsi_cmd_create(struct iscsi_cmnd *req)
+static void tgt_scsi_cmd_create(struct istgt_cmd *req)
 {
 	struct iscsi_cmd *req_hdr = cmd_hdr(req);
 	struct iscsi_conn *conn = req->conn;
@@ -812,7 +812,7 @@ static void tgt_scsi_cmd_create(struct iscsi_cmnd *req)
 	}
 }
 
-static void scsi_cmnd_exec(struct iscsi_cmnd *cmnd)
+static void scsi_cmnd_exec(struct istgt_cmd *cmnd)
 {
 	struct tgt_cmd *cmd = cmnd->tc;
 
@@ -828,7 +828,7 @@ static void scsi_cmnd_exec(struct iscsi_cmnd *cmnd)
 	}
 }
 
-static int noop_out_start(struct iscsi_conn *conn, struct iscsi_cmnd *cmnd)
+static int noop_out_start(struct iscsi_conn *conn, struct istgt_cmd *cmnd)
 {
 	uint32_t size, tmp;
 	int i = 0, err = 0;
@@ -903,7 +903,7 @@ static uint32_t get_next_ttt(struct iscsi_session *session)
 	return cpu_to_be32(ttt);
 }
 
-static void scsi_cmnd_start(struct iscsi_conn *conn, struct iscsi_cmnd *req)
+static void scsi_cmnd_start(struct iscsi_conn *conn, struct istgt_cmd *req)
 {
 	struct iscsi_cmd *req_hdr = cmd_hdr(req);
 
@@ -990,10 +990,10 @@ static void scsi_cmnd_start(struct iscsi_conn *conn, struct iscsi_cmnd *req)
 	return;
 }
 
-static void data_out_start(struct iscsi_conn *conn, struct iscsi_cmnd *cmnd)
+static void data_out_start(struct iscsi_conn *conn, struct istgt_cmd *cmnd)
 {
 	struct iscsi_data *req = (struct iscsi_data *)&cmnd->pdu.bhs;
-	struct iscsi_cmnd *scsi_cmnd = NULL;
+	struct istgt_cmd *scsi_cmnd = NULL;
 	uint32_t offset = be32_to_cpu(req->offset);
 
 	update_stat_sn(cmnd);
@@ -1041,10 +1041,10 @@ skip_data:
 	return;
 }
 
-static void data_out_end(struct iscsi_conn *conn, struct iscsi_cmnd *cmnd)
+static void data_out_end(struct iscsi_conn *conn, struct istgt_cmd *cmnd)
 {
 	struct iscsi_data *req = (struct iscsi_data *) &cmnd->pdu.bhs;
-	struct iscsi_cmnd *scsi_cmnd;
+	struct istgt_cmd *scsi_cmnd;
 	uint32_t offset;
 
 	BUG_ON(!cmnd);
@@ -1088,7 +1088,7 @@ out:
 	return;
 }
 
-/* static int __cmnd_abort(struct iscsi_cmnd *cmnd) */
+/* static int __cmnd_abort(struct istgt_cmd *cmnd) */
 /* { */
 /* 	if (!cmnd_waitio(cmnd)) { */
 /* 		cmnd_release(cmnd, 1); */
@@ -1099,7 +1099,7 @@ out:
 
 /* static int cmnd_abort(struct iscsi_session *session, u32 itt) */
 /* { */
-/* 	struct iscsi_cmnd *cmnd; */
+/* 	struct istgt_cmd *cmnd; */
 /* 	int err =  -ISCSI_RESPONSE_UNKNOWN_TASK; */
 
 /* 	if ((cmnd = cmnd_find_hash(session, itt, ISCSI_RESERVED_TAG))) { */
@@ -1113,12 +1113,12 @@ out:
 /* 	return err; */
 /* } */
 
-/* static int target_reset(struct iscsi_cmnd *req, u32 lun, int all) */
+/* static int target_reset(struct istgt_cmd *req, u32 lun, int all) */
 /* { */
 /* 	struct iscsi_target *target = req->conn->session->target; */
 /* 	struct iscsi_session *session; */
 /* 	struct iscsi_conn *conn; */
-/* 	struct iscsi_cmnd *cmnd, *tmp; */
+/* 	struct istgt_cmd *cmnd, *tmp; */
 
 /* 	list_for_each_entry(session, &target->session_list, list) { */
 /* 		list_for_each_entry(conn, &session->conn_list, list) { */
@@ -1137,11 +1137,11 @@ out:
 /* 	return 0; */
 /* } */
 
-/* static void task_set_abort(struct iscsi_cmnd *req) */
+/* static void task_set_abort(struct istgt_cmd *req) */
 /* { */
 /* 	struct iscsi_session *session = req->conn->session; */
 /* 	struct iscsi_conn *conn; */
-/* 	struct iscsi_cmnd *cmnd, *tmp; */
+/* 	struct istgt_cmd *cmnd, *tmp; */
 
 /* 	list_for_each_entry(conn, &session->conn_list, list) { */
 /* 		list_for_each_entry_safe(cmnd, tmp, &conn->pdu_list, conn_list) { */
@@ -1151,11 +1151,11 @@ out:
 /* 	} */
 /* } */
 
-static void execute_task_management(struct iscsi_cmnd *req)
+static void execute_task_management(struct istgt_cmd *req)
 {
 /* 	struct iscsi_conn *conn = req->conn; */
 /* 	struct iscsi_target *target = conn->session->target; */
-	struct iscsi_cmnd *rsp;
+	struct istgt_cmd *rsp;
 	struct iscsi_tm *req_hdr = (struct iscsi_tm *)&req->pdu.bhs;
 	struct iscsi_tm_rsp *rsp_hdr;
 	int function = req_hdr->flags & ISCSI_FLAG_TM_FUNC_MASK;
@@ -1218,9 +1218,9 @@ static void execute_task_management(struct iscsi_cmnd *req)
 	iscsi_cmnd_init_write(rsp);
 }
 
-static void noop_out_exec(struct iscsi_cmnd *req)
+static void noop_out_exec(struct istgt_cmd *req)
 {
-	struct iscsi_cmnd *rsp;
+	struct istgt_cmd *rsp;
 	struct iscsi_nopin *rsp_hdr;
 
 	if (cmd_itt(req) != cpu_to_be32(ISCSI_RESERVED_TAG)) {
@@ -1249,10 +1249,10 @@ static void noop_out_exec(struct iscsi_cmnd *req)
 		iscsi_cmnd_remove(req);
 }
 
-static void logout_exec(struct iscsi_cmnd *req)
+static void logout_exec(struct istgt_cmd *req)
 {
 	struct iscsi_logout *req_hdr;
-	struct iscsi_cmnd *rsp;
+	struct istgt_cmd *rsp;
 	struct iscsi_logout_rsp *rsp_hdr;
 
 	req_hdr = (struct iscsi_logout *)&req->pdu.bhs;
@@ -1265,7 +1265,7 @@ static void logout_exec(struct iscsi_cmnd *req)
 	iscsi_cmnd_init_write(rsp);
 }
 
-static void iscsi_cmnd_exec(struct iscsi_cmnd *cmnd)
+static void iscsi_cmnd_exec(struct istgt_cmd *cmnd)
 {
 	dprintk("%p,%x,%u\n", cmnd, cmnd_opcode(cmnd),
 		cmnd->pdu.bhs.statsn);
@@ -1309,7 +1309,7 @@ static void __cmnd_send_pdu(struct iscsi_conn *conn, struct scatterlist *sg,
 	conn->write_size += size;
 }
 
-static void cmnd_send_pdu(struct iscsi_conn *conn, struct iscsi_cmnd *cmnd)
+static void cmnd_send_pdu(struct iscsi_conn *conn, struct istgt_cmd *cmnd)
 {
 	uint32_t size;
 
@@ -1332,9 +1332,9 @@ static void set_cork(struct socket *sock, int on)
 	set_fs(oldfs);
 }
 
-void cmnd_release(struct iscsi_cmnd *cmnd, int force)
+void cmnd_release(struct istgt_cmd *cmnd, int force)
 {
-	struct iscsi_cmnd *req, *rsp;
+	struct istgt_cmd *req, *rsp;
 	int is_last = 0;
 
 	if (!cmnd)
@@ -1345,7 +1345,7 @@ void cmnd_release(struct iscsi_cmnd *cmnd, int force)
 
 	if (force) {
 		while (!list_empty(&cmnd->pdu_list)) {
-			rsp = list_entry(cmnd->pdu_list.next, struct iscsi_cmnd, pdu_list);
+			rsp = list_entry(cmnd->pdu_list.next, struct istgt_cmd, pdu_list);
 			list_del_init(&rsp->list);
 			list_del(&rsp->pdu_list);
 			iscsi_cmnd_remove(rsp);
@@ -1368,7 +1368,7 @@ void cmnd_release(struct iscsi_cmnd *cmnd, int force)
 	return;
 }
 
-void cmnd_tx_start(struct iscsi_cmnd *cmnd)
+void cmnd_tx_start(struct istgt_cmd *cmnd)
 {
 	struct iscsi_conn *conn = cmnd->conn;
 	struct iovec *iop;
@@ -1436,7 +1436,7 @@ void cmnd_tx_start(struct iscsi_cmnd *cmnd)
 	conn->write_size = (conn->write_size + 3) & -4;
 }
 
-void cmnd_tx_end(struct iscsi_cmnd *cmnd)
+void cmnd_tx_end(struct istgt_cmd *cmnd)
 {
 	struct iscsi_conn *conn = cmnd->conn;
 
@@ -1474,7 +1474,7 @@ void cmnd_tx_end(struct iscsi_cmnd *cmnd)
  * @cmnd: ptr to command
  */
 
-static void iscsi_session_push_cmnd(struct iscsi_cmnd *cmnd)
+static void iscsi_session_push_cmnd(struct istgt_cmd *cmnd)
 {
 	struct iscsi_session *session = cmnd->conn->session;
 	struct list_head *entry;
@@ -1497,7 +1497,7 @@ static void iscsi_session_push_cmnd(struct iscsi_cmnd *cmnd)
 
 			if (list_empty(&session->pending_list))
 				break;
-			cmnd = list_entry(session->pending_list.next, struct iscsi_cmnd, list);
+			cmnd = list_entry(session->pending_list.next, struct istgt_cmd, list);
 			if (cmnd->pdu.bhs.statsn != cmd_sn)
 				break;
 /* 			eprintk("find out-of-order %x %u %u\n", */
@@ -1517,7 +1517,7 @@ static void iscsi_session_push_cmnd(struct iscsi_cmnd *cmnd)
 			eprintk("too large cmd_sn (%u,%u)\n", cmd_sn, session->exp_cmd_sn);
 
 		list_for_each(entry, &session->pending_list) {
-			struct iscsi_cmnd *tmp = list_entry(entry, struct iscsi_cmnd, list);
+			struct istgt_cmd *tmp = list_entry(entry, struct istgt_cmd, list);
 			if (before(cmd_sn, tmp->pdu.bhs.statsn))
 				break;
 		}
@@ -1528,7 +1528,7 @@ static void iscsi_session_push_cmnd(struct iscsi_cmnd *cmnd)
 	}
 }
 
-static int check_segment_length(struct iscsi_cmnd *cmnd)
+static int check_segment_length(struct istgt_cmd *cmnd)
 {
 	struct iscsi_conn *conn = cmnd->conn;
 	struct iscsi_sess_param *param = &conn->session->param;
@@ -1546,7 +1546,7 @@ static int check_segment_length(struct iscsi_cmnd *cmnd)
 	return 0;
 }
 
-void cmnd_rx_start(struct iscsi_cmnd *cmnd)
+void cmnd_rx_start(struct istgt_cmd *cmnd)
 {
 	struct iscsi_conn *conn = cmnd->conn;
 	int err = 0;
@@ -1586,7 +1586,7 @@ void cmnd_rx_start(struct iscsi_cmnd *cmnd)
 	}
 }
 
-void cmnd_rx_end(struct iscsi_cmnd *cmnd)
+void cmnd_rx_end(struct istgt_cmd *cmnd)
 {
 	struct iscsi_conn *conn = cmnd->conn;
 
@@ -1620,7 +1620,7 @@ void cmnd_rx_end(struct iscsi_cmnd *cmnd)
 
 static int buffer_ready(struct tgt_cmd *tc)
 {
-	struct iscsi_cmnd *cmnd = (struct iscsi_cmnd *) tc->private;
+	struct istgt_cmd *cmnd = (struct istgt_cmd *) tc->private;
 
 	complete(&cmnd->event);
 
@@ -1716,7 +1716,7 @@ static int istgt_init(void)
 	       VERSION_STRING);
 
 	istgt_cmd_cache = kmem_cache_create("istgt_cmd",
-					    sizeof(struct iscsi_cmnd),
+					    sizeof(struct istgt_cmd),
 					    0, 0, NULL, NULL);
 	if (!istgt_cmd_cache)
 		return -ENOMEM;

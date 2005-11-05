@@ -77,7 +77,7 @@ static void digest_header(struct crypto_tfm *tfm, struct iscsi_pdu *pdu,
 	crypto_digest_final(tfm, crc);
 }
 
-int digest_rx_header(struct iscsi_cmnd *cmnd)
+int digest_rx_header(struct istgt_cmd *cmnd)
 {
 	uint32_t crc;
 
@@ -88,13 +88,13 @@ int digest_rx_header(struct iscsi_cmnd *cmnd)
 	return 0;
 }
 
-void digest_tx_header(struct iscsi_cmnd *cmnd)
+void digest_tx_header(struct istgt_cmd *cmnd)
 {
 	digest_header(cmnd->conn->tx_digest_tfm, &cmnd->pdu,
 		      (uint8_t *) &cmnd->hdigest);
 }
 
-static void digest_data(struct crypto_tfm *tfm, struct iscsi_cmnd *cmnd,
+static void digest_data(struct crypto_tfm *tfm, struct istgt_cmd *cmnd,
 			struct scatterlist *sgv, uint32_t offset, uint8_t *crc)
 {
 	struct scatterlist sg[ISCSI_CONN_IOV_MAX];
@@ -130,13 +130,13 @@ static void digest_data(struct crypto_tfm *tfm, struct iscsi_cmnd *cmnd,
 	crypto_digest_final(tfm, crc);
 }
 
-int digest_rx_data(struct iscsi_cmnd *cmnd)
+int digest_rx_data(struct istgt_cmd *cmnd)
 {
 	struct scatterlist *sg;
 	uint32_t offset, crc;
 
 	if (cmd_opcode(cmnd) == ISCSI_OP_SCSI_DATA_OUT) {
-		struct iscsi_cmnd *scsi_cmnd = cmnd->req;
+		struct istgt_cmd *scsi_cmnd = cmnd->req;
 		struct iscsi_data *req = (struct iscsi_data *) &cmnd->pdu.bhs;
 
 		sg = scsi_cmnd->tc->sg;
@@ -158,7 +158,7 @@ int digest_rx_data(struct iscsi_cmnd *cmnd)
 	return 0;
 }
 
-void digest_tx_data(struct iscsi_cmnd *cmnd)
+void digest_tx_data(struct istgt_cmd *cmnd)
 {
 	struct iscsi_data *req = (struct iscsi_data *) &cmnd->pdu.bhs;
 

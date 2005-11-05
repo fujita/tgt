@@ -58,7 +58,7 @@ struct network_thread_info {
 	void (*old_data_ready)(struct sock *, int);
 };
 
-struct iscsi_cmnd;
+struct istgt_cmd;
 
 enum iscsi_device_state {
 	IDEV_RUNNING,
@@ -134,14 +134,14 @@ struct iscsi_conn {
 	struct list_head pdu_list;		/* in/outcoming pdus */
 	struct list_head write_list;		/* list of data pdus to be sent */
 
-	struct iscsi_cmnd *read_cmnd;
+	struct istgt_cmd *read_cmnd;
 	struct msghdr read_msg;
 	struct iovec read_iov[ISCSI_CONN_IOV_MAX];
 	uint32_t read_size;
 	uint32_t read_overflow;
 	int read_state;
 
-	struct iscsi_cmnd *write_cmnd;
+	struct istgt_cmd *write_cmnd;
 	struct iovec write_iov[ISCSI_CONN_IOV_MAX];
 	struct iovec *write_iop;
 
@@ -162,7 +162,7 @@ struct iscsi_pdu {
 	unsigned int datasize;
 };
 
-struct iscsi_cmnd {
+struct istgt_cmd {
 	struct list_head list;
 	struct list_head conn_list;
 	unsigned long state;
@@ -188,7 +188,7 @@ struct iscsi_cmnd {
 	struct work_struct work;
 	struct completion event;
 
-	struct iscsi_cmnd *req;
+	struct istgt_cmd *req;
 	struct tgt_cmd *tc;
 };
 
@@ -198,13 +198,13 @@ struct iscsi_cmnd {
 #define ISCSI_OP_SCSI_ABORT	ISCSI_OP_VENDOR4_CMD
 
 /* iscsi.c */
-extern struct iscsi_cmnd *cmnd_alloc(struct iscsi_conn *, int);
-extern void cmnd_rx_start(struct iscsi_cmnd *);
-extern void cmnd_rx_end(struct iscsi_cmnd *);
-extern void cmnd_tx_start(struct iscsi_cmnd *);
-extern void cmnd_tx_end(struct iscsi_cmnd *);
-extern void cmnd_release(struct iscsi_cmnd *, int);
-extern void send_scsi_rsp(struct iscsi_cmnd *);
+extern struct istgt_cmd *cmnd_alloc(struct iscsi_conn *, int);
+extern void cmnd_rx_start(struct istgt_cmd *);
+extern void cmnd_rx_end(struct istgt_cmd *);
+extern void cmnd_tx_start(struct istgt_cmd *);
+extern void cmnd_tx_end(struct istgt_cmd *);
+extern void cmnd_release(struct istgt_cmd *, int);
+extern void send_scsi_rsp(struct istgt_cmd *);
 
 /* conn.c */
 extern int conn_add(struct iscsi_session *, struct conn_info *);

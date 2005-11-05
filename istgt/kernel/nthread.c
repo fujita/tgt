@@ -40,20 +40,20 @@ static inline void iscsi_conn_init_read(struct iscsi_conn *conn, void *data, siz
 	conn->read_size = (len + 3) & -4;
 }
 
-static void iscsi_conn_read_ahs(struct iscsi_conn *conn, struct iscsi_cmnd *cmnd)
+static void iscsi_conn_read_ahs(struct iscsi_conn *conn, struct istgt_cmd *cmnd)
 {
 	cmnd->pdu.ahs = kmalloc(cmnd->pdu.ahssize, __GFP_NOFAIL|GFP_KERNEL);
 	BUG_ON(!cmnd->pdu.ahs);
 	iscsi_conn_init_read(conn, cmnd->pdu.ahs, cmnd->pdu.ahssize);
 }
 
-static struct iscsi_cmnd * iscsi_get_send_cmnd(struct iscsi_conn *conn)
+static struct istgt_cmd * iscsi_get_send_cmnd(struct iscsi_conn *conn)
 {
-	struct iscsi_cmnd *cmnd = NULL;
+	struct istgt_cmd *cmnd = NULL;
 
 	spin_lock(&conn->list_lock);
 	if (!list_empty(&conn->write_list)) {
-		cmnd = list_entry(conn->write_list.next, struct iscsi_cmnd, list);
+		cmnd = list_entry(conn->write_list.next, struct istgt_cmd, list);
 		list_del_init(&cmnd->list);
 	}
 	spin_unlock(&conn->list_lock);
@@ -162,7 +162,7 @@ enum rx_state {
 
 static void rx_ddigest(struct iscsi_conn *conn, int state)
 {
-	struct iscsi_cmnd *cmnd = conn->read_cmnd;
+	struct istgt_cmd *cmnd = conn->read_cmnd;
 	int res = digest_rx_data(cmnd);
 
 	if (!res)
@@ -173,7 +173,7 @@ static void rx_ddigest(struct iscsi_conn *conn, int state)
 
 static void rx_hdigest(struct iscsi_conn *conn, int state)
 {
-	struct iscsi_cmnd *cmnd = conn->read_cmnd;
+	struct istgt_cmd *cmnd = conn->read_cmnd;
 	int res = digest_rx_header(cmnd);
 
 	if (!res)
@@ -182,9 +182,9 @@ static void rx_hdigest(struct iscsi_conn *conn, int state)
 		conn_close(conn);
 }
 
-static struct iscsi_cmnd *create_cmnd(struct iscsi_conn *conn)
+static struct istgt_cmd *create_cmnd(struct iscsi_conn *conn)
 {
-	struct iscsi_cmnd *cmnd;
+	struct istgt_cmd *cmnd;
 
 	cmnd = cmnd_alloc(conn, 1);
 	iscsi_conn_init_read(cmnd->conn, &cmnd->pdu.bhs, sizeof(cmnd->pdu.bhs));
@@ -195,7 +195,7 @@ static struct iscsi_cmnd *create_cmnd(struct iscsi_conn *conn)
 
 static int recv(struct iscsi_conn *conn)
 {
-	struct iscsi_cmnd *cmnd = conn->read_cmnd;
+	struct istgt_cmd *cmnd = conn->read_cmnd;
 	int hdigest, ddigest, res = 1;
 
 	if (!test_bit(CONN_ACTIVE, &conn->state))
@@ -428,7 +428,7 @@ static void exit_tx(struct iscsi_conn *conn, int res)
 	}
 }
 
-static int tx_ddigest(struct iscsi_cmnd *cmnd, int state)
+static int tx_ddigest(struct istgt_cmd *cmnd, int state)
 {
 	int res, rest = cmnd->conn->write_size;
 	struct msghdr msg = {.msg_flags = MSG_NOSIGNAL | MSG_DONTWAIT};
@@ -449,7 +449,7 @@ static int tx_ddigest(struct iscsi_cmnd *cmnd, int state)
 	return res;
 }
 
-static void init_tx_hdigest(struct iscsi_cmnd *cmnd)
+static void init_tx_hdigest(struct istgt_cmd *cmnd)
 {
 	struct iscsi_conn *conn = cmnd->conn;
 	struct iovec *iop;
@@ -495,7 +495,7 @@ static int do_send(struct iscsi_conn *conn, int state)
 
 static int send(struct iscsi_conn *conn)
 {
-	struct iscsi_cmnd *cmnd = conn->write_cmnd;
+	struct istgt_cmd *cmnd = conn->write_cmnd;
 	int ddigest, res = 0;
 
 	ddigest = conn->ddigest_type != DIGEST_NONE ? 1 : 0;
@@ -574,7 +574,7 @@ out:
 static void close_conn(struct iscsi_conn *conn)
 {
 	struct iscsi_session *session = conn->session;
-	struct iscsi_cmnd *cmnd;
+	struct istgt_cmd *cmnd;
 
 	conn->sock->ops->shutdown(conn->sock, 2);
 
@@ -591,7 +591,7 @@ static void close_conn(struct iscsi_conn *conn)
 		yield();
 
 	while (!list_empty(&conn->pdu_list)) {
-		cmnd = list_entry(conn->pdu_list.next, struct iscsi_cmnd, conn_list);
+		cmnd = list_entry(conn->pdu_list.next, struct istgt_cmd, conn_list);
 
 		list_del_init(&cmnd->list);
 		cmnd_release(cmnd, 1);
