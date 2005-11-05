@@ -218,12 +218,6 @@ extern int nthread_start(struct iscsi_target *);
 extern int nthread_stop(struct iscsi_target *);
 extern void nthread_wakeup(struct iscsi_target *);
 
-/* target.c */
-extern int target_lock(struct iscsi_target *, int);
-extern void target_unlock(struct iscsi_target *);
-extern int target_add(struct tgt_target *);
-extern void target_del(struct tgt_target *);
-
 /* config.c */
 extern int iet_msg_recv(struct tgt_target *, uint32_t, void *);
 extern int event_send(struct tgt_target *tgt, int tid, uint64_t sid,

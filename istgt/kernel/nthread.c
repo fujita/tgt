@@ -635,14 +635,14 @@ static int istd(void *arg)
 		clear_bit(D_DATA_READY, &info->flags);
 		spin_unlock_bh(&info->nthread_lock);
 
-		target_lock(target, 0);
+		down(&target->target_sem);
 		list_for_each_entry_safe(conn, tmp, &info->active_conns, poll_list) {
 			if (test_bit(CONN_ACTIVE, &conn->state))
 				process_io(conn);
 			else
 				close_conn(conn);
 		}
-		target_unlock(target);
+		up(&target->target_sem);
 
 	} while (!kthread_should_stop());
 

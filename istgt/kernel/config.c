@@ -34,7 +34,7 @@ int iet_msg_recv(struct tgt_target *tgt, uint32_t len, void *data)
 	struct iet_msg *msg = data;
 	int err;
 
-	err = target_lock(target, 1);
+	err = down_interruptible(&target->target_sem);
 	if (err < 0) {
 		eprintk("interrupted %u %d\n", err, msg->msg_type);
 		goto done;
@@ -70,7 +70,7 @@ int iet_msg_recv(struct tgt_target *tgt, uint32_t len, void *data)
 		err = -EINVAL;
 	}
 
-	target_unlock(target);
+	up(&target->target_sem);
 done:
 	msg->result = err;
 	tgt_msg_send(tgt, msg, sizeof(*msg), GFP_KERNEL);

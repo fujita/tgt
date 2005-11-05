@@ -13,9 +13,7 @@
 
 #include <iscsi.h>
 
-unsigned long debug_enable_flags;
-
-static kmem_cache_t *iscsi_cmnd_cache;
+static kmem_cache_t *istgt_cmd_cache;
 static char dummy_data[1024];
 
 static uint32_t cmnd_write_size(struct iscsi_cmnd *cmnd)
@@ -58,7 +56,7 @@ struct iscsi_cmnd *cmnd_alloc(struct iscsi_conn *conn, int req)
 	struct iscsi_cmnd *cmnd;
 
 	/* TODO: async interface is necessary ? */
-	cmnd = kmem_cache_alloc(iscsi_cmnd_cache, GFP_KERNEL | __GFP_NOFAIL);
+	cmnd = kmem_cache_alloc(istgt_cmd_cache, GFP_KERNEL | __GFP_NOFAIL);
 
 	memset(cmnd, 0, sizeof(*cmnd));
 	INIT_LIST_HEAD(&cmnd->list);
@@ -366,7 +364,7 @@ void iscsi_cmnd_remove(struct iscsi_cmnd *cmnd)
 
 	if (cmnd->tc)
 		cmnd->tc->done(cmnd->tc);
-	kmem_cache_free(iscsi_cmnd_cache, cmnd);
+	kmem_cache_free(istgt_cmd_cache, cmnd);
 }
 
 static void cmnd_skip_pdu(struct iscsi_cmnd *cmnd)
@@ -1629,53 +1627,113 @@ static int buffer_ready(struct tgt_cmd *tc)
 	return 0;
 }
 
+
+static struct iscsi_sess_param default_session_param = {
+	.initial_r2t = 1,
+	.immediate_data = 1,
+	.max_connections = 1,
+	.max_recv_data_length = 8192,
+	.max_xmit_data_length = 8192,
+	.max_burst_length = 262144,
+	.first_burst_length = 65536,
+	.default_wait_time = 2,
+	.default_retain_time = 20,
+	.max_outstanding_r2t = 1,
+	.data_pdu_inorder = 1,
+	.data_sequence_inorder = 1,
+	.error_recovery_level = 0,
+	.header_digest = DIGEST_NONE,
+	.data_digest = DIGEST_NONE,
+	.ofmarker = 0,
+	.ifmarker = 0,
+	.ofmarkint = 2048,
+	.ifmarkint = 2048,
+};
+
+static struct iscsi_trgt_param default_target_param = {
+	.queued_cmnds = DEFAULT_NR_QUEUED_CMNDS,
+};
+
+static int istgt_target_create(struct tgt_target *tt)
+{
+	int err = -EINVAL;
+	struct iscsi_target *target = tt->tt_data;
+
+	target->tt = tt;
+	target->tid = target->tt->tid;
+
+	memcpy(&target->sess_param, &default_session_param, sizeof(default_session_param));
+	memcpy(&target->trgt_param, &default_target_param, sizeof(default_target_param));
+
+	init_MUTEX(&target->target_sem);
+	INIT_LIST_HEAD(&target->session_list);
+
+	nthread_init(target);
+	err = nthread_start(target);
+
+	return err;
+}
+
+static void istgt_target_destroy(struct tgt_target *tt)
+{
+	struct iscsi_target *target =
+		(struct iscsi_target *) tt->tt_data;
+
+	down(&target->target_sem);
+
+	/* kernel may crash until tgt supports lifetime management. */
+	BUG_ON(!list_empty(&target->session_list));
+
+	up(&target->target_sem);
+
+	nthread_stop(target);
+}
+
 static struct tgt_target_template istgt_template = {
 	.name = THIS_NAME,
 	.module = THIS_MODULE,
 	.protocol = "scsi",
 	.subprotocol = "iscsi",
-	.target_create = target_add,
-	.target_destroy = target_del,
+	.target_create = istgt_target_create,
+	.target_destroy = istgt_target_destroy,
 	.msg_recv = iet_msg_recv,
 	.transfer_response = scsi_cmnd_done,
 	.transfer_write_data = buffer_ready,
 	.priv_data_size = sizeof(struct iscsi_target),
 };
 
-static void iscsi_exit(void)
+static void istgt_exit(void)
 {
-	if (iscsi_cmnd_cache)
-		kmem_cache_destroy(iscsi_cmnd_cache);
-
+	kmem_cache_destroy(istgt_cmd_cache);
 	tgt_target_template_unregister(&istgt_template);
 }
 
-static int iscsi_init(void)
+static int istgt_init(void)
 {
-	int err = -ENOMEM;
+	int err;
 
 	printk("iSCSI Target Software for Linux Target Framework %s\n",
 	       VERSION_STRING);
 
-	iscsi_cmnd_cache = kmem_cache_create("iscsi_cmnd", sizeof(struct iscsi_cmnd),
-					     0, 0, NULL, NULL);
-	if (!iscsi_cmnd_cache)
-		goto err;
+	istgt_cmd_cache = kmem_cache_create("istgt_cmd",
+					    sizeof(struct iscsi_cmnd),
+					    0, 0, NULL, NULL);
+	if (!istgt_cmd_cache)
+		return -ENOMEM;
 
 	err = tgt_target_template_register(&istgt_template);
 	if (err < 0)
-		goto err;
+		goto free_cmd_cache;
 
 	return 0;
 
-err:
-	iscsi_exit();
+free_cmd_cache:
+	kmem_cache_destroy(istgt_cmd_cache);
+
 	return err;
 }
 
-module_param(debug_enable_flags, ulong, S_IRUGO);
-
-module_init(iscsi_init);
-module_exit(iscsi_exit);
+module_init(istgt_init);
+module_exit(istgt_exit);
 
 MODULE_LICENSE("GPL");
