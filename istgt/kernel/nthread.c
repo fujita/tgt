@@ -343,8 +343,9 @@ static int write_data(struct iscsi_conn *conn)
 		}
 	}
 
-	if (!(sg = conn->write_tcmnd)) {
-		eprintk("%s\n", "warning data missing!");
+	sg = conn->write_sg;
+	if (!sg) {
+		eprintk("warning data missing!\n");
 		return 0;
 	}
 	offset = conn->write_offset;
@@ -370,7 +371,7 @@ static int write_data(struct iscsi_conn *conn)
 				goto err;
 			}
 			if (res == size) {
-				conn->write_tcmnd = NULL;
+				conn->write_sg = NULL;
 				conn->write_size = 0;
 				return saved_size;
 			}

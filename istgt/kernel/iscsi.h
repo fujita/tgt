@@ -145,7 +145,7 @@ struct iscsi_conn {
 	struct iovec write_iov[ISCSI_CONN_IOV_MAX];
 	struct iovec *write_iop;
 
-	struct scatterlist *write_tcmnd;
+	struct scatterlist *write_sg;
 
 	uint32_t write_size;
 	uint32_t write_offset;
@@ -165,7 +165,6 @@ struct iscsi_pdu {
 struct istgt_cmd {
 	struct list_head list;
 	struct list_head conn_list;
-	unsigned long state;
 	unsigned long flags;
 	struct iscsi_conn *conn;
 

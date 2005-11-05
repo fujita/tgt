@@ -135,9 +135,9 @@ static void iscsi_cmnd_init_write(struct istgt_cmd *cmnd)
 	LIST_HEAD(head);
 
 	if (!list_empty(&cmnd->list)) {
-		eprintk("%x %x %x %x %lx %lx %u %u %u %u %u %u %u %d %d\n",
+		eprintk("%x %x %x %x %lx %u %u %u %u %u %u %u %d %d\n",
 			cmd_itt(cmnd), cmd_ttt(cmnd), cmd_opcode(cmnd),
-			cmd_scsicode(cmnd), cmnd->state, cmnd->flags,
+			cmd_scsicode(cmnd), cmnd->flags,
 			cmnd->r2t_sn, cmnd->r2t_length, cmnd->is_unsolicited_data,
 			cmnd->target_task_tag, cmnd->outstanding_r2t,
 			cmnd->hdigest, cmnd->ddigest,
@@ -344,16 +344,15 @@ void iscsi_cmnd_remove(struct istgt_cmd *cmnd)
 	if (!list_empty(&cmnd->list)) {
 		struct iscsi_cmd *req = cmd_hdr(cmnd);
 
-		eprintk("cmnd %p still on some list?, %x, %x, %x, %x, %x, %x, %x %lx %lx\n",
+		eprintk("cmnd %p still on some list?, %x %x %x %x %x %x %x %lx\n",
 			cmnd, req->opcode, req->cdb[0], req->flags, req->itt,
-			be32_to_cpu(req->data_length),
-			req->cmdsn, be32_to_cpu(cmnd->pdu.datasize), cmnd->state, conn->state);
+			be32_to_cpu(req->data_length), req->cmdsn,
+			be32_to_cpu(cmnd->pdu.datasize), conn->state);
 
 		if (cmnd->req) {
 			struct iscsi_cmd *req = cmd_hdr(cmnd->req);
 			eprintk("%p %x %u\n", req, req->opcode, req->cdb[0]);
 		}
-		dump_stack();
 		BUG();
 	}
 	list_del(&cmnd->list);
@@ -1304,7 +1303,7 @@ static void __cmnd_send_pdu(struct iscsi_conn *conn, struct scatterlist *sg,
 /* 	assert(offset <= sg->offset + tio->size); */
 /* 	assert(offset + size <= tio->offset + tio->size); */
 
-	conn->write_tcmnd = sg;
+	conn->write_sg = sg;
 	conn->write_offset = offset;
 	conn->write_size += size;
 }
