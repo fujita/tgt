@@ -236,11 +236,11 @@ static inline void iscsi_cmnd_set_length(struct iscsi_pdu *pdu)
 	hton24(pdu->bhs.dlength, pdu->datasize);
 }
 
-#define cmd_hdr(cmd) ((struct iscsi_cmd *) (&((cmd)->pdu.bhs)))
-#define cmd_ttt(cmd) cpu_to_be32((cmd)->pdu.bhs.ttt)
-#define cmd_itt(cmd) cpu_to_be32((cmd)->pdu.bhs.itt)
-#define cmd_opcode(cmd) ((cmd)->pdu.bhs.opcode & ISCSI_OPCODE_MASK)
-#define cmd_scsicode(cmd) cmd_hdr(cmd)->cdb[0]
+#define cmd_hdr(cmd)		((struct iscsi_cmd *) (&((cmd)->pdu.bhs)))
+#define cmd_ttt(cmd)		cpu_to_be32((cmd)->pdu.bhs.ttt)
+#define cmd_itt(cmd)		cpu_to_be32((cmd)->pdu.bhs.itt)
+#define cmd_opcode(cmd)		((cmd)->pdu.bhs.opcode & ISCSI_OPCODE_MASK)
+#define cmd_scsicode(cmd)	cmd_hdr(cmd)->cdb[0]
 
 #define	SECTOR_SIZE_BITS	9
 
@@ -253,16 +253,16 @@ enum istgt_cmd_flags {
 };
 
 #define set_cmd_hashed(cmd)	set_bit(CMD_hashed, &(cmd)->flags)
-#define cmd_hashed(cmd)	test_bit(CMD_hashed, &(cmd)->flags)
+#define cmd_hashed(cmd)		test_bit(CMD_hashed, &(cmd)->flags)
 
 #define set_cmd_final(cmd)	set_bit(CMD_final, &(cmd)->flags)
-#define cmd_final(cmd)	test_bit(CMD_final, &(cmd)->flags)
+#define cmd_final(cmd)		test_bit(CMD_final, &(cmd)->flags)
 
 #define set_cmd_waitio(cmd)	set_bit(CMD_waitio, &(cmd)->flags)
-#define cmd_waitio(cmd)	test_bit(CMD_waitio, &(cmd)->flags)
+#define cmd_waitio(cmd)		test_bit(CMD_waitio, &(cmd)->flags)
 
 #define set_cmd_close(cmd)	set_bit(CMD_close, &(cmd)->flags)
-#define cmd_close(cmd)	test_bit(CMD_close, &(cmd)->flags)
+#define cmd_close(cmd)		test_bit(CMD_close, &(cmd)->flags)
 
 #define set_cmd_pending(cmd)	set_bit(CMD_pending, &(cmd)->flags)
 #define clear_cmd_pending(cmd)	clear_bit(CMD_pending, &(cmd)->flags)
