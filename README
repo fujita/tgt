@@ -1,0 +1,92 @@
+Introduction
+-------------
+Note that linux target framework software (tgt) is under active
+development. Don't play with important data.
+
+Currently, tgt supports two SCSI targets, iSCSI software target
+(istgt) and IBM virtual SCSI target (ibmvstgt).
+
+
+Starting
+-------------
+The software consists of kernel modules and user-space tools (daemon,
+management tool, dynamic libraries). The compilation of the kernel
+modules require the path to above kernel sources:
+
+host:~/tgt$ make KERNELSRC=<kernel-src>
+
+Make sure that everything is built successfully. Now you can start tgt
+by type the followings.
+
+host:~/tgt$ su
+host:~/tgt# ./initd start
+
+You need to be in the tgt source code directory to execute the script
+correctly.
+
+You can see /sys/class/tgt_type directory to make sure kernel modules
+loaded.
+
+host:~/tgt# cat /sys/class/tgt_type/driver1/name
+istgt
+host:~/tgt# cat /sys/class/tgt_type/driver1/protocol
+scsi
+
+The number in the directory path is driver id. The istgt driver id is
+1 in the above example.
+
+By defaults, tgt generates logs of debug messages. Please see
+/var/log/kern.log and /var/log/daemon.log (your Linux distributions
+may use the different log file names).
+
+
+Configuration
+-------------
+Everyting is configured via the tgtadm management tool. Currenlty, tgt
+does not support persistent configurations. The tgtadm alayws requires
+you to specify the driver name like the following examples.
+
+host:~/tgt# ./usr/tgtadm --driver istgt --help
+host:~/tgt# ./usr/tgtadm --driver ibmvstgt --help
+
+First, you need to create a target.
+
+host:~/tgt# ./usr/tgtadm --driver istgt --op new --tid 0 \
+--params Name=iqn.2001-04.com.example:storage.disk1.sys1.xyz
+
+If you use ibmvstgt, you don't need to create a target because they
+are created automatically. A target is created per virtual bus.
+
+You can see /sys/class/tgt_target directory to make sure the target is
+ready.
+
+host:~/tgt# cat /sys/class/tgt_target/target0/typeid
+1
+
+This number is the driver id. That is, this target (tid 0) belongs to
+the driver id 1.
+
+The number in the directory path is target id (tid). tid is 0 in the
+above example.
+
+Then, you need to add a device to the target (tid 0).
+
+host:~/tgt# ./usr/tgtadm --driver istgt --op new --tid 0 --lun 0 \
+--params Path=/dev/sdb1,Type=tgt_vsd
+
+You can see /sys/class/tgt_device directory to make sure the device
+was added successfully.
+
+host:~/tgt# cat /sys/class/tgt_device/device0\:0/size
+9006649344
+
+Note that every target must need a device whose lun is zero. Now the
+target is ready for accepting accesses from initiators.
+
+
+Stopping
+-------------
+Simply execute:
+
+host:~/tgt# ./initd stop
+
