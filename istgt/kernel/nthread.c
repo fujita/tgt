@@ -606,10 +606,9 @@ static void close_conn(struct iscsi_conn *conn)
 	}
 
 	eprintk("%d %" PRIu64 " %u\n",
-		session->target->tid, session->sid, conn->cid);
+		session->target->tt->tid, session->sid, conn->cid);
 
-	event_send(session->target->tt, session->target->tid,
-		   session->sid, conn->cid, E_CONN_CLOSE);
+	event_send(session->target->tt, session->sid, conn->cid, E_CONN_CLOSE);
 	conn_free(conn);
 
 	if (list_empty(&session->conn_list))
@@ -674,11 +673,11 @@ int nthread_start(struct iscsi_target *target)
 	struct task_struct *task;
 
 	if (info->task) {
-		eprintk("Target (%u) already runs\n", target->tid);
+		eprintk("Target (%u) already runs\n", target->tt->tid);
 		return -EALREADY;
 	}
 
-	task = kthread_run(istd, target, "istd%d", target->tid);
+	task = kthread_run(istd, target, "istd%d", target->tt->tid);
 
 	if (IS_ERR(task))
 		err = PTR_ERR(task);

@@ -1659,7 +1659,6 @@ static int istgt_target_create(struct tgt_target *tt)
 	struct iscsi_target *target = tt->tt_data;
 
 	target->tt = tt;
-	target->tid = target->tt->tid;
 
 	memcpy(&target->sess_param, &default_session_param, sizeof(default_session_param));
 	memcpy(&target->trgt_param, &default_target_param, sizeof(default_target_param));

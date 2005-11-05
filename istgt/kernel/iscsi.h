@@ -61,8 +61,6 @@ struct network_thread_info {
 struct istgt_cmd;
 
 struct iscsi_target {
-	int tid;
-
 	struct iscsi_sess_param sess_param;
 	struct iscsi_trgt_param trgt_param;
 
@@ -213,7 +211,7 @@ extern void nthread_wakeup(struct iscsi_target *);
 
 /* config.c */
 extern int iet_msg_recv(struct tgt_target *, uint32_t, void *);
-extern int event_send(struct tgt_target *tgt, int tid, uint64_t sid,
+extern int event_send(struct tgt_target *tgt, uint64_t sid,
 		      uint32_t cid, uint32_t state);
 
 /* session.c */

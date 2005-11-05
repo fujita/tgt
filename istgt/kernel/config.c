@@ -77,12 +77,12 @@ done:
 	return err;
 }
 
-int event_send(struct tgt_target *tgt, int tid, uint64_t sid, uint32_t cid,
+int event_send(struct tgt_target *tgt, uint64_t sid, uint32_t cid,
 	       uint32_t state)
 {
 	struct iet_msg msg;
 
-	msg.k.conn_state_change.tid = tid;
+	msg.k.conn_state_change.tid = tgt->tid;
 	msg.k.conn_state_change.sid = sid;
 	msg.k.conn_state_change.cid = cid;
 	msg.k.conn_state_change.state = state;
