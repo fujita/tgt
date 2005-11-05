@@ -118,7 +118,7 @@ static void iscsi_cmnds_init_write(struct list_head *send)
 	list_for_each_safe(pos, next, send) {
 		cmnd = list_entry(pos, struct istgt_cmd, list);
 
-		dprintk("%p:%x\n", cmnd, cmnd_opcode(cmnd));
+		dprintk("%p:%x\n", cmnd, cmd_opcode(cmnd));
 
 		list_del_init(&cmnd->list);
 		BUG_ON(conn != cmnd->conn);
@@ -376,7 +376,7 @@ static void cmnd_skip_pdu(struct istgt_cmd *cmnd)
 
 	BUG_ON(1);
 
-/* 	eprintk("%x %x %x %u\n", cmd_itt(cmnd), cmnd_opcode(cmnd), */
+/* 	eprintk("%x %x %x %u\n", cmd_itt(cmnd), cmd_opcode(cmnd), */
 /* 		cmd_hdr(cmnd)->cdb[0], cmnd->pdu.datasize); */
 
 /* 	if (!(size = cmnd->pdu.datasize)) */
@@ -446,7 +446,7 @@ static void update_stat_sn(struct istgt_cmd *cmnd)
 	uint32_t exp_stat_sn;
 
 	cmnd->pdu.bhs.exp_statsn = exp_stat_sn = be32_to_cpu(cmnd->pdu.bhs.exp_statsn);
-	dprintk("%x,%x\n", cmnd_opcode(cmnd), exp_stat_sn);
+	dprintk("%x,%x\n", cmd_opcode(cmnd), exp_stat_sn);
 	if ((int32_t) (exp_stat_sn - conn->exp_stat_sn) > 0 &&
 	    (int32_t) (exp_stat_sn - conn->stat_sn) <= 0) {
 		// free pdu resources
@@ -1102,7 +1102,7 @@ out:
 /* 	int err =  -ISCSI_RESPONSE_UNKNOWN_TASK; */
 
 /* 	if ((cmnd = cmnd_find_hash(session, itt, ISCSI_RESERVED_TAG))) { */
-/* 		eprintk("%x %x %x %u %u %u %u\n", cmd_itt(cmnd), cmnd_opcode(cmnd), */
+/* 		eprintk("%x %x %x %u %u %u %u\n", cmd_itt(cmnd), cmd_opcode(cmnd), */
 /* 			cmnd->r2t_length, cmnd_scsicode(cmnd), */
 /* 			cmnd_write_size(cmnd), cmnd->is_unsolicited_data, */
 /* 			cmnd->outstanding_r2t); */
@@ -1266,7 +1266,7 @@ static void logout_exec(struct istgt_cmd *req)
 
 static void iscsi_cmnd_exec(struct istgt_cmd *cmnd)
 {
-	dprintk("%p,%x,%u\n", cmnd, cmnd_opcode(cmnd),
+	dprintk("%p,%x,%u\n", cmnd, cmd_opcode(cmnd),
 		cmnd->pdu.bhs.statsn);
 
 	switch (cmd_opcode(cmnd)) {
@@ -1372,7 +1372,7 @@ void cmnd_tx_start(struct istgt_cmd *cmnd)
 	struct iscsi_conn *conn = cmnd->conn;
 	struct iovec *iop;
 
-	dprintk("%p:%x\n", cmnd, cmnd_opcode(cmnd));
+	dprintk("%p:%x\n", cmnd, cmd_opcode(cmnd));
 	BUG_ON(!cmnd);
 	iscsi_cmnd_set_length(&cmnd->pdu);
 
