@@ -245,11 +245,11 @@ static inline void iscsi_cmnd_set_length(struct iscsi_pdu *pdu)
 	hton24(pdu->bhs.dlength, pdu->datasize);
 }
 
-#define cmnd_hdr(cmnd) ((struct iscsi_cmd *) (&((cmnd)->pdu.bhs)))
-#define cmnd_ttt(cmnd) cpu_to_be32((cmnd)->pdu.bhs.ttt)
-#define cmnd_itt(cmnd) cpu_to_be32((cmnd)->pdu.bhs.itt)
-#define cmnd_opcode(cmnd) ((cmnd)->pdu.bhs.opcode & ISCSI_OPCODE_MASK)
-#define cmnd_scsicode(cmnd) cmnd_hdr(cmnd)->cdb[0]
+#define cmd_hdr(cmd) ((struct iscsi_cmd *) (&((cmd)->pdu.bhs)))
+#define cmd_ttt(cmd) cpu_to_be32((cmd)->pdu.bhs.ttt)
+#define cmd_itt(cmd) cpu_to_be32((cmd)->pdu.bhs.itt)
+#define cmd_opcode(cmd) ((cmd)->pdu.bhs.opcode & ISCSI_OPCODE_MASK)
+#define cmd_scsicode(cmd) cmd_hdr(cmd)->cdb[0]
 
 #define	SECTOR_SIZE_BITS	9
 

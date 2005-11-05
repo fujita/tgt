@@ -135,7 +135,7 @@ int digest_rx_data(struct iscsi_cmnd *cmnd)
 	struct scatterlist *sg;
 	uint32_t offset, crc;
 
-	if (cmnd_opcode(cmnd) == ISCSI_OP_SCSI_DATA_OUT) {
+	if (cmd_opcode(cmnd) == ISCSI_OP_SCSI_DATA_OUT) {
 		struct iscsi_cmnd *scsi_cmnd = cmnd->req;
 		struct iscsi_data *req = (struct iscsi_data *) &cmnd->pdu.bhs;
 
@@ -150,7 +150,7 @@ int digest_rx_data(struct iscsi_cmnd *cmnd)
 	digest_data(cmnd->conn->rx_digest_tfm, cmnd, sg, offset,
 		    (uint8_t *) &crc);
 
-	if (!cmnd->conn->read_overflow && (cmnd_opcode(cmnd) != ISCSI_OP_PDU_REJECT)) {
+	if (!cmnd->conn->read_overflow && (cmd_opcode(cmnd) != ISCSI_OP_PDU_REJECT)) {
 		if (crc != cmnd->ddigest)
 			return -EIO;
 	}

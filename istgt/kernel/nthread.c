@@ -257,7 +257,7 @@ static int recv(struct iscsi_conn *conn)
 		rx_ddigest(conn, RX_END);
 		break;
 	default:
-		eprintk("%d %d %x\n", res, conn->read_state, cmnd_opcode(cmnd));
+		eprintk("%d %d %x\n", res, conn->read_state, cmd_opcode(cmnd));
 		BUG_ON(1);
 	}
 
@@ -268,13 +268,13 @@ static int recv(struct iscsi_conn *conn)
 		return res;
 
 	if (conn->read_size) {
-		eprintk("%d %x %d\n", res, cmnd_opcode(cmnd), conn->read_size);
+		eprintk("%d %x %d\n", res, cmd_opcode(cmnd), conn->read_size);
 		BUG_ON(1);
 	}
 
 	cmnd_rx_end(cmnd);
 	if (conn->read_size) {
-		eprintk("%x %d\n", cmnd_opcode(cmnd), conn->read_size);
+		eprintk("%x %d\n", cmd_opcode(cmnd), conn->read_size);
 		conn->read_state = RX_DATA;
 		return 1;
 	}
@@ -522,7 +522,7 @@ static int send(struct iscsi_conn *conn)
 		res = tx_ddigest(cmnd, TX_END);
 		break;
 	default:
-		eprintk("%d %d %x\n", res, conn->write_state, cmnd_opcode(cmnd));
+		eprintk("%d %d %x\n", res, conn->write_state, cmd_opcode(cmnd));
 		BUG_ON(1);
 	}
 
@@ -533,7 +533,7 @@ static int send(struct iscsi_conn *conn)
 		return res;
 
 	if (conn->write_size) {
-		eprintk("%d %x %u\n", res, cmnd_opcode(cmnd), conn->write_size);
+		eprintk("%d %x %u\n", res, cmd_opcode(cmnd), conn->write_size);
 		BUG_ON(conn->write_size);
 	}
 	cmnd_tx_end(cmnd);
@@ -600,7 +600,7 @@ static void close_conn(struct iscsi_conn *conn)
 	if (atomic_read(&conn->nr_cmnds)) {
 		eprintk("%u\n", atomic_read(&conn->nr_cmnds));
 		list_for_each_entry(cmnd, &conn->pdu_list, conn_list)
-			eprintk("%x %x\n", cmnd_opcode(cmnd), cmnd_itt(cmnd));
+			eprintk("%x %x\n", cmd_opcode(cmnd), cmd_itt(cmnd));
 		BUG_ON(1);
 	}
 
