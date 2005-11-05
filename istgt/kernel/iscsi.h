@@ -60,11 +60,6 @@ struct network_thread_info {
 
 struct istgt_cmd;
 
-enum iscsi_device_state {
-	IDEV_RUNNING,
-	IDEV_DEL,
-};
-
 struct iscsi_target {
 	int tid;
 
@@ -257,7 +252,6 @@ enum istgt_cmd_flags {
 	CMD_final,
 	CMD_waitio,
 	CMD_close,
-	CMD_lunit,
 	CMD_pending,
 };
 
