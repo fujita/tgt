@@ -16,6 +16,7 @@
 #include <scsi/scsi.h>
 
 #include <tgt.h>
+#include <tgt_target.h>
 #include <tgt_device.h>
 #include <tgt_scsi.h>
 
@@ -31,6 +32,7 @@ static int tgt_vsd_create(struct tgt_device *device)
 	else
 		return -EINVAL;
 
+	device->use_clustering = 1;
 	device->size = inode->i_size;
 	dprintk("%d %llu\n", device->fd, inode->i_size >> 9);
 
@@ -132,12 +134,12 @@ static int vsd_execute_file_io(struct tgt_cmd *cmd, int op)
 	}
 
 	/* sync_page_range(inode, inode->i_mapping, pos, (size_t) cmd->bufflen); */
-
 	return 0;
 }
 
-static int tgt_vsd_execute(struct tgt_cmd *cmd)
+static void __tgt_vsd_execute(void *data)
 {
+	struct tgt_cmd *cmd = data;
 	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
 	int err, rw;
 
@@ -154,33 +156,42 @@ static int tgt_vsd_execute(struct tgt_cmd *cmd)
 		rw = WRITE;
 		break;
 	default:
-		err = tgt_uspace_cmd_send(cmd);
+		err = tgt_uspace_cmd_send(cmd, GFP_KERNEL);
 		/*
 		 * successfully queued
 		 */
 		if (err >= 0)
-			return TGT_CMD_USPACE_QUEUED;
+			return;
 
 		goto failed;
 	};
 
-	/*
-	 * TODO this will become device->io_handler->queue_cmd
-	 * when we seperate the io_handlers
-	 */
 	err = vsd_execute_file_io(cmd, rw);
 	if (!err) {
 		cmd->result = SAM_STAT_GOOD;
-		return TGT_CMD_COMPLETED;
+		goto done;
 	}
 
 	/*
-	 * we should to a switch but I am not sure of all the err values
+	 * we should do a switch but I am not sure of all the err values
 	 * returned. If you find one add it
 	 */
 failed:
+	/* TODO if -ENOMEM return QUEUEFULL or BUSY ??? */
 	scsi_tgt_sense_data_build(cmd, HARDWARE_ERROR, 0, 0);
-	return TGT_CMD_FAILED;
+done:
+	tgt_transfer_response(cmd);
+}
+
+static int tgt_vsd_execute(struct tgt_cmd *cmd)
+{
+	/*
+	 * TODO: this module needs to do async non blocking io or create
+	 * its own threads
+	 */
+	INIT_WORK(&cmd->work, __tgt_vsd_execute, cmd);
+	queue_work(cmd->session->target->twq, &cmd->work);
+	return TGT_CMD_KERN_QUEUED;
 }
 
 static struct tgt_device_template tgt_vsd = {

@@ -49,6 +49,8 @@ struct tgt_event {
 			uint64_t dev_id;
 		} d_device;
 		struct {
+			int tid;
+			uint64_t dev_id;
 			uint64_t cid;
 			uint32_t len;
 			int result;

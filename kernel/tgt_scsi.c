@@ -95,6 +95,10 @@ scsi_tgt_create_cmd(struct tgt_session *session, void *tgt_priv, uint8_t *scb,
 		if (!device) {
 			eprintk("Could not find device %x %" PRIu64 "\n",
 				scmd->scb[0], cmd->dev_id);
+			/*
+			 * TODO: FIX THIS LEAK. We should check magic
+			 * target queue.
+			 */
 			return NULL;
 		}
 	}
@@ -110,7 +114,7 @@ scsi_tgt_create_cmd(struct tgt_session *session, void *tgt_priv, uint8_t *scb,
 	/* do scsi device specific setup */
 	device->dt->prep_cmd(cmd, data_len);
 
-	tgt_cmd_queue(cmd);
+	tgt_cmd_start(cmd);
 
 	return cmd;
 }

@@ -10,10 +10,12 @@
 #define __TGT_H
 
 #include <linux/mempool.h>
+#include <linux/bio.h>
 #include <linux/dma-mapping.h>
 
 #include <tgt_types.h>
 
+struct request;
 struct tgt_device;
 struct tgt_protocol;
 
@@ -25,9 +27,11 @@ struct tgt_session {
 };
 
 enum {
-	TGT_CMD_CREATE,
+	TGT_CMD_CREATED,
+	TGT_CMD_BUF_ALLOCATED,
+	TGT_CMD_STARTED,
+	TGT_CMD_READY,
 	TGT_CMD_RECV,
-	TGT_CMD_QUEUED,
 	TGT_CMD_XMIT,
 	TGT_CMD_DONE,
 };
@@ -37,9 +41,8 @@ struct tgt_cmd {
 	struct tgt_device *device;
 	struct tgt_protocol *proto;
 
-	uint32_t state;
+	atomic_t state;
 	uint64_t dev_id;
-	uint64_t cid;
 
 	struct work_struct work;
 	void (*done) (struct tgt_cmd *);
@@ -54,6 +57,7 @@ struct tgt_cmd {
 	uint64_t offset;
 	int result;
 
+	struct request *rq;
 	/*
 	 * target driver private
 	 */
@@ -73,10 +77,9 @@ extern int tgt_session_destroy(struct tgt_session *session);
 
 extern int tgt_msg_send(struct tgt_target *target, void *data, int dlen,
 			gfp_t flags);
-extern int tgt_uspace_cmd_send(struct tgt_cmd *cmd);
+extern int tgt_uspace_cmd_send(struct tgt_cmd *cmd, gfp_t gfp_mask);
 extern struct tgt_cmd *tgt_cmd_create(struct tgt_session *session, void *priv);
-extern void tgt_cmd_destroy(struct tgt_cmd *cmd);
-extern int tgt_cmd_queue(struct tgt_cmd *cmd);
+extern int tgt_cmd_start(struct tgt_cmd *cmd);
 extern void tgt_transfer_response(void *cmd);
 extern int tgt_sysfs_init(void);
 extern void tgt_sysfs_exit(void);

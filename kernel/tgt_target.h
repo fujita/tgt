@@ -29,10 +29,23 @@ enum {
 	TGT_CMD_XMIT_REQUEUE,
 };
 
+#define TGT_DEFAULT_MAX_SECTORS 1024
+#define TGT_MAX_PHYS_SEGMENTS 255
+/*
+ * this should be a template and device limit probably
+ */
+#define TGT_QUEUE_DEPTH 64 
+
 struct tgt_target_template {
 	const char *name;
 	struct module *module;
 	unsigned priv_data_size;
+
+	unsigned short max_hw_segments;
+	unsigned int max_segment_size;
+	unsigned long seg_boundary_mask;
+	unsigned short max_sectors;
+	unsigned use_clustering;
 
 	/*
 	 * Target creation/destroy callbacks useful when userspace

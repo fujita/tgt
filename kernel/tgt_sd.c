@@ -24,9 +24,24 @@
  */
 static int tgt_sd_create(struct tgt_device *device)
 {
+	struct file *file = device->file;
+	struct io_restrictions *limits = &device->limits;
+	struct request_queue *q;
 	struct inode *inode;
 
-	inode = device->file->f_dentry->d_inode;
+	q = bdev_get_queue(file->f_dentry->d_inode->i_bdev);
+	limits->max_sectors = q->max_hw_sectors;
+	limits->max_phys_segments = q->max_phys_segments;
+	limits->max_hw_segments = q->max_hw_segments;
+	limits->hardsect_size = q->hardsect_size;
+	limits->max_segment_size = q->max_segment_size;
+	limits->seg_boundary_mask = q->seg_boundary_mask;
+	if (test_bit(QUEUE_FLAG_CLUSTER, &q->queue_flags))
+		device->use_clustering = 1;
+	else
+		device->use_clustering = 0;
+
+	inode = file->f_dentry->d_inode;
 	if (S_ISREG(inode->i_mode))
 		;
 	else if (S_ISBLK(inode->i_mode))
@@ -101,95 +116,6 @@ static void tgt_sd_end_rq(struct request *rq)
 }
 
 /*
- * this is going to the bio layer
- */
-static struct bio *bio_map_pages(request_queue_t *q, struct page *page,
-				 unsigned int len, unsigned int offset,
-				 unsigned int gfp_mask)
-{
-	int nr_pages = (len + PAGE_SIZE - 1) >> PAGE_SHIFT;
-	struct bio *bio;
-
-	bio = bio_alloc(gfp_mask, nr_pages);
-	if (!bio)
-		return ERR_PTR(-ENOMEM);
-
-	while (len) {
-		unsigned int bytes = PAGE_SIZE - offset;
-
-		if (bytes > len)
-			bytes = len;
-
-		if (__bio_add_page(q, bio, page, bytes, offset) < bytes)
-			goto free_bio;
-
-		offset = 0;
-		len -= bytes;
-		page++;
-	}
-
-	return bio;
-
- free_bio:
-	bio_put(bio);
-	return ERR_PTR(-EINVAL);
-}
-
-/*
- * this is going to scsi-ml or the block layer
- */
-static int req_map_sg(request_queue_t *q, struct request *rq,
-		      struct scatterlist *sg, int nsegs, unsigned int gfp)
-{
-	struct bio *bio;
-	int i, err = 0;
-	unsigned int len = 0;
-
-	for (i = 0; i < nsegs; i++) {
-		bio = bio_map_pages(q, sg[i].page, sg[i].length, sg[i].offset,
-				    gfp);
-		if (IS_ERR(bio)) {
-			err = PTR_ERR(bio);
-			goto free_bios;
-		}
-		len += sg[i].length;
-
-		bio->bi_flags &= ~(1 << BIO_SEG_VALID);
-		if (rq_data_dir(rq) == WRITE)
-			bio->bi_rw |= (1 << BIO_RW);
-		blk_queue_bounce(q, &bio);
-
-		if (i == 0)
-			blk_rq_bio_prep(q, rq, bio);
-		else if (!q->back_merge_fn(q, rq, bio)) {
-			bio_endio(bio, bio->bi_size, 0);
-			err = -EINVAL;
-			goto free_bios;
-		} else {
-			rq->biotail->bi_next = bio;
-			rq->biotail = bio;
-			rq->hard_nr_sectors += bio_sectors(bio);
-			rq->nr_sectors = rq->hard_nr_sectors;
-		}
-	}
-
-	rq->buffer = rq->data = NULL;
-	rq->data_len = len;
-	return 0;
-
- free_bios:
-	while ((bio = rq->bio) != NULL) {
-		rq->bio = bio->bi_next;
-		/*
-		 * call endio instead of bio_put incase it was bounced
-		 */
-		bio_endio(bio, bio->bi_size, 0);
-	}
-
-	return err;
-}
-
-/*
  * TODO part of this will move to a io_handler callout
  */
 static int tgt_sd_execute_rq(struct tgt_cmd *cmd)
@@ -204,10 +130,10 @@ static int tgt_sd_execute_rq(struct tgt_cmd *cmd)
 	if (!rq)
 		goto hw_error;
 
-	if (req_map_sg(q, rq, cmd->sg, cmd->sg_count,
+/*	if (req_map_sg(q, rq, cmd->sg, cmd->sg_count,
 			GFP_KERNEL | __GFP_NOFAIL))
 		goto free_request;
-
+*/
 	rq->cmd_len = COMMAND_SIZE(scmd->scb[0]);
 	memcpy(rq->cmd, scmd->scb, rq->cmd_len);
 	rq->sense_len = 0;

@@ -224,12 +224,10 @@ static struct class_device_attribute *tgt_device_attrs[] = {
 static void tgt_device_class_release(struct class_device *cdev)
 {
 	struct tgt_device *device = cdev_to_tgt_device(cdev);
-	struct tgt_target *target = device->target;
+	struct class_device *parent = &device->target->cdev;
 
-	class_device_put(&target->cdev);
-	kfree(device->dt_data);
-	kfree(device->pt_data);
-	kfree(device);
+	tgt_device_free(device);
+	class_device_put(parent);
 }
 
 static struct class tgt_device_class = {

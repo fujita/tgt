@@ -8,9 +8,12 @@
 #ifndef __TGT_DEVICE_H
 #define __TGT_DEVICE_H
 
+#include <linux/blkdev.h>
+#include <linux/device-mapper.h>
 #include <linux/device.h>
 #include <linux/list.h>
 
+struct request_queue;
 struct tgt_device;
 struct tgt_cmd;
 
@@ -75,6 +78,16 @@ struct tgt_device {
 	uint32_t blk_shift;
 	uint64_t size;
 
+	/*
+	 * queue for tgt <-> tgt LLD requests
+	 */
+	struct request_queue *q;
+	/*
+	 * end device io limits (should be set by tgt_device drivers)
+	 */
+	struct io_restrictions limits;
+	unsigned use_clustering;
+
 	struct tgt_target *target;
 	struct list_head dlist;
 };
@@ -82,6 +95,7 @@ struct tgt_device {
 #define cdev_to_tgt_device(cdev) \
         container_of(cdev, struct tgt_device, cdev)
 
+extern void tgt_device_free(struct tgt_device *device);
 extern struct tgt_device *tgt_device_find(struct tgt_target *target,
 					  uint64_t dev_id);
 extern int tgt_sysfs_register_device(struct tgt_device *device);
