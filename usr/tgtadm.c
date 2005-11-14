@@ -27,6 +27,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/un.h>
+#include <linux/types.h>
 #include <linux/netlink.h>
 
 #include "tgtadm.h"
