@@ -464,7 +464,7 @@ static int check_cmd_sn(struct istgt_cmd *cmnd)
 	if ((int32_t) (cmd_sn - session->exp_cmd_sn) >= 0)
 		return 0;
 	eprintk("sequence error (%x,%x)\n", cmd_sn, session->exp_cmd_sn);
-	return -ISCSI_PROTOCOL_ERROR;
+	return -ISCSI_REASON_PROTOCOL_ERROR;
 }
 
 static struct istgt_cmd *__cmnd_find_hash(struct iscsi_session *session,
@@ -510,7 +510,7 @@ static int cmnd_insert_hash(struct istgt_cmd *cmnd)
 
 	dprintk("%p:%x\n", cmnd, itt);
 	if (itt == ISCSI_RESERVED_TAG) {
-		err = -ISCSI_PROTOCOL_ERROR;
+		err = -ISCSI_REASON_PROTOCOL_ERROR;
 		goto out;
 	}
 
@@ -523,7 +523,7 @@ static int cmnd_insert_hash(struct istgt_cmd *cmnd)
 		list_add_tail(&cmnd->hash_list, head);
 		set_cmd_hashed(cmnd);
 	} else
-		err = -TASK_IN_PROGRESS;
+		err = -ISCSI_REASON_TASK_IN_PROGRESS;
 
 	spin_unlock(&session->cmnd_hash_lock);
 
@@ -838,7 +838,7 @@ static int noop_out_start(struct iscsi_conn *conn, struct istgt_cmd *cmnd)
 		 * See 10.18.2 in the draft 20.
 		 */
 		eprintk("initiator bug %x\n", cmd_itt(cmnd));
-		err = -ISCSI_PROTOCOL_ERROR;
+		err = -ISCSI_REASON_PROTOCOL_ERROR;
 		goto out;
 	}
 
@@ -1572,10 +1572,10 @@ void cmnd_rx_start(struct istgt_cmd *cmnd)
 		break;
 	case ISCSI_OP_TEXT:
 	case ISCSI_OP_SNACK:
-		err = -CMD_NOT_SUPPORTED;
+		err = -ISCSI_REASON_CMD_NOT_SUPPORTED;
 		break;
 	default:
-		err = -CMD_NOT_SUPPORTED;
+		err = -ISCSI_REASON_CMD_NOT_SUPPORTED;
 		break;
 	}
 
