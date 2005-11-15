@@ -34,7 +34,7 @@ enum {
 /*
  * this should be a template and device limit probably
  */
-#define TGT_QUEUE_DEPTH 64 
+#define TGT_QUEUE_DEPTH 64
 
 struct tgt_target_template {
 	const char *name;

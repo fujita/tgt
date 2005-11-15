@@ -976,7 +976,7 @@ static int uspace_cmd_done(int tid, uint64_t dev_id, uint64_t cid, void *data,
 	if (!cmd) {
 		eprintk("Could not find command %llu\n",
 			(unsigned long long) cid);
-		return -EINVAL;	
+		return -EINVAL;
 	}
 
 	dprintk("cmd %p tag %d result %d len %d bufflen %u\n",
