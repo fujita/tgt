@@ -26,6 +26,7 @@
 
 #include "tgtd.h"
 #include "tgt_if.h"
+#include "tgt_sysfs.h"
 
 #define cpu_to_be32 __cpu_to_be32
 #define be32_to_cpu __be32_to_cpu
@@ -66,7 +67,7 @@ static int device_info(int tid, uint64_t lun, uint64_t *size)
 	int fd, err;
 	char path[PATH_MAX], buf[128];
 
-	sprintf(path, "/sys/class/tgt_device/device%d:%" PRIu64 "/size",
+	sprintf(path, TGT_DEVICE_SYSFSDIR "/device%d:%" PRIu64 "/size",
 		tid, lun);
 
 	fd = open(path, O_RDONLY);
@@ -324,9 +325,9 @@ static int report_luns(int tid, uint32_t unused, uint8_t *scb, uint8_t *p, int *
 	char buf[128];
 	int result = SAM_STAT_GOOD;
 
-	dir = opendir("/sys/class/tgt_device");
+	dir = opendir(TGT_DEVICE_SYSFSDIR);
 	if (!dir) {
-		perror("can't open /sys/class/tgt_device\n");
+		eprintf("can't open %s %d\n", TGT_DEVICE_SYSFSDIR, errno);
 		exit(0);
 	}
 
@@ -406,7 +407,7 @@ static int sync_cache(int tid, uint64_t lun, uint8_t *scb, uint8_t *data,
 	int fd, err;
 	char path[PATH_MAX], buf[PATH_MAX];
 
-	sprintf(path, "/sys/class/tgt_device/device%d:%" PRIu64 "/fd",
+	sprintf(path, TGT_DEVICE_SYSFSDIR "/device%d:%" PRIu64 "/fd",
 		tid, lun);
 
 	fd = open(path, O_RDONLY);
