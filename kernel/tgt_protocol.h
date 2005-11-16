@@ -47,8 +47,9 @@ struct tgt_protocol {
 	/*
 	 * Build userspace packet
 	 */
-	void (* build_uspace_pdu)(struct tgt_cmd *cmd, void *data);
+	void (* uspace_pdu_build)(struct tgt_cmd *cmd, void *data);
 
+	void (* uspace_cmd_complete)(struct tgt_cmd *cmd);
 	/*
 	 * Initialize protocol specific data per device
 	 */

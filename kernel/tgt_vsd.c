@@ -78,13 +78,6 @@ static void tgt_vsd_prep(struct tgt_cmd *cmd, uint32_t data_len)
 	cmd->offset = off;
 }
 
-static void tgt_vsd_uspace_complete(struct tgt_cmd *cmd)
-{
-	/* userspace did everything for us just copy the buffer */
-	if (cmd->result != SAM_STAT_GOOD)
-		scsi_tgt_sense_copy(cmd);
-}
-
 /*
  * TODO: We need to redo our scatter lists so they take into account
  * this common usage, but also not violate HW limits
@@ -200,7 +193,6 @@ static struct tgt_device_template tgt_vsd = {
 	.create = tgt_vsd_create,
 	.execute_cmd = tgt_vsd_execute,
 	.prep_cmd = tgt_vsd_prep,
-	.complete_uspace_cmd = tgt_vsd_uspace_complete,
 };
 
 static int __init tgt_vsd_init(void)

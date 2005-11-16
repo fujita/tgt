@@ -114,7 +114,7 @@ static int cmd_queue(int fd, char *reqbuf, char *resbuf)
 	struct tgt_event *ev_res = NLMSG_DATA(resbuf);
 	uint64_t cid = ev_req->k.cmd_req.cid;
 	uint8_t *scb;
-	int (*fn) (int, uint64_t, uint8_t *, uint8_t *, int *);
+	int (*fn) (int, uint64_t, uint8_t *, uint8_t *, int *, uint32_t);
 
 	memset(resbuf, 0, NL_BUFSIZE);
 	scb = (uint8_t *) ev_req->data;
@@ -122,10 +122,12 @@ static int cmd_queue(int fd, char *reqbuf, char *resbuf)
 
 	fn = dl_proto_cmd_process(ev_req->k.cmd_req.tid,
 				  ev_req->k.cmd_req.typeid);
+
 	if (fn)
 		result = fn(ev_req->k.cmd_req.tid,
 			    ev_req->k.cmd_req.dev_id, scb,
-			    (uint8_t *) ev_res->data, &len);
+			    (uint8_t *) ev_res->data, &len,
+			    ev_req->k.cmd_req.flags);
 	else {
 		result = -EINVAL;
 		eprintf("Cannot process cmd %d %" PRIu64 " %" PRIu64 "\n",
@@ -133,8 +135,11 @@ static int cmd_queue(int fd, char *reqbuf, char *resbuf)
 	}
 
 	memset(ev_res, 0, sizeof(*ev_res));
+	ev_res->u.cmd_res.tid = ev_req->k.cmd_req.tid;
+	ev_res->u.cmd_res.dev_id = ev_req->k.cmd_req.dev_id;
 	ev_res->u.cmd_res.cid = cid;
 	ev_res->u.cmd_res.len = len;
+	ev_res->u.cmd_res.flags = ev_req->k.cmd_req.flags;
 	ev_res->u.cmd_res.result = result;
 
 	log_error("scsi_cmd_process res %d len %d\n", result, len);

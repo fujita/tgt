@@ -148,6 +148,95 @@ found:
 }
 EXPORT_SYMBOL_GPL(tgt_target_template_unregister);
 
+static void tgt_request_fn(struct request_queue *q)
+{
+	struct tgt_target *target;
+	struct tgt_cmd *cmd;
+	struct request *rq;
+	int err;
+
+	while ((rq = elv_next_request(q)) != NULL) {
+		/* we need to set state or refcount under this lock! */
+		cmd = rq->special;
+
+		/*
+		 * the iosched nicely ordered these, should we try to keep the
+		 * ordering or for most cases will it not make a difference
+		 * since the lower levels will iosched again (not for
+		 * passthrough though). Maybe we should use a tgt_device
+		 * flag to indicate what is best for the real device.
+		 */
+		if (atomic_read(&cmd->state) != TGT_CMD_READY)
+			break;
+		/*
+		 * hit queue depth (command completion will run the
+		 * queue again
+		 */
+		if (blk_queue_tagged(q) && blk_queue_start_tag(q, rq))
+			break;
+
+		blkdev_dequeue_request(rq);
+
+		spin_unlock_irq(q->queue_lock);
+
+		/*
+		 * TODO: kill cid. We can use the request queue tag instead
+		 */
+		dprintk("cmd %p tag %d\n", cmd, rq->tag);
+
+		target = cmd->session->target;
+	        err = target->proto->execute_cmd(cmd);
+	        switch (err) {
+	        case TGT_CMD_FAILED:
+		case TGT_CMD_COMPLETED:
+			dprintk("command completed %d\n", err);
+			tgt_transfer_response(cmd);
+		default:
+			dprintk("command %d queued to real dev\n", rq->tag);
+		}
+
+		spin_lock_irq(q->queue_lock);
+	}
+}
+
+static int tgt_queue_setup(struct request_queue **queue, int depth)
+{
+	struct request_queue *q;
+	int err;
+
+	q = blk_init_queue(tgt_request_fn, NULL);
+	if (!q)
+		return -ENOMEM;
+
+	/*
+	 * this is a tmp hack: we do not register this queue
+	 * becuase we do not have a proper parent. We can remove
+	 * this code and do this from userspace when the queue's parent
+	 * is not the gendisk.
+	 */
+	elevator_exit(q->elevator);
+	/*
+	 * for the virtual devices iosched happens there, and for passthru
+	 * devs we do noop for now (do we need to since the initiator does
+	 * ioscheduling)
+	 */
+	err = elevator_init(q, "noop");
+	if (err)
+		goto cleanup_queue;
+
+	/* who should set this limit ? */
+	err = blk_queue_init_tags(q, depth, NULL);
+	if (err)
+		goto cleanup_queue;
+
+	*queue = q;
+	return 0;
+
+cleanup_queue:
+	blk_cleanup_queue(q);
+	return err;
+}
+
 static struct tgt_target *target_find(int tid)
 {
 	struct tgt_target *target;
@@ -204,14 +293,19 @@ struct tgt_target *tgt_target_create(char *target_type, int queued_cmds)
 		if (target->tt->target_create(target))
 			goto free_priv_tt_data;
 
-	if (tgt_sysfs_register_target(target))
+	if (tgt_queue_setup(&target->q, queued_cmds ? : TGT_QUEUE_DEPTH))
 		goto tt_destroy;
+
+	if (tgt_sysfs_register_target(target))
+		goto queue_destroy;
 
 	spin_lock(&all_targets_lock);
 	list_add(&target->tlist, &all_targets);
 	spin_unlock(&all_targets_lock);
 	return target;
 
+queue_destroy:
+	blk_cleanup_queue(target->q);
 tt_destroy:
 	if (target->tt->target_destroy)
 		target->tt->target_destroy(target);
@@ -239,6 +333,7 @@ int tgt_target_destroy(struct tgt_target *target)
 		target->tt->target_destroy(target);
 
 	destroy_workqueue(target->twq);
+	blk_cleanup_queue(target->q);
 	target_template_put(target->tt);
 	tgt_sysfs_unregister_target(target);
 
@@ -446,88 +541,21 @@ struct tgt_device *tgt_device_find(struct tgt_target *target, uint64_t dev_id)
 }
 EXPORT_SYMBOL_GPL(tgt_device_find);
 
-static void tgt_request_fn(struct request_queue *q)
-{
-	struct tgt_target *target;
-	struct tgt_cmd *cmd;
-	struct request *rq;
-	int err;
-
-	while ((rq = elv_next_request(q)) != NULL) {
-		/* we need to set state or refcount under this lock! */
-		cmd = rq->special;
-
-		/*
-		 * the iosched nicely ordered these, should we try to keep the
-		 * ordering or for most cases will it not make a difference
-		 * since the lower levels will iosched again (not for
-		 * passthrough though). Maybe we should use a tgt_device
-		 * flag to indicate what is best for the real device.
-		 */
-		if (atomic_read(&cmd->state) != TGT_CMD_READY)
-			break;
-		/*
-		 * hit queue depth (command completion will run the
-		 * queue again
-		 */
-		if (blk_queue_tagged(q) && blk_queue_start_tag(q, rq))
-			break;
-		blkdev_dequeue_request(rq);
-
-		spin_unlock_irq(q->queue_lock);
-
-		/*
-		 * TODO: kill cid. We can use the request queue tag instead
-		 */
-		dprintk("cmd %p tag %d\n", cmd, rq->tag);
-
-		target = cmd->session->target;
-	        err = target->proto->execute_cmd(cmd);
-	        switch (err) {
-	        case TGT_CMD_FAILED:
-		case TGT_CMD_COMPLETED:
-			dprintk("command completed %d\n", err);
-			tgt_transfer_response(cmd);
-		default:
-			dprintk("command %d queued to real dev\n", rq->tag);
-		}
-
-		spin_lock_irq(q->queue_lock);
-	}
-}
-
 #define min_not_zero(l, r) (l == 0) ? r : ((r == 0) ? l : min(l, r))
 
-static int tgt_setup_queue(struct tgt_device *device)
+static int tgt_device_queue_setup(struct tgt_device *device)
 {
 	struct io_restrictions *limits = &device->limits;
 	struct tgt_target_template *tt = device->target->tt;
 	struct request_queue *q;
-
 	int err;
 
-	q = blk_init_queue(tgt_request_fn, NULL);
-	if (!q)
-		return -ENOMEM;
+	err = tgt_queue_setup(&q, TGT_QUEUE_DEPTH);
+	if (err)
+		return err;
+
 	device->q = q;
 	q->queuedata = device;
-	/*
-	 * this is a tmp hack: we do not register this queue
-	 * becuase we do not have a proper parent. We can remove
-	 * this code and do this from userspace when the queue's parent
-	 * is not the gendisk.
-	 */
-	elevator_exit(q->elevator);
-	/*
-	 * for the virtual devices iosched happens there, and for passthru
-	 * devs we do noop for now (do we need to since the initiator does
-	 * ioscheduling)
-	 */
-	err = elevator_init(q, "noop");
-	if (err) {
-		blk_cleanup_queue(q);
-		return err;
-	}
 
 	blk_queue_max_sectors(q, min_not_zero(tt->max_sectors,
 					limits->max_sectors));
@@ -551,13 +579,6 @@ static int tgt_setup_queue(struct tgt_device *device)
 		dprintk("clustering set\n");
 	else
 		dprintk("clustering not set\n");
-
-	/* who should set this limit ? */
-	err = blk_queue_init_tags(q, TGT_QUEUE_DEPTH, NULL);
-	if (err) {
-		blk_cleanup_queue(q);
-		return err;
-	}
 
 	return 0;
 }
@@ -612,7 +633,7 @@ static int tgt_device_create(int tid, uint64_t dev_id, char *device_type,
 	if (target->proto->attach_device)
 		target->proto->attach_device(device->pt_data);
 
-	if (tgt_setup_queue(device))
+	if (tgt_device_queue_setup(device))
 		goto dt_destroy;
 
 	if (tgt_sysfs_register_device(device))
@@ -785,8 +806,13 @@ EXPORT_SYMBOL_GPL(tgt_cmd_create);
 static int tgt_cmd_queue(struct tgt_cmd *cmd, gfp_t gfp_mask)
 {
 	int write = (cmd->data_dir == DMA_TO_DEVICE);
-	struct request_queue *q = cmd->device->q;
+	struct request_queue *q;
 	struct request *rq;
+
+	if (cmd->device)
+		q = cmd->device->q;
+	else
+		q = cmd->session->target->q;
 
 	rq = blk_get_request(q, write, gfp_mask);
 	if (!rq)
@@ -802,7 +828,7 @@ static int tgt_cmd_queue(struct tgt_cmd *cmd, gfp_t gfp_mask)
 static void set_cmd_ready(struct tgt_cmd *cmd)
 {
 	unsigned long flags;
-	struct request_queue *q = cmd->device->q;
+	struct request_queue *q = cmd->rq->q;
 
 	/*
 	 * we have a request that is ready for processing so
@@ -920,7 +946,7 @@ int tgt_uspace_cmd_send(struct tgt_cmd *cmd, gfp_t gfp_mask)
 	if (!skb)
 		return -ENOMEM;
 
-	dprintk("%d %Zd %d\n", len, sizeof(*ev), proto_pdu_size);
+	dprintk("%p %d %Zd %d\n", cmd, len, sizeof(*ev), proto_pdu_size);
 	nlh = __nlmsg_put(skb, tgtd_pid, 0, TGT_KEVENT_CMD_REQ,
 			  len - sizeof(*nlh), 0);
 	ev = NLMSG_DATA(nlh);
@@ -931,33 +957,38 @@ int tgt_uspace_cmd_send(struct tgt_cmd *cmd, gfp_t gfp_mask)
 	ev->k.cmd_req.dev_id = cmd->dev_id;
 	ev->k.cmd_req.cid = cmd->rq->tag;
 	ev->k.cmd_req.typeid = cmd->session->target->typeid;
+	if (cmd->device)
+		ev->k.cmd_req.flags |= 1 << TGT_CMD_DEVICE;
 
-	proto->build_uspace_pdu(cmd, pdu);
+	proto->uspace_pdu_build(cmd, pdu);
 
 	return netlink_unicast(nls, skb, tgtd_pid, 0);
 }
 EXPORT_SYMBOL_GPL(tgt_uspace_cmd_send);
 
-static struct tgt_cmd *find_cmd_by_id(struct tgt_device *device, uint64_t cid)
+static struct tgt_cmd *find_cmd_by_id(struct request_queue *q, uint64_t cid)
 {
 
 	struct request *rq;
 
-	rq = blk_queue_find_tag(device->q, cid);
+	rq = blk_queue_find_tag(q, cid);
 	if (rq)
 		return rq->special;
-	eprintk("Could not find cid %llu\n", (unsigned long long)cid);
 	return NULL;
 }
 
 static int uspace_cmd_done(int tid, uint64_t dev_id, uint64_t cid, void *data,
-			   int result, uint32_t len)
+			   int result, uint32_t len, uint32_t flags)
 {
 	struct tgt_target *target;
 	struct tgt_device *device;
 	struct tgt_cmd *cmd;
+	struct request_queue *q;
 	char *p = data;
 	int i;
+
+	dprintk("%d %llu %llu %x\n", tid, (unsigned long long) dev_id,
+		(unsigned long long) cid, flags);
 
 	target = target_find(tid);
 	if (!target) {
@@ -965,14 +996,18 @@ static int uspace_cmd_done(int tid, uint64_t dev_id, uint64_t cid, void *data,
 		return -EINVAL;
 	}
 
-	device = tgt_device_find(target, dev_id);
-	if (!device) {
-		eprintk("Could not find device %llu\n",
-			(unsigned long long) dev_id);
-		return -EINVAL;
-	}
+	if (flags & (1 << TGT_CMD_DEVICE)) {
+		device = tgt_device_find(target, dev_id);
+		if (!device) {
+			eprintk("Could not find device %llu\n",
+				(unsigned long long) dev_id);
+			return -EINVAL;
+		}
+		q = device->q;
+	} else
+		q = target->q;
 
-	cmd = find_cmd_by_id(device, cid);
+	cmd = find_cmd_by_id(q, cid);
 	if (!cmd) {
 		eprintk("Could not find command %llu\n",
 			(unsigned long long) cid);
@@ -1007,8 +1042,7 @@ static int uspace_cmd_done(int tid, uint64_t dev_id, uint64_t cid, void *data,
 	}
 
 	cmd->result = result;
-	if (device->dt->complete_uspace_cmd)
-		device->dt->complete_uspace_cmd(cmd);
+	target->proto->uspace_cmd_complete(cmd);
 	tgt_transfer_response(cmd);
 
 	return 0;
@@ -1106,7 +1140,8 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 	case TGT_UEVENT_CMD_RES:
 		err = uspace_cmd_done(ev->u.cmd_res.tid, ev->u.cmd_res.dev_id,
 				      ev->u.cmd_res.cid, ev->data,
-				      ev->u.cmd_res.result, ev->u.cmd_res.len);
+				      ev->u.cmd_res.result, ev->u.cmd_res.len,
+				      ev->u.cmd_res.flags);
 		break;
 	default:
 		eprintk("unknown type %d\n", nlh->nlmsg_type);

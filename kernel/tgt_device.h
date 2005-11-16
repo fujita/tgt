@@ -45,10 +45,6 @@ struct tgt_device_template {
 	 */
 	int (* execute_cmd)(struct tgt_cmd *cmd);
 	/*
-	 * complete a userspace command
-	 */
-	void (* complete_uspace_cmd)(struct tgt_cmd *cmd);
-	/*
 	 * complete a kernel command if your queue_command was async
 	 * and the device used one of the tgt threads to process the
 	 * command

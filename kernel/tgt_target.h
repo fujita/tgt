@@ -103,6 +103,7 @@ struct tgt_target {
 
 	struct class_device cdev;
 
+	struct request_queue *q;
 	int queued_cmds;
 
 	/* Protects session_list, work_list, device_list */

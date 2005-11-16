@@ -25,6 +25,7 @@
 #include <fcntl.h>
 
 #include "tgtd.h"
+#include "tgt_if.h"
 
 #define cpu_to_be32 __cpu_to_be32
 #define be32_to_cpu __be32_to_cpu
@@ -232,6 +233,7 @@ static int inquiry(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *len)
 	if (((scb[1] & 0x3) == 0x3) || (!(scb[1] & 0x3) && scb[2]))
 		goto err;
 
+	errno = 0;
 	device_info(tid, lun, &size);
 
 	if (!(scb[1] & 0x3)) {
@@ -490,15 +492,14 @@ static int sevice_action(int tid, uint64_t lun, uint8_t *scb, uint8_t *p, int *l
 	return SAM_STAT_GOOD;
 }
 
-int cmd_process(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *len)
+int cmd_process(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *len,
+		uint32_t flags)
 {
-	int err, result = SAM_STAT_GOOD;
-	uint64_t size;
+	int result = SAM_STAT_GOOD;
 
-	dprintf("%x\n", scb[0]);
+	dprintf("%d %" PRIu64 " %x %x\n", tid, lun, scb[0], flags);
 
-	err = device_info(tid, lun, &size);
-	if (errno == ENOENT)
+	if (!(flags & (1 << TGT_CMD_DEVICE)))
 		switch (scb[0]) {
 		case REQUEST_SENSE:
 		case INQUIRY:

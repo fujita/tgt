@@ -83,25 +83,6 @@ scsi_tgt_create_cmd(struct tgt_session *session, void *tgt_priv, uint8_t *scb,
 	/* translate target driver LUN to device id */
 	cmd->dev_id = scsi_tgt_translate_lun(lun, lun_size);
 	device = tgt_device_find(session->target, cmd->dev_id);
-	if (!device) {
-		switch (scmd->scb[0]) {
-		case INQUIRY:
-		case REPORT_LUNS:
-			/* we assume that we have lun 0. */
-			device = tgt_device_find(session->target, 0);
-			break;
-		}
-
-		if (!device) {
-			eprintk("Could not find device %x %" PRIu64 "\n",
-				scmd->scb[0], cmd->dev_id);
-			/*
-			 * TODO: FIX THIS LEAK. We should check magic
-			 * target queue.
-			 */
-			return NULL;
-		}
-	}
 	cmd->device = device;
 
 	/* is this device specific */
@@ -112,7 +93,8 @@ scsi_tgt_create_cmd(struct tgt_session *session, void *tgt_priv, uint8_t *scb,
 	 */
 	cmd->bufflen = data_len;
 	/* do scsi device specific setup */
-	device->dt->prep_cmd(cmd, data_len);
+	if (device)
+		device->dt->prep_cmd(cmd, data_len);
 
 	tgt_cmd_start(cmd);
 
@@ -235,10 +217,15 @@ static void scsi_tgt_execute_pending_cmds(struct tgt_device *device)
 static void scsi_tgt_complete_cmd(struct tgt_cmd *cmd)
 {
 	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
-	struct tgt_device *device = cmd->device;
-	struct scsi_tgt_device *stdev = device->pt_data;
+	struct tgt_device *device;
+	struct scsi_tgt_device *stdev;
 	unsigned long flags;
 
+	device = cmd->device;
+	if (!device)
+		return;
+
+	stdev = device->pt_data;
 	spin_lock_irqsave(&stdev->lock, flags);
 
 	stdev->active_cmds--;
@@ -262,15 +249,37 @@ static void scsi_tgt_complete_cmd(struct tgt_cmd *cmd)
 	spin_unlock_irqrestore(&stdev->lock, flags);
 }
 
+/* TODO: reimplement SCSI ordering by using the queuest_queue */
+
+static void __tgt_uspace_cmd_send(void *data)
+{
+	struct tgt_cmd *cmd = data;
+	int err;
+
+	err = tgt_uspace_cmd_send(cmd, GFP_KERNEL);
+	if (err >= 0)
+		return;
+
+	scsi_tgt_sense_data_build(cmd, HARDWARE_ERROR, 0, 0);
+	tgt_transfer_response(cmd);
+}
+
 static int scsi_tgt_execute_cmd(struct tgt_cmd *cmd)
 {
 	struct tgt_device *device = cmd->device;
-	struct scsi_tgt_device *stdev = device->pt_data;
+	struct scsi_tgt_device *stdev;
 	unsigned long flags;
 	int err, enabled, more;
 
-	BUG_ON(!device);
+	dprintk("%p %x\n", cmd, tgt_cmd_to_scsi(cmd)->scb[0]);
 
+	if (!device) {
+		INIT_WORK(&cmd->work, __tgt_uspace_cmd_send, cmd);
+		queue_work(cmd->session->target->twq, &cmd->work);
+		return TGT_CMD_KERN_QUEUED;
+	}
+
+	stdev = device->pt_data;
 	spin_lock_irqsave(&stdev->lock, flags);
 
 	/* Do we need our own list_head? */
@@ -292,10 +301,17 @@ static int scsi_tgt_execute_cmd(struct tgt_cmd *cmd)
 	return err;
 }
 
-static void scsi_tgt_build_uspace_pdu(struct tgt_cmd *cmd, void *data)
+static void scsi_tgt_uspace_pdu_build(struct tgt_cmd *cmd, void *data)
 {
 	struct scsi_tgt_cmd *scmd = (struct scsi_tgt_cmd *)cmd->proto_priv;
 	memcpy(data, scmd->scb, sizeof(scmd->scb));
+}
+
+static void scsi_tgt_uspace_cmd_complete(struct tgt_cmd *cmd)
+{
+	/* userspace did everything for us just copy the buffer */
+	if (cmd->result != SAM_STAT_GOOD)
+		scsi_tgt_sense_copy(cmd);
 }
 
 static void scsi_tgt_attach_device(void *data)
@@ -319,7 +335,8 @@ static struct tgt_protocol scsi_tgt_proto = {
 	.name = "scsi",
 	.module = THIS_MODULE,
 	.create_cmd = scsi_tgt_create_cmd,
-	.build_uspace_pdu = scsi_tgt_build_uspace_pdu,
+	.uspace_pdu_build = scsi_tgt_uspace_pdu_build,
+	.uspace_cmd_complete = scsi_tgt_uspace_cmd_complete,
 	.execute_cmd = scsi_tgt_execute_cmd,
 	.complete_cmd = scsi_tgt_complete_cmd,
 	.attach_device = scsi_tgt_attach_device,
