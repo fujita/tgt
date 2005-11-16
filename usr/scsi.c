@@ -500,7 +500,7 @@ int cmd_process(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *len,
 
 	dprintf("%d %" PRIu64 " %x %x\n", tid, lun, scb[0], flags);
 
-	if (!(flags & (1 << TGT_CMD_DEVICE)))
+	if (lun == TGT_INVALID_DEV_ID)
 		switch (scb[0]) {
 		case REQUEST_SENSE:
 		case INQUIRY:

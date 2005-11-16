@@ -23,9 +23,7 @@ enum tgt_event_type {
 	TGT_KEVENT_TARGET_PASSTHRU,
 };
 
-enum tgt_cmd_flags {
-	TGT_CMD_DEVICE,
-};
+#define	TGT_INVALID_DEV_ID	~0ULL
 
 struct tgt_event {
 	/* user-> kernel */
@@ -57,7 +55,6 @@ struct tgt_event {
 			uint64_t dev_id;
 			uint64_t cid;
 			uint32_t len;
-			uint32_t flags;
 			int result;
 		} cmd_res;
 	} u;
@@ -72,7 +69,6 @@ struct tgt_event {
 			uint64_t dev_id;
 			uint64_t cid;
 			int typeid;
-			uint32_t flags;
 		} cmd_req;
 		struct {
 			int tid;

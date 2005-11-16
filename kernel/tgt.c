@@ -957,11 +957,9 @@ int tgt_uspace_cmd_send(struct tgt_cmd *cmd, gfp_t gfp_mask)
 
 	pdu = (char *) ev->data;
 	ev->k.cmd_req.tid = cmd->session->target->tid;
-	ev->k.cmd_req.dev_id = cmd->dev_id;
+	ev->k.cmd_req.dev_id = cmd->device ? cmd->dev_id : TGT_INVALID_DEV_ID;
 	ev->k.cmd_req.cid = cmd->rq->tag;
 	ev->k.cmd_req.typeid = cmd->session->target->typeid;
-	if (cmd->device)
-		ev->k.cmd_req.flags |= 1 << TGT_CMD_DEVICE;
 
 	proto->uspace_pdu_build(cmd, pdu);
 
@@ -981,7 +979,7 @@ static struct tgt_cmd *find_cmd_by_id(struct request_queue *q, uint64_t cid)
 }
 
 static int uspace_cmd_done(int tid, uint64_t dev_id, uint64_t cid, void *data,
-			   int result, uint32_t len, uint32_t flags)
+			   int result, uint32_t len)
 {
 	struct tgt_target *target;
 	struct tgt_device *device;
@@ -990,8 +988,8 @@ static int uspace_cmd_done(int tid, uint64_t dev_id, uint64_t cid, void *data,
 	char *p = data;
 	int i;
 
-	dprintk("%d %llu %llu %x\n", tid, (unsigned long long) dev_id,
-		(unsigned long long) cid, flags);
+	dprintk("%d %llu %llu\n", tid, (unsigned long long) dev_id,
+		(unsigned long long) cid);
 
 	target = target_find(tid);
 	if (!target) {
@@ -999,7 +997,9 @@ static int uspace_cmd_done(int tid, uint64_t dev_id, uint64_t cid, void *data,
 		return -EINVAL;
 	}
 
-	if (flags & (1 << TGT_CMD_DEVICE)) {
+	if (dev_id == TGT_INVALID_DEV_ID)
+		q = target->q;
+	else {
 		device = tgt_device_find(target, dev_id);
 		if (!device) {
 			eprintk("Could not find device %llu\n",
@@ -1007,8 +1007,7 @@ static int uspace_cmd_done(int tid, uint64_t dev_id, uint64_t cid, void *data,
 			return -EINVAL;
 		}
 		q = device->q;
-	} else
-		q = target->q;
+	}
 
 	cmd = find_cmd_by_id(q, cid);
 	if (!cmd) {
@@ -1143,8 +1142,7 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 	case TGT_UEVENT_CMD_RES:
 		err = uspace_cmd_done(ev->u.cmd_res.tid, ev->u.cmd_res.dev_id,
 				      ev->u.cmd_res.cid, ev->data,
-				      ev->u.cmd_res.result, ev->u.cmd_res.len,
-				      ev->u.cmd_res.flags);
+				      ev->u.cmd_res.result, ev->u.cmd_res.len);
 		break;
 	default:
 		eprintk("unknown type %d\n", nlh->nlmsg_type);
