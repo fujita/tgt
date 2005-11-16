@@ -325,6 +325,9 @@ int tgt_target_destroy(struct tgt_target *target)
 {
 	dprintk("%p\n", target);
 
+	if (!list_empty(&target->device_list))
+		return -EBUSY;
+
 	spin_lock(&all_targets_lock);
 	list_del(&target->tlist);
 	spin_unlock(&all_targets_lock);
