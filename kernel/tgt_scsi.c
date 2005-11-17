@@ -17,23 +17,117 @@
 #include <tgt_protocol.h>
 #include <tgt_target.h>
 
-enum scsi_tgt_device_state_bit {
-	STDEV_ORDERED,
-	STDEV_HEAD,
-};
-
-/*
- * The ordering stuff can be generic for all protocols. If so, should
- * these be moved into struct tgt_device?
- */
-struct scsi_tgt_device {
-	spinlock_t lock;
-	struct list_head pending_cmds;
-	unsigned long state;
-	unsigned active_cmds;
-};
-
 static kmem_cache_t *scsi_tgt_cmd_cache;
+
+struct tgt_scsi_queuedata {
+	int nr_active; /* Can we use q->in_flight? */
+	int blocked;
+};
+
+static struct request *elevator_tgt_scsi_next_request(request_queue_t *q)
+{
+	struct request *rq;
+	struct tgt_scsi_queuedata *sqdata = q->queuedata;
+	struct scsi_tgt_cmd *scmd;
+	int enabled = 0;
+
+	if (list_empty(&q->queue_head))
+		return NULL;
+
+	rq = list_entry_rq(q->queue_head.next);
+
+	scmd = tgt_cmd_to_scsi(rq->special);
+	dprintk("%p %x %x %d %d\n", rq->special, scmd->tags, scmd->scb[0],
+		sqdata->blocked, sqdata->nr_active);
+	switch (scmd->tags) {
+	case MSG_SIMPLE_TAG:
+		if (!sqdata->blocked)
+			enabled = 1;
+	case MSG_ORDERED_TAG:
+		if (!sqdata->blocked && !sqdata->nr_active)
+			enabled = 1;
+		break;
+	case MSG_HEAD_TAG:
+		enabled = 1;
+		break;
+	default:
+		BUG();
+	}
+
+	return enabled ? rq : NULL;
+}
+
+static void elevator_tgt_scsi_add_request(request_queue_t *q,
+					  struct request *rq, int where)
+{
+	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(rq->special);
+
+	switch (scmd->tags) {
+	case MSG_SIMPLE_TAG:
+	case MSG_ORDERED_TAG:
+		list_add_tail(&rq->queuelist, &q->queue_head);
+		break;
+	case MSG_HEAD_TAG:
+		list_add(&rq->queuelist, &q->queue_head);
+		break;
+	default:
+		eprintk("unknown scsi tag %p %x %x\n",
+			rq->special, scmd->tags, scmd->scb[0]);
+
+		scmd->tags = MSG_SIMPLE_TAG;
+		list_add_tail(&rq->queuelist, &q->queue_head);
+	}
+}
+
+static void elevator_tgt_scsi_remove_request(request_queue_t *q,
+					     struct request *rq)
+{
+	struct tgt_scsi_queuedata *sqdata = q->queuedata;
+	struct tgt_cmd *cmd = rq->special;
+	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
+
+	sqdata->nr_active++;
+
+	dprintk("%p %x %x %d %d %llu\n", rq->special, scmd->tags, scmd->scb[0],
+		sqdata->blocked, sqdata->nr_active,
+		cmd->device ? cmd->device->dev_id : ~0ULL);
+
+	if (scmd->tags == MSG_ORDERED_TAG || scmd->tags == MSG_HEAD_TAG)
+		sqdata->blocked = 1;
+}
+
+static struct elevator_type elevator_tgt_scsi = {
+	.ops = {
+		.elevator_next_req_fn = elevator_tgt_scsi_next_request,
+		.elevator_add_req_fn = elevator_tgt_scsi_add_request,
+		.elevator_remove_req_fn = elevator_tgt_scsi_remove_request,
+	},
+	.elevator_name = __stringify(KBUILD_MODNAME),
+	.elevator_owner = THIS_MODULE,
+};
+
+static void scsi_tgt_complete_cmd(struct tgt_cmd *cmd)
+{
+	struct request_queue *q = cmd->rq->q;
+	struct tgt_scsi_queuedata *sqdata = q->queuedata;
+	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
+	unsigned long flags;
+
+	dprintk("%p %x %x %d %d %llu\n", cmd, scmd->tags, scmd->scb[0],
+		sqdata->blocked, sqdata->nr_active,
+		cmd->device ? cmd->device->dev_id : ~0ULL);
+
+	spin_lock_irqsave(q->queue_lock, flags);
+
+	sqdata->nr_active--;
+
+	if (scmd->tags == MSG_ORDERED_TAG || scmd->tags == MSG_HEAD_TAG)
+		sqdata->blocked = 0;
+
+	blk_plug_device(q);
+
+	spin_unlock_irqrestore(q->queue_lock, flags);
+}
 
 /*
  * we should be able to use scsi-ml's functions for this
@@ -82,8 +176,7 @@ scsi_tgt_create_cmd(struct tgt_session *session, void *tgt_priv, uint8_t *scb,
 
 	/* translate target driver LUN to device id */
 	cmd->dev_id = scsi_tgt_translate_lun(lun, lun_size);
-	device = tgt_device_find(session->target, cmd->dev_id);
-	cmd->device = device;
+	cmd->device = device = tgt_device_find(session->target, cmd->dev_id);
 
 	/* is this device specific */
 	cmd->data_dir = data_dir;
@@ -141,116 +234,6 @@ int scsi_tgt_sense_copy(struct tgt_cmd *cmd)
 }
 EXPORT_SYMBOL_GPL(scsi_tgt_sense_copy);
 
-#define	device_blocked(x)	((x)->state & (1 << STDEV_ORDERED | 1 << STDEV_HEAD))
-
-static int scsi_tgt_task_state(struct tgt_cmd *cmd, int queue, int *more)
-{
-	struct tgt_device *device = cmd->device;
-	struct scsi_tgt_device *stdev = device->pt_data;
-	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
-	int enabled = 0;
-
-	*more = 0;
-	switch (scmd->tags) {
-	case MSG_SIMPLE_TAG:
-		if (!device_blocked(stdev) &&
-		    queue ? list_empty(&stdev->pending_cmds) : 1) {
-			enabled = 1;
-			*more = 1;
-		}
-
-		break;
-	case MSG_ORDERED_TAG:
-		if (!device_blocked(stdev) &&
-		    !stdev->active_cmds &&
-		    queue ? list_empty(&stdev->pending_cmds) : 1) {
-			enabled = 1;
-			stdev->state |= 1 << STDEV_ORDERED;
-		}
-		break;
-	case MSG_HEAD_TAG:
-		BUG_ON(!queue);
-		stdev->state |= 1 << STDEV_HEAD;
-		enabled = 1;
-		break;
-	default:
-		printk("unknown scsi tag %x\n", scmd->tags);
-		enabled = 1;
-		*more = 1;
-		break;
-	}
-
-	return enabled;
-}
-
-static void device_queue_cmd(void *data)
-{
-	struct tgt_cmd *cmd = data;
-	cmd->device->dt->execute_cmd(cmd);
-}
-
-static void scsi_tgt_execute_pending_cmds(struct tgt_device *device)
-{
-	struct scsi_tgt_device *stdev = device->pt_data;
-	struct tgt_cmd *cmd, *tmp;
-	struct scsi_tgt_cmd *scmd;
-	int enabled, more;
-
-	list_for_each_entry_safe(cmd, tmp, &stdev->pending_cmds, clist) {
-		scmd = tgt_cmd_to_scsi(cmd);
-
-		enabled = scsi_tgt_task_state(cmd, 0, &more);
-		BUG_ON(!enabled && more);
-
-		if (enabled) {
-			list_del(&cmd->clist);
-			stdev->active_cmds++;
-			INIT_WORK(&cmd->work, device_queue_cmd, cmd);
-			queue_work(cmd->session->target->twq, &cmd->work);
-		}
-
-		if (!more)
-			break;
-	}
-}
-
-static void scsi_tgt_complete_cmd(struct tgt_cmd *cmd)
-{
-	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
-	struct tgt_device *device;
-	struct scsi_tgt_device *stdev;
-	unsigned long flags;
-
-	device = cmd->device;
-	if (!device)
-		return;
-
-	stdev = device->pt_data;
-	spin_lock_irqsave(&stdev->lock, flags);
-
-	stdev->active_cmds--;
-
-	switch (scmd->tags) {
-	case MSG_SIMPLE_TAG:
-		break;
-	case MSG_ORDERED_TAG:
-		stdev->state &= ~(1 << STDEV_ORDERED);
-		break;
-	case MSG_HEAD_TAG:
-		stdev->state &= ~(1 << STDEV_HEAD);
-		break;
-	default:
-		break;
-	}
-
-	if (!list_empty(&stdev->pending_cmds))
-		scsi_tgt_execute_pending_cmds(device);
-
-	spin_unlock_irqrestore(&stdev->lock, flags);
-}
-
-/* TODO: reimplement SCSI ordering by using the queuest_queue */
-
 static void __tgt_uspace_cmd_send(void *data)
 {
 	struct tgt_cmd *cmd = data;
@@ -266,39 +249,14 @@ static void __tgt_uspace_cmd_send(void *data)
 
 static int scsi_tgt_execute_cmd(struct tgt_cmd *cmd)
 {
-	struct tgt_device *device = cmd->device;
-	struct scsi_tgt_device *stdev;
-	unsigned long flags;
-	int err, enabled, more;
-
 	dprintk("%p %x\n", cmd, tgt_cmd_to_scsi(cmd)->scb[0]);
 
-	if (!device) {
+	if (!cmd->device) {
 		INIT_WORK(&cmd->work, __tgt_uspace_cmd_send, cmd);
 		queue_work(cmd->session->target->twq, &cmd->work);
 		return TGT_CMD_KERN_QUEUED;
-	}
-
-	stdev = device->pt_data;
-	spin_lock_irqsave(&stdev->lock, flags);
-
-	/* Do we need our own list_head? */
-	BUG_ON(!list_empty(&cmd->clist));
-
-	enabled = scsi_tgt_task_state(cmd, 1, &more);
-	if (enabled)
-		stdev->active_cmds++;
-	else
-		list_add_tail(&cmd->clist, &stdev->pending_cmds);
-
-	spin_unlock_irqrestore(&stdev->lock, flags);
-
-	if (enabled)
-		err = device->dt->execute_cmd(cmd);
-	else
-		err = TGT_CMD_KERN_QUEUED;
-
-	return err;
+	} else
+		return cmd->device->dt->execute_cmd(cmd);
 }
 
 static void scsi_tgt_uspace_pdu_build(struct tgt_cmd *cmd, void *data)
@@ -314,34 +272,16 @@ static void scsi_tgt_uspace_cmd_complete(struct tgt_cmd *cmd)
 		scsi_tgt_sense_copy(cmd);
 }
 
-static void scsi_tgt_attach_device(void *data)
-{
-	struct scsi_tgt_device *stdev = data;
-
-	spin_lock_init(&stdev->lock);
-	INIT_LIST_HEAD(&stdev->pending_cmds);
-	stdev->active_cmds = 0;
-}
-
-static void scsi_tgt_detach_device(void *data)
-{
-	struct scsi_tgt_device *stdev = data;
-
-	/* TODO */
-	BUG_ON(!list_empty(&stdev->pending_cmds));
-}
-
 static struct tgt_protocol scsi_tgt_proto = {
 	.name = "scsi",
 	.module = THIS_MODULE,
+	.elevator = elevator_tgt_scsi.elevator_name,
 	.create_cmd = scsi_tgt_create_cmd,
 	.uspace_pdu_build = scsi_tgt_uspace_pdu_build,
 	.uspace_cmd_complete = scsi_tgt_uspace_cmd_complete,
 	.execute_cmd = scsi_tgt_execute_cmd,
 	.complete_cmd = scsi_tgt_complete_cmd,
-	.attach_device = scsi_tgt_attach_device,
-	.detach_device = scsi_tgt_detach_device,
-	.priv_dev_data_size = sizeof(struct scsi_tgt_device),
+	.priv_queuedata_size = sizeof(struct tgt_scsi_queuedata),
 	.uspace_pdu_size = MAX_COMMAND_SIZE,
 };
 
@@ -360,13 +300,24 @@ static int __init scsi_tgt_init(void)
 
 	err = tgt_protocol_register(&scsi_tgt_proto);
 	if (err)
-		kmem_cache_destroy(scsi_tgt_cmd_cache);
+		goto protocol_unregister;
+
+	err = elv_register(&elevator_tgt_scsi);
+	if (err)
+		goto cache_destroy;
+
+	return 0;
+cache_destroy:
+	kmem_cache_destroy(scsi_tgt_cmd_cache);
+protocol_unregister:
+	tgt_protocol_unregister(&scsi_tgt_proto);
 
 	return err;
 }
 
 static void __exit scsi_tgt_exit(void)
 {
+	elv_unregister(&elevator_tgt_scsi);
 	kmem_cache_destroy(scsi_tgt_cmd_cache);
 	tgt_protocol_unregister(&scsi_tgt_proto);
 }

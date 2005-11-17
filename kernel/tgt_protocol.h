@@ -26,8 +26,9 @@ struct tgt_protocol {
 
 	kmem_cache_t *cmd_cache;
 	unsigned uspace_pdu_size;
-	unsigned priv_dev_data_size;
+	unsigned priv_queuedata_size;
 
+	char *elevator;
 	/*
 	 * Create a command and allocate a buffer of size data_len for
 	 * for transfer. The buffer will be allocated with GFP_KERNEL
@@ -51,10 +52,9 @@ struct tgt_protocol {
 
 	void (* uspace_cmd_complete)(struct tgt_cmd *cmd);
 	/*
-	 * Initialize protocol specific data per device
+	 * Initialize protocol specific data per queue
 	 */
-	void (* attach_device)(void *data);
-	void (* detach_device)(void *data);
+	int (* queue_create)(void *data);
 };
 
 extern void tgt_protocol_init(void);

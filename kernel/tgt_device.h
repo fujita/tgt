@@ -64,7 +64,6 @@ struct tgt_device_template {
 struct tgt_device {
 	struct tgt_device_template *dt;
 	void *dt_data;
-	void *pt_data;
 
 	struct class_device cdev;
 

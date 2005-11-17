@@ -175,8 +175,6 @@ static void tgt_request_fn(struct request_queue *q)
 		if (blk_queue_tagged(q) && blk_queue_start_tag(q, rq))
 			break;
 
-		blkdev_dequeue_request(rq);
-
 		spin_unlock_irq(q->queue_lock);
 
 		/*
@@ -199,14 +197,27 @@ static void tgt_request_fn(struct request_queue *q)
 	}
 }
 
-static int tgt_queue_setup(struct request_queue **queue, int depth)
+static void tgt_queue_destroy(struct request_queue *q)
+{
+	kfree(q->queuedata);
+	blk_cleanup_queue(q);
+}
+
+static int tgt_queue_create(struct tgt_protocol *proto, int depth,
+			    struct request_queue **queue)
 {
 	struct request_queue *q;
-	int err;
+	int err = -ENOMEM;
 
-	q = blk_init_queue(tgt_request_fn, NULL);
+	*queue = q = blk_init_queue(tgt_request_fn, NULL);
 	if (!q)
 		return -ENOMEM;
+
+	if (proto->priv_queuedata_size) {
+		q->queuedata = kzalloc(proto->priv_queuedata_size, GFP_KERNEL);
+		if (!q->queuedata)
+			goto out;
+	}
 
 	/*
 	 * this is a tmp hack: we do not register this queue
@@ -220,20 +231,24 @@ static int tgt_queue_setup(struct request_queue **queue, int depth)
 	 * devs we do noop for now (do we need to since the initiator does
 	 * ioscheduling)
 	 */
-	err = elevator_init(q, "noop");
+	err = elevator_init(q, proto->elevator ? : "noop");
 	if (err)
-		goto cleanup_queue;
+		goto out;
 
 	/* who should set this limit ? */
 	err = blk_queue_init_tags(q, depth, NULL);
 	if (err)
-		goto cleanup_queue;
+		goto out;
 
-	*queue = q;
+	if (proto->queue_create) {
+		err = proto->queue_create(q->queuedata);
+		if (err)
+			goto out;
+	}
+
 	return 0;
-
-cleanup_queue:
-	blk_cleanup_queue(q);
+out:
+	tgt_queue_destroy(q);
 	return err;
 }
 
@@ -293,7 +308,8 @@ struct tgt_target *tgt_target_create(char *target_type, int queued_cmds)
 		if (target->tt->target_create(target))
 			goto free_priv_tt_data;
 
-	if (tgt_queue_setup(&target->q, queued_cmds ? : TGT_QUEUE_DEPTH))
+	if (tgt_queue_create(target->proto, queued_cmds ? : TGT_QUEUE_DEPTH,
+			     &target->q))
 		goto tt_destroy;
 
 	if (tgt_sysfs_register_target(target))
@@ -305,7 +321,7 @@ struct tgt_target *tgt_target_create(char *target_type, int queued_cmds)
 	return target;
 
 queue_destroy:
-	blk_cleanup_queue(target->q);
+	tgt_queue_destroy(target->q);
 tt_destroy:
 	if (target->tt->target_destroy)
 		target->tt->target_destroy(target);
@@ -336,7 +352,7 @@ int tgt_target_destroy(struct tgt_target *target)
 		target->tt->target_destroy(target);
 
 	destroy_workqueue(target->twq);
-	blk_cleanup_queue(target->q);
+	tgt_queue_destroy(target->q);
 	target_template_put(target->tt);
 	tgt_sysfs_unregister_target(target);
 
@@ -550,15 +566,9 @@ static int tgt_device_queue_setup(struct tgt_device *device)
 {
 	struct io_restrictions *limits = &device->limits;
 	struct tgt_target_template *tt = device->target->tt;
-	struct request_queue *q;
-	int err;
-
-	err = tgt_queue_setup(&q, TGT_QUEUE_DEPTH);
-	if (err)
-		return err;
+	struct request_queue *q = device->q;
 
 	device->q = q;
-	q->queuedata = device;
 
 	blk_queue_max_sectors(q, min_not_zero(tt->max_sectors,
 					limits->max_sectors));
@@ -624,23 +634,16 @@ static int tgt_device_create(int tid, uint64_t dev_id, char *device_type,
 	if (!device->dt_data)
 		goto put_template;
 
-	device->pt_data =
-		kzalloc(target->proto->priv_dev_data_size, GFP_KERNEL);
-	if (!device->pt_data)
-		goto free_priv_dt_data;
-
 	if (device->dt->create)
 		if (device->dt->create(device))
-			goto free_priv_pt_data;
+			goto free_priv_dt_data;
 
-	if (target->proto->attach_device)
-		target->proto->attach_device(device->pt_data);
-
-	if (tgt_device_queue_setup(device))
+	if (tgt_queue_create(target->proto, TGT_QUEUE_DEPTH, &device->q))
 		goto dt_destroy;
+	tgt_device_queue_setup(device);
 
 	if (tgt_sysfs_register_device(device))
-		goto cleaup_queue;
+		goto queue_destroy;
 
 	spin_lock_irqsave(&target->lock, flags);
 	list_add(&device->dlist, &target->device_list);
@@ -648,13 +651,11 @@ static int tgt_device_create(int tid, uint64_t dev_id, char *device_type,
 
 	return 0;
 
-cleaup_queue:
-	blk_cleanup_queue(device->q);
+queue_destroy:
+	tgt_queue_destroy(device->q);
 dt_destroy:
 	if (device->dt->destroy)
 		device->dt->destroy(device);
-free_priv_pt_data:
-	kfree(device->pt_data);
 free_priv_dt_data:
 	kfree(device->dt_data);
 put_template:
@@ -668,20 +669,14 @@ free_device:
 
 void tgt_device_free(struct tgt_device *device)
 {
-	struct tgt_target *target = device->target;
-
 	if (device->dt->destroy)
 		device->dt->destroy(device);
 
-	if (target->proto->detach_device)
-		target->proto->detach_device(device->pt_data);
-
-	blk_cleanup_queue(device->q);
+	tgt_queue_destroy(device->q);
 	fput(device->file);
 	device_template_put(device->dt);
 
 	kfree(device->dt_data);
-	kfree(device->pt_data);
 	kfree(device);
 }
 
