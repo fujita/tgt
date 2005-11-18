@@ -290,7 +290,6 @@ struct tgt_target *tgt_target_create(char *target_type, int queued_cmds)
 
 	INIT_LIST_HEAD(&target->session_list);
 	INIT_LIST_HEAD(&target->device_list);
-	INIT_LIST_HEAD(&target->work_list);
 
 	target->queued_cmds = queued_cmds;
 
