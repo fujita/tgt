@@ -47,8 +47,6 @@ struct tgt_cmd {
 	struct work_struct work;
 	void (*done) (struct tgt_cmd *);
 
-	struct list_head hash_list;
-
 	enum dma_data_direction data_dir;
 	int sg_count;
 	struct scatterlist *sg;

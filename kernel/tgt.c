@@ -9,7 +9,6 @@
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/list.h>
-#include <linux/hash.h>
 #include <linux/pagemap.h>
 #include <linux/slab.h>
 #include <linux/mempool.h>
