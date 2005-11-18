@@ -239,12 +239,6 @@ static int tgt_queue_create(struct tgt_protocol *proto, int depth,
 	if (err)
 		goto out;
 
-	if (proto->queue_create) {
-		err = proto->queue_create(q->queuedata);
-		if (err)
-			goto out;
-	}
-
 	return 0;
 out:
 	tgt_queue_destroy(q);

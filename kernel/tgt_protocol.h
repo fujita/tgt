@@ -51,10 +51,6 @@ struct tgt_protocol {
 	void (* uspace_pdu_build)(struct tgt_cmd *cmd, void *data);
 
 	void (* uspace_cmd_complete)(struct tgt_cmd *cmd);
-	/*
-	 * Initialize protocol specific data per queue
-	 */
-	int (* queue_create)(void *data);
 };
 
 extern void tgt_protocol_init(void);
