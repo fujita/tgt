@@ -106,7 +106,7 @@ struct tgt_target {
 	struct request_queue *q;
 	int queued_cmds;
 
-	/* Protects session_list, work_list, device_list */
+	/* Protects session_list and device_list */
 	spinlock_t lock;
 
 	struct list_head tlist;
@@ -114,7 +114,6 @@ struct tgt_target {
 	struct list_head device_list;
 	struct list_head session_list;
 
-	struct list_head work_list;
 	struct workqueue_struct *twq;
 };
 
