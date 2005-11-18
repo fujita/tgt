@@ -792,7 +792,6 @@ struct tgt_cmd *tgt_cmd_create(struct tgt_session *session, void *tgt_priv)
 	memset(cmd, 0, sizeof(*cmd));
 	cmd->session = session;
 	cmd->private = tgt_priv;
-	INIT_LIST_HEAD(&cmd->clist);
 	cmd->done = tgt_cmd_destroy;
 	atomic_set(&cmd->state, TGT_CMD_CREATED);
 
