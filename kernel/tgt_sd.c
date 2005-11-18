@@ -53,7 +53,7 @@ static int tgt_sd_create(struct tgt_device *device)
 		return -EINVAL;
 
 	device->size = inode->i_size;
-	printk("%d %llu\n", device->fd, inode->i_size >> 9);
+	dprintk("%d %llu\n", device->fd, inode->i_size >> 9);
 
 	return 0;
 }

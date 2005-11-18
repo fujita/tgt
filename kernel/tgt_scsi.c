@@ -167,7 +167,7 @@ scsi_tgt_create_cmd(struct tgt_session *session, void *tgt_priv, uint8_t *scb,
 
 	cmd = tgt_cmd_create(session, tgt_priv);
 	if (!cmd) {
-		printk(KERN_ERR "Could not allocate command\n");
+		eprintk("Could not allocate command\n");
 		return NULL;
 	}
 	scmd = tgt_cmd_to_scsi(cmd);
