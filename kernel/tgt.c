@@ -455,6 +455,13 @@ EXPORT_SYMBOL_GPL(tgt_session_create);
 
 int tgt_session_destroy(struct tgt_session *session)
 {
+	struct tgt_target *target = session->target;
+	unsigned long flags;
+
+	spin_lock_irqsave(&target->lock, flags);
+	list_del(&session->slist);
+	spin_unlock_irqrestore(&target->lock, flags);
+
 	mempool_destroy(session->cmd_pool);
 	kfree(session);
 
