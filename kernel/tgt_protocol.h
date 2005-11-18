@@ -26,7 +26,6 @@ struct tgt_protocol {
 
 	kmem_cache_t *cmd_cache;
 	unsigned uspace_pdu_size;
-	unsigned priv_queuedata_size;
 
 	char *elevator;
 	/*

@@ -19,17 +19,16 @@
 
 static kmem_cache_t *scsi_tgt_cmd_cache;
 
-struct tgt_scsi_queuedata {
-	int nr_active; /* Can we use q->in_flight? */
-	int blocked;
+enum {
+	TGT_SCSI_QUEUE_BLOCKED = TGT_QUEUE_PRIVATE_START,
 };
 
 static struct request *elevator_tgt_scsi_next_request(request_queue_t *q)
 {
 	struct request *rq;
-	struct tgt_scsi_queuedata *sqdata = q->queuedata;
 	struct scsi_tgt_cmd *scmd;
 	int enabled = 0;
+	struct tgt_queuedata *tqd = q->queuedata;
 
 	if (list_empty(&q->queue_head))
 		return NULL;
@@ -37,14 +36,15 @@ static struct request *elevator_tgt_scsi_next_request(request_queue_t *q)
 	rq = list_entry_rq(q->queue_head.next);
 
 	scmd = tgt_cmd_to_scsi(rq->special);
-	dprintk("%p %x %x %d %d\n", rq->special, scmd->tags, scmd->scb[0],
-		sqdata->blocked, sqdata->nr_active);
+	dprintk("%p %x %x %llx %d\n", rq->special, scmd->tags, scmd->scb[0],
+		(unsigned long long) tqd->qflags, tqd->active_cmd);
 	switch (scmd->tags) {
 	case MSG_SIMPLE_TAG:
-		if (!sqdata->blocked)
+		if (!test_bit(TGT_SCSI_QUEUE_BLOCKED, &tqd->qflags))
 			enabled = 1;
 	case MSG_ORDERED_TAG:
-		if (!sqdata->blocked && !sqdata->nr_active)
+		if (!test_bit(TGT_SCSI_QUEUE_BLOCKED, &tqd->qflags) &&
+		    !tqd->active_cmd)
 			enabled = 1;
 		break;
 	case MSG_HEAD_TAG:
@@ -82,18 +82,18 @@ static void elevator_tgt_scsi_add_request(request_queue_t *q,
 static void elevator_tgt_scsi_remove_request(request_queue_t *q,
 					     struct request *rq)
 {
-	struct tgt_scsi_queuedata *sqdata = q->queuedata;
+	struct tgt_queuedata *tqd = q->queuedata;
 	struct tgt_cmd *cmd = rq->special;
 	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
 
-	sqdata->nr_active++;
+	tqd->active_cmd++;
 
-	dprintk("%p %x %x %d %d %llu\n", rq->special, scmd->tags, scmd->scb[0],
-		sqdata->blocked, sqdata->nr_active,
+	dprintk("%p %x %x %llx %d %llu\n", rq->special, scmd->tags, scmd->scb[0],
+		(unsigned long long) tqd->qflags, tqd->active_cmd,
 		cmd->device ? cmd->device->dev_id : ~0ULL);
 
 	if (scmd->tags == MSG_ORDERED_TAG || scmd->tags == MSG_HEAD_TAG)
-		sqdata->blocked = 1;
+		set_bit(TGT_SCSI_QUEUE_BLOCKED, &tqd->qflags);
 }
 
 static struct elevator_type elevator_tgt_scsi = {
@@ -109,20 +109,20 @@ static struct elevator_type elevator_tgt_scsi = {
 static void scsi_tgt_complete_cmd(struct tgt_cmd *cmd)
 {
 	struct request_queue *q = cmd->rq->q;
-	struct tgt_scsi_queuedata *sqdata = q->queuedata;
+	struct tgt_queuedata *tqd = q->queuedata;
 	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
 	unsigned long flags;
 
-	dprintk("%p %x %x %d %d %llu\n", cmd, scmd->tags, scmd->scb[0],
-		sqdata->blocked, sqdata->nr_active,
+	dprintk("%p %x %x %llx %d %llu\n", cmd, scmd->tags, scmd->scb[0],
+		(unsigned long long) tqd->qflags, tqd->active_cmd,
 		cmd->device ? cmd->device->dev_id : ~0ULL);
 
 	spin_lock_irqsave(q->queue_lock, flags);
 
-	sqdata->nr_active--;
+	tqd->active_cmd--;
 
 	if (scmd->tags == MSG_ORDERED_TAG || scmd->tags == MSG_HEAD_TAG)
-		sqdata->blocked = 0;
+		clear_bit(TGT_SCSI_QUEUE_BLOCKED, &tqd->qflags);
 
 	blk_plug_device(q);
 
@@ -281,7 +281,6 @@ static struct tgt_protocol scsi_tgt_proto = {
 	.uspace_cmd_complete = scsi_tgt_uspace_cmd_complete,
 	.execute_cmd = scsi_tgt_execute_cmd,
 	.complete_cmd = scsi_tgt_complete_cmd,
-	.priv_queuedata_size = sizeof(struct tgt_scsi_queuedata),
 	.uspace_pdu_size = MAX_COMMAND_SIZE,
 };
 

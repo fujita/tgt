@@ -212,11 +212,9 @@ static int tgt_queue_create(struct tgt_protocol *proto, int depth,
 	if (!q)
 		return -ENOMEM;
 
-	if (proto->priv_queuedata_size) {
-		q->queuedata = kzalloc(proto->priv_queuedata_size, GFP_KERNEL);
-		if (!q->queuedata)
-			goto out;
-	}
+	q->queuedata = kzalloc(sizeof(struct tgt_queuedata), GFP_KERNEL);
+	if (!q->queuedata)
+		goto out;
 
 	/*
 	 * this is a tmp hack: we do not register this queue

@@ -66,6 +66,16 @@ struct tgt_cmd {
 	unsigned long proto_priv[0] __attribute__ ((aligned (sizeof(unsigned long))));
 };
 
+enum {
+	TGT_QUEUE_DEL,
+	TGT_QUEUE_PRIVATE_START,
+};
+
+struct tgt_queuedata {
+	int active_cmd; /* should we use q->in_flight? */
+	unsigned long qflags;
+};
+
 extern struct tgt_session *
 tgt_session_create(struct tgt_target *target,
 		   int max_cmds,
