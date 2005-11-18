@@ -697,11 +697,12 @@ static int tgt_device_destroy(int tid, uint64_t dev_id)
 
 	spin_lock_irqsave(&target->lock, flags);
 	device = tgt_device_find_nolock(target, dev_id);
+	if (device)
+		list_del(&device->dlist);
 	spin_unlock_irqrestore(&target->lock, flags);
 	if (!device)
 		return -EINVAL;
 
-	list_del(&device->dlist);
 	tgt_sysfs_unregister_device(device);
 
 	return 0;
