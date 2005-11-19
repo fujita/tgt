@@ -91,8 +91,11 @@ struct tgt_device {
         container_of(cdev, struct tgt_device, cdev)
 
 extern void tgt_device_free(struct tgt_device *device);
-extern struct tgt_device *tgt_device_find(struct tgt_target *target,
-					  uint64_t dev_id);
+extern struct tgt_device *tgt_device_get(struct tgt_target *target,
+					 uint64_t dev_id);
+extern void tgt_device_put(struct tgt_device *device);
+
+
 extern int tgt_sysfs_register_device(struct tgt_device *device);
 extern void tgt_sysfs_unregister_device(struct tgt_device *device);
 extern int tgt_device_template_register(struct tgt_device_template *dt);

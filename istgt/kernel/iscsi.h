@@ -12,6 +12,7 @@
 #include <linux/crypto.h>
 #include <net/sock.h>
 #include <asm/scatterlist.h>
+#include <linux/blkdev.h>
 
 #include <iscsi_proto.h>
 #include <istgt_u.h>

@@ -91,6 +91,11 @@ extern void tgt_transfer_response(void *cmd);
 extern int tgt_sysfs_init(void);
 extern void tgt_sysfs_exit(void);
 
+static inline struct tgt_queuedata *tgt_qdata(struct request_queue *q)
+{
+	return (struct tgt_queuedata *) q->queuedata;
+}
+
 
 #define DEBUG_TGT
 

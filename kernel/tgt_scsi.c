@@ -28,7 +28,7 @@ static struct request *elevator_tgt_scsi_next_request(request_queue_t *q)
 	struct request *rq;
 	struct scsi_tgt_cmd *scmd;
 	int enabled = 0;
-	struct tgt_queuedata *tqd = q->queuedata;
+	struct tgt_queuedata *tqd = tgt_qdata(q);
 
 	if (list_empty(&q->queue_head))
 		return NULL;
@@ -82,7 +82,7 @@ static void elevator_tgt_scsi_add_request(request_queue_t *q,
 static void elevator_tgt_scsi_remove_request(request_queue_t *q,
 					     struct request *rq)
 {
-	struct tgt_queuedata *tqd = q->queuedata;
+	struct tgt_queuedata *tqd = tgt_qdata(q);
 	struct tgt_cmd *cmd = rq->special;
 	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
 
@@ -109,7 +109,7 @@ static struct elevator_type elevator_tgt_scsi = {
 static void scsi_tgt_complete_cmd(struct tgt_cmd *cmd)
 {
 	struct request_queue *q = cmd->rq->q;
-	struct tgt_queuedata *tqd = q->queuedata;
+	struct tgt_queuedata *tqd = tgt_qdata(q);
 	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
 	unsigned long flags;
 
@@ -118,15 +118,14 @@ static void scsi_tgt_complete_cmd(struct tgt_cmd *cmd)
 		cmd->device ? cmd->device->dev_id : ~0ULL);
 
 	spin_lock_irqsave(q->queue_lock, flags);
-
 	tqd->active_cmd--;
-
 	if (scmd->tags == MSG_ORDERED_TAG || scmd->tags == MSG_HEAD_TAG)
 		clear_bit(TGT_SCSI_QUEUE_BLOCKED, &tqd->qflags);
-
 	blk_plug_device(q);
-
 	spin_unlock_irqrestore(q->queue_lock, flags);
+
+	if (cmd->device)
+		tgt_device_put(cmd->device);
 }
 
 /*
@@ -176,7 +175,7 @@ scsi_tgt_create_cmd(struct tgt_session *session, void *tgt_priv, uint8_t *scb,
 
 	/* translate target driver LUN to device id */
 	cmd->dev_id = scsi_tgt_translate_lun(lun, lun_size);
-	cmd->device = device = tgt_device_find(session->target, cmd->dev_id);
+	cmd->device = device = tgt_device_get(session->target, cmd->dev_id);
 
 	/* is this device specific */
 	cmd->data_dir = data_dir;

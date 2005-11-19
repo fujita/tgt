@@ -544,7 +544,7 @@ tgt_device_find_nolock(struct tgt_target *target, uint64_t dev_id)
 	return NULL;
 }
 
-struct tgt_device *tgt_device_find(struct tgt_target *target, uint64_t dev_id)
+static struct tgt_device *tgt_device_find(struct tgt_target *target, uint64_t dev_id)
 {
 	static struct tgt_device *device;
 	unsigned long flags;
@@ -555,7 +555,31 @@ struct tgt_device *tgt_device_find(struct tgt_target *target, uint64_t dev_id)
 
 	return device;
 }
-EXPORT_SYMBOL_GPL(tgt_device_find);
+
+struct tgt_device *tgt_device_get(struct tgt_target *target, uint64_t dev_id)
+{
+	static struct tgt_device *device;
+	unsigned long flags;
+
+	spin_lock_irqsave(&target->lock, flags);
+	device = tgt_device_find_nolock(target, dev_id);
+	if (device)
+		if (test_bit(TGT_QUEUE_DEL, &tgt_qdata(device->q)->qflags))
+			device = NULL;
+		else
+			class_device_get(&device->cdev);
+
+	spin_unlock_irqrestore(&target->lock, flags);
+
+	return device;
+}
+EXPORT_SYMBOL_GPL(tgt_device_get);
+
+void tgt_device_put(struct tgt_device *device)
+{
+	class_device_put(&device->cdev);
+}
+EXPORT_SYMBOL_GPL(tgt_device_put);
 
 #define min_not_zero(l, r) (l == 0) ? r : ((r == 0) ? l : min(l, r))
 
@@ -666,6 +690,15 @@ free_device:
 
 void tgt_device_free(struct tgt_device *device)
 {
+	struct tgt_target *target = device->target;
+	unsigned long flags;
+
+	dprintk("%d %lld\n", target->tid, (unsigned long long) device->dev_id);
+
+	spin_lock_irqsave(&target->lock, flags);
+	list_del(&device->dlist);
+	spin_unlock_irqrestore(&target->lock, flags);
+
 	if (device->dt->destroy)
 		device->dt->destroy(device);
 
@@ -682,22 +715,35 @@ static int tgt_device_destroy(int tid, uint64_t dev_id)
 	struct tgt_device *device;
 	struct tgt_target *target;
 	unsigned long flags;
+	int err = 0;
 
 	target = target_find(tid);
 	if (!target)
 		return -ENOENT;
 
+	/*
+	 * We cannot delete the device from the list because
+	 * uspace_cmd_done would use it later.
+	 */
 	spin_lock_irqsave(&target->lock, flags);
 	device = tgt_device_find_nolock(target, dev_id);
 	if (device)
-		list_del(&device->dlist);
+		err = test_and_set_bit(TGT_QUEUE_DEL,
+				       &tgt_qdata(device->q)->qflags);
 	spin_unlock_irqrestore(&target->lock, flags);
+
 	if (!device)
-		return -EINVAL;
+		return -ENOENT;
 
-	tgt_sysfs_unregister_device(device);
-
-	return 0;
+	if (err) {
+		eprintk("the device is being removed %d %lld\n",
+			tid, (unsigned long long) dev_id);
+		return -EBUSY;
+	} else {
+		/* TODO: revoke commands in the devece queue here. */
+		tgt_sysfs_unregister_device(device);
+		return 0;
+	}
 }
 
 static void tgt_free_buffer(struct tgt_cmd *cmd)
