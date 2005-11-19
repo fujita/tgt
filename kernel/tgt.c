@@ -563,12 +563,12 @@ struct tgt_device *tgt_device_get(struct tgt_target *target, uint64_t dev_id)
 
 	spin_lock_irqsave(&target->lock, flags);
 	device = tgt_device_find_nolock(target, dev_id);
-	if (device)
+	if (device) {
 		if (test_bit(TGT_QUEUE_DEL, &tgt_qdata(device->q)->qflags))
 			device = NULL;
 		else
 			class_device_get(&device->cdev);
-
+	}
 	spin_unlock_irqrestore(&target->lock, flags);
 
 	return device;
