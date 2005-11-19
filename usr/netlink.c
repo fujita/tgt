@@ -133,7 +133,7 @@ static int cmd_queue(int fd, char *reqbuf, char *resbuf)
 			ev_req->k.cmd_req.tid, ev_req->k.cmd_req.dev_id, cid);
 	}
 
-	memset(ev_res, 0, sizeof(*ev_res));
+	memset(ev_res, 0, (char *) ev_res->data - (char *) ev_res);
 	ev_res->u.cmd_res.tid = ev_req->k.cmd_req.tid;
 	ev_res->u.cmd_res.dev_id = ev_req->k.cmd_req.dev_id;
 	ev_res->u.cmd_res.cid = cid;
