@@ -90,7 +90,7 @@ static void elevator_tgt_scsi_remove_request(request_queue_t *q,
 
 	dprintk("%p %x %x %llx %d %llu\n", rq->special, scmd->tags, scmd->scb[0],
 		(unsigned long long) tqd->qflags, tqd->active_cmd,
-		cmd->device ? cmd->device->dev_id : ~0ULL);
+		cmd->device ? (unsigned long long) cmd->device->dev_id : ~0ULL);
 
 	if (scmd->tags == MSG_ORDERED_TAG || scmd->tags == MSG_HEAD_TAG)
 		set_bit(TGT_SCSI_QUEUE_BLOCKED, &tqd->qflags);
@@ -115,7 +115,7 @@ static void scsi_tgt_complete_cmd(struct tgt_cmd *cmd)
 
 	dprintk("%p %x %x %llx %d %llu\n", cmd, scmd->tags, scmd->scb[0],
 		(unsigned long long) tqd->qflags, tqd->active_cmd,
-		cmd->device ? cmd->device->dev_id : ~0ULL);
+		cmd->device ? (unsigned long long) cmd->device->dev_id : ~0ULL);
 
 	spin_lock_irqsave(q->queue_lock, flags);
 	tqd->active_cmd--;
