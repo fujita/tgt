@@ -53,7 +53,7 @@ int session_add(struct iscsi_target *target, struct session_info *info)
 
 	list_add(&session->list, &target->session_list);
 
-	session->ts = tgt_session_create(target->tt, 64, NULL, NULL);
+	session->ts = tgt_session_create(target->tt, NULL, NULL);
 
 	return 0;
 }
@@ -81,7 +81,7 @@ int session_del(struct iscsi_target *target, uint64_t sid)
 
 	list_del(&session->list);
 
-	tgt_session_destroy(session->ts);
+	tgt_session_destroy(session->ts, NULL, NULL);
 	kfree(session);
 
 	return 0;
