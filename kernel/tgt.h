@@ -18,12 +18,24 @@
 struct request;
 struct tgt_device;
 struct tgt_protocol;
+struct tgt_session;
+
+/*
+ * this should be in a tgt_target_template
+ */
+#define	TGT_MAX_CMD	64
+
+typedef void (tgt_session_done_t) (void *, struct tgt_session *);
 
 struct tgt_session {
 	struct tgt_target *target;
 	struct list_head slist;
 
 	mempool_t *cmd_pool;
+
+	struct work_struct work;
+	tgt_session_done_t *done;
+	void *arg;
 };
 
 enum {
@@ -78,10 +90,9 @@ struct tgt_queuedata {
 
 extern struct tgt_session *
 tgt_session_create(struct tgt_target *target,
-		   int max_cmds,
-		   void (*done)(void *, struct tgt_session *), void *arg);
-extern int tgt_session_destroy(struct tgt_session *session);
-
+		   tgt_session_done_t *done, void *arg);
+extern int tgt_session_destroy(struct tgt_session *session,
+			       tgt_session_done_t *done, void *arg);
 extern int tgt_msg_send(struct tgt_target *target, void *data, int dlen,
 			gfp_t flags);
 extern int tgt_uspace_cmd_send(struct tgt_cmd *cmd, gfp_t gfp_mask);

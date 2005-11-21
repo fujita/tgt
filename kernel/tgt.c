@@ -350,103 +350,84 @@ int tgt_target_destroy(struct tgt_target *target)
 }
 EXPORT_SYMBOL_GPL(tgt_target_destroy);
 
-static int session_init(struct tgt_session *session, int max_cmds)
+struct tgt_session_wait {
+	struct completion event;
+	int err;
+};
+
+static void tgt_session_op_init(struct tgt_session *session,
+				void (*func)(void *),
+				tgt_session_done_t *done, void *arg)
 {
+	session->done = done;
+	session->arg = arg;
+	INIT_WORK(&session->work, func, session);
+	queue_work(session->target->twq, &session->work);
+}
+
+static void tgt_session_sync_helper(void *arg, struct tgt_session *session)
+{
+	struct tgt_session_wait *w = (struct tgt_session_wait *) arg;
+
+	if (session)
+		w->err = 0;
+	else
+		w->err = 1;
+	complete(&w->event);
+}
+
+static void tgt_session_async_create(void *data)
+{
+	struct tgt_session *session = (struct tgt_session *) data;
 	struct tgt_target *target = session->target;
 	struct tgt_protocol *proto = session->target->proto;
 	unsigned long flags;
+	int err = 0;
 
-	session->cmd_pool = mempool_create(max_cmds, mempool_alloc_slab,
+	session->cmd_pool = mempool_create(TGT_MAX_CMD, mempool_alloc_slab,
 					   mempool_free_slab, proto->cmd_cache);
 	if (!session->cmd_pool)
-		goto out;
+		err = -ENOMEM;
 
-	spin_lock_irqsave(&target->lock, flags);
-	list_add(&session->slist, &target->session_list);
-	spin_unlock_irqrestore(&target->lock, flags);
-
-	return 0;
-out:
-	if (session->cmd_pool)
-		mempool_destroy(session->cmd_pool);
-
-	return -ENOMEM;
-}
-
-struct async_session_data {
-	struct tgt_session *session;
-	struct work_struct work;
-	int cmds;
-	void (*done)(void *, struct tgt_session *);
-	void *arg;
-};
-
-static void session_async_create(void *data)
-{
-	struct async_session_data *async
-		= (struct async_session_data *) data;
-	int err;
-
-	err = session_init(async->session, async->cmds);
-	if (err)
-		kfree(async->session);
-	async->done(async->arg, err ? NULL : async->session);
-	kfree(async);
-}
-
-struct tgt_session *
-tgt_session_create(struct tgt_target *target,
-		   int max_cmds,
-		   void (*done)(void *, struct tgt_session *),
-		   void *arg)
-{
-	struct tgt_session *session;
-	struct async_session_data *async;
-
-	BUG_ON(!target);
-
-	if (done && !arg) {
-		eprintk("Need arg %d!\n", target->tid);
-		return NULL;
+	if (!err) {
+		spin_lock_irqsave(&target->lock, flags);
+		list_add(&session->slist, &target->session_list);
+		spin_unlock_irqrestore(&target->lock, flags);
 	}
 
-	dprintk("%p %d\n", target, max_cmds);
+	session->done(session->arg, err ? NULL : session);
+	if (err)
+		kfree(session);
+}
+
+struct tgt_session *tgt_session_create(struct tgt_target *target,
+				       tgt_session_done_t *done, void *arg)
+{
+	struct tgt_session *session;
+	struct tgt_session_wait w;
 
 	session = kzalloc(sizeof(*session), done ? GFP_ATOMIC : GFP_KERNEL);
 	if (!session)
 		return NULL;
-
 	session->target = target;
 	INIT_LIST_HEAD(&session->slist);
 
-	if (done) {
-		async = kmalloc(sizeof(*async), GFP_ATOMIC);
-		if (!async)
-			goto out;
-
-		async->session = session;
-		async->cmds = max_cmds;
-		async->done = done;
-		async->arg = arg;
-
-		INIT_WORK(&async->work, session_async_create, async);
-		queue_work(session->target->twq, &async->work);
-		return session;
+	init_completion(&w.event);
+	tgt_session_op_init(session, tgt_session_async_create,
+			    done ? : tgt_session_sync_helper,
+			    arg ? : &w);
+	if (!done) {
+		wait_for_completion(&w.event);
+		if (w.err)
+			return NULL;
 	}
-
-	if (session_init(session, max_cmds) < 0)
-		goto out;
-
 	return session;
-
-out:
-	kfree(session);
-	return NULL;
 }
 EXPORT_SYMBOL_GPL(tgt_session_create);
 
-int tgt_session_destroy(struct tgt_session *session)
+static void tgt_session_async_destroy(void *data)
 {
+	struct tgt_session *session = (struct tgt_session *) data;
 	struct tgt_target *target = session->target;
 	unsigned long flags;
 
@@ -454,8 +435,24 @@ int tgt_session_destroy(struct tgt_session *session)
 	list_del(&session->slist);
 	spin_unlock_irqrestore(&target->lock, flags);
 
+	session->done(session->arg, NULL);
+
 	mempool_destroy(session->cmd_pool);
 	kfree(session);
+}
+
+int tgt_session_destroy(struct tgt_session *session,
+			tgt_session_done_t *done, void *arg)
+{
+	struct tgt_session_wait w;
+
+	init_completion(&w.event);
+	tgt_session_op_init(session, tgt_session_async_destroy,
+			    done ? : tgt_session_sync_helper,
+			    arg ? : &w);
+
+	if (!done)
+		wait_for_completion(&w.event);
 
 	return 0;
 }
