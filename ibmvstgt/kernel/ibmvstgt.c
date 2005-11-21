@@ -1114,8 +1114,7 @@ static int ibmvstgt_probe(struct vio_dev *dev, const struct vio_device_id *id)
 	INIT_WORK(&adapter->crq_work, handle_crq, adapter);
 	INIT_LIST_HEAD(&adapter->cmd_queue);
 
-	adapter->ts = tgt_session_create(tt, INITIAL_SRP_LIMIT,
-					 NULL, NULL);
+	adapter->ts = tgt_session_create(tt, NULL, NULL);
 	if (!adapter->ts)
 		goto free_tt;
 
@@ -1134,7 +1133,7 @@ static int ibmvstgt_probe(struct vio_dev *dev, const struct vio_device_id *id)
 free_pool:
 	mempool_destroy(adapter->iu_pool);
 free_ts:
-	tgt_session_destroy(adapter->ts);
+	tgt_session_destroy(adapter->ts, NULL, NULL);
 free_tt:
 	tgt_target_destroy(tt);
 
@@ -1149,7 +1148,7 @@ static int ibmvstgt_remove(struct vio_dev *dev)
 
 	crq_queue_destroy(adapter);
 	mempool_destroy(adapter->iu_pool);
-	tgt_session_destroy(adapter->ts);
+	tgt_session_destroy(adapter->ts, NULL, NULL);
 
 	tgt_target_destroy(tt);
 
