@@ -27,11 +27,16 @@ struct tgt_session;
 
 typedef void (tgt_session_done_t) (void *, struct tgt_session *);
 
+enum {
+	TGT_SESSION_CREATED,
+};
+
 struct tgt_session {
 	struct tgt_target *target;
 	struct list_head slist;
 
 	mempool_t *cmd_pool;
+	unsigned long state;
 
 	struct work_struct work;
 	tgt_session_done_t *done;

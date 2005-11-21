@@ -393,6 +393,8 @@ static void tgt_session_async_create(void *data)
 		spin_lock_irqsave(&target->lock, flags);
 		list_add(&session->slist, &target->session_list);
 		spin_unlock_irqrestore(&target->lock, flags);
+
+		set_bit(TGT_SESSION_CREATED, &session->state);
 	}
 
 	session->done(session->arg, err ? NULL : session);
@@ -445,6 +447,9 @@ int tgt_session_destroy(struct tgt_session *session,
 			tgt_session_done_t *done, void *arg)
 {
 	struct tgt_session_wait w;
+
+	/* We cannot handle unfinished sessions. Should we do? */
+	BUG_ON(!test_bit(TGT_SESSION_CREATED, &session->state));
 
 	init_completion(&w.event);
 	tgt_session_op_init(session, tgt_session_async_destroy,
