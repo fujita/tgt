@@ -149,7 +149,6 @@ EXPORT_SYMBOL_GPL(tgt_target_template_unregister);
 
 static void tgt_request_fn(struct request_queue *q)
 {
-	struct tgt_target *target;
 	struct tgt_cmd *cmd;
 	struct request *rq;
 	int err;
@@ -176,13 +175,17 @@ static void tgt_request_fn(struct request_queue *q)
 
 		spin_unlock_irq(q->queue_lock);
 
-		/*
-		 * TODO: kill cid. We can use the request queue tag instead
-		 */
 		dprintk("cmd %p tag %d\n", cmd, rq->tag);
 
-		target = cmd->session->target;
-	        err = target->proto->execute_cmd(cmd);
+		if (!cmd->device) {
+			struct tgt_target *target = cmd->session->target;
+
+			INIT_WORK(&cmd->work, target->proto->uspace_cmd_execute,
+				  cmd);
+			queue_work(target->twq, &cmd->work);
+			err = TGT_CMD_USPACE_QUEUED;
+		} else
+			err = cmd->device->dt->execute_cmd(cmd);
 	        switch (err) {
 	        case TGT_CMD_FAILED:
 		case TGT_CMD_COMPLETED:
@@ -198,7 +201,6 @@ static void tgt_request_fn(struct request_queue *q)
 
 static void tgt_queue_destroy(struct request_queue *q)
 {
-	kfree(q->queuedata);
 	blk_cleanup_queue(q);
 }
 
@@ -212,23 +214,8 @@ static int tgt_queue_create(struct tgt_protocol *proto, int depth,
 	if (!q)
 		return -ENOMEM;
 
-	q->queuedata = kzalloc(sizeof(struct tgt_queuedata), GFP_KERNEL);
-	if (!q->queuedata)
-		goto out;
-
-	/*
-	 * this is a tmp hack: we do not register this queue
-	 * becuase we do not have a proper parent. We can remove
-	 * this code and do this from userspace when the queue's parent
-	 * is not the gendisk.
-	 */
 	elevator_exit(q->elevator);
-	/*
-	 * for the virtual devices iosched happens there, and for passthru
-	 * devs we do noop for now (do we need to since the initiator does
-	 * ioscheduling)
-	 */
-	err = elevator_init(q, proto->elevator ? : "noop");
+	err = elevator_init(q, "noop");
 	if (err)
 		goto out;
 
@@ -566,7 +553,7 @@ struct tgt_device *tgt_device_get(struct tgt_target *target, uint64_t dev_id)
 	spin_lock_irqsave(&target->lock, flags);
 	device = tgt_device_find_nolock(target, dev_id);
 	if (device) {
-		if (test_bit(TGT_QUEUE_DEL, &tgt_qdata(device->q)->qflags))
+		if (test_bit(TGT_DEV_DEL, &device->state))
 			device = NULL;
 		else
 			class_device_get(&device->cdev);
@@ -730,8 +717,7 @@ static int tgt_device_destroy(int tid, uint64_t dev_id)
 	spin_lock_irqsave(&target->lock, flags);
 	device = tgt_device_find_nolock(target, dev_id);
 	if (device)
-		err = test_and_set_bit(TGT_QUEUE_DEL,
-				       &tgt_qdata(device->q)->qflags);
+		err = test_and_set_bit(TGT_DEV_DEL, &device->state);
 	spin_unlock_irqrestore(&target->lock, flags);
 
 	if (!device)
@@ -776,6 +762,9 @@ static void __tgt_cmd_destroy(void *data)
 		spin_unlock_irqrestore(q->queue_lock, flags);
 	}
 
+	if (cmd->device)
+		tgt_device_put(cmd->device);
+
 	mempool_free(cmd, cmd->session->cmd_pool);
 
 	if (q)
@@ -805,9 +794,6 @@ void tgt_transfer_response(void *data)
 	struct tgt_target *target = cmd->session->target;
 	int err;
 
-	if (target->proto->complete_cmd)
-		target->proto->complete_cmd(cmd);
-
 	cmd->done = tgt_cmd_destroy;
 	err = target->tt->transfer_response(cmd);
 	switch (err) {
@@ -825,7 +811,8 @@ void tgt_transfer_response(void *data)
 }
 EXPORT_SYMBOL_GPL(tgt_transfer_response);
 
-struct tgt_cmd *tgt_cmd_create(struct tgt_session *session, void *tgt_priv)
+struct tgt_cmd *tgt_cmd_create(struct tgt_session *session, uint64_t dev_id,
+			       void *tgt_priv)
 {
 	struct tgt_cmd *cmd;
 
@@ -836,6 +823,8 @@ struct tgt_cmd *tgt_cmd_create(struct tgt_session *session, void *tgt_priv)
 	}
 
 	memset(cmd, 0, sizeof(*cmd));
+	cmd->dev_id = dev_id;
+	cmd->device = tgt_device_get(session->target, cmd->dev_id);
 	cmd->session = session;
 	cmd->private = tgt_priv;
 	cmd->done = tgt_cmd_destroy;
@@ -959,6 +948,9 @@ int tgt_cmd_start(struct tgt_cmd *cmd)
 {
 	struct tgt_session *session = cmd->session;
 	int err;
+
+	if (cmd->device)
+		cmd->device->dt->prep_cmd(cmd);
 
 	err = tgt_cmd_queue(cmd, GFP_ATOMIC);
 	if (err)

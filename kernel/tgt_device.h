@@ -25,7 +25,8 @@ enum {
 	 * for completing it
 	 */
 	TGT_CMD_USPACE_QUEUED,
-	TGT_CMD_KERN_QUEUED
+	TGT_CMD_KERN_QUEUED,
+	TGT_DEV_DEL = 0,
 };
 
 struct tgt_device_template {
@@ -53,7 +54,7 @@ struct tgt_device_template {
 	/*
 	 * setup buffer or device fields if needed
 	 */
-	void (* prep_cmd)(struct tgt_cmd *cmd, uint32_t data_len);
+	void (* prep_cmd)(struct tgt_cmd *cmd);
 
 	/*
 	 * Pointer to the sysfs class properties for this host, NULL terminated.
@@ -73,6 +74,7 @@ struct tgt_device {
 	uint32_t blk_shift;
 	uint64_t size;
 
+	unsigned long state;
 	/*
 	 * queue for tgt <-> tgt LLD requests
 	 */

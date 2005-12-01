@@ -58,7 +58,7 @@ static int tgt_sd_create(struct tgt_device *device)
 	return 0;
 }
 
-static void tgt_sd_prep(struct tgt_cmd *cmd, uint32_t data_len)
+static void tgt_sd_prep(struct tgt_cmd *cmd)
 {
 	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
 	uint8_t *scb = scmd->scb;
@@ -87,10 +87,6 @@ static void tgt_sd_prep(struct tgt_cmd *cmd, uint32_t data_len)
 
 	off <<= 9;
 
-	/*
-	 * we trust the data_len passed in for now
-	 */
-	cmd->bufflen = data_len;
 	cmd->offset = off;
 }
 

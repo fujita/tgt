@@ -83,16 +83,6 @@ struct tgt_cmd {
 	unsigned long proto_priv[0] __attribute__ ((aligned (sizeof(unsigned long))));
 };
 
-enum {
-	TGT_QUEUE_DEL,
-	TGT_QUEUE_PRIVATE_START,
-};
-
-struct tgt_queuedata {
-	int active_cmd; /* should we use q->in_flight? */
-	unsigned long qflags;
-};
-
 extern struct tgt_session *
 tgt_session_create(struct tgt_target *target,
 		   tgt_session_done_t *done, void *arg);
@@ -101,17 +91,12 @@ extern int tgt_session_destroy(struct tgt_session *session,
 extern int tgt_msg_send(struct tgt_target *target, void *data, int dlen,
 			gfp_t flags);
 extern int tgt_uspace_cmd_send(struct tgt_cmd *cmd, gfp_t gfp_mask);
-extern struct tgt_cmd *tgt_cmd_create(struct tgt_session *session, void *priv);
+extern struct tgt_cmd *tgt_cmd_create(struct tgt_session *session, uint64_t id,
+				      void *priv);
 extern int tgt_cmd_start(struct tgt_cmd *cmd);
 extern void tgt_transfer_response(void *cmd);
 extern int tgt_sysfs_init(void);
 extern void tgt_sysfs_exit(void);
-
-static inline struct tgt_queuedata *tgt_qdata(struct request_queue *q)
-{
-	return (struct tgt_queuedata *) q->queuedata;
-}
-
 
 #define DEBUG_TGT
 

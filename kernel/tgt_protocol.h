@@ -27,7 +27,6 @@ struct tgt_protocol {
 	kmem_cache_t *cmd_cache;
 	unsigned uspace_pdu_size;
 
-	char *elevator;
 	/*
 	 * Create a command and allocate a buffer of size data_len for
 	 * for transfer. The buffer will be allocated with GFP_KERNEL
@@ -41,15 +40,13 @@ struct tgt_protocol {
 				       enum dma_data_direction data_dir,
 				       uint8_t *dev_id_buff, int id_buff_size,
 				       int flags);
-
-	int (* execute_cmd) (struct tgt_cmd *cmd);
-	void (* complete_cmd) (struct tgt_cmd *cmd);
 	/*
 	 * Build userspace packet
 	 */
 	void (* uspace_pdu_build)(struct tgt_cmd *cmd, void *data);
 
 	void (* uspace_cmd_complete)(struct tgt_cmd *cmd);
+	void (* uspace_cmd_execute)(void *cmd);
 };
 
 extern void tgt_protocol_init(void);
