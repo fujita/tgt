@@ -19,9 +19,23 @@ struct iscsi_session *session_lookup(struct iscsi_target *target, uint64_t sid)
 	return NULL;
 }
 
+struct session_wait {
+	struct completion event;
+	struct tgt_session *ts;
+};
+
+static void session_done(void *arg, struct tgt_session *session)
+{
+	struct session_wait *w = (struct session_wait *) arg;
+
+	w->ts = session;
+	complete(&w->event);
+}
+
 int session_add(struct iscsi_target *target, struct session_info *info)
 {
 	struct iscsi_session *session;
+	struct session_wait w;
 	int i;
 
 	dprintk("%p %u %" PRIx64 "\n", target, target->tid, info->sid);
@@ -34,6 +48,14 @@ int session_add(struct iscsi_target *target, struct session_info *info)
 	if (!session)
 		return -ENOMEM;
 
+	init_completion(&w.event);
+	if (tgt_session_create(target->tt, session_done, &w))
+		goto kfree_session;
+	wait_for_completion(&w.event);
+	if (!w.ts)
+		goto kfree_session;
+
+	session->ts = w.ts;
 	session->target = target;
 	session->sid = info->sid;
 	memcpy(&session->param, &target->sess_param, sizeof(session->param));
@@ -53,9 +75,10 @@ int session_add(struct iscsi_target *target, struct session_info *info)
 
 	list_add(&session->list, &target->session_list);
 
-	session->ts = tgt_session_create(target->tt, NULL, NULL);
-
 	return 0;
+kfree_session:
+	kfree(session);
+	return -ENOMEM;
 }
 
 int session_del(struct iscsi_target *target, uint64_t sid)
