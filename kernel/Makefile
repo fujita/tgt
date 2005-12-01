@@ -6,7 +6,7 @@ EXTRA_CFLAGS += -I$(obj) -I$(obj)/../include -DNETLINK_TGT=20
 
 ifneq ($(KERNELRELEASE),)
 obj-m		+= tgt_core.o
-tgt_core-objs	:= tgt.o tgt_sysfs.o tgt_protocol.o
+tgt_core-objs	:= tgt.o tgt_nl.o tgt_sysfs.o tgt_protocol.o
 
 obj-m		+= tgt_vsd.o tgt_scsi.o
 #obj-m		+= tgt_vsd.o tgt_scsi.o tgt_sd.o

@@ -95,8 +95,6 @@ extern struct tgt_cmd *tgt_cmd_create(struct tgt_session *session, uint64_t id,
 				      void *priv);
 extern int tgt_cmd_start(struct tgt_cmd *cmd);
 extern void tgt_transfer_response(void *cmd);
-extern int tgt_sysfs_init(void);
-extern void tgt_sysfs_exit(void);
 
 #define DEBUG_TGT
 
