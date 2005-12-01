@@ -334,11 +334,6 @@ int tgt_target_destroy(struct tgt_target *target)
 }
 EXPORT_SYMBOL_GPL(tgt_target_destroy);
 
-struct tgt_session_wait {
-	struct completion event;
-	int err;
-};
-
 static void tgt_session_op_init(struct tgt_session *session,
 				void (*func)(void *),
 				tgt_session_done_t *done, void *arg)
@@ -347,17 +342,6 @@ static void tgt_session_op_init(struct tgt_session *session,
 	session->arg = arg;
 	INIT_WORK(&session->work, func, session);
 	queue_work(session->target->twq, &session->work);
-}
-
-static void tgt_session_sync_helper(void *arg, struct tgt_session *session)
-{
-	struct tgt_session_wait *w = (struct tgt_session_wait *) arg;
-
-	if (session)
-		w->err = 0;
-	else
-		w->err = 1;
-	complete(&w->event);
 }
 
 static void tgt_session_async_create(void *data)
@@ -377,8 +361,6 @@ static void tgt_session_async_create(void *data)
 		spin_lock_irqsave(&target->lock, flags);
 		list_add(&session->slist, &target->session_list);
 		spin_unlock_irqrestore(&target->lock, flags);
-
-		set_bit(TGT_SESSION_CREATED, &session->state);
 	}
 
 	session->done(session->arg, err ? NULL : session);
@@ -386,28 +368,21 @@ static void tgt_session_async_create(void *data)
 		kfree(session);
 }
 
-struct tgt_session *tgt_session_create(struct tgt_target *target,
-				       tgt_session_done_t *done, void *arg)
+int tgt_session_create(struct tgt_target *target, tgt_session_done_t *done,
+		       void *arg)
 {
 	struct tgt_session *session;
-	struct tgt_session_wait w;
 
-	session = kzalloc(sizeof(*session), done ? GFP_ATOMIC : GFP_KERNEL);
+	BUG_ON(!done);
+	session = kzalloc(sizeof(*session), GFP_ATOMIC);
 	if (!session)
-		return NULL;
+		return -ENOMEM;
 	session->target = target;
 	INIT_LIST_HEAD(&session->slist);
 
-	init_completion(&w.event);
-	tgt_session_op_init(session, tgt_session_async_create,
-			    done ? : tgt_session_sync_helper,
-			    arg ? : &w);
-	if (!done) {
-		wait_for_completion(&w.event);
-		if (w.err)
-			return NULL;
-	}
-	return session;
+	tgt_session_op_init(session, tgt_session_async_create, done, arg);
+
+	return 0;
 }
 EXPORT_SYMBOL_GPL(tgt_session_create);
 
@@ -421,7 +396,8 @@ static void tgt_session_async_destroy(void *data)
 	list_del(&session->slist);
 	spin_unlock_irqrestore(&target->lock, flags);
 
-	session->done(session->arg, NULL);
+	if (session->done)
+		session->done(session->arg, NULL);
 
 	mempool_destroy(session->cmd_pool);
 	kfree(session);
@@ -430,19 +406,8 @@ static void tgt_session_async_destroy(void *data)
 int tgt_session_destroy(struct tgt_session *session,
 			tgt_session_done_t *done, void *arg)
 {
-	struct tgt_session_wait w;
-
-	/* We cannot handle unfinished sessions. Should we do? */
-	BUG_ON(!test_bit(TGT_SESSION_CREATED, &session->state));
-
-	init_completion(&w.event);
 	tgt_session_op_init(session, tgt_session_async_destroy,
-			    done ? : tgt_session_sync_helper,
-			    arg ? : &w);
-
-	if (!done)
-		wait_for_completion(&w.event);
-
+			    done, arg);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(tgt_session_destroy);

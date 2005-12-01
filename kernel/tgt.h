@@ -27,16 +27,11 @@ struct tgt_session;
 
 typedef void (tgt_session_done_t) (void *, struct tgt_session *);
 
-enum {
-	TGT_SESSION_CREATED,
-};
-
 struct tgt_session {
 	struct tgt_target *target;
 	struct list_head slist;
 
 	mempool_t *cmd_pool;
-	unsigned long state;
 
 	struct work_struct work;
 	tgt_session_done_t *done;
@@ -83,9 +78,8 @@ struct tgt_cmd {
 	unsigned long proto_priv[0] __attribute__ ((aligned (sizeof(unsigned long))));
 };
 
-extern struct tgt_session *
-tgt_session_create(struct tgt_target *target,
-		   tgt_session_done_t *done, void *arg);
+extern int tgt_session_create(struct tgt_target *target,
+			      tgt_session_done_t *done, void *arg);
 extern int tgt_session_destroy(struct tgt_session *session,
 			       tgt_session_done_t *done, void *arg);
 extern int tgt_msg_send(struct tgt_target *target, void *data, int dlen,
