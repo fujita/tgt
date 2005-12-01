@@ -1074,9 +1074,23 @@ static void handle_crq(void *data)
 	handle_cmd_queue(adapter);
 }
 
+struct session_wait {
+	struct completion event;
+	struct tgt_session *ts;
+};
+
+static void session_done(void *arg, struct tgt_session *session)
+{
+	struct session_wait *w = (struct session_wait *) arg;
+
+	w->ts = session;
+	complete(&w->event);
+}
+
 static int ibmvstgt_probe(struct vio_dev *dev, const struct vio_device_id *id)
 {
 	struct tgt_target *tt;
+	struct session_wait w;
 	struct server_adapter *adapter;
 	unsigned int *dma, dma_size;
 	int err = -ENOMEM;
@@ -1114,10 +1128,13 @@ static int ibmvstgt_probe(struct vio_dev *dev, const struct vio_device_id *id)
 	INIT_WORK(&adapter->crq_work, handle_crq, adapter);
 	INIT_LIST_HEAD(&adapter->cmd_queue);
 
-	adapter->ts = tgt_session_create(tt, NULL, NULL);
-	if (!adapter->ts)
+	init_completion(&w.event);
+	if (tgt_session_create(tt, session_done, &w))
 		goto free_tt;
-
+	wait_for_completion(&w.event);
+	if (!w.ts)
+		goto free_tt;
+	adapter->ts = w.ts;
 	adapter->iu_pool = mempool_create(INITIAL_SRP_LIMIT,
 					  mempool_alloc_slab,
 					  mempool_free_slab, iu_cache);
