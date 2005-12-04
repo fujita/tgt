@@ -709,28 +709,22 @@ static void __tgt_cmd_destroy(void *data)
 {
 	struct tgt_cmd *cmd = data;
 	struct request *rq = cmd->rq;
-	struct request_queue *q = NULL;
+	struct request_queue *q = rq->q;
 	unsigned long flags;
 
-	if (rq) {
-		q = rq->q;
-
-		dprintk("tag %d\n", rq->tag);
-
-		spin_lock_irqsave(q->queue_lock, flags);
-		if (blk_rq_tagged(rq))
-			blk_queue_end_tag(q, rq);
-		end_that_request_last(rq);
-		spin_unlock_irqrestore(q->queue_lock, flags);
-	}
+	dprintk("tag %d\n", rq->tag);
+	spin_lock_irqsave(q->queue_lock, flags);
+	if (blk_rq_tagged(rq))
+		blk_queue_end_tag(q, rq);
+	end_that_request_last(rq);
+	spin_unlock_irqrestore(q->queue_lock, flags);
 
 	if (cmd->device)
 		tgt_device_put(cmd->device);
 
 	mempool_free(cmd, cmd->session->cmd_pool);
 
-	if (q)
-		blk_run_queue(q);
+	blk_run_queue(q);
 }
 
 static void tgt_cmd_destroy(struct tgt_cmd *cmd)
