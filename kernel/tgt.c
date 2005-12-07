@@ -313,12 +313,23 @@ EXPORT_SYMBOL_GPL(tgt_target_create);
 
 int tgt_target_destroy(struct tgt_target *target)
 {
+	unsigned long flags;
+
 	dprintk("%p\n", target);
 
-	if (!list_empty(&target->device_list))
+	spin_lock_irqsave(&target->lock, flags);
+	if (!list_empty(&target->device_list)) {
+		spin_unlock_irqrestore(&target->lock, flags);
 		return -EBUSY;
+	}
+	spin_unlock_irqrestore(&target->lock, flags);
 
 	spin_lock(&all_targets_lock);
+	/* userspace and maybe a hotunplug are racing (TODO refcounts) */
+	if (list_empty(&target->tlist)) {
+		spin_unlock(&all_targets_lock);
+		return -ENODEV;
+	}
 	list_del(&target->tlist);
 	spin_unlock(&all_targets_lock);
 
