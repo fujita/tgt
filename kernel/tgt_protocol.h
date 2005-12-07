@@ -26,9 +26,22 @@ struct tgt_protocol {
 
 	kmem_cache_t *cmd_cache;
 	unsigned uspace_pdu_size;
+
+ 	/*
+	 * Create a command and allocate a buffer of size data_len for
+	 * for transfer. The buffer will be allocated with GFP_KERNEL
+	 * and preprocesed by tgt/scsi_proto so the next time
+	 * the target driver is notified about the cmd is when
+	 * the transfer* is called.
+	 */
+	void (* cmd_create)(struct tgt_cmd *cmd, uint8_t *cb,
+			    uint32_t data_len, enum dma_data_direction data_dir,
+			    uint8_t *dev_id_buff, int id_buff_size,
+			    int flags);
 	/*
 	 * Build userspace packet
 	 */
+
 	void (* uspace_pdu_build)(struct tgt_cmd *cmd, void *data);
 
 	void (* uspace_cmd_complete)(struct tgt_cmd *cmd);

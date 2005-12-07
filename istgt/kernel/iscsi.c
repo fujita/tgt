@@ -789,11 +789,11 @@ static void tgt_scsi_cmd_create(struct istgt_cmd *req)
 		break;
 	}
 
-	req->tc = scsi_tgt_create_cmd(conn->session->ts, req, req_hdr->cdb,
-				     be32_to_cpu(req_hdr->data_length),
-				     data_dir, req_hdr->lun,
-				     sizeof(req_hdr->lun),
-				     tags);
+	req->tc = tgt_cmd_create(conn->session->ts, req, req_hdr->cdb,
+				 be32_to_cpu(req_hdr->data_length),
+				 data_dir, req_hdr->lun,
+				 sizeof(req_hdr->lun),
+				 tags);
 	BUG_ON(!req->tc);
 
 	if (data_dir == DMA_TO_DEVICE && be32_to_cpu(req_hdr->data_length)) {

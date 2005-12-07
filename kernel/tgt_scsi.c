@@ -46,23 +46,15 @@ static uint64_t scsi_tgt_translate_lun(uint8_t *p, int size)
  * we may have to add a wrapper becuase people are passing the lun in
  * differently
  */
-struct tgt_cmd *
-scsi_tgt_create_cmd(struct tgt_session *session, void *tgt_priv, uint8_t *scb,
+static void
+scsi_tgt_cmd_create(struct tgt_cmd *cmd, uint8_t *scb,
 		    uint32_t data_len, enum dma_data_direction data_dir,
 		    uint8_t *lun, int lun_size, int tags)
 {
-	struct tgt_cmd *cmd;
 	struct scsi_tgt_cmd *scmd;
-	uint64_t id;
 
 	/* translate target driver LUN to device id */
-	id = scsi_tgt_translate_lun(lun, lun_size);
-
-	cmd = tgt_cmd_create(session, id, tgt_priv);
-	if (!cmd) {
-		eprintk("Could not allocate command\n");
-		return NULL;
-	}
+	cmd->dev_id = scsi_tgt_translate_lun(lun, lun_size);
 	scmd = tgt_cmd_to_scsi(cmd);
 	memcpy(scmd->scb, scb, sizeof(scmd->scb));
 	scmd->tags = tags;
@@ -74,12 +66,7 @@ scsi_tgt_create_cmd(struct tgt_session *session, void *tgt_priv, uint8_t *scb,
 	 * handler overide just in case
 	 */
 	cmd->bufflen = data_len;
-
-	tgt_cmd_start(cmd);
-	return cmd;
 }
-
-EXPORT_SYMBOL_GPL(scsi_tgt_create_cmd);
 
 /* kspace command failure */
 int scsi_tgt_sense_data_build(struct tgt_cmd *cmd, uint8_t key,
@@ -150,6 +137,7 @@ static void scsi_tgt_uspace_cmd_complete(struct tgt_cmd *cmd)
 static struct tgt_protocol scsi_tgt_proto = {
 	.name = "scsi",
 	.module = THIS_MODULE,
+	.cmd_create = scsi_tgt_cmd_create,
 	.uspace_pdu_build = scsi_tgt_uspace_pdu_build,
 	.uspace_cmd_execute = scsi_tgt_uspace_cmd_exec,
 	.uspace_cmd_complete = scsi_tgt_uspace_cmd_complete,

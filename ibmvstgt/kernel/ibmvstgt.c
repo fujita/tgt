@@ -349,8 +349,8 @@ static int process_cmd(struct iu_entry *iue)
 		iue, iu->srp.cmd.cdb[0], iu->srp.cmd.lun, data_dir, len, lun[1], tags);
 
 	BUG_ON(!iue->adapter->ts);
-	iue->tc = scsi_tgt_create_cmd(iue->adapter->ts, iue, iu->srp.cmd.cdb,
-				      len, data_dir, lun, sizeof(lun), tags);
+	iue->tc = tgt_cmd_create(iue->adapter->ts, iue, iu->srp.cmd.cdb,
+				 len, data_dir, lun, sizeof(lun), tags);
 	BUG_ON(!iue->tc);
 	dprintk("%p\n", iue->tc);
 

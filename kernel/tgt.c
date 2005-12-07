@@ -778,8 +778,10 @@ void tgt_transfer_response(void *data)
 }
 EXPORT_SYMBOL_GPL(tgt_transfer_response);
 
-struct tgt_cmd *tgt_cmd_create(struct tgt_session *session, uint64_t dev_id,
-			       void *tgt_priv)
+struct tgt_cmd *
+tgt_cmd_create(struct tgt_session *session, void *tgt_priv, uint8_t *cb,
+	       uint32_t data_len, enum dma_data_direction data_dir,
+	       uint8_t *dev_buf, int dev_buf_size, int flags)
 {
 	struct tgt_cmd *cmd;
 
@@ -788,9 +790,10 @@ struct tgt_cmd *tgt_cmd_create(struct tgt_session *session, uint64_t dev_id,
 		eprintk("Could not allocate tgt_cmd for %p\n", session);
 		return NULL;
 	}
-
 	memset(cmd, 0, sizeof(*cmd));
-	cmd->dev_id = dev_id;
+	session->target->proto->cmd_create(cmd, cb, data_len, data_dir,
+					   dev_buf, dev_buf_size, flags);
+
 	cmd->device = tgt_device_get(session->target, cmd->dev_id);
 	cmd->session = session;
 	cmd->private = tgt_priv;
@@ -798,6 +801,9 @@ struct tgt_cmd *tgt_cmd_create(struct tgt_session *session, uint64_t dev_id,
 	atomic_set(&cmd->state, TGT_CMD_CREATED);
 
 	dprintk("%p %p\n", session, cmd);
+
+	tgt_cmd_start(cmd);
+
 	return cmd;
 }
 EXPORT_SYMBOL_GPL(tgt_cmd_create);
