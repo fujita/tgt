@@ -94,6 +94,11 @@ struct tgt_target_template {
 	struct class_device_attribute **target_attrs;
 };
 
+enum {
+	TGT_CREATED,
+	TGT_DESTROYED,
+};
+
 struct tgt_target {
 	int typeid;
 	int tid;
@@ -105,8 +110,9 @@ struct tgt_target {
 
 	struct request_queue *q;
 	int queued_cmds;
+	int state;
 
-	/* Protects session_list and device_list */
+	/* Protects session_list and device_list and state */
 	spinlock_t lock;
 
 	struct list_head tlist;

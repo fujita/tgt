@@ -258,6 +258,7 @@ struct tgt_target *tgt_target_create(char *target_type, int queued_cmds)
 	if (!ti)
 		goto free_target;
 
+	target->state = TGT_CREATED;
 	target->tt = ti->tt;
 	target->proto = ti->proto;
 	target->typeid = ti->typeid;
@@ -322,14 +323,13 @@ int tgt_target_destroy(struct tgt_target *target)
 		spin_unlock_irqrestore(&target->lock, flags);
 		return -EBUSY;
 	}
+	/* userspace and maybe a hotunplug are racing (TODO refcounts) */
+	if (target->state == TGT_DESTROYED)
+		return -ENODEV;
+	target->state = TGT_DESTROYED;
 	spin_unlock_irqrestore(&target->lock, flags);
 
 	spin_lock(&all_targets_lock);
-	/* userspace and maybe a hotunplug are racing (TODO refcounts) */
-	if (list_empty(&target->tlist)) {
-		spin_unlock(&all_targets_lock);
-		return -ENODEV;
-	}
 	list_del(&target->tlist);
 	spin_unlock(&all_targets_lock);
 
