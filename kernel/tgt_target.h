@@ -122,12 +122,8 @@ struct tgt_target {
 
 extern struct tgt_target *tgt_target_create(char *target_type, int nr_cmds);
 extern int tgt_target_destroy(struct tgt_target *target);
-extern int tgt_sysfs_register_target(struct tgt_target *target);
-extern void tgt_sysfs_unregister_target(struct tgt_target *target);
 
 extern int tgt_target_template_register(struct tgt_target_template *tt);
 extern void tgt_target_template_unregister(struct tgt_target_template *tt);
-extern int tgt_sysfs_register_type(struct target_type_internal *ti);
-extern void tgt_sysfs_unregister_type(struct target_type_internal *ti);
 
 #endif
