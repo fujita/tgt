@@ -46,7 +46,7 @@ static uint64_t scsi_tgt_translate_lun(uint8_t *p, int size)
  * we may have to add a wrapper becuase people are passing the lun in
  * differently
  */
-static struct tgt_cmd *
+struct tgt_cmd *
 scsi_tgt_create_cmd(struct tgt_session *session, void *tgt_priv, uint8_t *scb,
 		    uint32_t data_len, enum dma_data_direction data_dir,
 		    uint8_t *lun, int lun_size, int tags)
@@ -78,6 +78,8 @@ scsi_tgt_create_cmd(struct tgt_session *session, void *tgt_priv, uint8_t *scb,
 	tgt_cmd_start(cmd);
 	return cmd;
 }
+
+EXPORT_SYMBOL_GPL(scsi_tgt_create_cmd);
 
 /* kspace command failure */
 int scsi_tgt_sense_data_build(struct tgt_cmd *cmd, uint8_t key,
@@ -148,7 +150,6 @@ static void scsi_tgt_uspace_cmd_complete(struct tgt_cmd *cmd)
 static struct tgt_protocol scsi_tgt_proto = {
 	.name = "scsi",
 	.module = THIS_MODULE,
-	.create_cmd = scsi_tgt_create_cmd,
 	.uspace_pdu_build = scsi_tgt_uspace_pdu_build,
 	.uspace_cmd_execute = scsi_tgt_uspace_cmd_exec,
 	.uspace_cmd_complete = scsi_tgt_uspace_cmd_complete,

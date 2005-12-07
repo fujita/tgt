@@ -22,7 +22,6 @@
 #include <tgt.h>
 #include <tgt_target.h>
 #include <tgt_scsi.h>
-#include <tgt_protocol.h>
 
 #include "viosrp.h"
 
@@ -297,15 +296,12 @@ static inline uint8_t getlink(struct iu_entry *iue)
 static int process_cmd(struct iu_entry *iue)
 {
 	struct tgt_target *tt = iue->adapter->tt;
-	struct tgt_protocol *proto;
 	union viosrp_iu *iu = vio_iu(iue);
 	enum dma_data_direction data_dir;
 	int tags, len;
 	uint8_t lun[8];
 
 	dprintk("%p %p %p\n", tt, iue->adapter, iue);
-	proto = tt->proto;
-	BUG_ON(!proto);
 
 	if (getlink(iue))
 		__set_bit(V_LINKED, &iue->req.flags);
@@ -353,9 +349,8 @@ static int process_cmd(struct iu_entry *iue)
 		iue, iu->srp.cmd.cdb[0], iu->srp.cmd.lun, data_dir, len, lun[1], tags);
 
 	BUG_ON(!iue->adapter->ts);
-	BUG_ON(!proto->create_cmd);
-	iue->tc = proto->create_cmd(iue->adapter->ts, iue, iu->srp.cmd.cdb,
-				    len, data_dir, lun, sizeof(lun), tags);
+	iue->tc = scsi_tgt_create_cmd(iue->adapter->ts, iue, iu->srp.cmd.cdb,
+				      len, data_dir, lun, sizeof(lun), tags);
 	BUG_ON(!iue->tc);
 	dprintk("%p\n", iue->tc);
 
