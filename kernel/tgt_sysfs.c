@@ -9,6 +9,8 @@
 #include <tgt_target.h>
 #include <tgt_device.h>
 
+#include "tgt_priv.h"
+
 static struct class_device_attribute *class_attr_overridden(
 				struct class_device_attribute **attrs,
 				struct class_device_attribute *attr)

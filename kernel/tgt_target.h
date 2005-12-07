@@ -15,14 +15,6 @@ struct tgt_protocol;
 struct tgt_target;
 struct tgt_cmd;
 
-struct target_type_internal {
-	int typeid;
-	struct list_head list;
-	struct tgt_target_template *tt;
-	struct tgt_protocol *proto;
-	struct class_device cdev;
-};
-
 enum {
 	TGT_CMD_XMIT_OK,
 	TGT_CMD_XMIT_FAILED,

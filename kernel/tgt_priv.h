@@ -16,6 +16,14 @@ extern void tgt_nl_exit(void);
 extern int tgt_nl_init(void);
 
 /* Sysfs */
+struct target_type_internal {
+	int typeid;
+	struct list_head list;
+	struct tgt_target_template *tt;
+	struct tgt_protocol *proto;
+	struct class_device cdev;
+};
+
 extern int tgt_sysfs_init(void);
 extern void tgt_sysfs_exit(void);
 extern int tgt_sysfs_register_type(struct target_type_internal *ti);
