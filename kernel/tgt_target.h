@@ -70,6 +70,8 @@ struct tgt_target_template {
 	 */
 	int (* transfer_write_data) (struct tgt_cmd *);
 
+	void (* task_mgmt_done) (uint64_t, int);
+
 	/*
 	 * name of protocol to use
 	 */

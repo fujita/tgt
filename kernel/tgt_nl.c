@@ -88,6 +88,27 @@ int tgt_msg_send(struct tgt_target *target, void *data, int dlen, gfp_t flags)
 }
 EXPORT_SYMBOL_GPL(tgt_msg_send);
 
+int tgt_task_mgmt_send(struct tgt_target *target, uint64_t rid,
+		       int func, uint64_t dev_id, uint64_t tag, gfp_t flags)
+{
+	struct tgt_event ev;
+
+	memset(&ev, 0, sizeof(ev));
+
+	dprintk("%llu %d %llu %llu\n", rid, func, dev_id, tag);
+
+	ev.k.task_mgmt.rid = rid;
+	ev.k.task_mgmt.func = func;
+	ev.k.task_mgmt.tid = target->tid;
+	ev.k.task_mgmt.typeid = target->typeid;
+/* 	ev.k.task_mgmt.sid = (uint64_t) session; */
+	ev.k.task_mgmt.dev_id = dev_id;
+	ev.k.task_mgmt.tag = tag;
+
+	return send_event_res(TGT_KEVENT_TASK_MGMT, &ev, NULL, 0, flags);
+}
+EXPORT_SYMBOL_GPL(tgt_task_mgmt_send);
+
 static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 {
 	int err = 0;
@@ -144,6 +165,13 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 		err = uspace_cmd_done(ev->u.cmd_res.tid, ev->u.cmd_res.dev_id,
 				      ev->u.cmd_res.cid, ev->data,
 				      ev->u.cmd_res.result, ev->u.cmd_res.len);
+		break;
+	case TGT_UEVENT_TASK_MGMT:
+		err = tgt_task_mgmt(ev->u.task_mgmt.rid, ev->u.task_mgmt.func,
+				    ev->u.task_mgmt.tid, ev->u.task_mgmt.sid,
+				    ev->u.task_mgmt.dev_id,
+				    ev->u.task_mgmt.tag,
+				    ev->u.task_mgmt.result);
 		break;
 	default:
 		eprintk("unknown type %d\n", nlh->nlmsg_type);

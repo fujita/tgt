@@ -91,6 +91,9 @@ tgt_cmd_create(struct tgt_session *session, void *tgt_priv, uint8_t *cb,
 	       uint8_t *dev_buf, int dev_buf_size, int flags);
 extern int tgt_cmd_start(struct tgt_cmd *cmd);
 extern void tgt_transfer_response(void *cmd);
+extern int tgt_task_mgmt_send(struct tgt_target *target, uint64_t rid,
+			      int func, uint64_t dev_id, uint64_t tag,
+			      gfp_t gfp_mask);
 
 #define DEBUG_TGT
 

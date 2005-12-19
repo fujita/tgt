@@ -11,6 +11,9 @@
  *   licensed under the terms of the GNU GPL v2.0,
  */
 
+#define	u8	__u8
+#define	u64	__u64
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,12 +23,17 @@
 #include <unistd.h>
 #include <errno.h>
 #include <scsi/scsi.h>
+#include <scsi/srp.h>
+#include <scsi/iscsi_proto.h>
 #include <asm/byteorder.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/socket.h>
+#include <linux/netlink.h>
 
 #include "tgtd.h"
 #include "tgt_if.h"
+#include "tgt_scsi.h"
 #include "tgt_sysfs.h"
 
 #define cpu_to_be32 __cpu_to_be32
@@ -557,4 +565,155 @@ int cmd_process(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *len,
 
 out:
 	return result;
+}
+
+/* TODO: Create transport specific library. */
+
+int iscsi_task_mgmt(int *func)
+{
+	int err = 0;
+
+	switch (*func) {
+	case ISCSI_TM_FUNC_ABORT_TASK:
+		*func = ABORT_TASK;
+		break;
+	case ISCSI_TM_FUNC_ABORT_TASK_SET:
+		*func = ABORT_TASK_SET;
+		break;
+	case ISCSI_TM_FUNC_CLEAR_ACA:
+		*func = CLEAR_ACA;
+		break;
+	case ISCSI_TM_FUNC_CLEAR_TASK_SET:
+		*func = CLEAR_TASK_SET;
+		break;
+	case ISCSI_TM_FUNC_LOGICAL_UNIT_RESET:
+		*func = LOGICAL_UNIT_RESET;
+		break;
+	case ISCSI_TM_FUNC_TARGET_WARM_RESET:
+	case ISCSI_TM_FUNC_TARGET_COLD_RESET:
+		/* TODO: call tgt task mgmt function again and again. */
+		err = TMF_RSP_REJECTED;
+		break;
+	case ISCSI_TM_FUNC_TASK_REASSIGN:
+	default:
+		err = TMF_RSP_REJECTED;
+		break;
+	}
+	return err;
+}
+
+int srp_task_mgmt(int *func)
+{
+	int err = 0;
+
+	switch (*func) {
+	case SRP_TSK_ABORT_TASK:
+		*func = ABORT_TASK;
+		break;
+	case SRP_TSK_ABORT_TASK_SET:
+		*func = ABORT_TASK_SET;
+		break;
+	case SRP_TSK_CLEAR_TASK_SET:
+		*func = CLEAR_TASK_SET;
+		break;
+	case SRP_TSK_LUN_RESET:
+		*func = LOGICAL_UNIT_RESET;
+		break;
+	case SRP_TSK_CLEAR_ACA:
+		*func = CLEAR_ACA;
+		break;
+	default:
+		err = TMF_RSP_REJECTED;
+		break;
+	}
+	return err;
+}
+
+static int do_task_mgmt(uint64_t rid, int func, int tid, int type,
+			uint64_t sid, uint64_t lun, uint64_t tag)
+{
+	struct tgt_event *ev;
+	struct nlmsghdr *nlh;
+	char nlm_sev[NLMSG_SPACE(sizeof(struct tgt_event))];
+	char nlm_rev[NLMSG_SPACE(sizeof(struct tgt_event))];
+	int fd, err;
+	uint64_t size;
+	char path[PATH_MAX], buf[128];
+
+	snprintf(path, sizeof(path),
+		 TGT_TYPE_SYSFSDIR "/driver%d/subprotocol", type);
+	fd = open(path, O_RDONLY);
+	if (fd < 0) {
+		err = TMF_RSP_TARGET_FAILURE;
+		goto out;
+	}
+
+	err = read(fd, buf, sizeof(buf));
+	close(fd);
+	if (err < 0) {
+		err = TMF_RSP_TARGET_FAILURE;
+		goto out;
+	}
+
+	if (!strncmp(buf, "iscsi", 5))
+		err = iscsi_task_mgmt(&func);
+	else if (!strncmp(buf, "srp", 3))
+		err = srp_task_mgmt(&func);
+	else {
+		eprintf("Cannot subprotocol %s\n", buf);
+		err = TMF_RSP_TARGET_FAILURE;
+	}
+
+	if (err) {
+		err = TMF_RSP_TARGET_FAILURE;
+		goto out;
+	}
+
+	/* We support only I_T_L or I_T_L_Q now. */
+
+	errno = 0;
+	device_info(tid, lun, &size);
+	if (errno == ENOENT) {
+		err = TMF_RSP_INCORRECT_LUN;
+		goto out;
+	}
+	err = 0;
+
+out:
+	memset(nlm_sev, 0, sizeof(nlm_sev));
+	memset(nlm_rev, 0, sizeof(nlm_rev));
+
+	nlh = (struct nlmsghdr *) nlm_sev;
+	nlh->nlmsg_pid = getpid();
+	nlh->nlmsg_len = NLMSG_SPACE(sizeof(*ev));
+	nlh->nlmsg_flags = 0;
+	nlh->nlmsg_type = TGT_UEVENT_TASK_MGMT;
+
+	ev = NLMSG_DATA(nlh);
+	ev->u.task_mgmt.rid = rid;
+	ev->u.task_mgmt.func = func;
+	ev->u.task_mgmt.tid = tid;
+	ev->u.task_mgmt.sid = sid;
+	ev->u.task_mgmt.dev_id = lun;
+	ev->u.task_mgmt.tag = tag;
+	ev->u.task_mgmt.result = err;
+
+	err = nl_cmd_call(nl_fd, nlh->nlmsg_type, (char *) nlh,
+			  nlh->nlmsg_len, nlm_rev, sizeof(nlm_rev));
+
+	return err;
+}
+
+int task_mgmt(struct tgt_event *ev)
+{
+	dprintf("%" PRIu64 " %d %d %d %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
+		ev->k.task_mgmt.rid, ev->k.task_mgmt.func,
+		ev->k.task_mgmt.tid, ev->k.task_mgmt.typeid,
+		ev->k.task_mgmt.sid, ev->k.task_mgmt.dev_id,
+		ev->k.task_mgmt.tag);
+
+	return do_task_mgmt(ev->k.task_mgmt.rid, ev->k.task_mgmt.func,
+			    ev->k.task_mgmt.tid, ev->k.task_mgmt.typeid,
+			    ev->k.task_mgmt.sid, ev->k.task_mgmt.dev_id,
+			    ev->k.task_mgmt.tag);
 }

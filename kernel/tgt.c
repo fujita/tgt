@@ -1023,6 +1023,50 @@ int uspace_cmd_done(int tid, uint64_t dev_id, uint64_t cid, void *data,
 	return 0;
 }
 
+/* Should we create proto->task_mgmt ? */
+
+struct tgt_task_mgmt_info {
+	struct tgt_target *target;
+	struct work_struct work;
+	uint64_t rid;
+	int res;
+};
+
+static void tgt_task_mgmt_done(void *data)
+{
+	struct tgt_task_mgmt_info *mi = (struct tgt_task_mgmt_info *) data;
+	struct tgt_target *target = mi->target;
+
+	target->tt->task_mgmt_done(mi->rid, mi->res);
+	kfree(mi);
+}
+
+int tgt_task_mgmt(uint64_t rid, int func, int tid, uint64_t sid,
+		  uint64_t dev_id, uint64_t tag, int res)
+{
+	int err = 0;
+	struct tgt_target *target = target_find(tid);
+	struct tgt_task_mgmt_info *mi;
+
+	dprintk("%llu %d %d %llu %llu %llu %d\n",
+		rid, func, tid, sid, dev_id, tag, res);
+
+	if (target && target->tt->task_mgmt_done) {
+		mi = kzalloc(sizeof(*mi), GFP_KERNEL);
+		if (!mi)
+			return -ENOMEM;
+
+		mi->target = target;
+		mi->rid = rid;
+		mi->res = res;
+		INIT_WORK(&mi->work, tgt_task_mgmt_done, mi);
+		queue_work(target->twq, &mi->work);
+	} else
+		err = -EINVAL;
+
+	return err;
+}
+
 static void __exit tgt_exit(void)
 {
 	tgt_nl_exit();

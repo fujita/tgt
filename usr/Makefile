@@ -1,4 +1,4 @@
-CFLAGS += -O2 -fno-inline -Wall -Wstrict-prototypes -fPIC -I../include -DNETLINK_TGT=20
+CFLAGS += -O2 -fno-inline -Wall -Wstrict-prototypes -fPIC -I$(KERNELSRC)/include -I../include -DNETLINK_TGT=20
 PROGRAMS = tgtd tgtadm scsi.so
 
 all: $(PROGRAMS)

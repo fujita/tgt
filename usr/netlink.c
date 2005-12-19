@@ -146,6 +146,18 @@ static int cmd_queue(int fd, char *reqbuf, char *resbuf)
 			  NLMSG_SPACE(sizeof(*ev_res) + len));
 }
 
+static void nl_task_mgmt(struct tgt_event *ev)
+{
+	void (*fn) (char *);
+
+	fn = dl_task_mgmt_fn(ev->k.task_mgmt.typeid);
+	if (fn)
+		fn((char *) ev);
+	else
+		eprintf("Cannot handle task management %d\n",
+			ev->k.task_mgmt.tid);
+}
+
 void nl_event_handle(int fd)
 {
 	struct nlmsghdr *nlh;
@@ -172,6 +184,9 @@ void nl_event_handle(int fd)
 		else
 			eprintf("Cannot handle async event %d\n",
 				ev->k.tgt_passthru.tid);
+		break;
+	case TGT_KEVENT_TASK_MGMT:
+		nl_task_mgmt(ev);
 		break;
 	default:
 		/* kernel module bug */
@@ -209,13 +224,14 @@ static int nl_start(int fd)
 {
 	int err;
 	struct tgt_event *ev;
+	char rbuf[4096];
 	char nlmsg[NLMSG_SPACE(sizeof(struct tgt_event))];
 
 	err = nl_cmd_call(fd, TGT_UEVENT_START, nlmsg,
-			  NLMSG_SPACE(sizeof(struct tgt_event)), NULL, 0);
+			  NLMSG_SPACE(sizeof(struct tgt_event)),
+			  rbuf, sizeof(rbuf));
 
-	ev = (struct tgt_event *) NLMSG_DATA(nlmsg);
-
+	ev = (struct tgt_event *) NLMSG_DATA(rbuf);
 	if (err < 0 || ev->k.event_res.err < 0) {
 		eprintf("%d %d\n", err, ev->k.event_res.err);
 		return -EINVAL;

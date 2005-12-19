@@ -16,11 +16,13 @@ enum tgt_event_type {
 	TGT_UEVENT_DEVICE_CREATE,
 	TGT_UEVENT_DEVICE_DESTROY,
 	TGT_UEVENT_CMD_RES,
+	TGT_UEVENT_TASK_MGMT,
 
 	/* kernel -> user */
 	TGT_KEVENT_RESPONSE,
 	TGT_KEVENT_CMD_REQ,
 	TGT_KEVENT_TARGET_PASSTHRU,
+	TGT_KEVENT_TASK_MGMT
 };
 
 #define	TGT_INVALID_DEV_ID	~0ULL
@@ -57,6 +59,15 @@ struct tgt_event {
 			uint32_t len;
 			int result;
 		} cmd_res;
+		struct {
+			uint64_t rid;
+			int func;
+			int tid;
+			uint64_t sid;
+			uint64_t dev_id;
+			uint64_t tag;
+			int result;
+		} task_mgmt;
 	} u;
 
 	/* kernel -> user */
@@ -75,6 +86,15 @@ struct tgt_event {
 			uint32_t len;
 			int typeid;
 		} tgt_passthru;
+		struct {
+			uint64_t rid;
+			int func;
+			int tid;
+			int typeid;
+			uint64_t sid;
+			uint64_t dev_id;
+			uint64_t tag;
+		} task_mgmt;
 	} k;
 
 	/*
