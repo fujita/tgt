@@ -1149,15 +1149,14 @@ out:
 /* 	} */
 /* } */
 
-static void execute_task_management(struct istgt_cmd *req)
+static void istgt_task_mgmt_done(uint64_t rid, int err)
 {
-/* 	struct iscsi_conn *conn = req->conn; */
-/* 	struct iscsi_target *target = conn->session->target; */
 	struct istgt_cmd *rsp;
-	struct iscsi_tm *req_hdr = (struct iscsi_tm *)&req->pdu.bhs;
 	struct iscsi_tm_rsp *rsp_hdr;
-	int function = req_hdr->flags & ISCSI_FLAG_TM_FUNC_MASK;
+	struct istgt_cmd *req = (void*)(unsigned long) rid;
+	struct iscsi_tm *req_hdr = (struct iscsi_tm *)&req->pdu.bhs;
 
+	eprintk("%llu %d\n", (unsigned long long) rid, err);
 	rsp = iscsi_cmnd_create_rsp_cmnd(req, 1);
 	rsp_hdr = (struct iscsi_tm_rsp *)&rsp->pdu.bhs;
 
@@ -1167,7 +1166,19 @@ static void execute_task_management(struct istgt_cmd *req)
 /* 	rsp_hdr->response = ISCSI_TMF_RSP_COMPLETE; */
 	rsp_hdr->response = ISCSI_TMF_RSP_REJECTED;
 
-	eprintk("%x %d %x\n", cmd_itt(req), function, req_hdr->rtt);
+	iscsi_cmnd_init_write(rsp);
+}
+
+static void execute_task_management(struct istgt_cmd *req)
+{
+	struct iscsi_conn *conn = req->conn;
+	struct iscsi_target *target = conn->session->target;
+	struct iscsi_tm *req_hdr = (struct iscsi_tm *)&req->pdu.bhs;
+	int func = req_hdr->flags & ISCSI_FLAG_TM_FUNC_MASK;
+
+	eprintk("%p %x %d %x\n", req, cmd_itt(req), func, req_hdr->rtt);
+	tgt_task_mgmt_send(target->tt, (uint64_t) (unsigned long) req,
+			   func, 0, 0, GFP_KERNEL);
 
 /* 	switch (function) { */
 /* 	case ISCSI_FUNCTION_ABORT_TASK: */
@@ -1213,7 +1224,6 @@ static void execute_task_management(struct istgt_cmd *req)
 /* 		break; */
 /* 	} */
 /* out: */
-	iscsi_cmnd_init_write(rsp);
 }
 
 static void noop_out_exec(struct istgt_cmd *req)
@@ -1696,6 +1706,7 @@ static struct tgt_target_template istgt_template = {
 	.msg_recv = iet_msg_recv,
 	.transfer_response = scsi_cmnd_done,
 	.transfer_write_data = buffer_ready,
+	.task_mgmt_done = istgt_task_mgmt_done,
 	.priv_data_size = sizeof(struct iscsi_target),
 };
 
