@@ -164,7 +164,7 @@ static void do_send_data_rsp(struct istgt_cmd *cmnd)
 	expsize = cmnd_read_size(cmnd);
 	BUG_ON(!cmnd->tc);
 	size = min(expsize, cmnd->tc->bufflen);
-	eprintk("%u %u\n", expsize, cmnd->tc->bufflen);
+	dprintk("%u %u\n", expsize, cmnd->tc->bufflen);
 	offset = 0;
 	sn = 0;
 

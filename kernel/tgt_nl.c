@@ -196,7 +196,7 @@ static int event_recv_skb(struct sk_buff *skb)
 			rlen = skb->len;
 		err = event_recv_msg(skb, nlh);
 
-		eprintk("%d %d\n", nlh->nlmsg_type, err);
+		dprintk("%d %d\n", nlh->nlmsg_type, err);
 		/*
 		 * TODO for passthru commands the lower level should
 		 * probably handle the result or we should modify this
