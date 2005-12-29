@@ -27,7 +27,4 @@
 #error "unknown endianess!"
 #endif
 
-typedef uint16_t __be16;
-typedef uint32_t __be32;
-
 #endif	/* TYPES_H */

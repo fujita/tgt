@@ -9,13 +9,15 @@
 
 #include <search.h>
 #include <sys/types.h>
+#include <linux/types.h>
 
 #include "types.h"
 #include "istgt_u.h"
 #include "param.h"
 #include "misc.h"
 #include "log.h"
-#include <iscsi_proto.h>
+
+#include <scsi/iscsi_proto.h>
 
 #define sid64(isid, tsih)					\
 ({								\

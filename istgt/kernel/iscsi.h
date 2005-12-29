@@ -14,7 +14,7 @@
 #include <asm/scatterlist.h>
 #include <linux/blkdev.h>
 
-#include <iscsi_proto.h>
+#include <scsi/iscsi_proto.h>
 #include <istgt_u.h>
 
 #include <tgt.h>
