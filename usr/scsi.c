@@ -11,9 +11,6 @@
  *   licensed under the terms of the GNU GPL v2.0,
  */
 
-#define	u8	__u8
-#define	u64	__u64
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,7 +20,6 @@
 #include <unistd.h>
 #include <errno.h>
 #include <scsi/scsi.h>
-#include <scsi/srp.h>
 #include <scsi/iscsi_proto.h>
 #include <asm/byteorder.h>
 #include <asm/page.h>
@@ -36,7 +32,6 @@
 
 #include "tgtd.h"
 #include "tgt_if.h"
-#include "tgt_scsi.h"
 #include "tgt_sysfs.h"
 
 #define cpu_to_be32 __cpu_to_be32
