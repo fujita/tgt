@@ -156,18 +156,6 @@ static int cmd_queue(int fd, char *reqbuf, char *resbuf)
 			  NLMSG_SPACE(sizeof(*ev_res)));
 }
 
-static void nl_task_mgmt(struct tgt_event *ev)
-{
-	void (*fn) (char *);
-
-	fn = dl_task_mgmt_fn(ev->k.task_mgmt.typeid);
-	if (fn)
-		fn((char *) ev);
-	else
-		eprintf("Cannot handle task management %d\n",
-			ev->k.task_mgmt.tid);
-}
-
 void nl_event_handle(int fd)
 {
 	struct nlmsghdr *nlh;
@@ -194,9 +182,6 @@ void nl_event_handle(int fd)
 		else
 			eprintf("Cannot handle async event %d\n",
 				ev->k.tgt_passthru.tid);
-		break;
-	case TGT_KEVENT_TASK_MGMT:
-		nl_task_mgmt(ev);
 		break;
 	case TGT_KEVENT_CMD_DONE:
 		fn = dl_cmd_done_fn(ev->k.cmd_done.typeid);

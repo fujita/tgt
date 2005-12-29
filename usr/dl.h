@@ -12,7 +12,6 @@ extern void *dl_poll_fn(int idx);
 extern void *dl_ipc_fn(int typeid);
 extern void *dl_event_fn(int tid, int typeid);
 extern void *dl_proto_cmd_process(int tid, int typeid);
-extern void *dl_task_mgmt_fn(int typeid);
 extern void *dl_cmd_done_fn(int typeid);
 
 extern char *typeid_to_name(int typeid);

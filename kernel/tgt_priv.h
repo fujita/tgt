@@ -12,9 +12,6 @@ extern int uspace_cmd_done(int tid, uint64_t dev_id, uint64_t cid,
 			   int result, uint32_t len, uint64_t offset,
 			   unsigned long addr,
 			   uint8_t rw, uint8_t try_map);
-extern int tgt_task_mgmt(uint64_t fid, int func, int tid, uint64_t sid,
-			 uint64_t lun, uint64_t tag, int res);
-
 extern struct task_struct *tgtd_tsk;
 
 /* netlink */

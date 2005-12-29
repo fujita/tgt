@@ -99,9 +99,6 @@ tgt_cmd_create(struct tgt_session *session, void *tgt_priv, uint8_t *cb,
 	       uint32_t data_len, enum dma_data_direction data_dir,
 	       uint8_t *dev_buf, int dev_buf_size, int flags);
 extern void tgt_transfer_response(void *cmd);
-extern int tgt_task_mgmt_send(struct tgt_target *target, uint64_t rid,
-			      int func, uint64_t dev_id, uint64_t tag,
-			      gfp_t gfp_mask);
 extern int tgt_uspace_cmd_done_send(struct tgt_cmd *cmd, gfp_t flags);
 
 #define DEBUG_TGT 1

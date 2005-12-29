@@ -171,14 +171,6 @@ void *dl_event_fn(int tid, int typeid)
 	return NULL;
 }
 
-void *dl_task_mgmt_fn(int typeid)
-{
-	if (dinfo[typeid].pdl)
-		return dlsym(dinfo[typeid].pdl, "task_mgmt");
-
-	return NULL;
-}
-
 void *dl_cmd_done_fn(int typeid)
 {
 	if (dinfo[typeid].pdl)
