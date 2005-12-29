@@ -15,8 +15,6 @@ start_server()
 {
 	insmod ${PWD}/kernel/tgt_core.ko
 	insmod ${PWD}/kernel/tgt_scsi.ko
-	insmod ${PWD}/kernel/tgt_vsd.ko
-#	insmod ${PWD}/kernel/tgt_sd.ko
 
 	if [ $TARGET = "istgt" ] ; then
 		modprobe -q crc32c
@@ -44,8 +42,6 @@ stop_server()
 		rmmod ibmvstgt
 	fi
 
-#	rmmod tgt_sd
-	rmmod tgt_vsd
 	rmmod tgt_scsi
 	rmmod tgt_core
 }

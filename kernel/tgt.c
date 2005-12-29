@@ -26,6 +26,8 @@
 
 MODULE_LICENSE("GPL");
 
+struct task_struct *tgtd_tsk;
+
 static spinlock_t all_targets_lock;
 static LIST_HEAD(all_targets);
 
@@ -148,24 +150,13 @@ static void tgt_request_fn(struct request_queue *q)
 {
 	struct tgt_cmd *cmd;
 	struct request *rq;
-	int err;
 
 	while ((rq = elv_next_request(q)) != NULL) {
 		/* we need to set state or refcount under this lock! */
 		cmd = rq->special;
-
-		/*
-		 * the iosched nicely ordered these, should we try to keep the
-		 * ordering or for most cases will it not make a difference
-		 * since the lower levels will iosched again (not for
-		 * passthrough though). Maybe we should use a tgt_device
-		 * flag to indicate what is best for the real device.
-		 */
-		if (atomic_read(&cmd->state) != TGT_CMD_READY)
-			break;
 		/*
 		 * hit queue depth (command completion will run the
-		 * queue again
+		 * queue again)
 		 */
 		if (blk_queue_tagged(q) && blk_queue_start_tag(q, rq))
 			break;
@@ -174,23 +165,14 @@ static void tgt_request_fn(struct request_queue *q)
 
 		dprintk("cmd %p tag %d\n", cmd, rq->tag);
 
-		if (!cmd->device) {
-			struct tgt_target *target = cmd->session->target;
+		/*
+		 * TODO: build a vector of commands and then do the
+	 	 * userspace send call
+		 */
 
-			INIT_WORK(&cmd->work, target->proto->uspace_cmd_execute,
-				  cmd);
-			queue_work(target->twq, &cmd->work);
-			err = TGT_CMD_USPACE_QUEUED;
-		} else
-			err = cmd->device->dt->execute_cmd(cmd);
-	        switch (err) {
-	        case TGT_CMD_FAILED:
-		case TGT_CMD_COMPLETED:
-			dprintk("command completed %d\n", err);
-			tgt_transfer_response(cmd);
-		default:
-			dprintk("command %d queued to real dev\n", rq->tag);
-		}
+		/* what should we do on failure here ? */
+		if (tgt_uspace_cmd_send(cmd, GFP_ATOMIC) < 0)
+			eprintk("command %d failed\n", rq->tag);
 
 		spin_lock_irq(q->queue_lock);
 	}
@@ -423,74 +405,6 @@ int tgt_session_destroy(struct tgt_session *session,
 }
 EXPORT_SYMBOL_GPL(tgt_session_destroy);
 
-struct device_type_internal {
-	struct tgt_device_template *sdt;
-	struct list_head list;
-};
-
-static struct tgt_device_template *device_template_get(const char *name)
-{
-	unsigned long flags;
-	struct device_type_internal *ti;
-
-	spin_lock_irqsave(&device_tmpl_lock, flags);
-
-	list_for_each_entry(ti, &device_tmpl_list, list)
-		if (!strcmp(name, ti->sdt->name)) {
-			if (!try_module_get(ti->sdt->module))
-				ti = NULL;
-			spin_unlock_irqrestore(&device_tmpl_lock, flags);
-			return ti ? ti->sdt : NULL;
-		}
-
-	spin_unlock_irqrestore(&device_tmpl_lock, flags);
-
-	return NULL;
-}
-
-static void device_template_put(struct tgt_device_template *sdt)
-{
-	module_put(sdt->module);
-}
-
-int tgt_device_template_register(struct tgt_device_template *sdt)
-{
-	unsigned long flags;
-	struct device_type_internal *ti;
-
-	ti = kzalloc(sizeof(*ti), GFP_KERNEL);
-	if (!ti)
-		return -ENOMEM;
-
-	INIT_LIST_HEAD(&ti->list);
-	ti->sdt = sdt;
-
-	spin_lock_irqsave(&device_tmpl_lock, flags);
-	list_add_tail(&ti->list, &device_tmpl_list);
-	spin_unlock_irqrestore(&device_tmpl_lock, flags);
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(tgt_device_template_register);
-
-void tgt_device_template_unregister(struct tgt_device_template *sdt)
-{
-	unsigned long flags;
-	struct device_type_internal *ti;
-
-	spin_lock_irqsave(&device_tmpl_lock, flags);
-
-	list_for_each_entry(ti, &device_tmpl_list, list)
-		if (ti->sdt == sdt) {
-			list_del(&ti->list);
-			kfree(ti);
-			break;
-		}
-
-	spin_unlock_irqrestore(&device_tmpl_lock, flags);
-}
-EXPORT_SYMBOL_GPL(tgt_device_template_unregister);
-
 /*
  * TODO: use a hash or any better alg/ds
  */
@@ -585,6 +499,7 @@ int tgt_device_create(int tid, uint64_t dev_id, char *device_type,
 	struct tgt_target *target;
 	struct tgt_device *device;
 	unsigned long flags;
+	struct inode *inode;
 
 	dprintk("tid %d dev_id %" PRIu64 " type %s fd %d\n",
 		tid, dev_id, device_type, fd);
@@ -607,22 +522,18 @@ int tgt_device_create(int tid, uint64_t dev_id, char *device_type,
 		goto free_device;
 	}
 
-	device->dt = device_template_get(device_type);
-	if (!device->dt) {
-		eprintk("Could not get devive type %s\n", device_type);
-		goto put_fd;
-	}
+	/* TODO: kill me */
+	inode = device->file->f_dentry->d_inode;
+	if (S_ISREG(inode->i_mode))
+		;
+	else if (S_ISBLK(inode->i_mode))
+		inode = inode->i_bdev->bd_inode;
 
-	device->dt_data = kzalloc(device->dt->priv_data_size, GFP_KERNEL);
-	if (!device->dt_data)
-		goto put_template;
-
-	if (device->dt->create)
-		if (device->dt->create(device))
-			goto free_priv_dt_data;
+	device->use_clustering = 1;
+	device->size = inode->i_size;
 
 	if (tgt_queue_create(target->proto, TGT_QUEUE_DEPTH, &device->q))
-		goto dt_destroy;
+		goto put_fd;
 	tgt_device_queue_setup(device);
 
 	if (tgt_sysfs_register_device(device))
@@ -636,13 +547,6 @@ int tgt_device_create(int tid, uint64_t dev_id, char *device_type,
 
 queue_destroy:
 	tgt_queue_destroy(device->q);
-dt_destroy:
-	if (device->dt->destroy)
-		device->dt->destroy(device);
-free_priv_dt_data:
-	kfree(device->dt_data);
-put_template:
-	device_template_put(device->dt);
 put_fd:
 	fput(device->file);
 free_device:
@@ -661,14 +565,9 @@ void tgt_device_free(struct tgt_device *device)
 	list_del(&device->dlist);
 	spin_unlock_irqrestore(&target->lock, flags);
 
-	if (device->dt->destroy)
-		device->dt->destroy(device);
-
 	tgt_queue_destroy(device->q);
 	fput(device->file);
-	device_template_put(device->dt);
 
-	kfree(device->dt_data);
 	kfree(device);
 }
 
@@ -707,13 +606,20 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 	}
 }
 
-static void tgt_free_buffer(struct tgt_cmd *cmd)
+static void tgt_unmap_user_pages(struct tgt_cmd *cmd)
 {
+	struct page *page;
 	int i;
 
-	for (i = 0; i < cmd->sg_count; i++)
-		__free_page(cmd->sg[i].page);
-	kfree(cmd->sg);
+	for (i = 0; i < cmd->sg_count; i++) {
+		page = cmd->pages[i];
+		if(!page)
+			break;
+		if (test_bit(TGT_CMD_RW, &cmd->flags))
+			set_page_dirty_lock(page);
+		page_cache_release(page);
+	}
+	kfree(cmd->pages);
 }
 
 static void __tgt_cmd_destroy(void *data)
@@ -724,6 +630,11 @@ static void __tgt_cmd_destroy(void *data)
 	unsigned long flags;
 
 	dprintk("tag %d\n", rq->tag);
+
+	tgt_unmap_user_pages(cmd);
+	kfree(cmd->sg);
+	tgt_uspace_cmd_done_send(cmd, GFP_KERNEL);
+
 	spin_lock_irqsave(q->queue_lock, flags);
 	if (blk_rq_tagged(rq))
 		blk_queue_end_tag(q, rq);
@@ -742,8 +653,6 @@ static void tgt_cmd_destroy(struct tgt_cmd *cmd)
 {
 	dprintk("cmd %p\n", cmd);
 
-	tgt_free_buffer(cmd);
-
 	/*
 	 * Goose the queue incase we are blocked on a queue depth
 	 * limit or resource problem.
@@ -761,6 +670,8 @@ void tgt_transfer_response(void *data)
 	struct tgt_target *target = cmd->session->target;
 	int err;
 
+	dprintk("cmd %p\n", cmd);
+
 	cmd->done = tgt_cmd_destroy;
 	err = target->tt->transfer_response(cmd);
 	switch (err) {
@@ -777,36 +688,6 @@ void tgt_transfer_response(void *data)
 	}
 }
 EXPORT_SYMBOL_GPL(tgt_transfer_response);
-
-struct tgt_cmd *
-tgt_cmd_create(struct tgt_session *session, void *tgt_priv, uint8_t *cb,
-	       uint32_t data_len, enum dma_data_direction data_dir,
-	       uint8_t *dev_buf, int dev_buf_size, int flags)
-{
-	struct tgt_cmd *cmd;
-
-	cmd = mempool_alloc(session->cmd_pool, GFP_ATOMIC);
-	if (!cmd) {
-		eprintk("Could not allocate tgt_cmd for %p\n", session);
-		return NULL;
-	}
-	memset(cmd, 0, sizeof(*cmd));
-	session->target->proto->cmd_create(cmd, cb, data_len, data_dir,
-					   dev_buf, dev_buf_size, flags);
-
-	cmd->device = tgt_device_get(session->target, cmd->dev_id);
-	cmd->session = session;
-	cmd->private = tgt_priv;
-	cmd->done = tgt_cmd_destroy;
-	atomic_set(&cmd->state, TGT_CMD_CREATED);
-
-	dprintk("%p %p\n", session, cmd);
-
-	tgt_cmd_start(cmd);
-
-	return cmd;
-}
-EXPORT_SYMBOL_GPL(tgt_cmd_create);
 
 static int tgt_cmd_queue(struct tgt_cmd *cmd, gfp_t gfp_mask)
 {
@@ -826,24 +707,44 @@ static int tgt_cmd_queue(struct tgt_cmd *cmd, gfp_t gfp_mask)
 	cmd->rq = rq;
 	rq->special = cmd;
 	rq->flags |= REQ_SPECIAL | REQ_SOFTBARRIER | REQ_NOMERGE | REQ_BLOCK_PC;
-	elv_add_request(q, rq, ELEVATOR_INSERT_BACK, 0);
+	elv_add_request(q, rq, ELEVATOR_INSERT_BACK, 1);
 	return 0;
 }
 
-static void set_cmd_ready(struct tgt_cmd *cmd)
+struct tgt_cmd *
+tgt_cmd_create(struct tgt_session *session, void *tgt_priv, uint8_t *cb,
+	       uint32_t data_len, enum dma_data_direction data_dir,
+	       uint8_t *dev_buf, int dev_buf_size, int flags)
 {
-	unsigned long flags;
-	struct request_queue *q = cmd->rq->q;
+	struct tgt_cmd *cmd;
+	int err;
 
-	/*
-	 * we have a request that is ready for processing so
-	 * plug the queue
-	 */
-	spin_lock_irqsave(q->queue_lock, flags);
-	atomic_set(&cmd->state, TGT_CMD_READY);
-	blk_plug_device(q);
-	spin_unlock_irqrestore(q->queue_lock, flags);
+	cmd = mempool_alloc(session->cmd_pool, GFP_ATOMIC);
+	if (!cmd) {
+		eprintk("Could not allocate tgt_cmd for %p\n", session);
+		return NULL;
+	}
+	memset(cmd, 0, sizeof(*cmd));
+	session->target->proto->cmd_create(cmd, cb, data_len, data_dir,
+					   dev_buf, dev_buf_size, flags);
+
+	cmd->device = tgt_device_get(session->target, cmd->dev_id);
+	cmd->session = session;
+	cmd->private = tgt_priv;
+	cmd->done = tgt_cmd_destroy;
+	atomic_set(&cmd->state, TGT_CMD_CREATED);
+
+	dprintk("%p %p\n", session, cmd);
+
+	err = tgt_cmd_queue(cmd, GFP_ATOMIC);
+	if (err) {
+		mempool_free(cmd, cmd->session->cmd_pool);
+		return NULL;
+	}
+
+	return cmd;
 }
+EXPORT_SYMBOL_GPL(tgt_cmd_create);
 
 static void tgt_write_data_transfer_done(struct tgt_cmd *cmd)
 {
@@ -851,115 +752,19 @@ static void tgt_write_data_transfer_done(struct tgt_cmd *cmd)
 	 * TODO check for errors and add state checking. we may have
 	 * to internally queue for the target driver
 	 */
-	set_cmd_ready(cmd);
+	tgt_transfer_response(cmd);
 }
-
-#define pgcnt(size, offset)	((((size) + ((offset) & ~PAGE_CACHE_MASK)) + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT)
 
 /*
- * TODO: this will have to obey at least the target driver's limits,
- * but to support passthrough commands we will need to obey the
- * something like's tgt_sd devices's queue's limits.
+ * we should jsut pass the cmd pointer between userspace and the kernel
+ * as a handle like open-iscsi
  */
-void __tgt_alloc_buffer(struct tgt_cmd *cmd)
-{
-	uint64_t offset = cmd->offset;
-	uint32_t len = cmd->bufflen;
-	int i;
-
-	cmd->sg_count = pgcnt(len, offset);
-	offset &= ~PAGE_CACHE_MASK;
-
-	dprintk("cmd %p tag %d pg_count %d offset %" PRIu64 " len %d\n",
-		cmd, cmd->rq->tag, cmd->sg_count, cmd->offset, cmd->bufflen);
-
-	/*
-	 * TODO: mempool this like in scsi_lib.c
-	 */
-	cmd->sg = kmalloc(cmd->sg_count * sizeof(struct scatterlist),
-			   GFP_KERNEL | __GFP_NOFAIL);
-
-	/*
-	 * TODO need to create reserves
-	 */
-	for (i = 0; i < cmd->sg_count; i++) {
-		struct scatterlist *sg = &cmd->sg[i];
-
-		sg->page = alloc_page(GFP_KERNEL | __GFP_NOFAIL);
-		sg->offset = offset;
-		sg->length = min_t(uint32_t, PAGE_CACHE_SIZE - offset, len);
-
-		offset = 0;
-		len -= sg->length;
-	}
-}
-
-static void tgt_alloc_buffer(void *data)
-{
-	struct tgt_cmd *cmd = data;
-
-	__tgt_alloc_buffer(cmd);
-	atomic_set(&cmd->state, TGT_CMD_BUF_ALLOCATED);
-
-	/*
-	 * we probably will not be able to rely on the target
-	 * driver knowing the data_dir so this may have to move
-	 * the devices or protocol if it becomes command specific
-	 */
-	if (cmd->data_dir == DMA_TO_DEVICE) {
-		cmd->done = tgt_write_data_transfer_done;
-		/*
-		 * TODO handle errors and possibly requeue for the
-		 * target driver
-		 */
-		cmd->session->target->tt->transfer_write_data(cmd);
-	} else
-		set_cmd_ready(cmd);
-}
-
-int tgt_cmd_start(struct tgt_cmd *cmd)
-{
-	struct tgt_session *session = cmd->session;
-	int err;
-
-	if (cmd->device)
-		cmd->device->dt->prep_cmd(cmd);
-
-	err = tgt_cmd_queue(cmd, GFP_ATOMIC);
-	if (err)
-		return err;
-
-	if (cmd->bufflen) {
-		atomic_set(&cmd->state, TGT_CMD_STARTED);
-		INIT_WORK(&cmd->work, tgt_alloc_buffer, cmd);
-		queue_work(session->target->twq, &cmd->work);
-	} else
-		set_cmd_ready(cmd);
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(tgt_cmd_start);
-
-static struct tgt_cmd *find_cmd_by_id(struct request_queue *q, uint64_t cid)
-{
-
-	struct request *rq;
-
-	rq = blk_queue_find_tag(q, cid);
-	if (rq)
-		return rq->special;
-	return NULL;
-}
-
-int uspace_cmd_done(int tid, uint64_t dev_id, uint64_t cid, void *data,
-		    int result, uint32_t len)
+static struct tgt_cmd *find_cmd_by_id(int tid, uint64_t dev_id, uint64_t cid)
 {
 	struct tgt_target *target;
 	struct tgt_device *device;
-	struct tgt_cmd *cmd;
 	struct request_queue *q;
-	char *p = data;
-	int i;
+	struct request *rq;
 
 	dprintk("%d %llu %llu\n", tid, (unsigned long long) dev_id,
 		(unsigned long long) cid);
@@ -967,7 +772,7 @@ int uspace_cmd_done(int tid, uint64_t dev_id, uint64_t cid, void *data,
 	target = target_find(tid);
 	if (!target) {
 		eprintk("Could not find target %d\n", tid);
-		return -EINVAL;
+		return NULL;
 	}
 
 	if (dev_id == TGT_INVALID_DEV_ID)
@@ -977,12 +782,97 @@ int uspace_cmd_done(int tid, uint64_t dev_id, uint64_t cid, void *data,
 		if (!device) {
 			eprintk("Could not find device %llu\n",
 				(unsigned long long) dev_id);
-			return -EINVAL;
+			return NULL;
 		}
 		q = device->q;
 	}
 
-	cmd = find_cmd_by_id(q, cid);
+	rq = blk_queue_find_tag(q, cid);
+	if (rq)
+		return rq->special;
+
+	eprintk("Could not find rq for cid %llu\n", (unsigned long long) cid);
+	return NULL;
+}
+
+#define pgcnt(size, offset)	((((size) + ((offset) & ~PAGE_CACHE_MASK)) + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT)
+
+static int tgt_map_user_pages(int rw, struct tgt_cmd *cmd)
+{
+	int i, err = -EIO, cnt;
+	struct page *page, **pages;
+	uint64_t poffset = cmd->offset & ~PAGE_MASK;
+	uint32_t size, rest = cmd->bufflen;
+
+	cnt = pgcnt(cmd->bufflen, cmd->offset);
+	pages = kzalloc(cnt * sizeof(struct page *), GFP_KERNEL);
+	if (!pages)
+		return -ENOMEM;
+	cmd->pages = pages;
+
+	cmd->sg = kmalloc(cnt * sizeof(struct scatterlist), GFP_KERNEL);
+	if (!cmd->sg)
+		goto release_pages;
+	cmd->sg_count = cnt;
+
+	dprintk("cmd %p addr %lx cnt %d\n", cmd, cmd->uaddr, cnt);
+
+	down_read(&tgtd_tsk->mm->mmap_sem);
+	err = get_user_pages(tgtd_tsk, tgtd_tsk->mm, cmd->uaddr, cnt,
+			     rw == WRITE, 0, pages, NULL);
+	up_read(&tgtd_tsk->mm->mmap_sem);
+
+	if (err < cnt) {
+		err = -EIO;
+		goto free_sg;
+	}
+
+	/*
+	 * We have a request_queue and we have a the SGIO scatterlist stuff in
+	 * scsi-misc so we can use those functions to make us a request with
+	 * a proper scatterlist by using block layer funciotns ?????
+	 *
+	 * do a:
+	 * scsi_req_map_sg(cmd->rq, tmp_sg, cnt, orig_size, GFP_KERNEL);
+	 * blk_rq_map_sg(cmd->device->q or cmd->target->q, cmd->rq, cmd->sg);
+	 */
+	for (i = 0; i < cnt; i++) {
+		size = min_t(uint32_t, rest, PAGE_SIZE - poffset);
+
+		cmd->sg[i].page = pages[i];
+		cmd->sg[i].offset = poffset;
+		cmd->sg[i].length = size;
+
+		poffset = 0;
+		rest -= size;
+	}
+
+	return 0;
+
+free_sg:
+	kfree(cmd->sg);
+release_pages:
+	for (i = 0; i < cnt; i++) {
+		page = pages[i];
+		if(!page)
+			break;
+		if (!err && rw == WRITE)
+			set_page_dirty_lock(page);
+		page_cache_release(page);
+	}
+	kfree(pages);
+
+	return err;
+}
+
+int uspace_cmd_done(int tid, uint64_t dev_id, uint64_t cid,
+		    int result, uint32_t len, uint64_t offset,
+		    unsigned long uaddr, uint8_t rw, uint8_t try_map)
+{
+	struct tgt_target *target;
+	struct tgt_cmd *cmd;
+
+	cmd = find_cmd_by_id(tid, dev_id, cid);
 	if (!cmd) {
 		eprintk("Could not find command %llu\n",
 			(unsigned long long) cid);
@@ -992,34 +882,34 @@ int uspace_cmd_done(int tid, uint64_t dev_id, uint64_t cid, void *data,
 	dprintk("cmd %p tag %d result %d len %d bufflen %u\n",
 		cmd, cmd->rq->tag, result, len, cmd->bufflen);
 
-	if (len) {
-		/*
-		 * yuck TODO fix.
-		 * This will happen if we thought we were going to do some
-		 * IO but we ended up just gettting some sense back
-		 */
-		if (len != cmd->bufflen) {
-			tgt_free_buffer(cmd);
+	cmd->uaddr = uaddr;
+	cmd->result = result;
+	cmd->offset = offset;
+	if (len)
+		cmd->bufflen = len;
+	if (rw == WRITE)
+		__set_bit(TGT_CMD_RW, &cmd->flags);
+	if (try_map)
+		__set_bit(TGT_CMD_MAPPED, &cmd->flags);
 
-			cmd->bufflen = len;
-			cmd->offset = 0;
+	target = cmd->session->target;
+/* 	target->proto->uspace_cmd_complete(cmd); */
 
-			__tgt_alloc_buffer(cmd);
-		}
-
-		for (i = 0; i < cmd->sg_count; i++) {
-			uint32_t copy = min_t(uint32_t, len, PAGE_CACHE_SIZE);
-
-			memcpy(page_address(cmd->sg[i].page), p, copy);
-			p += copy;
-			len -= copy;
+	if (cmd->bufflen) {
+		if (tgt_map_user_pages(rw, cmd))
+			return -EIO;
+		if (cmd->data_dir == DMA_TO_DEVICE) {
+			cmd->done = tgt_write_data_transfer_done;
+			/*
+			 * TODO handle errors and possibly requeue for the
+			 * target driver
+			 */
+			target->tt->transfer_write_data(cmd);
+			return 0;
 		}
 	}
 
-	cmd->result = result;
-	target->proto->uspace_cmd_complete(cmd);
 	tgt_transfer_response(cmd);
-
 	return 0;
 }
 

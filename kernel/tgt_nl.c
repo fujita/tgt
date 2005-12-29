@@ -44,6 +44,8 @@ int tgt_uspace_cmd_send(struct tgt_cmd *cmd, gfp_t gfp_mask)
 	ev->k.cmd_req.dev_id = cmd->device ? cmd->dev_id : TGT_INVALID_DEV_ID;
 	ev->k.cmd_req.cid = cmd->rq->tag;
 	ev->k.cmd_req.typeid = cmd->session->target->typeid;
+	ev->k.cmd_req.fd = cmd->device ? cmd->device->fd : 0;
+	ev->k.cmd_req.data_len = cmd->bufflen;
 
 	proto->uspace_pdu_build(cmd, pdu);
 
@@ -88,6 +90,22 @@ int tgt_msg_send(struct tgt_target *target, void *data, int dlen, gfp_t flags)
 }
 EXPORT_SYMBOL_GPL(tgt_msg_send);
 
+int tgt_uspace_cmd_done_send(struct tgt_cmd *cmd, gfp_t flags)
+{
+	struct tgt_event ev;
+
+	memset(&ev, 0, sizeof(ev));
+	ev.k.cmd_done.tid = cmd->session->target->tid;
+	ev.k.cmd_done.typeid = cmd->session->target->typeid;
+	ev.k.cmd_done.uaddr = cmd->uaddr;
+	ev.k.cmd_done.len = cmd->bufflen;
+	if (test_bit(TGT_CMD_MAPPED, &cmd->flags))
+		ev.k.cmd_done.mmapped = 1;
+
+	return send_event_res(TGT_KEVENT_CMD_DONE, &ev, NULL, 0, flags);
+}
+EXPORT_SYMBOL_GPL(tgt_uspace_cmd_done_send);
+
 int tgt_task_mgmt_send(struct tgt_target *target, uint64_t rid,
 		       int func, uint64_t dev_id, uint64_t tag, gfp_t flags)
 {
@@ -121,6 +139,7 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 	switch (nlh->nlmsg_type) {
 	case TGT_UEVENT_START:
 		tgtd_pid  = NETLINK_CREDS(skb)->pid;
+		tgtd_tsk = current;
 		eprintk("start target drivers\n");
 		break;
 	case TGT_UEVENT_TARGET_CREATE:
@@ -163,8 +182,11 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 		break;
 	case TGT_UEVENT_CMD_RES:
 		err = uspace_cmd_done(ev->u.cmd_res.tid, ev->u.cmd_res.dev_id,
-				      ev->u.cmd_res.cid, ev->data,
-				      ev->u.cmd_res.result, ev->u.cmd_res.len);
+				      ev->u.cmd_res.cid,
+				      ev->u.cmd_res.result, ev->u.cmd_res.len,
+				      ev->u.cmd_res.offset,
+				      ev->u.cmd_res.uaddr, ev->u.cmd_res.rw,
+				      ev->u.cmd_res.try_map);
 		break;
 	case TGT_UEVENT_TASK_MGMT:
 		err = tgt_task_mgmt(ev->u.task_mgmt.rid, ev->u.task_mgmt.func,

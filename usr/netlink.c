@@ -112,9 +112,11 @@ static int cmd_queue(int fd, char *reqbuf, char *resbuf)
 	int result, len = 0;
 	struct tgt_event *ev_req = (struct tgt_event *) reqbuf;
 	struct tgt_event *ev_res = NLMSG_DATA(resbuf);
-	uint64_t cid = ev_req->k.cmd_req.cid;
-	uint8_t *scb;
-	int (*fn) (int, uint64_t, uint8_t *, uint8_t *, int *);
+	uint64_t offset, cid = ev_req->k.cmd_req.cid;
+	uint8_t *scb, rw = 0, try_map = 0;
+	unsigned long uaddr;
+	int (*fn) (int, uint64_t, uint8_t *, int *, int, uint32_t,
+		   unsigned long *, uint8_t *, uint8_t *, uint64_t *);
 
 	memset(resbuf, 0, NL_BUFSIZE);
 	scb = (uint8_t *) ev_req->data;
@@ -125,8 +127,12 @@ static int cmd_queue(int fd, char *reqbuf, char *resbuf)
 
 	if (fn)
 		result = fn(ev_req->k.cmd_req.tid,
-			    ev_req->k.cmd_req.dev_id, scb,
-			    (uint8_t *) ev_res->data, &len);
+			    ev_req->k.cmd_req.dev_id,
+			    scb,
+			    &len,
+			    ev_req->k.cmd_req.fd,
+			    ev_req->k.cmd_req.data_len,
+			    &uaddr, &rw, &try_map, &offset);
 	else {
 		result = -EINVAL;
 		eprintf("Cannot process cmd %d %" PRIu64 " %" PRIu64 "\n",
@@ -139,11 +145,15 @@ static int cmd_queue(int fd, char *reqbuf, char *resbuf)
 	ev_res->u.cmd_res.cid = cid;
 	ev_res->u.cmd_res.len = len;
 	ev_res->u.cmd_res.result = result;
+	ev_res->u.cmd_res.uaddr = uaddr;
+	ev_res->u.cmd_res.rw = rw;
+	ev_res->u.cmd_res.try_map = try_map;
+	ev_res->u.cmd_res.offset = offset;
 
-	log_error("scsi_cmd_process res %d len %d\n", result, len);
+	log_debug("scsi_cmd_process res %d len %d\n", result, len);
 
 	return __nl_write(fd, TGT_UEVENT_CMD_RES, resbuf,
-			  NLMSG_SPACE(sizeof(*ev_res) + len));
+			  NLMSG_SPACE(sizeof(*ev_res)));
 }
 
 static void nl_task_mgmt(struct tgt_event *ev)
@@ -187,6 +197,14 @@ void nl_event_handle(int fd)
 		break;
 	case TGT_KEVENT_TASK_MGMT:
 		nl_task_mgmt(ev);
+		break;
+	case TGT_KEVENT_CMD_DONE:
+		fn = dl_cmd_done_fn(ev->k.cmd_done.typeid);
+		if (fn)
+			fn(NLMSG_DATA(recvbuf));
+		else
+			eprintf("Cannot handle cmd done %d\n",
+				ev->k.cmd_done.tid);
 		break;
 	default:
 		/* kernel module bug */

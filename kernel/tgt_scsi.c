@@ -108,19 +108,6 @@ int scsi_tgt_sense_copy(struct tgt_cmd *cmd)
 }
 EXPORT_SYMBOL_GPL(scsi_tgt_sense_copy);
 
-static void scsi_tgt_uspace_cmd_exec(void *data)
-{
-	struct tgt_cmd *cmd = data;
-	int err;
-
-	err = tgt_uspace_cmd_send(cmd, GFP_KERNEL);
-	if (err >= 0)
-		return;
-
-	scsi_tgt_sense_data_build(cmd, HARDWARE_ERROR, 0, 0);
-	tgt_transfer_response(cmd);
-}
-
 static void scsi_tgt_uspace_pdu_build(struct tgt_cmd *cmd, void *data)
 {
 	struct scsi_tgt_cmd *scmd = (struct scsi_tgt_cmd *)cmd->proto_priv;
@@ -129,9 +116,14 @@ static void scsi_tgt_uspace_pdu_build(struct tgt_cmd *cmd, void *data)
 
 static void scsi_tgt_uspace_cmd_complete(struct tgt_cmd *cmd)
 {
-	/* userspace did everything for us just copy the buffer */
+	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
+
+	dprintk("%d %lu\n", cmd->result, cmd->uaddr);
+
 	if (cmd->result != SAM_STAT_GOOD)
 		scsi_tgt_sense_copy(cmd);
+
+	dprintk("res %d, cmd %p op 0x%02x\n", cmd->result, cmd, scmd->scb[0]);
 }
 
 static struct tgt_protocol scsi_tgt_proto = {
@@ -139,7 +131,6 @@ static struct tgt_protocol scsi_tgt_proto = {
 	.module = THIS_MODULE,
 	.cmd_create = scsi_tgt_cmd_create,
 	.uspace_pdu_build = scsi_tgt_uspace_pdu_build,
-	.uspace_cmd_execute = scsi_tgt_uspace_cmd_exec,
 	.uspace_cmd_complete = scsi_tgt_uspace_cmd_complete,
 	.uspace_pdu_size = MAX_COMMAND_SIZE,
 };

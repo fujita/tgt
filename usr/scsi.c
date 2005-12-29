@@ -26,9 +26,12 @@
 #include <scsi/srp.h>
 #include <scsi/iscsi_proto.h>
 #include <asm/byteorder.h>
-#include <sys/stat.h>
-#include <fcntl.h>
+#include <asm/page.h>
+#include <sys/mman.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <fcntl.h>
 #include <linux/netlink.h>
 
 #include "tgtd.h"
@@ -39,6 +42,10 @@
 #define cpu_to_be32 __cpu_to_be32
 #define be32_to_cpu __be32_to_cpu
 #define cpu_to_be64 __cpu_to_be64
+#define be64_to_cpu __be64_to_cpu
+
+#define READ 0
+#define WRITE 1
 
 #ifndef REPORT_LUNS
 #define REPORT_LUNS           0xa0
@@ -501,12 +508,81 @@ static int sevice_action(int tid, uint64_t lun, uint8_t *scb, uint8_t *p, int *l
 	return SAM_STAT_GOOD;
 }
 
-int cmd_process(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *len,
-		uint32_t flags)
+#define pgcnt(size, offset)	((((size) + ((offset) & ~PAGE_MASK)) + PAGE_SIZE - 1) >> PAGE_SHIFT)
+
+static int mmap_device(int tid, uint64_t lun, uint8_t *scb,
+		       int *len, int fd, uint32_t datalen, unsigned long *uaddr,
+		       uint64_t *offset)
+{
+	void *p;
+	uint64_t off;
+	*len = 0;
+
+	switch (scb[0]) {
+	case READ_6:
+	case WRITE_6:
+		off = ((scb[1] & 0x1f) << 16) + (scb[2] << 8) + scb[3];
+		break;
+	case READ_10:
+	case WRITE_10:
+	case WRITE_VERIFY:
+		off = be32_to_cpu(*(uint32_t *) &scb[2]);
+		break;
+	case READ_16:
+	case WRITE_16:
+		off = be64_to_cpu(*(uint64_t *) &scb[2]);
+		break;
+	default:
+		off = 0;
+		break;
+	}
+
+	off <<= 9;
+
+	p = mmap(NULL, pgcnt(datalen, off) << PAGE_SHIFT,
+		 PROT_READ | PROT_WRITE, MAP_SHARED, fd, off & PAGE_MASK);
+
+	*uaddr = (unsigned long) p;
+	*offset = off;
+	dprintf("%lx %u %" PRIu64 "\n", *uaddr, datalen, off);
+
+	return (p == MAP_FAILED) ? SAM_STAT_CHECK_CONDITION : SAM_STAT_GOOD;
+}
+
+static inline int mmap_cmd_init(uint8_t *scb, uint8_t *rw)
+{
+	int result = 1;
+
+	switch (scb[0]) {
+	case READ_6:
+	case READ_10:
+	case READ_16:
+		*rw = READ;
+		break;
+	case WRITE_6:
+	case WRITE_10:
+	case WRITE_16:
+	case WRITE_VERIFY:
+		*rw = WRITE;
+		break;
+	default:
+		result = 0;
+	}
+	return result;
+}
+
+int cmd_process(int tid, uint64_t lun, uint8_t *scb, int *len,
+		int fd, uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
+		uint8_t *try_map, uint64_t *offset)
 {
 	int result = SAM_STAT_GOOD;
+	uint8_t *data = NULL;
 
-	dprintf("%d %" PRIu64 " %x %x\n", tid, lun, scb[0], flags);
+	dprintf("%d %" PRIu64 " %x %d %u\n", tid, lun, scb[0], fd, datalen);
+
+	*offset = 0;
+	if (!mmap_cmd_init(scb, rw))
+		data = valloc(PAGE_SIZE);
 
 	if (lun == TGT_INVALID_DEV_ID)
 		switch (scb[0]) {
@@ -515,6 +591,9 @@ int cmd_process(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *len,
 		case REPORT_LUNS:
 			break;
 		default:
+			*offset = 0;
+			if (!data)
+				data = valloc(PAGE_SIZE);
 			*len = sense_data_build(data, 0x70, ILLEGAL_REQUEST,
 						0x25, 0);
 			result = SAM_STAT_CHECK_CONDITION;
@@ -550,9 +629,22 @@ int cmd_process(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *len,
 		break;
 	case READ_6:
 	case READ_10:
+	case READ_16:
 	case WRITE_6:
 	case WRITE_10:
+	case WRITE_16:
 	case WRITE_VERIFY:
+		result = mmap_device(tid, lun, scb, len, fd, datalen, uaddr, offset);
+		if (result == SAM_STAT_GOOD)
+			*try_map = 1;
+		else {
+			*offset = 0;
+			if (!data)
+				data = valloc(PAGE_SIZE);
+			*len = sense_data_build(data, 0x70, ILLEGAL_REQUEST,
+						0x25, 0);
+		}
+		break;
 	case RESERVE:
 	case RELEASE:
 	case RESERVE_10:
@@ -564,6 +656,9 @@ int cmd_process(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *len,
 	}
 
 out:
+	if (data)
+		*uaddr = (unsigned long) data;
+
 	return result;
 }
 
@@ -716,4 +811,19 @@ int task_mgmt(struct tgt_event *ev)
 			    ev->k.task_mgmt.tid, ev->k.task_mgmt.typeid,
 			    ev->k.task_mgmt.sid, ev->k.task_mgmt.dev_id,
 			    ev->k.task_mgmt.tag);
+}
+
+int cmd_done(struct tgt_event *ev)
+{
+	int err = 0;
+
+	if (ev->k.cmd_done.mmapped)
+		err = munmap((void *) ev->k.cmd_done.uaddr, ev->k.cmd_done.len);
+	else
+		free((void *) ev->k.cmd_done.uaddr);
+
+	dprintf("%d %lx %u %d\n", ev->k.cmd_done.mmapped,
+		ev->k.cmd_done.uaddr, ev->k.cmd_done.len, err);
+
+	return err;
 }

@@ -174,8 +174,6 @@ void poll_event(struct pollfd *pfds, int nr)
 	struct pollfd *pfd;
 	int i, res, opt;
 
-	eprintf("%d\n", nr);
-
 	for (i = 0; i < LISTEN_MAX; i++) {
 		if (pfds[POLL_LISTEN + i].revents)
 			accept_connection(pfds, pfds[POLL_LISTEN + i].fd);

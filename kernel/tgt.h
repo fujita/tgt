@@ -48,6 +48,11 @@ enum {
 	TGT_CMD_DONE,
 };
 
+enum {
+	TGT_CMD_MAPPED,
+	TGT_CMD_RW,		/* not set == read, set == write */
+};
+
 struct tgt_cmd {
 	struct tgt_session *session;
 	struct tgt_device *device;
@@ -55,6 +60,7 @@ struct tgt_cmd {
 
 	atomic_t state;
 	uint64_t dev_id;
+	unsigned long flags;
 
 	struct work_struct work;
 	void (*done) (struct tgt_cmd *);
@@ -62,9 +68,12 @@ struct tgt_cmd {
 	enum dma_data_direction data_dir;
 	int sg_count;
 	struct scatterlist *sg;
+	struct page **pages;
 	uint32_t bufflen;
 	uint64_t offset;
 	int result;
+
+	unsigned long uaddr;
 
 	struct request *rq;
 	/*
@@ -89,13 +98,13 @@ extern struct tgt_cmd *
 tgt_cmd_create(struct tgt_session *session, void *tgt_priv, uint8_t *cb,
 	       uint32_t data_len, enum dma_data_direction data_dir,
 	       uint8_t *dev_buf, int dev_buf_size, int flags);
-extern int tgt_cmd_start(struct tgt_cmd *cmd);
 extern void tgt_transfer_response(void *cmd);
 extern int tgt_task_mgmt_send(struct tgt_target *target, uint64_t rid,
 			      int func, uint64_t dev_id, uint64_t tag,
 			      gfp_t gfp_mask);
+extern int tgt_uspace_cmd_done_send(struct tgt_cmd *cmd, gfp_t flags);
 
-#define DEBUG_TGT
+#define DEBUG_TGT 1
 
 #define eprintk(fmt, args...)					\
 do {								\

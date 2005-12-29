@@ -257,24 +257,11 @@ int tgt_sysfs_register_device(struct tgt_device *device)
 	if (!class_device_get(&target->cdev))
 		return -EINVAL;
 
-	if (device->dt->device_attrs) {
-		for (i = 0; device->dt->device_attrs[i]; i++) {
-			err = class_attr_add(&device->cdev,
-					     tgt_target_attrs,
-					     device->dt->device_attrs[i]);
-                        if (err)
-                                goto cleanup;
-		}
-	}
-
 	for (i = 0; tgt_device_attrs[i]; i++) {
-		if (!class_attr_overridden(device->dt->device_attrs,
-					   tgt_device_attrs[i])) {
-			err = class_device_create_file(&device->cdev,
-						       tgt_device_attrs[i]);
-			if (err)
-				goto cleanup;
-		}
+		err = class_device_create_file(&device->cdev,
+					       tgt_device_attrs[i]);
+		if (err)
+			goto cleanup;
 	}
 
 	return 0;

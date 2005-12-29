@@ -29,43 +29,11 @@ enum {
 	TGT_DEV_DEL = 0,
 };
 
-struct tgt_device_template {
-	const char *name;
-	struct module *module;
-	unsigned priv_data_size;
-
-	/*
-	 * setup and destroy private structures
-	 */
-	int (* create)(struct tgt_device *);
-	void (* destroy)(struct tgt_device *);
-	/*
-	 * queue or execute command. Return TGT_CMD*.
-	 * If returning TGT_CMD_COMPLETED or TGT_CMD_FAILED the result
-	 * field must be set.
-	 */
-	int (* execute_cmd)(struct tgt_cmd *cmd);
-	/*
-	 * complete a kernel command if your queue_command was async
-	 * and the device used one of the tgt threads to process the
-	 * command
-	 */
-	void (* complete_kern_cmd)(struct tgt_cmd *cmd);
-	/*
-	 * setup buffer or device fields if needed
-	 */
-	void (* prep_cmd)(struct tgt_cmd *cmd);
-
-	/*
-	 * Pointer to the sysfs class properties for this host, NULL terminated.
-	 */
-	struct class_device_attribute **device_attrs;
-};
-
+/*
+ * TODO: we could do a queue per target instead of per device and kill
+ * all the tgt_device code
+ */
 struct tgt_device {
-	struct tgt_device_template *dt;
-	void *dt_data;
-
 	struct class_device cdev;
 
 	int fd;
@@ -100,7 +68,5 @@ extern void tgt_device_put(struct tgt_device *device);
 
 extern int tgt_sysfs_register_device(struct tgt_device *device);
 extern void tgt_sysfs_unregister_device(struct tgt_device *device);
-extern int tgt_device_template_register(struct tgt_device_template *dt);
-extern void tgt_device_template_unregister(struct tgt_device_template *dt);
 
 #endif

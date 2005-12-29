@@ -22,7 +22,8 @@ enum tgt_event_type {
 	TGT_KEVENT_RESPONSE,
 	TGT_KEVENT_CMD_REQ,
 	TGT_KEVENT_TARGET_PASSTHRU,
-	TGT_KEVENT_TASK_MGMT
+	TGT_KEVENT_TASK_MGMT,
+	TGT_KEVENT_CMD_DONE,
 };
 
 #define	TGT_INVALID_DEV_ID	~0ULL
@@ -58,6 +59,14 @@ struct tgt_event {
 			uint64_t cid;
 			uint32_t len;
 			int result;
+			/*
+			 * this is screwed for setups with 64 bit kernel
+			 * and 32 bit userspace
+			 */
+			unsigned long uaddr;
+			uint64_t offset;
+			uint8_t rw;
+			uint8_t try_map;
 		} cmd_res;
 		struct {
 			uint64_t rid;
@@ -80,6 +89,8 @@ struct tgt_event {
 			uint64_t dev_id;
 			uint64_t cid;
 			int typeid;
+			int fd;
+			uint32_t data_len;
 		} cmd_req;
 		struct {
 			int tid;
@@ -95,6 +106,13 @@ struct tgt_event {
 			uint64_t dev_id;
 			uint64_t tag;
 		} task_mgmt;
+		struct {
+			int tid;
+			int typeid;
+			unsigned long uaddr;
+			uint32_t len;
+			int mmapped;
+		} cmd_done;
 	} k;
 
 	/*
