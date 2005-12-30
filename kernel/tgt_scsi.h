@@ -16,7 +16,6 @@ struct scsi_tgt_cmd {
 	uint8_t scb[MAX_COMMAND_SIZE];
 	uint8_t sense_buff[SCSI_SENSE_BUFFERSIZE];
 	int sense_len;
-	int tags;
 };
 
 static inline struct scsi_tgt_cmd *tgt_cmd_to_scsi(struct tgt_cmd *cmd)

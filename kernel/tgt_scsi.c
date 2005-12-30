@@ -57,7 +57,6 @@ scsi_tgt_cmd_create(struct tgt_cmd *cmd, uint8_t *scb,
 	cmd->dev_id = scsi_tgt_translate_lun(lun, lun_size);
 	scmd = tgt_cmd_to_scsi(cmd);
 	memcpy(scmd->scb, scb, sizeof(scmd->scb));
-	scmd->tags = tags;
 
 	/* is this device specific */
 	cmd->data_dir = data_dir;
