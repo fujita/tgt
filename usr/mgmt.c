@@ -98,23 +98,6 @@ int ktarget_destroy(int tid)
 				 __ktarget_destroy);
 }
 
-struct kdevice_create_info {
-	int fd;
-	char devtype[256];
-};
-
-static void __kdevice_create(struct tgt_event *ev, struct tgtadm_req *req)
-{
-	struct kdevice_create_info *info =
-		(struct kdevice_create_info *) ((char *) req + sizeof(*req));
-
-	ev->u.c_device.tid = req->tid;
-	ev->u.c_device.dev_id = req->lun;
-	ev->u.c_device.fd = info->fd;
-	strncpy(ev->u.c_device.type, info->devtype,
-		sizeof(ev->u.c_device.type));
-}
-
 void kdevice_create_parser(char *args, char **path, char **devtype)
 {
 	char *p, *q;
@@ -141,45 +124,27 @@ void kdevice_create_parser(char *args, char **path, char **devtype)
 
 int kdevice_create(int tid, uint64_t devid, char *path, char *devtype)
 {
-	int fd;
-	char buf[sizeof(struct tgtadm_req) + sizeof(struct kdevice_create_info)];
-	struct tgtadm_req *req;
-	struct kdevice_create_info *info;
+	int fd, err;
 
 	dprintf("%d %" PRIu64 " %s %s\n", tid, devid, path, devtype);
-
-	req = (struct tgtadm_req *) buf;
-	info = (struct kdevice_create_info *) (buf + sizeof(*req));
-
-	req->tid = tid;
-	req->lun = devid;
 
 	fd = open(path, O_RDWR | O_LARGEFILE);
 	if (fd < 0) {
 		eprintf("Could not open %s errno %d\n", path, errno);
 		return -errno;
 	}
-	info->fd = fd;
-	strncpy(info->devtype, devtype, sizeof(info->devtype));
 
-	return tgt_event_execute(req, TGT_UEVENT_DEVICE_CREATE,
-				 __kdevice_create);
-}
+	err = tgt_device_create(tid, devid, fd);
+	if (err < 0)
+		close(fd);
 
-static void __kdevice_destroy(struct tgt_event *ev, struct tgtadm_req *req)
-{
-	ev->u.d_device.tid = req->tid;
-	ev->u.d_device.dev_id = req->lun;
+	return err;
 }
 
 int kdevice_destroy(int tid, uint64_t devid)
 {
 	int fd, err;
-	struct tgtadm_req req;
 	char path[PATH_MAX], buf[PATH_MAX];
-
-	req.tid = tid;
-	req.lun = devid;
 
 	dprintf("%u %" PRIu64 "\n", tid, devid);
 
@@ -199,8 +164,8 @@ int kdevice_destroy(int tid, uint64_t devid)
 	}
 	sscanf(buf, "%d\n", &fd);
 
-	err = tgt_event_execute(&req, TGT_UEVENT_DEVICE_DESTROY,
-				__kdevice_destroy);
+	err = tgt_device_destroy(tid, devid);
+
 	if (!err)
 		close(fd);
 

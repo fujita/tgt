@@ -7,7 +7,6 @@
  */
 #include <tgt_types.h>
 #include <tgt_target.h>
-#include <tgt_device.h>
 
 #include "tgt_priv.h"
 
@@ -199,85 +198,6 @@ void tgt_sysfs_unregister_target(struct tgt_target *target)
 	class_device_unregister(&target->cdev);
 }
 
-/*
- * Device files
- */
-#define tgt_device_show_fn(field, format_string)			\
-static ssize_t								\
-show_##field (struct class_device *cdev, char *buf)			\
-{									\
-	struct tgt_device *device = cdev_to_tgt_device(cdev);		\
-	return sprintf(buf, format_string, device->field);	\
-}
-
-#define tgt_device_rd_attr(field, format_string)		\
-	tgt_device_show_fn(field, format_string)		\
-static CLASS_DEVICE_ATTR(field, S_IRUGO, show_##field, NULL);
-
-tgt_device_rd_attr(fd, "%d\n");
-tgt_device_rd_attr(size, "%" PRIu64 "\n");
-
-static struct class_device_attribute *tgt_device_attrs[] = {
-	&class_device_attr_fd,
-	&class_device_attr_size,
-	NULL,
-};
-
-static void tgt_device_class_release(struct class_device *cdev)
-{
-	struct tgt_device *device = cdev_to_tgt_device(cdev);
-	struct class_device *parent = &device->target->cdev;
-
-	tgt_device_free(device);
-	class_device_put(parent);
-}
-
-static struct class tgt_device_class = {
-	.name = "tgt_device",
-	.release = tgt_device_class_release,
-};
-
-int tgt_sysfs_register_device(struct tgt_device *device)
-{
-	struct tgt_target *target = device->target;
-	struct class_device *cdev = &device->cdev;
-	int err, i;
-
-	cdev->class = &tgt_device_class;
-	snprintf(cdev->class_id, BUS_ID_SIZE, "device%d:%" PRIu64,
-		 target->tid, device->dev_id);
-	err = class_device_register(cdev);
-	if (err)
-		return err;
-
-	/*
-	 * get handle to target so our parent is never released before
-	 * us
-	 */
-	if (!class_device_get(&target->cdev))
-		return -EINVAL;
-
-	for (i = 0; tgt_device_attrs[i]; i++) {
-		err = class_device_create_file(&device->cdev,
-					       tgt_device_attrs[i]);
-		if (err)
-			goto cleanup;
-	}
-
-	return 0;
-
-cleanup:
-	class_device_put(&target->cdev);
-	class_device_unregister(cdev);
-	return err;
-
-}
-
-void tgt_sysfs_unregister_device(struct tgt_device *device)
-{
-	class_device_unregister(&device->cdev);
-}
-
 int tgt_sysfs_init(void)
 {
 	int err;
@@ -290,14 +210,8 @@ int tgt_sysfs_init(void)
 	if (err)
 		goto unregister_type;
 
-	err = class_register(&tgt_device_class);
-	if (err)
-		goto unregister_target;
-
 	return 0;
 
-unregister_target:
-	class_unregister(&tgt_target_class);
 unregister_type:
 	class_unregister(&tgt_type_class);
 
@@ -308,5 +222,4 @@ void tgt_sysfs_exit(void)
 {
 	class_unregister(&tgt_type_class);
 	class_unregister(&tgt_target_class);
-	class_unregister(&tgt_device_class);
 }

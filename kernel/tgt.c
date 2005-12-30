@@ -19,7 +19,6 @@
 
 #include <tgt.h>
 #include <tgt_target.h>
-#include <tgt_device.h>
 #include <tgt_if.h>
 #include <tgt_protocol.h>
 
@@ -34,9 +33,6 @@ static LIST_HEAD(all_targets);
 
 static spinlock_t target_tmpl_lock;
 static LIST_HEAD(target_tmpl_list);
-
-static spinlock_t device_tmpl_lock;
-static LIST_HEAD(device_tmpl_list);
 
 static struct target_type_internal *target_template_get(const char *name)
 {
@@ -225,7 +221,6 @@ struct tgt_target *tgt_target_create(char *target_type, int queued_cmds)
 	init_MUTEX(&target->uspace_sem);
 
 	INIT_LIST_HEAD(&target->session_list);
-	INIT_LIST_HEAD(&target->device_list);
 	for (i = 0; i < ARRAY_SIZE(target->cmd_hlist); i++)
 		INIT_LIST_HEAD(&target->cmd_hlist[i]);
 	INIT_LIST_HEAD(&target->uspace_cmd_queue);
@@ -277,10 +272,6 @@ int tgt_target_destroy(struct tgt_target *target)
 	dprintk("%p\n", target);
 
 	spin_lock_irqsave(&target->lock, flags);
-	if (!list_empty(&target->device_list)) {
-		spin_unlock_irqrestore(&target->lock, flags);
-		return -EBUSY;
-	}
 	/* userspace and maybe a hotunplug are racing (TODO refcounts) */
 	if (target->state == TGT_DESTROYED)
 		return -ENODEV;
@@ -379,126 +370,6 @@ int tgt_session_destroy(struct tgt_session *session,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(tgt_session_destroy);
-
-/*
- * TODO: use a hash or any better alg/ds
- */
-static struct tgt_device *
-tgt_device_find_nolock(struct tgt_target *target, uint64_t dev_id)
-{
-	struct tgt_device *device;
-
-	list_for_each_entry(device, &target->device_list, dlist)
-		if (device->dev_id == dev_id)
-			return device;
-
-	return NULL;
-}
-
-int tgt_device_create(int tid, uint64_t dev_id, char *device_type,
-		      int fd, unsigned long dflags)
-{
-	struct tgt_target *target;
-	struct tgt_device *device;
-	unsigned long flags;
-	struct inode *inode;
-
-	dprintk("tid %d dev_id %" PRIu64 " type %s fd %d\n",
-		tid, dev_id, device_type, fd);
-
-	target = target_find(tid);
-	if (!target)
-		return -EINVAL;
-
-	device = kzalloc(sizeof(*device), GFP_KERNEL);
-	if (!device)
-		return -ENOMEM;
-
-	device->dev_id = dev_id;
-	device->target = target;
-	device->fd = fd;
-
-	device->file = fget(fd);
-	if (!device->file) {
-		eprintk("Could not get fd %d\n", fd);
-		goto free_device;
-	}
-
-	/* TODO: kill me */
-	inode = device->file->f_dentry->d_inode;
-	if (S_ISREG(inode->i_mode))
-		;
-	else if (S_ISBLK(inode->i_mode))
-		inode = inode->i_bdev->bd_inode;
-
-	device->size = inode->i_size;
-
-	if (tgt_sysfs_register_device(device))
-		goto put_fd;
-
-	spin_lock_irqsave(&target->lock, flags);
-	list_add(&device->dlist, &target->device_list);
-	spin_unlock_irqrestore(&target->lock, flags);
-
-	return 0;
-
-put_fd:
-	fput(device->file);
-free_device:
-	kfree(device);
-	return -EINVAL;
-}
-
-void tgt_device_free(struct tgt_device *device)
-{
-	struct tgt_target *target = device->target;
-	unsigned long flags;
-
-	dprintk("%d %lld\n", target->tid, (unsigned long long) device->dev_id);
-
-	spin_lock_irqsave(&target->lock, flags);
-	list_del(&device->dlist);
-	spin_unlock_irqrestore(&target->lock, flags);
-
-	fput(device->file);
-
-	kfree(device);
-}
-
-int tgt_device_destroy(int tid, uint64_t dev_id)
-{
-	struct tgt_device *device;
-	struct tgt_target *target;
-	unsigned long flags;
-	int err = 0;
-
-	target = target_find(tid);
-	if (!target)
-		return -ENOENT;
-
-	/*
-	 * We cannot delete the device from the list because
-	 * uspace_cmd_done would use it later.
-	 */
-	spin_lock_irqsave(&target->lock, flags);
-	device = tgt_device_find_nolock(target, dev_id);
-	if (device)
-		err = test_and_set_bit(TGT_DEV_DEL, &device->state);
-	spin_unlock_irqrestore(&target->lock, flags);
-
-	if (!device)
-		return -ENOENT;
-
-	if (err) {
-		eprintk("the device is being removed %d %lld\n",
-			tid, (unsigned long long) dev_id);
-		return -EBUSY;
-	} else {
-		/* TODO: revoke commands in the devece queue here. */
-		tgt_sysfs_unregister_device(device);
-		return 0;
-	}
-}
 
 static void tgt_unmap_user_pages(struct tgt_cmd *cmd)
 {
@@ -846,7 +717,6 @@ static int __init tgt_init(void)
 
 	spin_lock_init(&all_targets_lock);
 	spin_lock_init(&target_tmpl_lock);
-	spin_lock_init(&device_tmpl_lock);
 
 	tgt_protocol_init();
 

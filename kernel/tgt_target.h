@@ -109,14 +109,13 @@ struct tgt_target {
 	int queued_cmds;
 	int state;
 
-	/* Protects session_list, device_list, cmd_hlist, and state */
+	/* Protects session_list, cmd_hlist, and state */
 	spinlock_t lock;
 
 	/* Serializes commands going to user space */
 	struct semaphore uspace_sem;
 	struct list_head tlist;
 
-	struct list_head device_list;
 	struct list_head session_list;
 	struct list_head cmd_hlist[1 << TGT_CMD_HASH_ORDER];
 

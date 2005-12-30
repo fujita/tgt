@@ -197,6 +197,9 @@ int main(int argc, char **argv)
 		setsid();
 	}
 
+	if (tgt_device_init() < 0)
+		exit(0);
+
 	nl_fd = nl_open();
 	if (nl_fd < 0)
 		exit(nl_fd);

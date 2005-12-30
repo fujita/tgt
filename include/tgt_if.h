@@ -13,8 +13,6 @@ enum tgt_event_type {
 	TGT_UEVENT_TARGET_CREATE,
 	TGT_UEVENT_TARGET_DESTROY,
 	TGT_UEVENT_TARGET_PASSTHRU,
-	TGT_UEVENT_DEVICE_CREATE,
-	TGT_UEVENT_DEVICE_DESTROY,
 	TGT_UEVENT_CMD_RES,
 
 	/* kernel -> user */
@@ -38,17 +36,6 @@ struct tgt_event {
 			int tid;
 			uint32_t len;
 		} tgt_passthru;
-		struct {
-			int tid;
-			uint64_t dev_id;
-			uint32_t flags;
-			char type[32];
-			int fd;
-		} c_device;
-		struct {
-			int tid;
-			uint64_t dev_id;
-		} d_device;
 		struct {
 			int tid;
 			uint64_t cid;

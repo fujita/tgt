@@ -11,7 +11,6 @@
 
 #include <tgt.h>
 #include <tgt_target.h>
-#include <tgt_device.h>
 #include <tgt_if.h>
 #include <tgt_protocol.h>
 #include "tgt_priv.h"
@@ -145,17 +144,6 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 
 		err = target->tt->msg_recv(target, ev->u.tgt_passthru.len,
 					   ev->data);
-		break;
-	case TGT_UEVENT_DEVICE_CREATE:
-		err = tgt_device_create(ev->u.c_device.tid,
-					ev->u.c_device.dev_id,
-					ev->u.c_device.type,
-					ev->u.c_device.fd,
-					ev->u.c_device.flags);
-		break;
-	case TGT_UEVENT_DEVICE_DESTROY:
-		err = tgt_device_destroy(ev->u.d_device.tid,
-					 ev->u.d_device.dev_id);
 		break;
 	case TGT_UEVENT_CMD_RES:
 		err = uspace_cmd_done(ev->u.cmd_res.tid,

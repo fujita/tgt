@@ -10,7 +10,6 @@
 #include <scsi/scsi_cmnd.h>
 
 #include <tgt.h>
-#include <tgt_device.h>
 #include <tgt_protocol.h>
 #include <tgt_target.h>
 #include <tgt_scsi_if.h>

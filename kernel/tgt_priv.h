@@ -5,9 +5,6 @@ struct tgt_target;
 
 /* tgt core */
 extern struct tgt_target *target_find(int tid);
-extern int tgt_device_create(int tid, uint64_t dev_id, char *device_type,
-			     int fd, unsigned long dflags);
-extern int tgt_device_destroy(int tid, uint64_t dev_id);
 extern int uspace_cmd_done(int tid, uint64_t cid,
 			   int result, uint32_t len, uint64_t offset,
 			   unsigned long addr,
