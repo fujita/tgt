@@ -7,7 +7,7 @@
 #ifndef __TGT_SCSI_IF_H
 #define __TGT_SCSI_IF_H
 
-#ifndef MAX_COMMAND_SIZE
+#ifndef __KERNEL__
 #define MAX_COMMAND_SIZE	16
 #endif
 

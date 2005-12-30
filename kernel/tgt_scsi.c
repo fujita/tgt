@@ -5,11 +5,8 @@
  * (C) 2005 Mike Christie <michaelc@cs.wisc.edu>
  * This code is licenced under the GPL.
  */
+
 #include <linux/module.h>
-#include <linux/mm.h>
-#include <linux/highmem.h>
-#include <scsi/scsi.h>
-#include <scsi/scsi_tcq.h>
 #include <scsi/scsi_cmnd.h>
 
 #include <tgt.h>
