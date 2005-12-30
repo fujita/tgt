@@ -13,7 +13,6 @@
 #include <linux/device.h>
 #include <linux/list.h>
 
-struct request_queue;
 struct tgt_device;
 struct tgt_cmd;
 
@@ -43,15 +42,6 @@ struct tgt_device {
 	uint64_t size;
 
 	unsigned long state;
-	/*
-	 * queue for tgt <-> tgt LLD requests
-	 */
-	struct request_queue *q;
-	/*
-	 * end device io limits (should be set by tgt_device drivers)
-	 */
-	struct io_restrictions limits;
-	unsigned use_clustering;
 
 	struct tgt_target *target;
 	struct list_head dlist;

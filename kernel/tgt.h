@@ -15,7 +15,6 @@
 
 #include <tgt_types.h>
 
-struct request;
 struct tgt_device;
 struct tgt_protocol;
 struct tgt_session;
@@ -58,6 +57,9 @@ struct tgt_cmd {
 	struct tgt_device *device;
 	struct tgt_protocol *proto;
 
+	struct list_head hash_list;
+	struct list_head cqueue;
+
 	atomic_t state;
 	uint64_t dev_id;
 	unsigned long flags;
@@ -75,7 +77,6 @@ struct tgt_cmd {
 
 	unsigned long uaddr;
 
-	struct request *rq;
 	/*
 	 * target driver private
 	 */

@@ -42,7 +42,7 @@ int tgt_uspace_cmd_send(struct tgt_cmd *cmd, gfp_t gfp_mask)
 	pdu = (char *) ev->data;
 	ev->k.cmd_req.tid = cmd->session->target->tid;
 	ev->k.cmd_req.dev_id = cmd->device ? cmd->dev_id : TGT_INVALID_DEV_ID;
-	ev->k.cmd_req.cid = cmd->rq->tag;
+	ev->k.cmd_req.cid = cmd_tag(cmd);
 	ev->k.cmd_req.typeid = cmd->session->target->typeid;
 	ev->k.cmd_req.fd = cmd->device ? cmd->device->fd : 0;
 	ev->k.cmd_req.data_len = cmd->bufflen;

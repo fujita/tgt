@@ -88,6 +88,10 @@ struct tgt_target_template {
 	struct class_device_attribute **target_attrs;
 };
 
+#define TGT_CMD_HASH_ORDER		4
+#define	cmd_tag(p)	((uint64_t)(unsigned long) p)
+#define	cmd_hashfn(tag)	hash_long((tag), TGT_CMD_HASH_ORDER)
+
 enum {
 	TGT_CREATED,
 	TGT_DESTROYED,
@@ -102,17 +106,22 @@ struct tgt_target {
 
 	struct class_device cdev;
 
-	struct request_queue *q;
 	int queued_cmds;
 	int state;
 
-	/* Protects session_list and device_list and state */
+	/* Protects session_list, device_list, cmd_hlist, and state */
 	spinlock_t lock;
 
+	/* Serializes commands going to user space */
+	struct semaphore uspace_sem;
 	struct list_head tlist;
 
 	struct list_head device_list;
 	struct list_head session_list;
+	struct list_head cmd_hlist[1 << TGT_CMD_HASH_ORDER];
+
+	struct list_head uspace_cmd_queue;
+	struct work_struct send_work;
 
 	struct workqueue_struct *twq;
 };
