@@ -247,18 +247,14 @@ static void send_scsi_rsp(struct istgt_cmd *req)
 	iscsi_cmnd_init_write(rsp);
 }
 
-struct iscsi_sense_data {
-	uint16_t length;
-	uint8_t  data[0];
-} __packed;
-
 static struct istgt_cmd *do_create_sense_rsp(struct istgt_cmd *req)
 {
 	struct istgt_cmd *rsp;
 	struct iscsi_cmd_rsp *rsp_hdr;
-	struct iscsi_sense_data *sense;
-	struct scsi_tgt_cmd *stc;
+	struct iscsi_sense_data *sense = &req->sense;
 	struct scatterlist *sg = &req->sense_sg;
+	struct page *page = req->tc->sg[0].page;
+	char *p;
 
 	rsp = iscsi_cmnd_create_rsp_cmnd(req, 1);
 
@@ -269,17 +265,18 @@ static struct istgt_cmd *do_create_sense_rsp(struct istgt_cmd *req)
 	rsp_hdr->cmd_status = SAM_STAT_CHECK_CONDITION;
 	rsp_hdr->itt = cmd_hdr(req)->itt;
 
-	stc = tgt_cmd_to_scsi(req->tc);
-	sense = (struct iscsi_sense_data *) stc->sense_buff;
-	memmove(sense->data, sense, stc->sense_len);
+	p = kmap(page);
+	memcpy(sense->sense_buff, p, sizeof(sense->sense_buff));
+	kunmap(page);
+
 	/*
 	 * this looks broken for ppc
 	 */
-	sense->length = cpu_to_be16(stc->sense_len);
+	sense->length = cpu_to_be16(tgt_scsi_sense_length(req->tc));
 
-	sg->page = virt_to_page(stc->sense_buff);
-	sg->offset = offset_in_page(stc->sense_buff);
-	sg->length = stc->sense_len + sizeof(struct iscsi_sense_data);
+	sg->page = virt_to_page(sense);
+	sg->offset = offset_in_page(sense);
+	sg->length = tgt_scsi_sense_length(req->tc) + sizeof(uint16_t);
 	rsp->pdu.datasize = sg->length;
 	rsp->sg = sg;
 
@@ -289,11 +286,11 @@ static struct istgt_cmd *do_create_sense_rsp(struct istgt_cmd *req)
 static struct istgt_cmd *create_sense_rsp(struct istgt_cmd *req,
 					   uint8_t sense_key, uint8_t asc, uint8_t ascq)
 {
-	struct scsi_tgt_cmd *stc;
 	struct istgt_cmd *rsp;
 	struct iscsi_cmd_rsp *rsp_hdr;
-	struct iscsi_sense_data *sense;
 	struct scatterlist *sg = &req->sense_sg;
+	struct iscsi_sense_data *sense = &req->sense;
+	uint8_t *data = sense->sense_buff;
 
 	rsp = iscsi_cmnd_create_rsp_cmnd(req, 1);
 
@@ -304,21 +301,20 @@ static struct istgt_cmd *create_sense_rsp(struct istgt_cmd *req,
 	rsp_hdr->cmd_status = SAM_STAT_CHECK_CONDITION;
 	rsp_hdr->itt = cmd_hdr(req)->itt;
 
-	stc = tgt_cmd_to_scsi(req->tc);
-	sg->page = virt_to_page(stc->sense_buff);
-	sg->offset = offset_in_page(stc->sense_buff);
-	sg->length = stc->sense_len;
+	sg->page = virt_to_page(sense);
+	sg->offset = offset_in_page(sense);
 
-	sense = (struct iscsi_sense_data *) stc->sense_buff;
 	sense->length = cpu_to_be16(14);
-	sense->data[0] = 0xf0;
-	sense->data[2] = sense_key;
-	sense->data[7] = 6;	// Additional sense length
-	sense->data[12] = asc;
-	sense->data[13] = ascq;
+	data[0] = 0xf0;
+	data[2] = sense_key;
+	data[7] = 6;	// Additional sense length
+	data[12] = asc;
+	data[13] = ascq;
 
-	rsp->pdu.datasize = sizeof(struct iscsi_sense_data) + 14;
+	rsp->pdu.datasize = sizeof(uint16_t) + 14;
 	rsp->sg = sg;
+
+	sg->length = (rsp->pdu.datasize + 3) & -4;
 
 	return rsp;
 }

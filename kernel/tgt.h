@@ -54,14 +54,12 @@ enum {
 
 struct tgt_cmd {
 	struct tgt_session *session;
-	struct tgt_device *device;
 	struct tgt_protocol *proto;
 
 	struct list_head hash_list;
 	struct list_head cqueue;
 
 	atomic_t state;
-	uint64_t dev_id;
 	unsigned long flags;
 
 	struct work_struct work;

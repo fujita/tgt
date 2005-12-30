@@ -38,10 +38,10 @@ struct tgt_protocol {
 			    uint32_t data_len, enum dma_data_direction data_dir,
 			    uint8_t *dev_id_buff, int id_buff_size,
 			    int flags);
+
 	/*
 	 * Build userspace packet
 	 */
-
 	void (* uspace_pdu_build)(struct tgt_cmd *cmd, void *data);
 
 	void (* uspace_cmd_complete)(struct tgt_cmd *cmd);

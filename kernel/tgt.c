@@ -395,31 +395,6 @@ tgt_device_find_nolock(struct tgt_target *target, uint64_t dev_id)
 	return NULL;
 }
 
-struct tgt_device *tgt_device_get(struct tgt_target *target, uint64_t dev_id)
-{
-	static struct tgt_device *device;
-	unsigned long flags;
-
-	spin_lock_irqsave(&target->lock, flags);
-	device = tgt_device_find_nolock(target, dev_id);
-	if (device) {
-		if (test_bit(TGT_DEV_DEL, &device->state))
-			device = NULL;
-		else
-			class_device_get(&device->cdev);
-	}
-	spin_unlock_irqrestore(&target->lock, flags);
-
-	return device;
-}
-EXPORT_SYMBOL_GPL(tgt_device_get);
-
-void tgt_device_put(struct tgt_device *device)
-{
-	class_device_put(&device->cdev);
-}
-EXPORT_SYMBOL_GPL(tgt_device_put);
-
 int tgt_device_create(int tid, uint64_t dev_id, char *device_type,
 		      int fd, unsigned long dflags)
 {
@@ -614,8 +589,6 @@ static void __tgt_cmd_destroy(void *data)
 	tgt_uspace_cmd_done_send(cmd, GFP_KERNEL);
 
 	tgt_cmd_hlist_del(cmd);
-	if (cmd->device)
-		tgt_device_put(cmd->device);
 
 	mempool_free(cmd, cmd->session->cmd_pool);
 }
@@ -687,7 +660,6 @@ tgt_cmd_create(struct tgt_session *session, void *tgt_priv, uint8_t *cb,
 	target->proto->cmd_create(cmd, cb, data_len, data_dir,
 				  dev_buf, dev_buf_size, flags);
 
-	cmd->device = tgt_device_get(target, cmd->dev_id);
 	cmd->session = session;
 	cmd->private = tgt_priv;
 	cmd->done = tgt_cmd_destroy;
@@ -697,8 +669,6 @@ tgt_cmd_create(struct tgt_session *session, void *tgt_priv, uint8_t *cb,
 
 	err = tgt_cmd_hlist_add(cmd);
 	if (err) {
-		if (cmd->device)
-			tgt_device_put(cmd->device);
 		mempool_free(cmd, cmd->session->cmd_pool);
 		return NULL;
 	}
@@ -727,13 +697,12 @@ static void tgt_write_data_transfer_done(struct tgt_cmd *cmd)
  * we should jsut pass the cmd pointer between userspace and the kernel
  * as a handle like open-iscsi
  */
-static struct tgt_cmd *tgt_cmd_find(int tid, uint64_t dev_id, uint64_t tag)
+static struct tgt_cmd *tgt_cmd_find(int tid, uint64_t tag)
 {
 	struct tgt_target *target;
 	struct tgt_cmd *cmd;
 
-	dprintk("%d %llu %llu\n", tid, (unsigned long long) dev_id,
-		(unsigned long long) tag);
+	dprintk("%d %llu\n", tid, (unsigned long long) tag);
 
 	target = target_find(tid);
 	if (!target) {
@@ -817,14 +786,14 @@ release_pages:
 	return err;
 }
 
-int uspace_cmd_done(int tid, uint64_t dev_id, uint64_t cid,
+int uspace_cmd_done(int tid, uint64_t cid,
 		    int result, uint32_t len, uint64_t offset,
 		    unsigned long uaddr, uint8_t rw, uint8_t try_map)
 {
 	struct tgt_target *target;
 	struct tgt_cmd *cmd;
 
-	cmd = tgt_cmd_find(tid, dev_id, cid);
+	cmd = tgt_cmd_find(tid, cid);
 	if (!cmd) {
 		eprintk("Could not find command %llu\n",
 			(unsigned long long) cid);

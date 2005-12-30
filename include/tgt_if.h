@@ -24,8 +24,6 @@ enum tgt_event_type {
 	TGT_KEVENT_CMD_DONE,
 };
 
-#define	TGT_INVALID_DEV_ID	~0ULL
-
 struct tgt_event {
 	/* user-> kernel */
 	union {
@@ -53,7 +51,6 @@ struct tgt_event {
 		} d_device;
 		struct {
 			int tid;
-			uint64_t dev_id;
 			uint64_t cid;
 			uint32_t len;
 			int result;
@@ -75,10 +72,8 @@ struct tgt_event {
 		} event_res;
 		struct {
 			int tid;
-			uint64_t dev_id;
 			uint64_t cid;
 			int typeid;
-			int fd;
 			uint32_t data_len;
 		} cmd_req;
 		struct {

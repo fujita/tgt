@@ -41,10 +41,8 @@ int tgt_uspace_cmd_send(struct tgt_cmd *cmd, gfp_t gfp_mask)
 
 	pdu = (char *) ev->data;
 	ev->k.cmd_req.tid = cmd->session->target->tid;
-	ev->k.cmd_req.dev_id = cmd->device ? cmd->dev_id : TGT_INVALID_DEV_ID;
 	ev->k.cmd_req.cid = cmd_tag(cmd);
 	ev->k.cmd_req.typeid = cmd->session->target->typeid;
-	ev->k.cmd_req.fd = cmd->device ? cmd->device->fd : 0;
 	ev->k.cmd_req.data_len = cmd->bufflen;
 
 	proto->uspace_pdu_build(cmd, pdu);
@@ -160,7 +158,7 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 					 ev->u.d_device.dev_id);
 		break;
 	case TGT_UEVENT_CMD_RES:
-		err = uspace_cmd_done(ev->u.cmd_res.tid, ev->u.cmd_res.dev_id,
+		err = uspace_cmd_done(ev->u.cmd_res.tid,
 				      ev->u.cmd_res.cid,
 				      ev->u.cmd_res.result, ev->u.cmd_res.len,
 				      ev->u.cmd_res.offset,

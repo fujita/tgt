@@ -113,35 +113,32 @@ static int cmd_queue(int fd, char *reqbuf, char *resbuf)
 	struct tgt_event *ev_req = (struct tgt_event *) reqbuf;
 	struct tgt_event *ev_res = NLMSG_DATA(resbuf);
 	uint64_t offset, cid = ev_req->k.cmd_req.cid;
-	uint8_t *scb, rw = 0, try_map = 0;
+	uint8_t *pdu, rw = 0, try_map = 0;
 	unsigned long uaddr;
-	int (*fn) (int, uint64_t, uint8_t *, int *, int, uint32_t,
+	int (*fn) (int, uint8_t *, int *, uint32_t,
 		   unsigned long *, uint8_t *, uint8_t *, uint64_t *);
 
 	memset(resbuf, 0, NL_BUFSIZE);
-	scb = (uint8_t *) ev_req->data;
-	dprintf("%" PRIu64 " %x\n", cid, scb[0]);
+	pdu = (uint8_t *) ev_req->data;
+	dprintf("%" PRIu64 " %x\n", cid, pdu[0]);
 
 	fn = dl_proto_cmd_process(ev_req->k.cmd_req.tid,
 				  ev_req->k.cmd_req.typeid);
 
 	if (fn)
 		result = fn(ev_req->k.cmd_req.tid,
-			    ev_req->k.cmd_req.dev_id,
-			    scb,
+			    pdu,
 			    &len,
-			    ev_req->k.cmd_req.fd,
 			    ev_req->k.cmd_req.data_len,
 			    &uaddr, &rw, &try_map, &offset);
 	else {
 		result = -EINVAL;
-		eprintf("Cannot process cmd %d %" PRIu64 " %" PRIu64 "\n",
-			ev_req->k.cmd_req.tid, ev_req->k.cmd_req.dev_id, cid);
+		eprintf("Cannot process cmd %d %" PRIu64 "\n",
+			ev_req->k.cmd_req.tid, cid);
 	}
 
 	memset(ev_res, 0, (char *) ev_res->data - (char *) ev_res);
 	ev_res->u.cmd_res.tid = ev_req->k.cmd_req.tid;
-	ev_res->u.cmd_res.dev_id = ev_req->k.cmd_req.dev_id;
 	ev_res->u.cmd_res.cid = cid;
 	ev_res->u.cmd_res.len = len;
 	ev_res->u.cmd_res.result = result;

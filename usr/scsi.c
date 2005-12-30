@@ -32,6 +32,7 @@
 
 #include "tgtd.h"
 #include "tgt_if.h"
+#include "tgt_scsi_if.h"
 #include "tgt_sysfs.h"
 
 #define cpu_to_be32 __cpu_to_be32
@@ -411,6 +412,37 @@ static int read_capacity(int tid, uint64_t lun, uint8_t *scb, uint8_t *p, int *l
 	return SAM_STAT_GOOD;
 }
 
+static int getfd(int tid, uint64_t lun)
+{
+	int fd, err;
+	char path[PATH_MAX], buf[PATH_MAX];
+
+	sprintf(path, TGT_DEVICE_SYSFSDIR "/device%d:%" PRIu64 "/fd",
+		tid, lun);
+
+	fd = open(path, O_RDONLY);
+	if (fd < 0) {
+		log_error("scsi sync_cache could not get LU's fd err %d",
+			  errno);
+		goto out;
+	}
+
+	err = read(fd, buf, sizeof(buf));
+	close(fd);
+	if (err < 0) {
+		log_error("scsi sync_cache could not read LUN path err %d",
+			  errno);
+		fd = -EIO;
+		goto out;
+	}
+
+	fd = 0;
+	sscanf(buf, "%d\n", &fd);
+
+out:
+	return fd;
+}
+
 static int sync_cache(int tid, uint64_t lun, uint8_t *scb, uint8_t *data,
 		      int *len)
 {
@@ -566,14 +598,39 @@ static inline int mmap_cmd_init(uint8_t *scb, uint8_t *rw)
 	return result;
 }
 
-int cmd_process(int tid, uint64_t lun, uint8_t *scb, int *len,
-		int fd, uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
+#define	TGT_INVALID_DEV_ID	~0ULL
+
+static uint64_t translate_lun(uint8_t *p, int size)
+{
+	uint64_t lun = TGT_INVALID_DEV_ID;
+
+	switch (*p >> 6) {
+	case 0:
+		lun = p[1];
+		break;
+	case 1:
+		lun = (0x3f & p[0]) << 8 | p[1];
+		break;
+	case 2:
+	case 3:
+	default:
+		break;
+	}
+
+	return lun;
+}
+
+int cmd_process(int tid, uint8_t *pdu, int *len,
+		uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
 		uint8_t *try_map, uint64_t *offset)
 {
-	int result = SAM_STAT_GOOD;
-	uint8_t *data = NULL;
+	int fd, result = SAM_STAT_GOOD;
+	struct tgt_scsi_cmd *scmd = (struct tgt_scsi_cmd *) pdu;
+	uint8_t *data = NULL, *scb = scmd->scb;
+	uint64_t lun;
 
-	dprintf("%d %" PRIu64 " %x %d %u\n", tid, lun, scb[0], fd, datalen);
+	lun = translate_lun(scmd->lun, sizeof(scmd->lun));
+	dprintf("%d %" PRIu64 " %x %u\n", tid, lun, scb[0], datalen);
 
 	*offset = 0;
 	if (!mmap_cmd_init(scb, rw))
@@ -629,10 +686,15 @@ int cmd_process(int tid, uint64_t lun, uint8_t *scb, int *len,
 	case WRITE_10:
 	case WRITE_16:
 	case WRITE_VERIFY:
-		result = mmap_device(tid, lun, scb, len, fd, datalen, uaddr, offset);
-		if (result == SAM_STAT_GOOD)
-			*try_map = 1;
-		else {
+		fd = getfd(tid, lun);
+		if (fd >= 0) {
+			result = mmap_device(tid, lun, scb, len, fd, datalen,
+					     uaddr, offset);
+			if (result == SAM_STAT_GOOD)
+				*try_map = 1;
+		}
+
+		if (fd < 0 || result != SAM_STAT_GOOD) {
 			*offset = 0;
 			if (!data)
 				data = valloc(PAGE_SIZE);

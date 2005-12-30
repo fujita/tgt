@@ -15,6 +15,7 @@
 #include <linux/blkdev.h>
 
 #include <scsi/iscsi_proto.h>
+#include <scsi/scsi_cmnd.h>
 #include <istgt_u.h>
 
 #include <tgt.h>
@@ -156,6 +157,11 @@ struct iscsi_pdu {
 	unsigned int datasize;
 };
 
+struct iscsi_sense_data {
+	uint16_t length;
+	uint8_t sense_buff[SCSI_SENSE_BUFFERSIZE];
+} __attribute__((packed));
+
 struct istgt_cmd {
 	struct list_head list;
 	struct list_head conn_list;
@@ -180,6 +186,8 @@ struct istgt_cmd {
 
 	struct work_struct work;
 	struct completion event;
+
+	struct iscsi_sense_data sense;
 
 	struct istgt_cmd *req;
 	struct tgt_cmd *tc;
