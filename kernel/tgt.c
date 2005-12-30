@@ -727,13 +727,13 @@ static void tgt_write_data_transfer_done(struct tgt_cmd *cmd)
  * we should jsut pass the cmd pointer between userspace and the kernel
  * as a handle like open-iscsi
  */
-static struct tgt_cmd *find_cmd_by_id(int tid, uint64_t dev_id, uint64_t cid)
+static struct tgt_cmd *tgt_cmd_find(int tid, uint64_t dev_id, uint64_t tag)
 {
 	struct tgt_target *target;
 	struct tgt_cmd *cmd;
 
 	dprintk("%d %llu %llu\n", tid, (unsigned long long) dev_id,
-		(unsigned long long) cid);
+		(unsigned long long) tag);
 
 	target = target_find(tid);
 	if (!target) {
@@ -741,9 +741,9 @@ static struct tgt_cmd *find_cmd_by_id(int tid, uint64_t dev_id, uint64_t cid)
 		return NULL;
 	}
 
-	cmd = tgt_cmd_hlist_find(target, cid);
+	cmd = tgt_cmd_hlist_find(target, tag);
 	if (!cmd)
-		eprintk("Could not find rq for cid %llu\n", (unsigned long long) cid);
+		eprintk("Could not find rq for cid %llu\n", (unsigned long long) tag);
 	return cmd;
 }
 
@@ -824,7 +824,7 @@ int uspace_cmd_done(int tid, uint64_t dev_id, uint64_t cid,
 	struct tgt_target *target;
 	struct tgt_cmd *cmd;
 
-	cmd = find_cmd_by_id(tid, dev_id, cid);
+	cmd = tgt_cmd_find(tid, dev_id, cid);
 	if (!cmd) {
 		eprintk("Could not find command %llu\n",
 			(unsigned long long) cid);
