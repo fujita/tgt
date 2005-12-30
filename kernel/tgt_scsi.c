@@ -26,18 +26,16 @@ static inline struct tgt_scsi_cmd *tgt_cmd_to_scsi(struct tgt_cmd *cmd)
 }
 
 static void
-scsi_tgt_cmd_create(struct tgt_cmd *cmd, uint8_t *scb,
+tgt_scsi_cmd_create(struct tgt_cmd *cmd, uint8_t *scb,
 		    uint32_t data_len, enum dma_data_direction data_dir,
 		    uint8_t *lun, int lun_size, int tags)
 {
-	struct tgt_scsi_cmd *scmd;
+	struct tgt_scsi_cmd *scmd = tgt_cmd_to_scsi(cmd);
 
-	scmd = tgt_cmd_to_scsi(cmd);
 	memcpy(scmd->scb, scb, sizeof(scmd->scb));
 	memcpy(scmd->lun, lun, sizeof(scmd->lun));
 	scmd->tags = tags;
 
-	/* is this device specific */
 	cmd->data_dir = data_dir;
 	/*
 	 * set bufflen based on data_len for now, but let device specific
@@ -46,30 +44,22 @@ scsi_tgt_cmd_create(struct tgt_cmd *cmd, uint8_t *scb,
 	cmd->bufflen = data_len;
 }
 
-static void scsi_tgt_uspace_pdu_build(struct tgt_cmd *cmd, void *data)
+static void tgt_scsi_pdu_build(struct tgt_cmd *cmd, void *data)
 {
 	struct tgt_scsi_cmd *scmd = tgt_cmd_to_scsi(cmd);
+
 	memcpy(data, scmd, sizeof(struct tgt_scsi_cmd));
 }
 
-static void scsi_tgt_uspace_cmd_complete(struct tgt_cmd *cmd)
-{
-	struct tgt_scsi_cmd *scmd = tgt_cmd_to_scsi(cmd);
-
-	dprintk("res %d, cmd %p op 0x%02x %lx\n", cmd->result, cmd, scmd->scb[0],
-		cmd->uaddr);
-}
-
-static struct tgt_protocol scsi_tgt_proto = {
+static struct tgt_protocol tgt_scsi_proto = {
 	.name = "scsi",
 	.module = THIS_MODULE,
-	.cmd_create = scsi_tgt_cmd_create,
-	.uspace_pdu_build = scsi_tgt_uspace_pdu_build,
-	.uspace_cmd_complete = scsi_tgt_uspace_cmd_complete,
+	.cmd_create = tgt_scsi_cmd_create,
+	.uspace_pdu_build = tgt_scsi_pdu_build,
 	.uspace_pdu_size = sizeof(struct tgt_scsi_cmd),
 };
 
-static int __init scsi_tgt_init(void)
+static int __init tgt_scsi_init(void)
 {
 	int err;
 	size_t size = sizeof(struct tgt_cmd) + sizeof(struct tgt_scsi_cmd);
@@ -80,9 +70,9 @@ static int __init scsi_tgt_init(void)
 					       NULL, NULL);
 	if (!tgt_scsi_cmd_cache)
 		return -ENOMEM;
-	scsi_tgt_proto.cmd_cache = tgt_scsi_cmd_cache;
+	tgt_scsi_proto.cmd_cache = tgt_scsi_cmd_cache;
 
-	err = tgt_protocol_register(&scsi_tgt_proto);
+	err = tgt_protocol_register(&tgt_scsi_proto);
 	if (err)
 		goto cache_destroy;
 
@@ -93,12 +83,12 @@ cache_destroy:
 	return err;
 }
 
-static void __exit scsi_tgt_exit(void)
+static void __exit tgt_scsi_exit(void)
 {
 	kmem_cache_destroy(tgt_scsi_cmd_cache);
-	tgt_protocol_unregister(&scsi_tgt_proto);
+	tgt_protocol_unregister(&tgt_scsi_proto);
 }
 
-module_init(scsi_tgt_init);
-module_exit(scsi_tgt_exit);
+module_init(tgt_scsi_init);
+module_exit(tgt_scsi_exit);
 MODULE_LICENSE("GPL");
