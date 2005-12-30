@@ -68,28 +68,6 @@ scsi_tgt_cmd_create(struct tgt_cmd *cmd, uint8_t *scb,
 	cmd->bufflen = data_len;
 }
 
-/* kspace command failure */
-int scsi_tgt_sense_data_build(struct tgt_cmd *cmd, uint8_t key,
-			      uint8_t ascode, uint8_t ascodeq)
-{
-	struct scsi_tgt_cmd *scmd = tgt_cmd_to_scsi(cmd);
-	int len = 8, alen = 6;
-	uint8_t *data = scmd->sense_buff;
-
-	memset(data, 0, sizeof(scmd->sense_buff));
-
-	data[0] = 0x70 | 1U << 7;
-	data[2] = key;
-	data[7] = alen;
-	data[12] = ascode;
-	data[13] = ascodeq;
-	cmd->result = SAM_STAT_CHECK_CONDITION;
-	scmd->sense_len = len + alen;
-
-	return len + alen;
-}
-EXPORT_SYMBOL_GPL(scsi_tgt_sense_data_build);
-
 /* uspace command failure */
 int scsi_tgt_sense_copy(struct tgt_cmd *cmd)
 {

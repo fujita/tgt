@@ -25,6 +25,4 @@ static inline struct scsi_tgt_cmd *tgt_cmd_to_scsi(struct tgt_cmd *cmd)
 }
 
 extern int scsi_tgt_sense_copy(struct tgt_cmd *cmd);
-extern int scsi_tgt_sense_data_build(struct tgt_cmd *cmd, uint8_t key,
-				     uint8_t ascode, uint8_t ascodeq);
 #endif
