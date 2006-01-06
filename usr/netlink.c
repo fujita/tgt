@@ -260,12 +260,6 @@ int nl_open(void)
 	src_addr.nl_pid = getpid();
 	src_addr.nl_groups = 0; /* not in mcast groups */
 
-	err = bind(fd, (struct sockaddr *)&src_addr, sizeof(src_addr));
-	if (err < 0) {
-		eprintf("%d\n", fd);
-		goto out;
-	}
-
 	memset(&dest_addr, 0, sizeof(dest_addr));
 	dest_addr.nl_family = AF_NETLINK;
 	dest_addr.nl_pid = 0; /* kernel */
