@@ -3,65 +3,67 @@
  *
  * Released under the terms of the GNU GPL v2.0.
  */
-
 #include <linux/file.h>
 #include <linux/ip.h>
 #include <net/tcp.h>
+#include <scsi/scsi_host.h>
+#include <scsi/scsi_transport_iscsi.h>
 
 #include <iscsi.h>
 #include <digest.h>
 
-static struct iscsi_conn *conn_lookup(struct iscsi_session *session,
-				      uint16_t cid)
+int conn_close(struct iscsi_conn *conn)
 {
-	struct iscsi_conn *conn;
-
-	list_for_each_entry(conn, &session->conn_list, list) {
-		if (conn->cid == cid)
-			return conn;
-	}
-	return NULL;
+	/* TODO: pass in error */
+	iscsi_conn_error(conn->cls_conn, ISCSI_ERR_CONN_FAILED);
+	return 0;
 }
 
 static void state_change(struct sock *sk)
 {
 	struct iscsi_conn *conn = sk->sk_user_data;
-	struct iscsi_target *target = conn->session->target;
+	struct iscsi_session *session = conn->session;
 
 	if (sk->sk_state != TCP_ESTABLISHED)
 		conn_close(conn);
 	else
-		nthread_wakeup(target);
+		nthread_wakeup(session);
 
-	target->nthread_info.old_state_change(sk);
+	session->nthread_info.old_state_change(sk);
 }
 
 static void data_ready(struct sock *sk, int len)
 {
 	struct iscsi_conn *conn = sk->sk_user_data;
-	struct iscsi_target *target = conn->session->target;
+	struct iscsi_session *session = conn->session;
 
-	nthread_wakeup(target);
-	target->nthread_info.old_data_ready(sk, len);
+	nthread_wakeup(session);
+	session->nthread_info.old_data_ready(sk, len);
 }
 
-static void socket_bind(struct iscsi_conn *conn)
+int
+istgt_conn_bind(struct iscsi_cls_session *cls_session,
+		struct iscsi_cls_conn *cls_conn, uint32_t transport_fd,
+		int is_leading)
 {
-	int opt = 1;
+	struct Scsi_Host *shost = iscsi_session_to_shost(cls_session);
+	struct iscsi_session *session = iscsi_hostdata(shost->hostdata);
+	struct iscsi_conn *conn = cls_conn->dd_data;
+	int opt = 1, err;
 	mm_segment_t oldfs;
-	struct iscsi_session *session = conn->session;
-	struct iscsi_target *target = session->target;
 
 	dprintk("%llu\n", (unsigned long long) session->sid);
 
-	conn->sock = SOCKET_I(conn->file->f_dentry->d_inode);
+	conn->file = fget(transport_fd);
+
+	conn->sock = sockfd_lookup(transport_fd, &err);
 	conn->sock->sk->sk_user_data = conn;
 
 	write_lock(&conn->sock->sk->sk_callback_lock);
-	target->nthread_info.old_state_change = conn->sock->sk->sk_state_change;
+	session->nthread_info.old_state_change = conn->sock->sk->sk_state_change;
 	conn->sock->sk->sk_state_change = state_change;
 
-	target->nthread_info.old_data_ready = conn->sock->sk->sk_data_ready;
+	session->nthread_info.old_data_ready = conn->sock->sk->sk_data_ready;
 	conn->sock->sk->sk_data_ready = data_ready;
 	write_unlock(&conn->sock->sk->sk_callback_lock);
 
@@ -70,10 +72,13 @@ static void socket_bind(struct iscsi_conn *conn)
 	conn->sock->ops->setsockopt(conn->sock, SOL_TCP, TCP_NODELAY,
 				    (void *)&opt, sizeof(opt));
 	set_fs(oldfs);
+	return 0;
 }
 
 int conn_free(struct iscsi_conn *conn)
 {
+	struct completion *wait = conn->free_done;
+
 	dprintk("%p %#Lx %u\n", conn->session,
 		(unsigned long long) conn->session->sid, conn->cid);
 
@@ -85,44 +90,59 @@ int conn_free(struct iscsi_conn *conn)
 	list_del(&conn->poll_list);
 
 	digest_cleanup(conn);
-	kfree(conn);
+
+	sock_release(conn->sock);
+
+	if (wait)
+		complete(wait);
 
 	return 0;
 }
 
-void conn_close(struct iscsi_conn *conn)
+void istgt_conn_destroy(struct iscsi_cls_conn *cls_conn)
 {
+	struct iscsi_conn *conn = cls_conn->dd_data;
+	struct iscsi_session *session = conn->session;
+	DECLARE_COMPLETION(wait);
+
+	conn->free_done = &wait;
+
 	if (test_and_clear_bit(CONN_ACTIVE, &conn->state))
 		set_bit(CONN_CLOSING, &conn->state);
 
-	nthread_wakeup(conn->session->target);
+	nthread_wakeup(session);
+	wait_for_completion(&wait);
 }
 
-int conn_add(struct iscsi_session *session, struct conn_info *info)
+struct iscsi_cls_conn *istgt_conn_create(struct iscsi_cls_session *cls_session,
+					 uint32_t cid)
 {
+	struct Scsi_Host *shost = iscsi_session_to_shost(cls_session);
+	struct iscsi_session *session = iscsi_hostdata(shost->hostdata);
+	struct iscsi_cls_conn *cls_conn;
 	struct iscsi_conn *conn;
 
-	dprintk("%#Lx:%u\n", (unsigned long long) session->sid, info->cid);
+	dprintk("%#Lx:%u\n", (unsigned long long) session->sid, cid);
 
-	conn = conn_lookup(session, info->cid);
-	if (conn)
-		return -EEXIST;
+        cls_conn = iscsi_create_conn(cls_session, cid);
+	if (!cls_conn)
+		return NULL;
 
-	conn = kzalloc(sizeof(*conn), GFP_KERNEL);
-	if (!conn)
-		return -ENOMEM;
+	conn = cls_conn->dd_data;
+	memset(conn, 0, sizeof(*conn));
 
+	conn->cls_conn = cls_conn;
 	conn->session = session;
-	conn->cid = info->cid;
-	conn->stat_sn = info->stat_sn;
-	conn->exp_stat_sn = info->exp_stat_sn;
+	conn->cid = cid;
+//	conn->stat_sn = info->stat_sn;
+// mnc	conn->exp_stat_sn = info->exp_stat_sn;
 
-	conn->hdigest_type = info->header_digest;
-	conn->ddigest_type = info->data_digest;
-	if (digest_init(conn) < 0) {
-		kfree(conn);
-		return -ENOMEM;
-	}
+//	conn->hdigest_type = info->header_digest;
+//	conn->ddigest_type = info->data_digest;
+//	if (digest_init(conn) < 0) {
+//		iscsi_destroy_conn(cls_conn);
+//		return NULL;
+//	}
 
 	spin_lock_init(&conn->list_lock);
 	atomic_set(&conn->nr_cmnds, 0);
@@ -132,28 +152,16 @@ int conn_add(struct iscsi_session *session, struct conn_info *info)
 	INIT_LIST_HEAD(&conn->poll_list);
 
 	list_add(&conn->list, &session->conn_list);
-
-	set_bit(CONN_ACTIVE, &conn->state);
-
-	conn->file = fget(info->fd);
-	socket_bind(conn);
-
-	list_add(&conn->poll_list, &session->target->nthread_info.active_conns);
-
-	nthread_wakeup(conn->session->target);
-
-	return 0;
+	return cls_conn;
 }
 
-int conn_del(struct iscsi_session *session, struct conn_info *info)
+int istgt_conn_start(struct iscsi_cls_conn *cls_conn)
 {
-	struct iscsi_conn *conn;
-	int err = -EEXIST;
+	struct iscsi_conn *conn = cls_conn->dd_data;
+	struct iscsi_session *session = conn->session;
 
-	if (!(conn = conn_lookup(session, info->cid)))
-		return err;
-
-	conn_close(conn);
-
+	set_bit(CONN_ACTIVE, &conn->state);
+	list_add(&conn->poll_list, &session->nthread_info.active_conns);
+	nthread_wakeup(conn->session);
 	return 0;
 }

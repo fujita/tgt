@@ -20,9 +20,9 @@ enum daemon_state_bit {
 	D_DATA_READY,
 };
 
-void nthread_wakeup(struct iscsi_target *target)
+void nthread_wakeup(struct iscsi_session *session)
 {
-	struct network_thread_info *info = &target->nthread_info;
+	struct network_thread_info *info = &session->nthread_info;
 
 	spin_lock_bh(&info->nthread_lock);
 	set_bit(D_DATA_READY, &info->flags);
@@ -547,7 +547,6 @@ static int send(struct iscsi_conn *conn)
 
 static void process_io(struct iscsi_conn *conn)
 {
-	struct iscsi_target *target = conn->session->target;
 	int res, wakeup = 0;
 
 	res = recv(conn);
@@ -567,7 +566,7 @@ static void process_io(struct iscsi_conn *conn)
 
 out:
 	if (wakeup)
-		nthread_wakeup(target);
+		nthread_wakeup(conn->session);
 
 	return;
 }
@@ -580,8 +579,8 @@ static void close_conn(struct iscsi_conn *conn)
 	conn->sock->ops->shutdown(conn->sock, 2);
 
 	write_lock(&conn->sock->sk->sk_callback_lock);
-	conn->sock->sk->sk_state_change = session->target->nthread_info.old_state_change;
-	conn->sock->sk->sk_data_ready = session->target->nthread_info.old_data_ready;
+	conn->sock->sk->sk_state_change = session->nthread_info.old_state_change;
+	conn->sock->sk->sk_data_ready = session->nthread_info.old_data_ready;
 	write_unlock(&conn->sock->sk->sk_callback_lock);
 
 	fput(conn->file);
@@ -605,20 +604,14 @@ static void close_conn(struct iscsi_conn *conn)
 		BUG_ON(1);
 	}
 
-	eprintk("%d %" PRIu64 " %u\n",
-		session->target->tt->tid, session->sid, conn->cid);
-
-	event_send(session->target->tt, session->sid, conn->cid, E_CONN_CLOSE);
+	eprintk("%llu %d\n", session->sid, conn->cid);
 	conn_free(conn);
-
-	if (list_empty(&session->conn_list))
-		session_del(session->target, session->sid);
 }
 
 static int istd(void *arg)
 {
-	struct iscsi_target *target = arg;
-	struct network_thread_info *info = &target->nthread_info;
+	struct iscsi_session *session = arg;
+	struct network_thread_info *info = &session->nthread_info;
 	struct iscsi_conn *conn, *tmp;
 
 	__set_current_state(TASK_RUNNING);
@@ -635,23 +628,23 @@ static int istd(void *arg)
 		clear_bit(D_DATA_READY, &info->flags);
 		spin_unlock_bh(&info->nthread_lock);
 
-		down(&target->target_sem);
+		down(&session->target_sem);
 		list_for_each_entry_safe(conn, tmp, &info->active_conns, poll_list) {
 			if (test_bit(CONN_ACTIVE, &conn->state))
 				process_io(conn);
 			else
 				close_conn(conn);
 		}
-		up(&target->target_sem);
+		up(&session->target_sem);
 
 	} while (!kthread_should_stop());
 
 	return 0;
 }
 
-int nthread_init(struct iscsi_target *target)
+int nthread_init(struct iscsi_session *session)
 {
-	struct network_thread_info *info = &target->nthread_info;
+	struct network_thread_info *info = &session->nthread_info;
 
 	info->flags = 0;
 	info->task = NULL;
@@ -666,18 +659,18 @@ int nthread_init(struct iscsi_target *target)
 	return 0;
 }
 
-int nthread_start(struct iscsi_target *target)
+int nthread_start(struct iscsi_session *session)
 {
 	int err = 0;
-	struct network_thread_info *info = &target->nthread_info;
+	struct network_thread_info *info = &session->nthread_info;
 	struct task_struct *task;
 
 	if (info->task) {
-		eprintk("Target (%u) already runs\n", target->tt->tid);
+		eprintk("Target (%llu) already runs\n", session->sid);
 		return -EALREADY;
 	}
 
-	task = kthread_run(istd, target, "istd%d", target->tt->tid);
+	task = kthread_run(istd, session, "istd%llu", session->sid);
 
 	if (IS_ERR(task))
 		err = PTR_ERR(task);
@@ -687,10 +680,10 @@ int nthread_start(struct iscsi_target *target)
 	return err;
 }
 
-int nthread_stop(struct iscsi_target *target)
+int nthread_stop(struct iscsi_session *session)
 {
 	int err;
-	struct network_thread_info *info = &target->nthread_info;
+	struct network_thread_info *info = &session->nthread_info;
 
 	if (!info->task)
 		return -ESRCH;

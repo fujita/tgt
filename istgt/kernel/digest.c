@@ -139,10 +139,10 @@ int digest_rx_data(struct istgt_cmd *cmnd)
 		struct istgt_cmd *scsi_cmnd = cmnd->req;
 		struct iscsi_data *req = (struct iscsi_data *) &cmnd->pdu.bhs;
 
-		sg = scsi_cmnd->tc->sg;
+		sg = scsi_cmnd->scmd->request_buffer;
 		offset = be32_to_cpu(req->offset);
 	} else {
-		sg = cmnd->tc->sg;
+		sg = cmnd->scmd->request_buffer;
 		offset = 0;
 	}
 

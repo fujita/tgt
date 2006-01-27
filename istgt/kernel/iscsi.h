@@ -62,23 +62,11 @@ struct network_thread_info {
 
 struct istgt_cmd;
 
-struct iscsi_target {
-	struct iscsi_sess_param sess_param;
-	struct iscsi_trgt_param trgt_param;
-
-	struct list_head session_list;
-	struct network_thread_info nthread_info;
-	struct semaphore target_sem;
-
-	struct tgt_target *tt;
-};
-
 #define IET_HASH_ORDER		8
 #define	cmnd_hashfn(itt)	hash_long((itt), IET_HASH_ORDER)
 
 struct iscsi_session {
 	struct list_head list;
-	struct iscsi_target *target;
 
 	uint64_t sid;
 
@@ -96,7 +84,13 @@ struct iscsi_session {
 
 	uint32_t next_ttt;
 
-	struct tgt_session *ts;
+	struct iscsi_trgt_param trgt_param;
+
+	struct list_head session_list;
+	struct network_thread_info nthread_info;
+	struct semaphore target_sem;
+
+	struct Scsi_Host *shost;
 };
 
 enum connection_state_bit {
@@ -106,9 +100,15 @@ enum connection_state_bit {
 
 #define ISCSI_CONN_IOV_MAX	(((256 << 10) >> PAGE_SHIFT) + 1)
 
+struct iscsi_cls_session;
+struct iscsi_cls_conn;
+struct completion;
+
 struct iscsi_conn {
 	struct list_head list;			/* list entry in session list */
 	struct iscsi_session *session;		/* owning session */
+	struct iscsi_cls_conn *cls_conn;
+	struct completion *free_done;
 
 	uint16_t cid;
 	unsigned long state;
@@ -190,7 +190,9 @@ struct istgt_cmd {
 	struct iscsi_sense_data sense;
 
 	struct istgt_cmd *req;
-	struct tgt_cmd *tc;
+
+	struct scsi_cmnd *scmd;
+	void (*done)(struct scsi_cmnd *);
 };
 
 #define ISCSI_OP_SCSI_REJECT	ISCSI_OP_VENDOR1_CMD
@@ -207,29 +209,20 @@ extern void cmnd_tx_end(struct istgt_cmd *);
 extern void cmnd_release(struct istgt_cmd *, int);
 
 /* conn.c */
-extern int conn_add(struct iscsi_session *, struct conn_info *);
-extern int conn_del(struct iscsi_session *, struct conn_info *);
+extern struct iscsi_cls_conn *istgt_conn_create(struct iscsi_cls_session *,
+						uint32_t cid);
+extern void istgt_conn_destroy(struct iscsi_cls_conn *);
+extern int istgt_conn_bind(struct iscsi_cls_session *, struct iscsi_cls_conn *,
+			   uint32_t, int);
+extern int istgt_conn_start(struct iscsi_cls_conn *);
 extern int conn_free(struct iscsi_conn *);
-extern void conn_close(struct iscsi_conn *);
+extern int conn_close(struct iscsi_conn *conn);
 
 /* nthread.c */
-extern int nthread_init(struct iscsi_target *);
-extern int nthread_start(struct iscsi_target *);
-extern int nthread_stop(struct iscsi_target *);
-extern void nthread_wakeup(struct iscsi_target *);
-
-/* config.c */
-extern int iet_msg_recv(struct tgt_target *, uint32_t, void *);
-extern int event_send(struct tgt_target *tgt, uint64_t sid,
-		      uint32_t cid, uint32_t state);
-
-/* session.c */
-extern struct iscsi_session *session_lookup(struct iscsi_target *, uint64_t);
-extern int session_add(struct iscsi_target *, struct session_info *);
-extern int session_del(struct iscsi_target *, uint64_t);
-
-/* params.c */
-extern int iscsi_param_set(struct iscsi_target *, struct iscsi_param_info *, int);
+extern int nthread_init(struct iscsi_session *);
+extern int nthread_start(struct iscsi_session *);
+extern int nthread_stop(struct iscsi_session *);
+extern void nthread_wakeup(struct iscsi_session *);
 
 #define get_pgcnt(size, offset)	((((size) + ((offset) & ~PAGE_CACHE_MASK)) + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT)
 
