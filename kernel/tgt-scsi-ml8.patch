@@ -576,7 +576,7 @@ index 6a2ccf7..580fb42 100644
  #define MAX_LINKS 32		
  
 diff --git a/include/scsi/scsi_cmnd.h b/include/scsi/scsi_cmnd.h
-index 7529f43..452d652 100644
+index 7529f43..ce97272 100644
 --- a/include/scsi/scsi_cmnd.h
 +++ b/include/scsi/scsi_cmnd.h
 @@ -5,9 +5,11 @@
@@ -599,7 +599,16 @@ index 7529f43..452d652 100644
  	struct scsi_device *device;
  	struct scsi_request *sc_request;
  
-@@ -131,6 +134,14 @@ struct scsi_cmnd {
+@@ -84,6 +87,8 @@ struct scsi_cmnd {
+ 	unsigned short sglist_len;	/* size of malloc'd scatter-gather list */
+ 	unsigned bufflen;	/* Size of data buffer */
+ 	void *buffer;		/* Data buffer */
++	/* offset in cmd we are at (for multi-transfer tgt cmds) */
++	unsigned offset;
+ 
+ 	unsigned underflow;	/* Return error if less than
+ 				   this amount is transferred */
+@@ -131,6 +136,14 @@ struct scsi_cmnd {
  
  	unsigned char tag;	/* SCSI-II queued command tag */
  	unsigned long pid;	/* Process ID, starts at 0. Unique per host. */
@@ -614,7 +623,7 @@ index 7529f43..452d652 100644
  };
  
  /*
-@@ -147,9 +158,14 @@ struct scsi_cmnd {
+@@ -147,9 +160,14 @@ struct scsi_cmnd {
  #define SCSI_STATE_MLQUEUE         0x100b
  
  
@@ -642,7 +651,7 @@ index e94ca4d..1b09f4f 100644
  extern int scsi_is_sdev_device(const struct device *);
  extern int scsi_is_target_device(const struct device *);
 diff --git a/include/scsi/scsi_host.h b/include/scsi/scsi_host.h
-index 467274a..fbab68c 100644
+index 467274a..6b06850 100644
 --- a/include/scsi/scsi_host.h
 +++ b/include/scsi/scsi_host.h
 @@ -7,6 +7,7 @@
@@ -653,7 +662,7 @@ index 467274a..fbab68c 100644
  struct block_device;
  struct completion;
  struct module;
-@@ -123,6 +124,21 @@ struct scsi_host_template {
+@@ -123,6 +124,36 @@ struct scsi_host_template {
  			     void (*done)(struct scsi_cmnd *));
  
  	/*
@@ -663,11 +672,26 @@ index 467274a..fbab68c 100644
 +	 *
 +	 * return values: see queuecommand
 +	 *
++	 * If the LLD accepts the cmd, it should set the result to an
++	 * appropriate value when completed before calling the done function.
++	 *
 +	 * STATUS: REQUIRED FOR TARGET DRIVERS
 +	 */
 +	/* TODO: rename */
 +	int (* transfer_response)(struct scsi_cmnd *,
 +				  void (*done)(struct scsi_cmnd *));
++	/*
++	 * This is called to inform the LLD to transfer cmd->request_bufflen
++	 * bytes of the cmd at cmd->offset in the cmd. The cmd->use_sg
++	 * speciefies the number of scatterlist entried in the command
++	 * and cmd->request_buffer contains the scatterlist.
++	 *
++	 * If the command cannot be processed in one transfer_data call
++	 * becuase a scatterlist within the LLD's limits cannot be
++	 * created then transfer_data will be called multiple times.
++	 * It is initially called from process context, and later
++	 * calls are from the interrup context.
++	 */
 +	int (* transfer_data)(struct scsi_cmnd *,
 +			      void (*done)(struct scsi_cmnd *));
 +
@@ -675,7 +699,7 @@ index 467274a..fbab68c 100644
  	 * This is an error handling strategy routine.  You don't need to
  	 * define one of these if you don't want to - there is a default
  	 * routine that is present that should work in most cases.  For those
-@@ -573,6 +589,12 @@ struct Scsi_Host {
+@@ -573,6 +604,12 @@ struct Scsi_Host {
  	 */
  	unsigned int max_host_blocked;
  
@@ -688,7 +712,7 @@ index 467274a..fbab68c 100644
  	/* legacy crap */
  	unsigned long base;
  	unsigned long io_port;
-@@ -675,6 +697,9 @@ extern void scsi_unblock_requests(struct
+@@ -675,6 +712,9 @@ extern void scsi_unblock_requests(struct
  extern void scsi_block_requests(struct Scsi_Host *);
  
  struct class_container;
@@ -698,3 +722,96 @@ index 467274a..fbab68c 100644
  /*
   * These two functions are used to allocate and free a pseudo device
   * which will connect to the host adapter itself rather than any
+diff --git a/include/scsi/scsi_tgt.h b/include/scsi/scsi_tgt.h
+new file mode 100644
+index 0000000..c1dc0d2
+--- /dev/null
++++ b/include/scsi/scsi_tgt.h
+@@ -0,0 +1,10 @@
++/*
++ * SCSI target definitions
++ */
++
++struct Scsi_Host;
++struct scsi_cmnd;
++struct scsi_lun;
++
++extern int scsi_tgt_alloc_queue(struct Scsi_Host *);
++extern void scsi_tgt_queue_command(struct scsi_cmnd *, struct scsi_lun *, int);
+diff --git a/include/scsi/scsi_tgt_if.h b/include/scsi/scsi_tgt_if.h
+new file mode 100644
+index 0000000..f7961d6
+--- /dev/null
++++ b/include/scsi/scsi_tgt_if.h
+@@ -0,0 +1,71 @@
++/*
++ * SCSI target netlink interface
++ *
++ * (C) 2005 FUJITA Tomonori <tomof@acm.org>
++ * (C) 2005 Mike Christie <michaelc@cs.wisc.edu>
++ * This code is licenced under the GPL.
++ */
++
++#ifndef SCSI_TARGET_FRAMEWORK_IF_H
++#define SCSI_TARGET_FRAMEWORK_IF_H
++
++enum tgt_event_type {
++	/* user -> kernel */
++	TGT_UEVENT_START,
++	TGT_UEVENT_TARGET_SETUP,
++	TGT_UEVENT_CMD_RES,
++	TGT_UEVENT_TARGET_BIND,
++
++	/* kernel -> user */
++	TGT_KEVENT_RESPONSE,
++	TGT_KEVENT_CMD_REQ,
++	TGT_KEVENT_CMD_DONE,
++};
++
++struct tgt_event {
++	/* user-> kernel */
++	union {
++		struct {
++			int host_no;
++			int pid;
++		} target_bind;
++		struct {
++			int host_no;
++			uint32_t cid;
++			uint32_t len;
++			int result;
++			uint64_t uaddr;
++			uint64_t offset;
++			uint8_t rw;
++			uint8_t try_map;
++		} cmd_res;
++	} u;
++
++	/* kernel -> user */
++	union {
++		struct {
++			int err;
++		} event_res;
++		struct {
++			int host_no;
++			uint32_t cid;
++			uint32_t data_len;
++			uint64_t dev_id;
++		} cmd_req;
++		struct {
++			int host_no;
++			uint32_t cid;
++			int result;
++		} cmd_done;
++	} k;
++
++	/*
++	 * I think a pointer is a unsigned long but this struct
++	 * gets passed around from the kernel to userspace and
++	 * back again so to handle some ppc64 setups where userspace is
++	 * 32 bits but the kernel is 64 we do this odd thing
++	 */
++	uint64_t data[0];
++} __attribute__ ((aligned (sizeof(uint64_t))));
++
++#endif
