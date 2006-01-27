@@ -269,6 +269,7 @@ static int scsi_map_user_pages(struct scsi_cmnd *cmd, int rw)
 			bio_list_add(&cmd->xfer_list, bio);
 	}
 
+	cmd->offset = 0;
 	err = scsi_tgt_init_cmd(cmd, GFP_KERNEL);
 	if (err)
 		goto unmap_bios;
@@ -307,6 +308,7 @@ send_uspace_err:
 
 	cmd->bufflen -= cmd->request_bufflen;
 	cmd->buffer += cmd->request_bufflen;
+	cmd->offset += cmd->request_bufflen;
 
 	if (!cmd->bufflen) {
 		scsi_tgt_transfer_response(cmd);
