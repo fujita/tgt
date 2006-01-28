@@ -11,8 +11,8 @@
 #include <net/tcp.h>
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_host.h>
+#include <scsi/scsi_tgt_if.h>
 
-#include "scsi_tgt_if.h" /* this needs to be changed when sending to linux-scsi */
 #include "scsi_tgt_priv.h"
 
 /* default task when host is not setup in userspace yet */
@@ -32,7 +32,7 @@ static int scsi_tgt_get_pid(struct Scsi_Host *shost)
 	}
 }
 
-int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, u64 lun, gfp_t gfp_mask)
+int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, gfp_t gfp_mask)
 {
 	struct sk_buff *skb;
 	struct nlmsghdr *nlh;
@@ -58,7 +58,6 @@ int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, u64 lun, gfp_t gfp_mask)
 
 	pdu = (char *) ev->data;
 	ev->k.cmd_req.host_no = cmd->shost->host_no;
-	ev->k.cmd_req.dev_id = lun;
 	ev->k.cmd_req.cid = cmd->request->tag;
 	ev->k.cmd_req.data_len = cmd->request_bufflen;
 	memcpy(ev->data, cmd->cmnd, MAX_COMMAND_SIZE);

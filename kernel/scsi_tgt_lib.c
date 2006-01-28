@@ -49,9 +49,7 @@ static void scsi_uspace_request_fn(struct request_queue *q)
 			break;
 
 		spin_unlock_irq(q->queue_lock);
-		/* rm scsilun_to_int and pass raw data up */
-		if (scsi_tgt_uspace_send(cmd, scsilun_to_int(rq->end_io_data),
-					GFP_ATOMIC) < 0)
+		if (scsi_tgt_uspace_send(cmd, GFP_ATOMIC) < 0)
 			goto requeue;
 		spin_lock_irq(q->queue_lock);
 	}

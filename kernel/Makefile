@@ -2,7 +2,7 @@
 # Makefile for the Linux kernel device drivers.
 #
 
-EXTRA_CFLAGS += -I$(obj) -I$(obj)/../include -DNETLINK_TGT=17 -DNETLINK_TGT_CMD=21
+EXTRA_CFLAGS += -I$(obj) -I$(obj)/../include -DNETLINK_TGT=17
 
 ifneq ($(KERNELRELEASE),)
 obj-m			+= scsi_tgt_core.o
