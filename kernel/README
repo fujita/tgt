@@ -1,1 +1,2 @@
-You must apply tgt-scsi-ml8.patch to your kernel
+You must apply tgt-scsi-ml8.patch to your kernel. The patch
+was built against the current scsi-misc-2.6 git tree.
