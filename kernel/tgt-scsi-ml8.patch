@@ -392,27 +392,6 @@ index 3574ba9..ab66ca4 100644
  
  void scsi_free_queue(struct request_queue *q)
  {
-diff --git a/drivers/scsi/scsi_scan.c b/drivers/scsi/scsi_scan.c
-index 752fb5d..0fdd11a 100644
---- a/drivers/scsi/scsi_scan.c
-+++ b/drivers/scsi/scsi_scan.c
-@@ -1013,7 +1013,7 @@ static void scsi_sequential_lun_scan(str
-  *     Given a struct scsi_lun of: 0a 04 0b 03 00 00 00 00, this function returns
-  *     the integer: 0x0b030a04
-  **/
--static int scsilun_to_int(struct scsi_lun *scsilun)
-+int scsilun_to_int(struct scsi_lun *scsilun)
- {
- 	int i;
- 	unsigned int lun;
-@@ -1024,6 +1024,7 @@ static int scsilun_to_int(struct scsi_lu
- 			      scsilun->scsi_lun[i + 1]) << (i * 8));
- 	return lun;
- }
-+EXPORT_SYMBOL(scsilun_to_int);
- 
- /**
-  * int_to_scsilun: reverts an int into a scsi_lun
 diff --git a/fs/bio.c b/fs/bio.c
 index 7b30695..aba3ce9 100644
 --- a/fs/bio.c
@@ -575,6 +554,20 @@ index 6a2ccf7..580fb42 100644
  
  #define MAX_LINKS 32		
  
+diff --git a/include/linux/raid/md_k.h b/include/linux/raid/md_k.h
+index 617b950..2323360 100644
+--- a/include/linux/raid/md_k.h
++++ b/include/linux/raid/md_k.h
+@@ -15,8 +15,7 @@
+ #ifndef _MD_K_H
+ #define _MD_K_H
+ 
+-/* and dm-bio-list.h is not under include/linux because.... ??? */
+-#include "../../../drivers/md/dm-bio-list.h"
++#include <linux/bio-list.h>
+ 
+ #define	LEVEL_MULTIPATH		(-4)
+ #define	LEVEL_LINEAR		(-1)
 diff --git a/include/scsi/scsi_cmnd.h b/include/scsi/scsi_cmnd.h
 index 7529f43..ce97272 100644
 --- a/include/scsi/scsi_cmnd.h
@@ -638,18 +631,6 @@ index 7529f43..ce97272 100644
 +extern void scsi_free_sgtable(struct scatterlist *, int);
  
  #endif /* _SCSI_SCSI_CMND_H */
-diff --git a/include/scsi/scsi_device.h b/include/scsi/scsi_device.h
-index e94ca4d..1b09f4f 100644
---- a/include/scsi/scsi_device.h
-+++ b/include/scsi/scsi_device.h
-@@ -264,6 +264,7 @@ extern void scsi_target_block(struct dev
- extern void scsi_target_unblock(struct device *);
- extern void scsi_remove_target(struct device *);
- extern void int_to_scsilun(unsigned int, struct scsi_lun *);
-+extern int scsilun_to_int(struct scsi_lun *);
- extern const char *scsi_device_state_name(enum scsi_device_state);
- extern int scsi_is_sdev_device(const struct device *);
- extern int scsi_is_target_device(const struct device *);
 diff --git a/include/scsi/scsi_host.h b/include/scsi/scsi_host.h
 index 467274a..6b06850 100644
 --- a/include/scsi/scsi_host.h
