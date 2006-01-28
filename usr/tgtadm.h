@@ -30,17 +30,18 @@ struct tgtadm_req {
 	uint64_t sid;
 	int cid;
 	uint64_t lun;
+	int pid;
+
+	unsigned long addr;
 };
 
 struct tgtadm_res {
 	int err;
+	unsigned long addr;
 };
 
-extern int tgt_mgmt(char *sbuf, char *rbuf);
 extern int ktarget_destroy(int tid);
 extern int ktarget_create(int typeid);
-extern int kdevice_destroy(int tid, uint64_t devid);
-extern int kdevice_create(int tid, uint64_t devid, char *path, char *devtype);
-extern void kdevice_create_parser(char *args, char **path, char **devtype);
+extern int tgt_mgmt(char *sbuf, char *rbuf);
 
 #endif

@@ -8,9 +8,11 @@
 
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
@@ -21,6 +23,10 @@
 #include "tgtd.h"
 #include "tgtadm.h"
 #include "dl.h"
+
+struct tgt_task {
+	int fd;
+};
 
 static int ipc_accept(int afd)
 {
@@ -50,15 +56,61 @@ out:
 	return err;
 }
 
-void ipc_event_handle(int accept_fd)
+void pipe_event_handle(int fd)
 {
-	int fd, err;
+	struct nlmsghdr *nlh;
+	struct iovec iov;
+	struct msghdr msg;
+	char buf[1024];
+	struct tgtadm_res *res;
+	struct tgt_task *task;
+	int err;
+
+	nlh = (struct nlmsghdr *) buf;
+	iov.iov_base = nlh;
+	iov.iov_len = NLMSG_ALIGN(sizeof(struct nlmsghdr));
+	memset(&msg, 0, sizeof(msg));
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+
+	err = recvmsg(fd, &msg, MSG_PEEK);
+	if (err != NLMSG_ALIGN(sizeof(struct nlmsghdr)))
+		return;
+
+	iov.iov_base = nlh;
+	iov.iov_len = NLMSG_ALIGN(nlh->nlmsg_len);
+	memset(&msg, 0, sizeof(msg));
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+
+	err = recvmsg(fd, &msg, MSG_DONTWAIT);
+	if (err < 0)
+		return;
+
+	res = NLMSG_DATA(nlh);
+	dprintf("%d %d %lx\n", err, nlh->nlmsg_len, res->addr);
+
+	task = (struct tgt_task *) res->addr;
+	if (!task)
+		return;
+
+	dprintf("%d\n", task->fd);
+
+	err = write(task->fd, nlh, nlh->nlmsg_len);
+	close(task->fd);
+	free(task);
+}
+
+void ipc_event_handle(struct driver_info *dinfo, int accept_fd)
+{
+	int fd, err, done = 0;
 	char sbuf[4096], rbuf[4096];
 	struct nlmsghdr *nlh;
 	struct iovec iov;
 	struct msghdr msg;
 	struct tgtadm_res *res;
 	struct tgtadm_req *req;
+	struct tgt_task *task;
 	int (*fn) (char *, char *);
 
 	fd = ipc_accept(accept_fd);
@@ -97,15 +149,36 @@ void ipc_event_handle(int accept_fd)
 	if (err < 0)
 		goto fail;
 
+	task = calloc(1, sizeof(*task));
+	if (!task) {
+		err = -ENOMEM;
+		goto fail;
+	}
+	task->fd = fd;
+
 	req = NLMSG_DATA(nlh);
+	dprintf("%d %d %d %d %d\n", req->mode, req->typeid, err, nlh->nlmsg_len, fd);
 
-	dprintf("%d %d %d\n", req->typeid, err, nlh->nlmsg_len);
+	switch (req->mode) {
+	case MODE_DEVICE:
+		dprintf("%d %d %d %d %lx\n",
+			req->tid, req->typeid, err, nlh->nlmsg_len,
+			(unsigned long) task);
+		req->addr = (unsigned long) task;
+		write(poll_array[POLLS_PER_DRV + req->tid].fd,
+		      sbuf, NLMSG_ALIGN(nlh->nlmsg_len));
+		break;
+	default:
+		fn = dl_ipc_fn(dinfo, req->typeid);
+		if (fn)
+			err = fn((char *) nlh, rbuf);
+		else
+			err = tgt_mgmt((char *) nlh, rbuf);
+		done = 1;
+	}
 
-	fn = dl_ipc_fn(req->typeid);
-	if (fn)
-		err = fn((char *) nlh, rbuf);
-	else
-		err = tgt_mgmt((char *) nlh, rbuf);
+	if (!done)
+		return;
 
 send:
 	err = write(fd, nlh, nlh->nlmsg_len);

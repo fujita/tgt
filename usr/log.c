@@ -45,7 +45,7 @@ static int logarea_init (int size)
 		return 1;
 
 	if (size < MAX_MSG_SIZE)
-		size = DEFAULT_AREA_SIZE;
+		size = LOG_SPACE_SIZE;
 
 	if ((shmid = shmget(IPC_PRIVATE, size,
 			    0644 | IPC_CREAT | IPC_EXCL)) == -1) {
@@ -304,13 +304,15 @@ int log_init(char *program_name, int size, int daemon, int debug)
 		openlog(log_name, 0, LOG_DAEMON);
 		setlogmask (LOG_UPTO (LOG_DEBUG));
 
-		if (logarea_init(size))
+		if (logarea_init(size)) {
+			syslog(LOG_ERR, "failed to initialize the logger\n");
 			return 1;
+		}
 
 		pid = fork();
 		if (pid < 0) {
-			syslog(LOG_ERR, "starting logger failed\n");
-			exit(1);
+			syslog(LOG_ERR, "fail to fork the logger\n");
+			return 1;
 		} else if (pid) {
 			syslog(LOG_WARNING,
 			       "Target daemon logger with pid=%d started!\n", pid);

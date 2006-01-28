@@ -31,7 +31,6 @@
 #include <linux/netlink.h>
 
 #include "tgtd.h"
-#include "tgt_if.h"
 #include "tgt_scsi_if.h"
 #include "tgt_sysfs.h"
 
@@ -544,6 +543,7 @@ static int mmap_device(int tid, uint64_t lun, uint8_t *scb,
 	void *p;
 	uint64_t off;
 	*len = 0;
+	int err = SAM_STAT_GOOD;
 
 	switch (scb[0]) {
 	case READ_6:
@@ -566,14 +566,20 @@ static int mmap_device(int tid, uint64_t lun, uint8_t *scb,
 
 	off <<= 9;
 
-	p = mmap(NULL, pgcnt(datalen, off) << PAGE_SHIFT,
-		 PROT_READ | PROT_WRITE, MAP_SHARED, fd, off & PAGE_MASK);
+	if (*uaddr)
+		*uaddr = *uaddr + (off & PAGE_MASK);
+	else {
+		p = mmap(NULL, pgcnt(datalen, off) << PAGE_SHIFT,
+			 PROT_READ | PROT_WRITE, MAP_SHARED, fd, off & PAGE_MASK);
 
-	*uaddr = (unsigned long) p;
+		*uaddr = (unsigned long) p;
+		if (p == MAP_FAILED)
+			err = SAM_STAT_CHECK_CONDITION;
+	}
 	*offset = off;
 	dprintf("%lx %u %" PRIu64 "\n", *uaddr, datalen, off);
 
-	return (p == MAP_FAILED) ? SAM_STAT_CHECK_CONDITION : SAM_STAT_GOOD;
+	return err;
 }
 
 static inline int mmap_cmd_init(uint8_t *scb, uint8_t *rw)
@@ -598,10 +604,10 @@ static inline int mmap_cmd_init(uint8_t *scb, uint8_t *rw)
 	return result;
 }
 
-#define	TGT_INVALID_DEV_ID	~0ULL
-
-static uint64_t translate_lun(uint8_t *p, int size)
+uint64_t get_devid(uint8_t *pdu)
 {
+	struct tgt_scsi_cmd *scmd = (struct tgt_scsi_cmd *) pdu;
+	uint8_t *p = scmd->lun;
 	uint64_t lun = TGT_INVALID_DEV_ID;
 
 	switch (*p >> 6) {
@@ -622,14 +628,12 @@ static uint64_t translate_lun(uint8_t *p, int size)
 
 int cmd_process(int tid, uint8_t *pdu, int *len,
 		uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
-		uint8_t *try_map, uint64_t *offset)
+		uint8_t *try_map, uint64_t *offset, uint64_t lun)
 {
 	int fd, result = SAM_STAT_GOOD;
 	struct tgt_scsi_cmd *scmd = (struct tgt_scsi_cmd *) pdu;
 	uint8_t *data = NULL, *scb = scmd->scb;
-	uint64_t lun;
 
-	lun = translate_lun(scmd->lun, sizeof(scmd->lun));
 	dprintf("%d %" PRIu64 " %x %u\n", tid, lun, scb[0], datalen);
 
 	*offset = 0;
@@ -686,7 +690,10 @@ int cmd_process(int tid, uint8_t *pdu, int *len,
 	case WRITE_10:
 	case WRITE_16:
 	case WRITE_VERIFY:
-		fd = getfd(tid, lun);
+		if (*uaddr)
+			fd = 0;
+		else
+			fd = getfd(tid, lun);
 		if (fd >= 0) {
 			result = mmap_device(tid, lun, scb, len, fd, datalen,
 					     uaddr, offset);
@@ -719,17 +726,16 @@ out:
 	return result;
 }
 
-int cmd_done(struct tgt_event *ev)
+int cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
 {
 	int err = 0;
 
-	if (ev->k.cmd_done.mmapped)
-		err = munmap((void *) ev->k.cmd_done.uaddr, ev->k.cmd_done.len);
-	else
-		free((void *) ev->k.cmd_done.uaddr);
+	dprintf("%d %d %" PRIx64 " %d\n", do_munmap, do_free, uaddr, len);
 
-	dprintf("%d %lx %u %d\n", ev->k.cmd_done.mmapped,
-		ev->k.cmd_done.uaddr, ev->k.cmd_done.len, err);
+	if (do_munmap)
+		err = munmap((void *) (unsigned long) uaddr, len);
+	else if (do_free)
+		free((void *) (unsigned long) uaddr);
 
 	return err;
 }

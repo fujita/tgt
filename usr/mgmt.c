@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <poll.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -72,16 +73,32 @@ int tgt_event_execute(struct tgtadm_req *req, int event, init_tgt_event_t *func)
 
 static void __ktarget_create(struct tgt_event *ev, struct tgtadm_req *req)
 {
-	sprintf(ev->u.c_target.type, "%s", typeid_to_name(req->typeid));
+	sprintf(ev->u.c_target.type, "%s", typeid_to_name(dlinfo, req->typeid));
+	ev->u.c_target.pid = req->pid;
 }
 
 int ktarget_create(int typeid)
 {
 	struct tgtadm_req req;
-	req.typeid = typeid;
+	int fd, err;
 
-	return tgt_event_execute(&req, TGT_UEVENT_TARGET_CREATE,
-				 __ktarget_create);
+	req.typeid = typeid;
+	req.pid = target_thread_create(&fd);
+	err = tgt_event_execute(&req, TGT_UEVENT_TARGET_CREATE,
+				__ktarget_create);
+	if (err >= 0) {
+		dprintf("%d %d\n", err, fd);
+
+		/* FIXME */
+		if (err > POLLS_PER_DRV)
+			eprintf("too large tid %d\n", err);
+		else {
+			poll_array[POLLS_PER_DRV + err].fd = fd;
+			poll_array[POLLS_PER_DRV + err].events = POLLIN;
+		}
+	}
+
+	return err;
 }
 
 static void __ktarget_destroy(struct tgt_event *ev, struct tgtadm_req *req)
@@ -98,7 +115,7 @@ int ktarget_destroy(int tid)
 				 __ktarget_destroy);
 }
 
-void kdevice_create_parser(char *args, char **path, char **devtype)
+static void kdevice_create_parser(char *args, char **path, char **devtype)
 {
 	char *p, *q;
 
@@ -122,11 +139,11 @@ void kdevice_create_parser(char *args, char **path, char **devtype)
 	}
 }
 
-int kdevice_create(int tid, uint64_t devid, char *path, char *devtype)
+static int kdevice_create(int tid, uint64_t devid, char *path)
 {
 	int fd, err;
 
-	dprintf("%d %" PRIu64 " %s %s\n", tid, devid, path, devtype);
+	dprintf("%d %" PRIu64 " %s\n", tid, devid, path);
 
 	fd = open(path, O_RDWR | O_LARGEFILE);
 	if (fd < 0) {
@@ -141,7 +158,7 @@ int kdevice_create(int tid, uint64_t devid, char *path, char *devtype)
 	return err;
 }
 
-int kdevice_destroy(int tid, uint64_t devid)
+static int kdevice_destroy(int tid, uint64_t devid)
 {
 	int fd, err;
 	char path[PATH_MAX], buf[PATH_MAX];
@@ -199,10 +216,10 @@ static int device_mgmt(struct tgtadm_req *req, char *params, char *rbuf, int *rl
 	case OP_NEW:
 		path = devtype = NULL;
 		kdevice_create_parser(params, &path, &devtype);
-		if (!path || !devtype)
-			eprintf("Invalid path or device type\n");
+		if (!path)
+			eprintf("Invalid path\n");
 		else
-			err = kdevice_create(req->tid, req->lun, path,devtype);
+			err = kdevice_create(req->tid, req->lun, path);
 		break;
 	case OP_DELETE:
 		err = kdevice_destroy(req->tid, req->lun);
@@ -212,83 +229,6 @@ static int device_mgmt(struct tgtadm_req *req, char *params, char *rbuf, int *rl
 	}
 
 	return err;
-}
-
-static int filter(const struct dirent *dir)
-{
-	return strcmp(dir->d_name, ".") && strcmp(dir->d_name, "..");
-}
-
-static void all_devices_destroy(int tid)
-{
-	struct dirent **namelist;
-	char *p;
-	int i, nr;
-	uint64_t devid;
-
-	nr = scandir(TGT_DEVICE_SYSFSDIR, &namelist, filter, alphasort);
-	if (!nr)
-		return;
-
-	for (i = 0; i < nr; i++) {
-
-		for (p = namelist[i]->d_name; !isdigit((int) *p); p++)
-			;
-		if (tid != atoi(p))
-			continue;
-		p = strchr(p, ':');
-		if (!p)
-			continue;
-		devid = strtoull(++p, NULL, 10);
-		kdevice_destroy(tid, devid);
-	}
-
-	for (i = 0; i < nr; i++)
-		free(namelist[i]);
-	free(namelist);
-}
-
-static int system_mgmt(struct tgtadm_req *req, char *params, char *rbuf, int *rlen)
-{
-	int err = -EINVAL, i, nr, fd;
-	struct dirent **namelist;
-	char path[PATH_MAX], buf[PATH_MAX], *p;
-
-	if (req->op != OP_DELETE)
-		return err;
-
-	nr = scandir(TGT_TARGET_SYSFSDIR, &namelist, filter, alphasort);
-	if (!nr)
-		return -ENOENT;
-
-	for (i = 0; i < nr; i++) {
-		snprintf(path, sizeof(path), TGT_TARGET_SYSFSDIR "/%s/typeid",
-			 namelist[i]->d_name);
-
-		fd = open(path, O_RDONLY);
-		if (fd < 0)
-			continue;
-		err = read(fd, buf, sizeof(buf));
-		close(fd);
-		if (err < 0)
-			continue;
-
-		if (req->typeid == atoi(buf)) {
-			int tid;
-
-			for (p = namelist[i]->d_name; !isdigit((int) *p); p++)
-				;
-			tid = atoi(p);
-			all_devices_destroy(tid);
-			ktarget_destroy(tid);
-		}
-	}
-
-	for (i = 0; i < nr; i++)
-		free(namelist[i]);
-	free(namelist);
-
-	return 0;
 }
 
 int tgt_mgmt(char *sbuf, char *rbuf)
@@ -302,13 +242,11 @@ int tgt_mgmt(char *sbuf, char *rbuf)
 	req = NLMSG_DATA(nlh);
 	params = (char *) req + sizeof(*req);
 
-	eprintf("%d %d %d %d %d %" PRIx64 " %" PRIx64 " %s\n", nlh->nlmsg_len,
-		req->typeid, req->mode, req->op, req->tid, req->sid, req->lun, params);
+	eprintf("%d %d %d %d %d %" PRIx64 " %" PRIx64 " %s %d\n", nlh->nlmsg_len,
+		req->typeid, req->mode, req->op, req->tid, req->sid, req->lun,
+		params, getpid());
 
 	switch (req->mode) {
-	case MODE_SYSTEM:
-		err = system_mgmt(req, params, rbuf, &rlen);
-		break;
 	case MODE_TARGET:
 		err = target_mgmt(req, params, rbuf, &rlen);
 		break;
@@ -320,7 +258,7 @@ int tgt_mgmt(char *sbuf, char *rbuf)
 	}
 
 	nlh = (struct nlmsghdr *) rbuf;
-	nlh->nlmsg_len = NLMSG_LENGTH(rlen);
+	nlh->nlmsg_len = NLMSG_LENGTH(sizeof(*res) + rlen);
 	res = NLMSG_DATA(nlh);
 	res->err = err;
 

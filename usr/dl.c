@@ -25,16 +25,9 @@
 #include "dl.h"
 #include "tgt_sysfs.h"
 
-struct driver_info {
-	char *name;
-	char *proto;
-	void *dl;
-	void *pdl;
-};
+struct driver_info dlinfo[MAX_DL_HANDLES];
 
-static struct driver_info dinfo[MAX_DL_HANDLES];
-
-char *typeid_to_name(int typeid)
+char *typeid_to_name(struct driver_info *dinfo, int typeid)
 {
 	return dinfo[typeid].name;
 }
@@ -71,7 +64,7 @@ static int filter(const struct dirent *dir)
 	return strcmp(dir->d_name, ".") && strcmp(dir->d_name, "..");
 }
 
-int dl_init(void)
+int dl_init(struct driver_info *dinfo)
 {
 	int i, nr, idx;
 	char path[PATH_MAX], *p;
@@ -116,38 +109,21 @@ int dl_init(void)
 	return 0;
 }
 
-void dl_config_load(void)
-{
-	void (* fn)(void);
-	int i;
-
-	for (i = 0; i < MAX_DL_HANDLES; i++) {
-		if (!dinfo[i].dl)
-			continue;
-
-		fn = dlsym(dinfo[i].dl, "initial_config_load");
-		if (!fn)
-			eprintf("%s\n", dlerror());
-		else
-			fn();
-	}
-}
-
-void *dl_poll_init_fn(int idx)
+void *dl_poll_init_fn(struct driver_info *dinfo, int idx)
 {
 	if (dinfo[idx].dl)
 		return dlsym(dinfo[idx].dl, "poll_init");
 	return NULL;
 }
 
-void *dl_poll_fn(int idx)
+void *dl_poll_fn(struct driver_info *dinfo, int idx)
 {
 	if (dinfo[idx].dl)
 		return dlsym(dinfo[idx].dl, "poll_event");
 	return NULL;
 }
 
-void *dl_ipc_fn(int typeid)
+void *dl_ipc_fn(struct driver_info *dinfo, int typeid)
 {
 	if (dinfo[typeid].dl)
 		return dlsym(dinfo[typeid].dl, "ipc_mgmt");
@@ -155,7 +131,7 @@ void *dl_ipc_fn(int typeid)
 	return NULL;
 }
 
-void *dl_proto_cmd_process(int tid, int typeid)
+void *dl_proto_cmd_process(struct driver_info *dinfo, int tid, int typeid)
 {
 	if (dinfo[typeid].pdl)
 		return dlsym(dinfo[typeid].pdl, "cmd_process");
@@ -163,7 +139,15 @@ void *dl_proto_cmd_process(int tid, int typeid)
 	return NULL;
 }
 
-void *dl_event_fn(int tid, int typeid)
+void *dl_proto_get_devid(struct driver_info *dinfo, int tid, int typeid)
+{
+	if (dinfo[typeid].pdl)
+		return dlsym(dinfo[typeid].pdl, "get_devid");
+
+	return NULL;
+}
+
+void *dl_event_fn(struct driver_info *dinfo, int tid, int typeid)
 {
 	if (dinfo[typeid].dl)
 		return dlsym(dinfo[typeid].dl, "async_event");
@@ -171,7 +155,7 @@ void *dl_event_fn(int tid, int typeid)
 	return NULL;
 }
 
-void *dl_cmd_done_fn(int typeid)
+void *dl_cmd_done_fn(struct driver_info *dinfo, int typeid)
 {
 	if (dinfo[typeid].pdl)
 		return dlsym(dinfo[typeid].pdl, "cmd_done");

@@ -26,16 +26,12 @@
 #include "tgtd.h"
 #include "dl.h"
 
-#define	NL_BUFSIZE	8192
+#define	NL_BUFSIZE	1024
 
-static struct sockaddr_nl src_addr, dest_addr;
-static char *recvbuf, *sendbuf;
-
-static int __nl_write(int fd, int type, char *data, int len)
+int __nl_write(int fd, int type, char *data, int len)
 {
 	struct nlmsghdr *nlh = (struct nlmsghdr *) data;
-	struct iovec iov;
-	struct msghdr msg;
+	struct sockaddr_nl daddr;
 
 	memset(nlh, 0, sizeof(*nlh));
 	nlh->nlmsg_len = len;
@@ -43,46 +39,36 @@ static int __nl_write(int fd, int type, char *data, int len)
 	nlh->nlmsg_flags = 0;
 	nlh->nlmsg_pid = getpid();
 
-	iov.iov_base = data;
-	iov.iov_len = len;
+	memset(&daddr, 0, sizeof(daddr));
+	daddr.nl_family = AF_NETLINK;
+	daddr.nl_pid = 0;
+	daddr.nl_groups = 0;
 
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_name= (void*) &dest_addr;
-	msg.msg_namelen = sizeof(dest_addr);
-	msg.msg_iov = (void *) &iov;
-	msg.msg_iovlen = 1;
-
-	return sendmsg(fd, &msg, 0);
+	return sendto(fd, data, len, 0, (struct sockaddr *) &daddr,
+		      sizeof(daddr));
 }
 
-static int __nl_read(int fd, void *data, int size, int flags)
+int __nl_read(int fd, void *data, int size, int flags)
 {
-	int rc;
-	struct iovec iov;
-	struct msghdr msg;
+	struct sockaddr_nl saddr;
+	socklen_t slen = sizeof(saddr);
 
-	iov.iov_base = data;
-	iov.iov_len = size;
+	memset(&saddr, 0, sizeof(saddr));
+	saddr.nl_family = AF_NETLINK;
+	saddr.nl_pid = getpid();
+	saddr.nl_groups = 0; /* not in mcast groups */
 
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_name= (void*) &src_addr;
-	msg.msg_namelen = sizeof(src_addr);
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-
-	rc = recvmsg(fd, &msg, flags);
-
-	return rc;
+	return recvfrom(fd, data, size, flags, (struct sockaddr *) &saddr, &slen);
 }
 
-int nl_read(int fd)
+static int nl_read(int fd, char *buf)
 {
 	struct nlmsghdr *nlh;
 	struct tgt_event *ev;
 	int err;
 
 peek_again:
-	err = __nl_read(fd, recvbuf, NLMSG_SPACE(sizeof(*ev)), MSG_PEEK);
+	err = __nl_read(fd, buf, NLMSG_SPACE(sizeof(*ev)), MSG_PEEK);
 	if (err < 0) {
 		eprintf("%d\n", err);
 		if (errno == EAGAIN || errno == EINTR)
@@ -90,13 +76,13 @@ peek_again:
 		return err;
 	}
 
-	nlh = (struct nlmsghdr *) recvbuf;
+	nlh = (struct nlmsghdr *) buf;
 	ev = (struct tgt_event *) NLMSG_DATA(nlh);
 
-	dprintf("nl_event_handle %d %d\n", nlh->nlmsg_type, nlh->nlmsg_len);
+	dprintf("%d %d %d\n", nlh->nlmsg_type, nlh->nlmsg_len, getpid());
 
 read_again:
-	err = __nl_read(fd, recvbuf, nlh->nlmsg_len, 0);
+	err = __nl_read(fd, buf, nlh->nlmsg_len, 0);
 	if (err < 0) {
 		eprintf("%d\n", err);
 		if (errno == EAGAIN || errno == EINTR)
@@ -107,86 +93,32 @@ read_again:
 	return err;
 }
 
-static int cmd_queue(int fd, char *reqbuf, char *resbuf)
-{
-	int result, len = 0;
-	struct tgt_event *ev_req = (struct tgt_event *) reqbuf;
-	struct tgt_event *ev_res = NLMSG_DATA(resbuf);
-	uint64_t offset, cid = ev_req->k.cmd_req.cid;
-	uint8_t *pdu, rw = 0, try_map = 0;
-	unsigned long uaddr;
-	int (*fn) (int, uint8_t *, int *, uint32_t,
-		   unsigned long *, uint8_t *, uint8_t *, uint64_t *);
-
-	memset(resbuf, 0, NL_BUFSIZE);
-	pdu = (uint8_t *) ev_req->data;
-	dprintf("%" PRIu64 " %x\n", cid, pdu[0]);
-
-	fn = dl_proto_cmd_process(ev_req->k.cmd_req.tid,
-				  ev_req->k.cmd_req.typeid);
-
-	if (fn)
-		result = fn(ev_req->k.cmd_req.tid,
-			    pdu,
-			    &len,
-			    ev_req->k.cmd_req.data_len,
-			    &uaddr, &rw, &try_map, &offset);
-	else {
-		result = -EINVAL;
-		eprintf("Cannot process cmd %d %" PRIu64 "\n",
-			ev_req->k.cmd_req.tid, cid);
-	}
-
-	memset(ev_res, 0, (char *) ev_res->data - (char *) ev_res);
-	ev_res->u.cmd_res.tid = ev_req->k.cmd_req.tid;
-	ev_res->u.cmd_res.cid = cid;
-	ev_res->u.cmd_res.len = len;
-	ev_res->u.cmd_res.result = result;
-	ev_res->u.cmd_res.uaddr = uaddr;
-	ev_res->u.cmd_res.rw = rw;
-	ev_res->u.cmd_res.try_map = try_map;
-	ev_res->u.cmd_res.offset = offset;
-
-	log_debug("scsi_cmd_process res %d len %d\n", result, len);
-
-	return __nl_write(fd, TGT_UEVENT_CMD_RES, resbuf,
-			  NLMSG_SPACE(sizeof(*ev_res)));
-}
-
-void nl_event_handle(int fd)
+void nl_event_handle(struct driver_info *dinfo, int fd)
 {
 	struct nlmsghdr *nlh;
 	struct tgt_event *ev;
+	char rbuf[NL_BUFSIZE];
 	int err;
 	void (*fn) (char *);
 
-	err = nl_read(fd);
+	err = nl_read(fd, rbuf);
 	if (err < 0)
 		return;
 
-	nlh = (struct nlmsghdr *) recvbuf;
+	nlh = (struct nlmsghdr *) rbuf;
 	ev = (struct tgt_event *) NLMSG_DATA(nlh);
 
+	dprintf("%d %d\n", getpid(), nlh->nlmsg_type);
+
 	switch (nlh->nlmsg_type) {
-	case TGT_KEVENT_CMD_REQ:
-		cmd_queue(fd, NLMSG_DATA(recvbuf), sendbuf);
-		break;
 	case TGT_KEVENT_TARGET_PASSTHRU:
-		fn = dl_event_fn(ev->k.tgt_passthru.tid,
+		fn = dl_event_fn(dinfo, ev->k.tgt_passthru.tid,
 				 ev->k.tgt_passthru.typeid);
 		if (fn)
-			fn(NLMSG_DATA(recvbuf));
+			fn(NLMSG_DATA(rbuf));
 		else
 			eprintf("Cannot handle async event %d\n",
 				ev->k.tgt_passthru.tid);
-		break;
-	case TGT_KEVENT_CMD_DONE:
-		fn = dl_cmd_done_fn(ev->k.cmd_done.typeid);
-		if (fn)
-			fn(NLMSG_DATA(recvbuf));
-		else
-			eprintf("Cannot handle cmd done %d\n",
-				ev->k.cmd_done.tid);
 		break;
 	default:
 		/* kernel module bug */
@@ -200,15 +132,16 @@ int nl_cmd_call(int fd, int type, char *sbuf, int slen, char *rbuf, int rlen)
 {
 	int err;
 	struct nlmsghdr *nlh;
+	char buf[NL_BUFSIZE];
 
 	err = __nl_write(fd, type, sbuf, slen);
 	if (err < 0)
 		return err;
 
-	err = nl_read(fd);
+	err = nl_read(fd, buf);
 
 	if (rbuf) {
-		nlh = (struct nlmsghdr *) recvbuf;
+		nlh = (struct nlmsghdr *) buf;
 		if (rlen < nlh->nlmsg_len)
 			eprintf("Too small rbuf %d %d\n", rlen, nlh->nlmsg_len);
 		else
@@ -220,18 +153,18 @@ int nl_cmd_call(int fd, int type, char *sbuf, int slen, char *rbuf, int rlen)
 	return err;
 }
 
-static int nl_start(int fd)
+int nl_start(int fd)
 {
 	int err;
 	struct tgt_event *ev;
-	char rbuf[4096];
 	char nlmsg[NLMSG_SPACE(sizeof(struct tgt_event))];
+	char buf[NL_BUFSIZE];
 
 	err = nl_cmd_call(fd, TGT_UEVENT_START, nlmsg,
 			  NLMSG_SPACE(sizeof(struct tgt_event)),
-			  rbuf, sizeof(rbuf));
+			  buf, NL_BUFSIZE);
 
-	ev = (struct tgt_event *) NLMSG_DATA(rbuf);
+	ev = (struct tgt_event *) NLMSG_DATA(buf);
 	if (err < 0 || ev->k.event_res.err < 0) {
 		eprintf("%d %d\n", err, ev->k.event_res.err);
 		return -EINVAL;
@@ -240,38 +173,13 @@ static int nl_start(int fd)
 	return 0;
 }
 
-int nl_open(void)
+int nl_init(void)
 {
-	int fd, err;
-
-	sendbuf = malloc(NL_BUFSIZE * 2);
-	if (!sendbuf)
-		return -ENOMEM;
-	recvbuf = sendbuf + NL_BUFSIZE;
+	int fd;
 
 	fd = socket(PF_NETLINK, SOCK_RAW, NETLINK_TGT);
-	if (fd < 0) {
-		eprintf("%d\n", fd);
-		return fd;
-	}
-
-	memset(&src_addr, 0, sizeof(src_addr));
-	src_addr.nl_family = AF_NETLINK;
-	src_addr.nl_pid = getpid();
-	src_addr.nl_groups = 0; /* not in mcast groups */
-
-	memset(&dest_addr, 0, sizeof(dest_addr));
-	dest_addr.nl_family = AF_NETLINK;
-	dest_addr.nl_pid = 0; /* kernel */
-	dest_addr.nl_groups = 0; /* unicast */
-
-	err = nl_start(fd);
-	if (err < 0)
-		goto out;
+	if (fd < 0)
+		eprintf("Fail to create the netlink socket %d\n", errno);
 
 	return fd;
-
-out:
-	close(fd);
-	return err;
 }

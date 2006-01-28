@@ -41,6 +41,7 @@ do {									\
 #define dprintf eprintf
 
 static char program_name[] = "tgtadm";
+static char *driver;
 
 static struct option const long_options[] =
 {
@@ -113,6 +114,85 @@ static int filter(const struct dirent *dir)
 	return strcmp(dir->d_name, ".") && strcmp(dir->d_name, "..");
 }
 
+static void all_devices_destroy(int tid)
+{
+	struct dirent **namelist;
+	char *p, cmd[1024];
+	int i, nr, err;
+	uint64_t devid;
+
+	nr = scandir(TGT_DEVICE_SYSFSDIR, &namelist, filter, alphasort);
+	if (!nr)
+		return;
+
+	for (i = 0; i < nr; i++) {
+
+		for (p = namelist[i]->d_name; !isdigit((int) *p); p++)
+			;
+		if (tid != atoi(p))
+			continue;
+		p = strchr(p, ':');
+		if (!p)
+			continue;
+		devid = strtoull(++p, NULL, 10);
+		snprintf(cmd, sizeof(cmd),
+			 "./usr/tgtadm --driver %s --op delete --tid %d --lun %" PRIu64,
+			 driver, tid, devid);
+		err = system(cmd);
+	}
+
+	for (i = 0; i < nr; i++)
+		free(namelist[i]);
+	free(namelist);
+}
+
+static int system_mgmt(struct tgtadm_req *req)
+{
+	int err = -EINVAL, i, nr, fd;
+	struct dirent **namelist;
+	char path[PATH_MAX], buf[PATH_MAX], cmd[PATH_MAX], *p;
+
+	if (req->op != OP_DELETE)
+		return err;
+
+	nr = scandir(TGT_TARGET_SYSFSDIR, &namelist, filter, alphasort);
+	if (!nr)
+		return -ENOENT;
+
+	for (i = 0; i < nr; i++) {
+		snprintf(path, sizeof(path), TGT_TARGET_SYSFSDIR "/%s/typeid",
+			 namelist[i]->d_name);
+
+		fd = open(path, O_RDONLY);
+		if (fd < 0)
+			continue;
+		err = read(fd, buf, sizeof(buf));
+		close(fd);
+		if (err < 0)
+			continue;
+
+		if (req->typeid == atoi(buf)) {
+			int tid;
+
+			for (p = namelist[i]->d_name; !isdigit((int) *p); p++)
+				;
+			tid = atoi(p);
+			all_devices_destroy(tid);
+
+			snprintf(cmd, sizeof(cmd),
+				 "./usr/tgtadm --driver %s --op delete --tid %d",
+				 driver, tid);
+			err = system(cmd);
+		}
+	}
+
+	for (i = 0; i < nr; i++)
+		free(namelist[i]);
+	free(namelist);
+
+	return 0;
+}
+
 static int driver_to_typeid(char *name)
 {
 	int i, nr, err, fd, id = -ENOENT;
@@ -177,6 +257,8 @@ static int driver_dl_init(int argc, char **argv)
 		eprintf("Invalid driver name %s\n", name);
 		goto out;
 	}
+
+	driver = name;
 
 	return id;
 out:
@@ -388,8 +470,12 @@ int main(int argc, char **argv)
 		len += strlen(params);
 	}
 
-	err = ipc_mgmt_call(sbuf, len, rbuf);
-	ipc_mgmt_result(rbuf);
+	if (req->mode == MODE_SYSTEM)
+		err = system_mgmt(req);
+	else {
+		err = ipc_mgmt_call(sbuf, len, rbuf);
+		ipc_mgmt_result(rbuf);
+	}
 out:
 	return err;
 }

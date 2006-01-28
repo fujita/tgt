@@ -35,7 +35,7 @@ union semun {
 	struct seminfo *__buf;
 };
 
-#define DEFAULT_AREA_SIZE 16384
+#define LOG_SPACE_SIZE 16384
 #define MAX_MSG_SIZE 256
 
 extern int log_daemon;
