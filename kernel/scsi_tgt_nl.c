@@ -11,8 +11,8 @@
 #include <net/tcp.h>
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_host.h>
-#include <scsi/scsi_tgt_if.h>
 
+#include "scsi_tgt_if.h" /* this needs to be changed when sending to linux-scsi */
 #include "scsi_tgt_priv.h"
 
 /* default task when host is not setup in userspace yet */
