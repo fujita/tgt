@@ -146,11 +146,16 @@ static void scsi_unmap_user_pages(struct scsi_cmnd *cmd)
 {
 	struct bio *bio;
 
-	while ((bio = bio_list_pop(&cmd->xfer_done_list)))
+	/* must call bio_endio in case bio was bounced */
+	while ((bio = bio_list_pop(&cmd->xfer_done_list))) {
+		bio_endio(bio, bio->bi_size, 0);
 		bio_unmap_user(bio);
+	}
 
-	while ((bio = bio_list_pop(&cmd->xfer_list)))
+	while ((bio = bio_list_pop(&cmd->xfer_list))) {
+		bio_endio(bio, bio->bi_size, 0);
 		bio_unmap_user(bio);
+	}
 }
 
 static void scsi_tgt_cmd_destroy(void *data)
@@ -260,7 +265,11 @@ static int scsi_map_user_pages(struct scsi_cmnd *cmd, int rw)
 
 		/*
 		 * The first bio is added and merged. We could probably
-		 * try to add others but for now we keep it simple.
+		 * try to add others using scsi_merge_bio() but for now
+		 * we keep it simple. The first bio should be pretty large
+		 * (either hitting the 1 MB bio pages limit or a queue limit)
+		 * already but for really large IO we may want to try and
+		 * merge these.
 		 */
 		if (!rq->bio)
 			blk_rq_bio_prep(q, rq, bio);
