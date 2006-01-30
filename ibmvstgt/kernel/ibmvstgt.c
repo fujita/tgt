@@ -4,24 +4,36 @@
  *			   Santiago Leon (santil@us.ibm.com) IBM Corp.
  *			   Linda Xie (lxie@us.ibm.com) IBM Corp.
  *
- * Rewritten for Linux target framework by FUJITA Tomonori <tomof@acm.org>
+ * Copyright (C) 2005 - 2006 FUJITA Tomonori <tomof@acm.org>
  *
- * This code is licenced under the GPL2.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+ * USA
  */
 
+#include <linux/interrupt.h>
 #include <linux/module.h>
-#include <scsi/scsi.h>
-#include <scsi/scsi_tcq.h>
 #include <linux/mempool.h>
+#include <scsi/scsi.h>
+#include <scsi/scsi_host.h>
+#include <scsi/scsi_tcq.h>
+#include <scsi/scsi_tgt.h>
 
 #include <asm/hvcall.h>
-#include <asm/vio.h>
 #include <asm/iommu.h>
 #include <asm/prom.h>
-
-#include <tgt.h>
-#include <tgt_target.h>
-#include <tgt_scsi.h>
+#include <asm/vio.h>
 
 #include "viosrp.h"
 
@@ -54,6 +66,13 @@ MODULE_DESCRIPTION("IBM Virtual SCSI Target");
 MODULE_AUTHOR("Dave Boutcher");
 MODULE_LICENSE("GPL");
 
+/* tmp - will replace with SCSI logging stuff */
+#define dprintk(fmt, args...)					\
+do {								\
+	printk("%s(%d) " fmt, __FUNCTION__, __LINE__, ##args);	\
+} while (0)
+
+#define eprintk dprintk
 
 /*
  * an RPA command/response transport queue.  This is our structure
@@ -83,9 +102,7 @@ struct server_adapter {
 	unsigned long riobn;
 
 	int max_sectors;
-
-	struct tgt_target *tt;
-	struct tgt_session *ts;
+	struct Scsi_Host *shost;
 };
 
 enum iue_flags {
@@ -116,8 +133,6 @@ struct iu_entry {
 		int data_in_residual_count;
 		int timeout;
 	} req;
-
-	struct tgt_cmd *tc;
 };
 
 
@@ -295,17 +310,19 @@ static inline uint8_t getlink(struct iu_entry *iue)
 
 static int process_cmd(struct iu_entry *iue)
 {
-	struct tgt_target *tt = iue->adapter->tt;
+	struct Scsi_host *shost = iue->adapter->shost;
 	union viosrp_iu *iu = vio_iu(iue);
 	enum dma_data_direction data_dir;
+	struct scsi_cmnd *scmd;
 	int tags, len;
-	uint8_t lun[8];
 
-	dprintk("%p %p %p\n", tt, iue->adapter, iue);
+	dprintk("%p %p\n", iue->adapter, iue);
 
 	if (getlink(iue))
 		__set_bit(V_LINKED, &iue->req.flags);
 
+	tags = MSG_SIMPLE_TAG;
+#if 0
 	switch (iu->srp.cmd.task_attribute) {
 	case SRP_SIMPLE_TASK:
 		tags = MSG_SIMPLE_TAG;
@@ -321,7 +338,7 @@ static int process_cmd(struct iu_entry *iue)
 			iu->srp.cmd.task_attribute);
 		tags = MSG_ORDERED_TAG;
 	}
-
+#endif
 	switch (iu->srp.cmd.cdb[0]) {
 	case WRITE_6:
 	case WRITE_10:
@@ -331,12 +348,6 @@ static int process_cmd(struct iu_entry *iue)
 		__set_bit(V_WRITE, &iue->req.flags);
 	}
 
-	memset(lun, 0, sizeof(lun));
-	/* FIXME */
-	lun[1] = GETLUN(iu->srp.cmd.lun);
-	if (GETBUS(iu->srp.cmd.lun) || GETTARGET(iu->srp.cmd.lun))
-		lun[0] = 3 << 6;
-
 	if (iu->srp.cmd.data_out_format) {
 		data_dir = DMA_TO_DEVICE;
 		len = vscsis_data_length(&iu->srp.cmd, 1);
@@ -345,14 +356,14 @@ static int process_cmd(struct iu_entry *iue)
 		len = vscsis_data_length(&iu->srp.cmd, 0);
 	}
 
-	dprintk("%p %x %lx %d %d %x %d\n",
-		iue, iu->srp.cmd.cdb[0], iu->srp.cmd.lun, data_dir, len, lun[1], tags);
+	dprintk("%p %x %lx %d %d %d\n",
+		iue, iu->srp.cmd.cdb[0], iu->srp.cmd.lun, data_dir, len, tags);
 
-	BUG_ON(!iue->adapter->ts);
-	iue->tc = tgt_cmd_create(iue->adapter->ts, iue, iu->srp.cmd.cdb,
-				 len, data_dir, lun, sizeof(lun), tags);
-	BUG_ON(!iue->tc);
-	dprintk("%p\n", iue->tc);
+	scmd = scsi_host_get_command(shost, data_dir, GFP_KERNEL);
+	BUG_ON(!scmd);
+
+	scmd->SCp.ptr = (char *) iue;
+	scsi_tgt_queue_command(scmd, (struct scsi_lun *) iu->srp.cmd.lun, 0);
 
 	return 0;
 }
@@ -379,25 +390,27 @@ retry:
 #define SEND	0
 #define RECV	1
 
-static int direct_data(struct tgt_cmd *tc, struct memory_descriptor *md, int op)
+static int direct_data(struct scsi_cmnd *scmd, struct memory_descriptor *md,
+		       int op)
 {
-	struct iu_entry *iue = (struct iu_entry *) tc->private;
+	struct iu_entry *iue = (struct iu_entry *) scmd->SCp.ptr;
 	struct server_adapter *adapter = iue->adapter;
-	struct scatterlist *sg = tc->sg;
+	struct scatterlist *sg = scmd->request_buffer;
 	unsigned int rest, len;
 	int i, done, nsg;
 	long err;
 	dma_addr_t token;
 
-	dprintk("%p %u %u %d\n", iue, tc->bufflen, md->length, tc->sg_count);
+	dprintk("%p %u %u %d\n", iue, scmd->request_bufflen,
+		md->length, scmd->use_sg);
 
-	nsg = dma_map_sg(adapter->dev, sg, tc->sg_count, DMA_BIDIRECTIONAL);
+	nsg = dma_map_sg(adapter->dev, sg, scmd->use_sg, DMA_BIDIRECTIONAL);
 	if (!nsg) {
-		eprintk("fail to map %p %d\n", iue, tc->sg_count);
+		eprintk("fail to map %p %d\n", iue, scmd->use_sg);
 		return 0;
 	}
 
-	rest = min(tc->bufflen, md->length);
+	rest = min(scmd->request_bufflen, md->length);
 
 	for (i = 0, done = 0; i < nsg && rest; i++) {
 		token = sg_dma_address(sg + i);
@@ -428,14 +441,14 @@ static int direct_data(struct tgt_cmd *tc, struct memory_descriptor *md, int op)
 	return done;
 }
 
-static int indirect_data(struct tgt_cmd *tc, struct indirect_descriptor *id,
+static int indirect_data(struct scsi_cmnd *scmd, struct indirect_descriptor *id,
 			 int op)
 {
-	struct iu_entry *iue = (struct iu_entry *) tc->private;
+	struct iu_entry *iue = (struct iu_entry *) scmd->SCp.ptr;
 	struct server_adapter *adapter = iue->adapter;
 	struct srp_cmd *cmd = &vio_iu(iue)->srp.cmd;
 	struct memory_descriptor *mds;
-	struct scatterlist *sg = tc->sg;
+	struct scatterlist *sg = scmd->request_buffer;
 	dma_addr_t token, itoken = 0;
 	long err;
 	unsigned int rest, done = 0;
@@ -443,8 +456,8 @@ static int indirect_data(struct tgt_cmd *tc, struct indirect_descriptor *id,
 
 	nmd = id->head.length / sizeof(struct memory_descriptor);
 
-	dprintk("%p %u %u %lu %d %d %d\n",
-		iue, tc->bufflen, id->total_length, tc->offset, nmd,
+	dprintk("%p %u %u %u %d %d %d\n",
+		iue, scmd->request_bufflen, id->total_length, scmd->offset, nmd,
 		cmd->data_in_count, cmd->data_out_count);
 
 	if ((op == SEND && nmd == cmd->data_in_count) ||
@@ -468,15 +481,15 @@ static int indirect_data(struct tgt_cmd *tc, struct indirect_descriptor *id,
 	}
 
 rdma:
-	nsg = dma_map_sg(adapter->dev, sg, tc->sg_count, DMA_BIDIRECTIONAL);
+	nsg = dma_map_sg(adapter->dev, sg, scmd->use_sg, DMA_BIDIRECTIONAL);
 	if (!nsg) {
-		eprintk("fail to map %p %d\n", iue, tc->sg_count);
+		eprintk("fail to map %p %d\n", iue, scmd->use_sg);
 		goto free_mem;
 	}
 
 	sidx = soff = 0;
 	token = sg_dma_address(sg + sidx);
-	rest = min(tc->bufflen, id->total_length);
+	rest = min(scmd->request_bufflen, id->total_length);
 	for (i = 0; i < nmd && rest; i++) {
 		unsigned int mdone, mlen;
 
@@ -514,7 +527,7 @@ rdma:
 
 				if (sidx > nsg) {
 					eprintk("out of sg %p %d %d %d\n",
-						iue, sidx, nsg, tc->sg_count);
+						iue, sidx, nsg, scmd->use_sg);
 					goto unmap_sg;
 				}
 			}
@@ -533,9 +546,9 @@ free_mem:
 	return done;
 }
 
-static int handle_cmd_data(struct tgt_cmd *tc, int op)
+static int handle_cmd_data(struct scsi_cmnd *scmd, int op)
 {
-	struct iu_entry *iue = (struct iu_entry *) tc->private;
+	struct iu_entry *iue = (struct iu_entry *) scmd->SCp.ptr;
 	struct srp_cmd *cmd = &vio_iu(iue)->srp.cmd;
 	struct memory_descriptor *md;
 	struct indirect_descriptor *id;
@@ -554,12 +567,12 @@ static int handle_cmd_data(struct tgt_cmd *tc, int op)
 	case SRP_DIRECT_BUFFER:
 		md = (struct memory_descriptor *)
 			(cmd->additional_data + offset);
-		err = direct_data(tc, md, op);
+		err = direct_data(scmd, md, op);
 		break;
 	case SRP_INDIRECT_BUFFER:
 		id = (struct indirect_descriptor *)
 			(cmd->additional_data + offset);
-		err = indirect_data(tc, id, op);
+		err = indirect_data(scmd, id, op);
 		break;
 	default:
 		eprintk("Unknown format %d %d\n", op, format);
@@ -569,13 +582,12 @@ static int handle_cmd_data(struct tgt_cmd *tc, int op)
 	return err;
 }
 
-static int recv_cmd_data(struct tgt_cmd *tc)
+static int recv_cmd_data(struct scsi_cmnd *scmd,
+			 void (*done)(struct scsi_cmnd *))
 {
-	dprintk("%p\n", tc);
-
-	handle_cmd_data(tc, RECV);
-	tc->done(tc);
-
+	/* TODO: this can be called multiple times for a single command. */
+	handle_cmd_data(scmd, RECV);
+	done(scmd);
 	return 0;
 }
 
@@ -590,7 +602,6 @@ static struct iu_entry *get_iu(struct server_adapter *adapter)
 	memset(&iue->req, 0, sizeof(iue->req));
 	iue->adapter = adapter;
 	INIT_LIST_HEAD(&iue->ilist);
-	iue->tc = NULL;
 
 	iue->iu_token = dma_map_single(adapter->dev, vio_iu(iue),
 				       sizeof(union viosrp_iu),
@@ -609,31 +620,28 @@ static void put_iu(struct iu_entry *iue)
 
 	dprintk("%p %p\n", adapter, iue);
 
-	if (iue->tc)
-		iue->tc->done(iue->tc);
-
 	dma_unmap_single(adapter->dev, iue->iu_token,
 			 sizeof(union viosrp_iu), DMA_BIDIRECTIONAL);
-
 	mempool_free(iue, adapter->iu_pool);
 }
 
-static int ibmvstgt_cmd_done(struct tgt_cmd *tc)
+static int ibmvstgt_cmd_done(struct scsi_cmnd *scmd,
+			     void (*done)(struct scsi_cmnd *))
 {
 	int sent = 0;
 	unsigned long flags;
-	struct iu_entry *iue = (struct iu_entry *) tc->private;
+	struct iu_entry *iue = (struct iu_entry *) scmd->SCp.ptr;
 	struct server_adapter *adapter = iue->adapter;
 
-	dprintk("%p %p %p %x\n", tc, iue, adapter, vio_iu(iue)->srp.cmd.cdb[0]);
+	dprintk("%p %p %x\n", iue, adapter, vio_iu(iue)->srp.cmd.cdb[0]);
 
 	spin_lock_irqsave(&adapter->lock, flags);
 	list_del(&iue->ilist);
 	spin_unlock_irqrestore(&adapter->lock, flags);
 
-	if (tc->result != SAM_STAT_GOOD) {
+	if (scmd->result != SAM_STAT_GOOD) {
 		eprintk("operation failed %p %d %x\n",
-			iue, tc->result, vio_iu(iue)->srp.cmd.cdb[0]);
+			iue, scmd->result, vio_iu(iue)->srp.cmd.cdb[0]);
 		send_rsp(iue, HARDWARE_ERROR, 0x00);
 		goto out;
 	}
@@ -661,18 +669,19 @@ static int ibmvstgt_cmd_done(struct tgt_cmd *tc)
 		break;
 	}
 
-	sent = handle_cmd_data(tc, SEND);
-	if (sent != tc->bufflen) {
+	sent = handle_cmd_data(scmd, SEND);
+	if (sent != scmd->request_bufflen) {
 		eprintk("sending data on response %p (tried %u, sent %d\n",
-			iue, tc->bufflen, sent);
+			iue, scmd->request_bufflen, sent);
 		send_rsp(iue, ABORTED_COMMAND, 0x00);
 	} else
 		send_rsp(iue, NO_SENSE, 0x00);
 
 out:
+	done(scmd);
 	put_iu(iue);
 
-	return TGT_CMD_XMIT_OK;
+	return 0;
 }
 
 int send_adapter_info(struct iu_entry *iue,
@@ -1069,23 +1078,20 @@ static void handle_crq(void *data)
 	handle_cmd_queue(adapter);
 }
 
-struct session_wait {
-	struct completion event;
-	struct tgt_session *ts;
+static struct scsi_host_template ibmvstgt_sht = {
+	.name			= TGT_NAME,
+	.module			= THIS_MODULE,
+	.can_queue		= INITIAL_SRP_LIMIT,
+	.sg_tablesize		= SG_ALL,
+	.use_clustering		= DISABLE_CLUSTERING,
+	.max_sectors		= DEFAULT_MAX_SECTORS,
+	.transfer_response	= ibmvstgt_cmd_done,
+	.transfer_data		= recv_cmd_data,
 };
-
-static void session_done(void *arg, struct tgt_session *session)
-{
-	struct session_wait *w = (struct session_wait *) arg;
-
-	w->ts = session;
-	complete(&w->event);
-}
 
 static int ibmvstgt_probe(struct vio_dev *dev, const struct vio_device_id *id)
 {
-	struct tgt_target *tt;
-	struct session_wait w;
+	struct Scsi_Host *shost;
 	struct server_adapter *adapter;
 	unsigned int *dma, dma_size;
 	int err = -ENOMEM;
@@ -1093,15 +1099,14 @@ static int ibmvstgt_probe(struct vio_dev *dev, const struct vio_device_id *id)
 	dprintk("%s %s %x %u\n", dev->name, dev->type,
 		dev->unit_address, dev->irq);
 
-	tt = tgt_target_create(TGT_NAME, INITIAL_SRP_LIMIT);
-	if (!tt)
+	shost = scsi_host_alloc(&ibmvstgt_sht, sizeof(struct server_adapter));
+	if (!shost)
 		return err;
+	if (scsi_tgt_alloc_queue(shost))
+		goto put_host;
 
-	adapter = tt->tt_data;
-
-	dprintk("%p %p\n", tt, adapter);
-
-	adapter->tt = tt;
+	adapter = (struct server_adapter *) shost->hostdata;
+	adapter->shost = shost;
 	adapter->dma_dev = dev;
 	adapter->dev = &dev->dev;
 	adapter->dev->driver_data = adapter;
@@ -1114,7 +1119,7 @@ static int ibmvstgt_probe(struct vio_dev *dev, const struct vio_device_id *id)
 	if (!dma || dma_size != 40) {
 		eprintk("Couldn't get window property %d\n", dma_size);
 		err = -EIO;
-		goto free_tt;
+		goto put_host;
 	}
 
 	adapter->liobn = dma[0];
@@ -1123,31 +1128,26 @@ static int ibmvstgt_probe(struct vio_dev *dev, const struct vio_device_id *id)
 	INIT_WORK(&adapter->crq_work, handle_crq, adapter);
 	INIT_LIST_HEAD(&adapter->cmd_queue);
 
-	init_completion(&w.event);
-	if (tgt_session_create(tt, session_done, &w))
-		goto free_tt;
-	wait_for_completion(&w.event);
-	if (!w.ts)
-		goto free_tt;
-	adapter->ts = w.ts;
 	adapter->iu_pool = mempool_create(INITIAL_SRP_LIMIT,
 					  mempool_alloc_slab,
 					  mempool_free_slab, iu_cache);
 	if (!adapter->iu_pool)
-		goto free_ts;
+		goto put_host;
 
 	err = crq_queue_create(&adapter->crq_queue, adapter);
 	if (err)
 		goto free_pool;
 
+	if (scsi_add_host(shost, adapter->dev))
+		goto destroy_queue;
 	return 0;
 
+destroy_queue:
+	crq_queue_destroy(adapter);
 free_pool:
 	mempool_destroy(adapter->iu_pool);
-free_ts:
-	tgt_session_destroy(adapter->ts, NULL, NULL);
-free_tt:
-	tgt_target_destroy(tt);
+put_host:
+	scsi_host_put(shost);
 
 	return err;
 }
@@ -1156,26 +1156,15 @@ static int ibmvstgt_remove(struct vio_dev *dev)
 {
 	struct server_adapter *adapter =
 		(struct server_adapter *) dev->dev.driver_data;
-	struct tgt_target *tt = adapter->tt;
+	struct Scsi_Host *shost = adapter->shost;
 
+	scsi_remove_host(shost);
+	scsi_host_put(shost);
 	crq_queue_destroy(adapter);
 	mempool_destroy(adapter->iu_pool);
-	tgt_session_destroy(adapter->ts, NULL, NULL);
-
-	tgt_target_destroy(tt);
 
 	return 0;
 }
-
-static struct tgt_target_template ibmvstgt_template = {
-	.name = TGT_NAME,
-	.module = THIS_MODULE,
-	.protocol = "scsi",
-	.subprotocol = "rdma",
-	.transfer_response = ibmvstgt_cmd_done,
-	.transfer_write_data = recv_cmd_data,
-	.priv_data_size = sizeof(struct server_adapter),
-};
 
 static struct vio_device_id ibmvstgt_device_table[] __devinitdata = {
 	{"v-scsi-host", "IBM,v-scsi-host"},
@@ -1185,10 +1174,13 @@ static struct vio_device_id ibmvstgt_device_table[] __devinitdata = {
 MODULE_DEVICE_TABLE(vio, ibmvstgt_device_table);
 
 static struct vio_driver ibmvstgt_driver = {
-	.name = "ibmvscsi",
 	.id_table = ibmvstgt_device_table,
 	.probe = ibmvstgt_probe,
 	.remove = ibmvstgt_remove,
+	.driver = {
+		.name = "ibmvscsi",
+		.owner = THIS_MODULE,
+	}
 };
 
 static int get_system_info(void)
@@ -1231,23 +1223,17 @@ static int ibmvstgt_init(void)
 	if (!iu_cache)
 		return -ENOMEM;
 
-	err = tgt_target_template_register(&ibmvstgt_template);
-	if (err < 0)
-		goto iu_cache;
-
 	err = get_system_info();
 	if (err < 0)
-		goto unregister_template;
+		goto free_iu_cache;
 
 	err = vio_register_driver(&ibmvstgt_driver);
 	if (err)
-		goto unregister_template;
+		goto free_iu_cache;
 
 	return 0;
 
-unregister_template:
-	tgt_target_template_unregister(&ibmvstgt_template);
-iu_cache:
+free_iu_cache:
 	kmem_cache_destroy(iu_cache);
 
 	return err;
@@ -1258,7 +1244,6 @@ static void ibmvstgt_exit(void)
 	printk("Unregister IBM virtual SCSI driver\n");
 
 	vio_unregister_driver(&ibmvstgt_driver);
-	tgt_target_template_unregister(&ibmvstgt_template);
 	kmem_cache_destroy(iu_cache);
 }
 
