@@ -111,6 +111,8 @@ static int scsi_tgt_bind_host(struct tgt_event *ev)
 	struct task_struct *tsk;
 	int err = 0;
 
+	dprintk("%d %d\n", ev->u.target_bind.host_no, ev->u.target_bind.pid);
+
 	shost = scsi_host_lookup(ev->u.target_bind.host_no);
 	if (IS_ERR(shost)) {
 		eprintk("Could not find host no %d\n",
