@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <search.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
@@ -21,8 +22,8 @@
 #include <sys/stat.h>
 #include <linux/fs.h>
 #include <linux/netlink.h>
+#include <scsi/scsi_tgt_if.h>
 
-#include <tgt_if.h>
 #include "tgtd.h"
 #include "tgtadm.h"
 #include "dl.h"
@@ -47,6 +48,7 @@ struct device {
 
 struct target {
 	struct pollfd pfd[2];
+	int tid;
 
 	struct device **devt;
 	uint64_t max_device;
@@ -209,11 +211,18 @@ int tgt_device_init(void)
 {
 	int err;
 
+	system("rm -rf " TGT_TARGET_SYSFSDIR);
 	system("rm -rf " TGT_DEVICE_SYSFSDIR);
+
+	err = mkdir(TGT_TARGET_SYSFSDIR, dmode);
+	if (err < 0) {
+		perror("Cannot create " TGT_TARGET_SYSFSDIR);
+		return err;
+	}
 
 	err = mkdir(TGT_DEVICE_SYSFSDIR, dmode);
 	if (err < 0)
-		perror("Cannot create" TGT_DEVICE_SYSFSDIR);
+		perror("Cannot create " TGT_DEVICE_SYSFSDIR);
 
 	return err;
 }
@@ -279,7 +288,61 @@ peek_again:
 	return nlh->nlmsg_len;
 }
 
-static int cmd_queue(struct driver_info *dinfo, int fd, char *reqbuf)
+/* FIXME */
+
+#undef offsetof
+#ifdef __compiler_offsetof
+#define offsetof(TYPE,MEMBER) __compiler_offsetof(TYPE,MEMBER)
+#else
+#define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
+#endif
+
+#define LIST_HEAD_INIT(name) { &(name), &(name) }
+
+#define INIT_LIST_HEAD(ptr) do { \
+	(ptr)->q_forw = (ptr); (ptr)->q_back = (ptr); \
+} while (0)
+
+#define container_of(ptr, type, member) ({			\
+        const typeof( ((type *)0)->member ) *__mptr = (ptr);	\
+        (type *)( (char *)__mptr - offsetof(type,member) );})
+
+#define list_entry(ptr, type, member) \
+	container_of(ptr, type, member)
+
+#define list_for_each_entry(pos, head, member)				\
+	for (pos = list_entry((head)->q_forw, typeof(*pos), member);	\
+	     &pos->member != (head); 	\
+	     pos = list_entry(pos->member.q_forw, typeof(*pos), member))
+
+struct qelem {
+	struct qelem *q_forw;
+	struct qelem *q_back;
+};
+
+static struct qelem cqueue = LIST_HEAD_INIT(cqueue);
+
+struct cmd {
+	struct qelem clist;
+	uint32_t cid;
+	uint64_t devid;
+	uint64_t uaddr;
+	uint32_t len;
+	int mmap;
+};
+
+static struct cmd *find_cmd(uint32_t cid)
+{
+	struct cmd *cmd;
+
+	list_for_each_entry(cmd, &cqueue, clist) {
+		if (cmd->cid == cid)
+			return cmd;
+	}
+	return NULL;
+}
+
+static int cmd_queue(int fd, char *reqbuf)
 {
 	int result, len = 0;
 	struct tgt_event *ev_req = (struct tgt_event *) reqbuf;
@@ -288,46 +351,34 @@ static int cmd_queue(struct driver_info *dinfo, int fd, char *reqbuf)
 	uint64_t offset, cid = ev_req->k.cmd_req.cid, devid;
 	uint8_t *pdu, rw = 0, try_map = 0;
 	unsigned long uaddr = 0;
-	static int (*fn) (int, uint8_t *, int *, uint32_t,
-			  unsigned long *, uint8_t *, uint8_t *, uint64_t *, uint64_t);
-	static uint64_t (*get_devid) (uint8_t *pdu);
-	int tid = ev_req->k.cmd_req.tid;
-	int typeid = ev_req->k.cmd_req.typeid;
+	int host_no = ev_req->k.cmd_req.host_no;
+	struct cmd *cmd;
 
 	memset(resbuf, 0, sizeof(resbuf));
 	pdu = (uint8_t *) ev_req->data;
 	dprintf("%" PRIu64 " %x\n", cid, pdu[0]);
 
-	if (!get_devid)
-		get_devid = dl_proto_get_devid(dinfo, tid, typeid);
-
-	if (get_devid)
-		devid = get_devid(pdu);
-	else {
-		eprintf("Cannot find get_devid\n");
-		devid = TGT_INVALID_DEV_ID;
-	}
+	devid = scsi_get_devid(pdu);
 
 	if (target->max_device > devid && target->devt[devid])
 		uaddr = target->devt[devid]->addr;
 
-	if (!fn)
-		fn = dl_proto_cmd_process(dinfo, tid, typeid);
-	if (fn)
-		result = fn(tid,
-			    pdu,
-			    &len,
-			    ev_req->k.cmd_req.data_len,
-			    &uaddr, &rw, &try_map, &offset, devid);
-	else {
-		result = -EINVAL;
-		eprintf("Cannot process cmd %d %" PRIu64 "\n",
-			tid, cid);
-	}
+	/* FIXME */
+	result = scsi_cmd_process(target->tid, pdu, &len,
+				  ev_req->k.cmd_req.data_len,
+				  &uaddr, &rw, &try_map, &offset, devid);
 
-	ev_res->u.cmd_res.tid = tid;
+	cmd = malloc(sizeof(*cmd));
+	cmd->cid = cid;
+	cmd->devid = devid;
+	cmd->uaddr = uaddr;
+	cmd->len = len;
+	cmd->mmap = try_map;
+
+	insque(&cmd->clist, &cqueue);
+
+	ev_res->u.cmd_res.host_no = host_no;
 	ev_res->u.cmd_res.cid = cid;
-	ev_res->u.cmd_res.devid = devid;
 	ev_res->u.cmd_res.len = len;
 	ev_res->u.cmd_res.result = result;
 	ev_res->u.cmd_res.uaddr = uaddr;
@@ -341,44 +392,46 @@ static int cmd_queue(struct driver_info *dinfo, int fd, char *reqbuf)
 			  NLMSG_SPACE(sizeof(*ev_res)));
 }
 
-static void cmd_done(struct driver_info *dinfo, char *buf)
+static void cmd_done(char *buf)
 {
-	static int (*done) (int do_munmap, int do_free, uint64_t uaddr, int len);
 	struct tgt_event *ev = (struct tgt_event *) buf;
 	int err = 0;
-	int do_munmap = ev->k.cmd_done.mmapped;
+	uint32_t cid = ev->k.cmd_done.cid;
+	struct cmd *cmd;
+	int do_munmap;
 
-	if (!done)
-		done = dl_cmd_done_fn(dinfo, ev->k.cmd_done.typeid);
+	cmd = find_cmd(cid);
+	if (!cmd) {
+		eprintf("Cannot find cmd %u\n", cid);
+		return;
+	}
+	remque(&cmd->clist);
+	do_munmap = cmd->mmap;
 
-	if (done) {
-		if (do_munmap) {
-			uint64_t devid = ev->k.cmd_done.devid;
-
-			if (devid >= target->max_device) {
-				eprintf("%" PRIu64 " %" PRIu64 "\n",
-					devid, target->max_device);
-				exit(1);
-			}
-
-			if (target->devt[devid]) {
-				if (target->devt[devid]->addr)
-					do_munmap = 0;
-			} else {
-				eprintf("%" PRIu64 " is null\n", devid);
-				exit(1);
-			}
+	if (do_munmap) {
+		if (cmd->devid >= target->max_device) {
+			eprintf("%" PRIu64 " %" PRIu64 "\n",
+				cmd->devid, target->max_device);
+			exit(1);
 		}
-		err = done(do_munmap, !ev->k.cmd_done.mmapped,
-			 ev->k.cmd_done.uaddr, ev->k.cmd_done.len);
-	} else
-		eprintf("Cannot handle cmd done\n");
 
-	dprintf("%d %lx %u %d\n", ev->k.cmd_done.mmapped,
-		ev->k.cmd_done.uaddr, ev->k.cmd_done.len, err);
+		if (target->devt[cmd->devid]) {
+			if (target->devt[cmd->devid]->addr)
+				do_munmap = 0;
+		} else {
+			eprintf("%" PRIu64 " is null\n", cmd->devid);
+			exit(1);
+		}
+	}
+
+	err = scsi_cmd_done(do_munmap, !cmd->mmap, cmd->uaddr, cmd->len);
+
+	dprintf("%d %" PRIx64 " %u %d\n", cmd->mmap, cmd->uaddr, cmd->len, err);
+
+	free(cmd);
 }
 
-static void nl_cmd(struct driver_info *dinfo, int fd)
+static void nl_cmd(int fd)
 {
 	struct nlmsghdr *nlh;
 	struct tgt_event *ev;
@@ -401,10 +454,10 @@ static void nl_cmd(struct driver_info *dinfo, int fd)
 
 	switch (nlh->nlmsg_type) {
 	case TGT_KEVENT_CMD_REQ:
-		cmd_queue(dinfo, fd, NLMSG_DATA(buf));
+		cmd_queue(fd, NLMSG_DATA(buf));
 		break;
 	case TGT_KEVENT_CMD_DONE:
-		cmd_done(dinfo, NLMSG_DATA(buf));
+		cmd_done(NLMSG_DATA(buf));
 		break;
 	default:
 		eprintf("unknown event %u\n", nlh->nlmsg_type);
@@ -427,7 +480,6 @@ static int bind_nls(int fd)
 
 static void tthread_event_loop(struct target *target)
 {
-	struct driver_info d[MAX_DL_HANDLES];
 	struct pollfd *pfd = target->pfd;
 	int fd, err;
 
@@ -438,9 +490,6 @@ static void tthread_event_loop(struct target *target)
 
 	target->pfd[POLL_NL_CMD].fd = fd;
 	target->pfd[POLL_NL_CMD].events = POLLIN;
-
-	err = dl_init(d);
-	dprintf("%d\n", err);
 
 	dprintf("Target thread started %u %d\n", getpid(), fd);
 
@@ -459,21 +508,49 @@ static void tthread_event_loop(struct target *target)
 			ipc_ctrl(pfd[POLL_IPC_CTRL].fd);
 
 		if (pfd[POLL_NL_CMD].revents)
-			nl_cmd(d, pfd[POLL_NL_CMD].fd);
+			nl_cmd(pfd[POLL_NL_CMD].fd);
 	}
 
 	free(target);
+}
+
+static int target_dir_create(int tid, int pid)
+{
+	char path[PATH_MAX], buf[32];
+	int err, fd;
+
+	snprintf(path, sizeof(path), TGT_TARGET_SYSFSDIR "/target%d", tid);
+	err = mkdir(path, dmode);
+	if (err < 0) {
+		eprintf("Cannot create %s\n", path);
+		return err;
+	}
+
+	snprintf(path, sizeof(path), TGT_TARGET_SYSFSDIR "/target%d/pid", tid);
+	fd = open(path, O_RDWR|O_CREAT|O_EXCL, fmode);
+	if (fd < 0) {
+		eprintf("Cannot create %s\n", path);
+		return err;
+	}
+	snprintf(buf, sizeof(buf), "%d", pid);
+	err = write(fd, buf, strlen(buf));
+	close(fd);
+
+	return 0;
 }
 
 int target_thread_create(int *sfd)
 {
 	pid_t pid;
 	int fd[2];
+	static int tid = 0;
 
 	if (socketpair(AF_UNIX, SOCK_STREAM, 0, fd) < 0) {
 		eprintf("Cannot create socketpair %d\n", errno);
 		return -1;
 	}
+
+	tid++;
 
 	pid = fork();
 	if (pid < 0)
@@ -481,7 +558,8 @@ int target_thread_create(int *sfd)
 	else if (pid) {
 		*sfd = fd[0];
 		close(fd[1]);
-		return pid;
+		target_dir_create(tid, pid);
+		return tid;
 	}
 
 	target = malloc(sizeof(*target));
@@ -492,6 +570,7 @@ int target_thread_create(int *sfd)
 
 	target->devt = calloc(DEFAULT_NR_DEVICE, sizeof(struct device *));
 	target->max_device = DEFAULT_NR_DEVICE;
+	target->tid = tid;
 
 	close(fd[0]);
 	target->pfd[POLL_IPC_CTRL].fd = fd[1];

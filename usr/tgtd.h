@@ -28,4 +28,10 @@ extern int tgt_device_init(void);
 extern int tgt_device_create(int tid, uint64_t lun, int dfd);
 extern int tgt_device_destroy(int tid, uint64_t lun);
 
+extern uint64_t scsi_get_devid(uint8_t *pdu);
+extern int scsi_cmd_process(int tid, uint8_t *pdu, int *len,
+			    uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
+			    uint8_t *try_map, uint64_t *offset, uint64_t lun);
+extern int scsi_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len);
+
 #endif

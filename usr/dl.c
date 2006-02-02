@@ -1,13 +1,11 @@
 /*
- * Dynamic library
+ * LLD dynamic library
  *
  * (C) 2005 FUJITA Tomonori <tomof@acm.org>
  * (C) 2005 Mike Christie <michaelc@cs.wisc.edu>
  *
  * This code is licenced under the GPL.
  */
-
-/* TODO : better handling of dynamic library. */
 
 #include <string.h>
 #include <fcntl.h>
@@ -25,88 +23,52 @@
 #include "dl.h"
 #include "tgt_sysfs.h"
 
-struct driver_info dlinfo[MAX_DL_HANDLES];
+/*
+ * Software LLDs needs to set up a target (that means tgtd must load
+ * thier libraries) before a scsi_host is created in kernel space. In
+ * short, tgtd needs to load LLD libraries before it knows what
+ * libraries are avilable (through sysfs). I chose the easiest way.
+ */
 
-char *typeid_to_name(struct driver_info *dinfo, int typeid)
-{
-	return dinfo[typeid].name;
-}
+struct driver_info dlinfo[] = {
+	{"istgt", }, {"ibmvstgt",},
+};
 
-static char *dlname(char *d_name, char *entry)
-{
-	int fd, err;
-	char *p, path[PATH_MAX], buf[PATH_MAX];
-
-	snprintf(path, sizeof(path),
-		 TGT_TYPE_SYSFSDIR "/%s/%s", d_name, entry);
-	fd = open(path, O_RDONLY);
-	if (fd < 0) {
-		eprintf("%s\n", path);
-		return NULL;
-	}
-	memset(buf, 0, sizeof(buf));
-	err = read(fd, buf, sizeof(buf));
-	close(fd);
-	if (err < 0) {
-		eprintf("%s %d\n", path, errno);
-		return NULL;
-	}
-
-	p = strchr(buf, '\n');
-	if (p)
-		*p = '\0';
-
-	return strdup(buf);
-}
-
-static int filter(const struct dirent *dir)
-{
-	return strcmp(dir->d_name, ".") && strcmp(dir->d_name, "..");
-}
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
 int dl_init(struct driver_info *dinfo)
 {
-	int i, nr, idx;
-	char path[PATH_MAX], *p;
-	struct dirent **namelist;
-	struct driver_info *di;
+	int i, fd, err;
+	char path[PATH_MAX];
+	mode_t fmode = S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH;
+	mode_t dmode = S_IRUSR|S_IWUSR|S_IXUSR|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH;
 
-	nr = scandir(TGT_TYPE_SYSFSDIR, &namelist, filter, alphasort);
-	for (i = 0; i < nr; i++) {
-		for (p = namelist[i]->d_name; !isdigit((int) *p); p++)
-			;
-		idx = atoi(p);
-		if (idx > MAX_DL_HANDLES) {
-			eprintf("Too large dl idx %s %d\n",
-				namelist[i]->d_name, idx);
-			continue;
-		}
-		di = &dinfo[idx];
-
-		di->name = dlname(namelist[i]->d_name, "name");
-		if (!di->name)
-			continue;
-
-		snprintf(path, sizeof(path), "%s.so", di->name);
-		di->dl = dlopen(path, RTLD_LAZY);
-		if (!di->dl)
-			eprintf("%s %s\n", path, dlerror());
-
-		di->proto = dlname(namelist[i]->d_name, "protocol");
-		if (!di->proto)
-			continue;
-
-		snprintf(path, sizeof(path), "%s.so", di->proto);
-		di->pdl = dlopen(path, RTLD_LAZY);
-		if (!di->pdl)
-			eprintf("%s %s\n", path, dlerror());
+	system("rm -rf " TGT_LLD_SYSFSDIR);
+	err = mkdir(TGT_LLD_SYSFSDIR, dmode);
+	if (err < 0) {
+		perror("Cannot create " TGT_LLD_SYSFSDIR);
+		return err;
 	}
 
-	for (i = 0; i < nr; i++)
-		free(namelist[i]);
-	free(namelist);
+	for (i = 0; i < ARRAY_SIZE(dlinfo); i++) {
+		snprintf(path, sizeof(path), "%s.so", dlinfo[i].name);
+		dlinfo[i].dl = dlopen(path, RTLD_LAZY);
+		if (dlinfo[i].dl)
+			eprintf("%s library was loaded.\n", dlinfo[i].name);
+		else
+			eprintf("%s library is not loaded.\n", dlinfo[i].name);
 
-	return 0;
+		snprintf(path, sizeof(path), TGT_LLD_SYSFSDIR "/%d-%s",
+			 i, dlinfo[i].name);
+
+		fd = open(path, O_RDWR|O_CREAT|O_EXCL, fmode);
+		if (fd < 0) {
+			eprintf("Cannot create %s.\n", path);
+			exit(-1);
+		}
+	}
+
+	return ARRAY_SIZE(dlinfo);
 }
 
 void *dl_poll_init_fn(struct driver_info *dinfo, int idx)
@@ -131,34 +93,10 @@ void *dl_ipc_fn(struct driver_info *dinfo, int typeid)
 	return NULL;
 }
 
-void *dl_proto_cmd_process(struct driver_info *dinfo, int tid, int typeid)
-{
-	if (dinfo[typeid].pdl)
-		return dlsym(dinfo[typeid].pdl, "cmd_process");
-
-	return NULL;
-}
-
-void *dl_proto_get_devid(struct driver_info *dinfo, int tid, int typeid)
-{
-	if (dinfo[typeid].pdl)
-		return dlsym(dinfo[typeid].pdl, "get_devid");
-
-	return NULL;
-}
-
 void *dl_event_fn(struct driver_info *dinfo, int tid, int typeid)
 {
 	if (dinfo[typeid].dl)
 		return dlsym(dinfo[typeid].dl, "async_event");
-
-	return NULL;
-}
-
-void *dl_cmd_done_fn(struct driver_info *dinfo, int typeid)
-{
-	if (dinfo[typeid].pdl)
-		return dlsym(dinfo[typeid].pdl, "cmd_done");
 
 	return NULL;
 }

@@ -22,7 +22,7 @@
 #include <asm/types.h>
 #include <linux/netlink.h>
 
-#include <tgt_if.h>
+#include <scsi/scsi_tgt_if.h>
 #include "tgtd.h"
 #include "dl.h"
 
@@ -99,7 +99,6 @@ void nl_event_handle(struct driver_info *dinfo, int fd)
 	struct tgt_event *ev;
 	char rbuf[NL_BUFSIZE];
 	int err;
-	void (*fn) (char *);
 
 	err = nl_read(fd, rbuf);
 	if (err < 0)
@@ -111,15 +110,6 @@ void nl_event_handle(struct driver_info *dinfo, int fd)
 	dprintf("%d %d\n", getpid(), nlh->nlmsg_type);
 
 	switch (nlh->nlmsg_type) {
-	case TGT_KEVENT_TARGET_PASSTHRU:
-		fn = dl_event_fn(dinfo, ev->k.tgt_passthru.tid,
-				 ev->k.tgt_passthru.typeid);
-		if (fn)
-			fn(NLMSG_DATA(rbuf));
-		else
-			eprintf("Cannot handle async event %d\n",
-				ev->k.tgt_passthru.tid);
-		break;
 	default:
 		/* kernel module bug */
 		eprintf("unknown event %u\n", nlh->nlmsg_type);

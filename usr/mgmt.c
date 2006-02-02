@@ -21,7 +21,7 @@
 #include <linux/types.h>
 #include <linux/netlink.h>
 
-#include <tgt_if.h>
+#include <scsi/scsi_tgt_if.h>
 #include "tgtd.h"
 #include "dl.h"
 #include "log.h"
@@ -71,48 +71,66 @@ int tgt_event_execute(struct tgtadm_req *req, int event, init_tgt_event_t *func)
 	return err;
 }
 
-static void __ktarget_create(struct tgt_event *ev, struct tgtadm_req *req)
+static void __bind(struct tgt_event *ev, struct tgtadm_req *req)
 {
-	sprintf(ev->u.c_target.type, "%s", typeid_to_name(dlinfo, req->typeid));
-	ev->u.c_target.pid = req->pid;
+	char path[PATH_MAX], buf[32];
+	int err, fd, pid;
+
+	snprintf(path, sizeof(path), TGT_TARGET_SYSFSDIR "/target%d/pid",
+		 req->tid);
+	fd = open(path, O_RDONLY);
+	if (fd < 0) {
+		eprintf("Cannot open %s\n", path);
+		return;
+	}
+	err = read(fd, buf, sizeof(buf));
+	close(fd);
+	if (err < 0) {
+		eprintf("Cannot read\n");
+		return;
+	}
+	sscanf(buf, "%d\n", &pid);
+
+	ev->u.target_bind.host_no = req->host_no;
+	ev->u.target_bind.pid = pid;
+}
+
+int ktarget_bind(int tid, int host_no)
+{
+	struct tgtadm_req req;
+
+	dprintf("%d %d\n", tid, host_no);
+
+	req.tid = tid;
+	req.host_no = host_no;
+	return tgt_event_execute(&req, TGT_UEVENT_TARGET_BIND, __bind);
 }
 
 int ktarget_create(int typeid)
 {
 	struct tgtadm_req req;
-	int fd, err;
+	int fd, tid;
 
 	req.typeid = typeid;
-	req.pid = target_thread_create(&fd);
-	err = tgt_event_execute(&req, TGT_UEVENT_TARGET_CREATE,
-				__ktarget_create);
-	if (err >= 0) {
-		dprintf("%d %d\n", err, fd);
+	tid = target_thread_create(&fd);
+	if (tid >= 0) {
+		dprintf("%d %d\n", tid, fd);
 
 		/* FIXME */
-		if (err > POLLS_PER_DRV)
-			eprintf("too large tid %d\n", err);
+		if (tid > POLLS_PER_DRV)
+			eprintf("too large tid %d\n", tid);
 		else {
-			poll_array[POLLS_PER_DRV + err].fd = fd;
-			poll_array[POLLS_PER_DRV + err].events = POLLIN;
+			poll_array[POLLS_PER_DRV + tid].fd = fd;
+			poll_array[POLLS_PER_DRV + tid].events = POLLIN;
 		}
 	}
 
-	return err;
-}
-
-static void __ktarget_destroy(struct tgt_event *ev, struct tgtadm_req *req)
-{
-	ev->u.d_target.tid = req->tid;
+	return tid;
 }
 
 int ktarget_destroy(int tid)
 {
-	struct tgtadm_req req;
-	req.tid = tid;
-
-	return tgt_event_execute(&req, TGT_UEVENT_TARGET_DESTROY,
-				 __ktarget_destroy);
+	return 0;
 }
 
 static void kdevice_create_parser(char *args, char **path, char **devtype)
@@ -199,6 +217,9 @@ static int target_mgmt(struct tgtadm_req *req, char *params, char *rbuf, int *rl
 		break;
 	case OP_DELETE:
 		err = ktarget_destroy(req->tid);
+		break;
+	case OP_BIND:
+		err = ktarget_bind(req->tid, req->host_no);
 		break;
 	default:
 		break;

@@ -161,9 +161,8 @@ void ipc_event_handle(struct driver_info *dinfo, int accept_fd)
 
 	switch (req->mode) {
 	case MODE_DEVICE:
-		dprintf("%d %d %d %d %lx\n",
-			req->tid, req->typeid, err, nlh->nlmsg_len,
-			(unsigned long) task);
+		dprintf("%d %d %d %lx\n",
+			req->tid, err, nlh->nlmsg_len, (unsigned long) task);
 		req->addr = (unsigned long) task;
 		write(poll_array[POLLS_PER_DRV + req->tid].fd,
 		      sbuf, NLMSG_ALIGN(nlh->nlmsg_len));

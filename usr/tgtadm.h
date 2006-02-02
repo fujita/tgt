@@ -6,8 +6,8 @@
 enum tgtadm_op {
 	OP_NEW,
 	OP_DELETE,
-	OP_UPDATE,
 	OP_SHOW,
+	OP_BIND,
 };
 
 enum tgtadm_mode {
@@ -21,8 +21,6 @@ enum tgtadm_mode {
 };
 
 struct tgtadm_req {
-	int typeid;
-
 	enum tgtadm_mode mode;
 	enum tgtadm_op op;
 
@@ -30,8 +28,8 @@ struct tgtadm_req {
 	uint64_t sid;
 	int cid;
 	uint64_t lun;
-	int pid;
-
+	int typeid;
+	int host_no;
 	unsigned long addr;
 };
 

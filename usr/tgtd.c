@@ -22,7 +22,7 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
-#include <tgt_if.h>
+#include <scsi/scsi_tgt_if.h>
 #include "tgtd.h"
 #include "dl.h"
 
@@ -225,11 +225,12 @@ int main(int argc, char **argv)
 
 	ipc_fd = ipc_open();
 	if (ipc_fd < 0)
-		exit(ipc_fd);
+		exit(1);
 
-	dl_init(dlinfo);
+	nr = dl_init(dlinfo);
+	if (nr < nr)
+		exit(1);
 
-	nr = MAX_DL_HANDLES;
 	poll_array = poll_init(nr);
 
 	event_loop(nr, poll_array);

@@ -11,28 +11,39 @@
  *   licensed under the terms of the GNU GPL v2.0,
  */
 
+#include <errno.h>
+#include <dirent.h>
+#include <fcntl.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#include <inttypes.h>
-#include <dirent.h>
 #include <unistd.h>
-#include <errno.h>
-#include <scsi/scsi.h>
-#include <scsi/iscsi_proto.h>
 #include <asm/byteorder.h>
 #include <asm/page.h>
+#include <scsi/iscsi_proto.h>
+#include <scsi/scsi.h>
+#include <scsi/scsi_tgt_if.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <fcntl.h>
+
 #include <linux/netlink.h>
 
 #include "tgtd.h"
-#include "tgt_scsi_if.h"
 #include "tgt_sysfs.h"
+
+/*
+ * FIXME: in some architectures (e.g., powerpc) don't export PAGE_* to
+ * user space by asm/page.h. How should we handle this?
+ */
+#ifndef PAGE_SHIFT
+#define	PAGE_SHIFT	12
+#define	PAGE_SIZE	(1UL << PAGE_SHIFT)
+#define	PAGE_MASK	(~(PAGE_SIZE-1))
+#endif
 
 #define cpu_to_be32 __cpu_to_be32
 #define be32_to_cpu __be32_to_cpu
@@ -604,10 +615,8 @@ static inline int mmap_cmd_init(uint8_t *scb, uint8_t *rw)
 	return result;
 }
 
-uint64_t get_devid(uint8_t *pdu)
+uint64_t scsi_get_devid(uint8_t *p)
 {
-	struct tgt_scsi_cmd *scmd = (struct tgt_scsi_cmd *) pdu;
-	uint8_t *p = scmd->lun;
 	uint64_t lun = TGT_INVALID_DEV_ID;
 
 	switch (*p >> 6) {
@@ -626,13 +635,12 @@ uint64_t get_devid(uint8_t *pdu)
 	return lun;
 }
 
-int cmd_process(int tid, uint8_t *pdu, int *len,
-		uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
-		uint8_t *try_map, uint64_t *offset, uint64_t lun)
+int scsi_cmd_process(int tid, uint8_t *pdu, int *len,
+		     uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
+		     uint8_t *try_map, uint64_t *offset, uint64_t lun)
 {
 	int fd, result = SAM_STAT_GOOD;
-	struct tgt_scsi_cmd *scmd = (struct tgt_scsi_cmd *) pdu;
-	uint8_t *data = NULL, *scb = scmd->scb;
+	uint8_t *data = NULL, *scb = pdu;
 
 	dprintf("%d %" PRIu64 " %x %u\n", tid, lun, scb[0], datalen);
 
@@ -726,7 +734,7 @@ out:
 	return result;
 }
 
-int cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
+int scsi_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
 {
 	int err = 0;
 
