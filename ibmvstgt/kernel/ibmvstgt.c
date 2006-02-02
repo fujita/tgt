@@ -1078,6 +1078,15 @@ static void handle_crq(void *data)
 	handle_cmd_queue(adapter);
 }
 
+/*
+ * TODO: just for cheating scsi_host_alloc now.
+ */
+static int ibmvstgt_eh_abort_handler(struct scsi_cmnd *cmd)
+{
+	BUG();
+	return 0;
+}
+
 static struct scsi_host_template ibmvstgt_sht = {
 	.name			= TGT_NAME,
 	.module			= THIS_MODULE,
@@ -1087,6 +1096,8 @@ static struct scsi_host_template ibmvstgt_sht = {
 	.max_sectors		= DEFAULT_MAX_SECTORS,
 	.transfer_response	= ibmvstgt_cmd_done,
 	.transfer_data		= recv_cmd_data,
+	.eh_abort_handler	= ibmvstgt_eh_abort_handler,
+	.proc_name		= TGT_NAME,
 };
 
 static int ibmvstgt_probe(struct vio_dev *dev, const struct vio_device_id *id)
