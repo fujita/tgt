@@ -363,7 +363,9 @@ static int process_cmd(struct iu_entry *iue)
 	BUG_ON(!scmd);
 
 	scmd->SCp.ptr = (char *) iue;
-	scsi_tgt_queue_command(scmd, (struct scsi_lun *) iu->srp.cmd.lun, 0);
+	memcpy(scmd->data_cmnd, iu->srp.cmd.cdb, MAX_COMMAND_SIZE);
+	scmd->request_bufflen = len;
+	scsi_tgt_queue_command(scmd, (struct scsi_lun *) &iu->srp.cmd.lun, 0);
 
 	return 0;
 }
@@ -401,7 +403,7 @@ static int direct_data(struct scsi_cmnd *scmd, struct memory_descriptor *md,
 	long err;
 	dma_addr_t token;
 
-	dprintk("%p %u %u %d\n", iue, scmd->request_bufflen,
+	dprintk("%p %u %u %u %d\n", iue, scmd->request_bufflen, scmd->bufflen,
 		md->length, scmd->use_sg);
 
 	nsg = dma_map_sg(adapter->dev, sg, scmd->use_sg, DMA_BIDIRECTIONAL);
@@ -410,7 +412,7 @@ static int direct_data(struct scsi_cmnd *scmd, struct memory_descriptor *md,
 		return 0;
 	}
 
-	rest = min(scmd->request_bufflen, md->length);
+	rest = min(scmd->bufflen, md->length);
 
 	for (i = 0, done = 0; i < nsg && rest; i++) {
 		token = sg_dma_address(sg + i);
@@ -456,8 +458,9 @@ static int indirect_data(struct scsi_cmnd *scmd, struct indirect_descriptor *id,
 
 	nmd = id->head.length / sizeof(struct memory_descriptor);
 
-	dprintk("%p %u %u %u %d %d %d\n",
-		iue, scmd->request_bufflen, id->total_length, scmd->offset, nmd,
+	dprintk("%p %u %u %u %u %d %d %d\n",
+		iue, scmd->request_bufflen, scmd->bufflen,
+		id->total_length, scmd->offset, nmd,
 		cmd->data_in_count, cmd->data_out_count);
 
 	if ((op == SEND && nmd == cmd->data_in_count) ||
@@ -489,7 +492,7 @@ rdma:
 
 	sidx = soff = 0;
 	token = sg_dma_address(sg + sidx);
-	rest = min(scmd->request_bufflen, id->total_length);
+	rest = min(scmd->bufflen, id->total_length);
 	for (i = 0; i < nmd && rest; i++) {
 		unsigned int mdone, mlen;
 
@@ -670,9 +673,9 @@ static int ibmvstgt_cmd_done(struct scsi_cmnd *scmd,
 	}
 
 	sent = handle_cmd_data(scmd, SEND);
-	if (sent != scmd->request_bufflen) {
+	if (sent != scmd->bufflen) {
 		eprintk("sending data on response %p (tried %u, sent %d\n",
-			iue, scmd->request_bufflen, sent);
+			iue, scmd->bufflen, sent);
 		send_rsp(iue, ABORTED_COMMAND, 0x00);
 	} else
 		send_rsp(iue, NO_SENSE, 0x00);
