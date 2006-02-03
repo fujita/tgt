@@ -3,7 +3,6 @@
  *
  * (C) 2004 - 2005 FUJITA Tomonori <tomof@acm.org>
  * (C) 2005 Mike Christie <michaelc@cs.wisc.edu>
- * This code is licenced under the GPL.
  *
  * SCSI target emulation code is based on Ardis's iSCSI implementation.
  *   http://www.ardistech.com/iscsi/
