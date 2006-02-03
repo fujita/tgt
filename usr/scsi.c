@@ -334,16 +334,14 @@ err:
 
 static int report_luns(int tid, uint32_t unused, uint8_t *scb, uint8_t *p, int *len)
 {
-	/*
-	 * TODO Convert to 64 bits
-	 */
-	uint32_t lun;
-	uint32_t *data = (uint32_t *) p;
-	int idx, alen, oalen, rbuflen, nr_luns;
+	uint64_t lun, *data = (uint64_t *) p;
+	int idx, alen, oalen, nr_luns, rbuflen = 4096;
 	DIR *dir;
 	struct dirent *ent;
 	char buf[128];
 	int result = SAM_STAT_GOOD;
+
+	memset(data, 0, rbuflen);
 
 	dir = opendir(TGT_DEVICE_SYSFSDIR);
 	if (!dir) {
@@ -362,21 +360,24 @@ static int report_luns(int tid, uint32_t unused, uint8_t *scb, uint8_t *p, int *
 	alen &= ~(8 - 1);
 	oalen = alen;
 
-	/* We'll set data[0] later. */
-	data[1] = 0;
-
 	alen -= 8;
-	rbuflen = 8192 - 8; /* FIXME */
-	idx = 2;
+	rbuflen -= 8; /* FIXME */
+	idx = 1;
 	nr_luns = 0;
+
+	/* ibmvstgt hack */
+	idx = 2;
+	nr_luns = 1;
 
 	sprintf(buf, "device%d:", tid);
 	while ((ent = readdir(dir))) {
 		if (!strncmp(ent->d_name, buf, strlen(buf))) {
-			sscanf(ent->d_name, "device%d:%u", &tid, &lun);
-			data[idx++] = cpu_to_be32((0x3ff & lun) << 16 |
-						  ((lun > 0xff) ? (0x1 << 30) : 0));
-			data[idx++] = 0;
+			sscanf(ent->d_name, "device%d:%" SCNu64, &tid, &lun);
+
+			lun = (0x8000 | (lun & 0x001f)) << 48;
+			dprintf("%d %" PRIx64 "\n", tid, lun);
+
+			data[idx++] = cpu_to_be64(lun);
 			if (!(alen -= 8))
 				break;
 			if (!(rbuflen -= 8)) {
@@ -387,7 +388,7 @@ static int report_luns(int tid, uint32_t unused, uint8_t *scb, uint8_t *p, int *
 		}
 	}
 
-	data[0] = cpu_to_be32(nr_luns * 8);
+	*data = (cpu_to_be64(nr_luns * 8) << 32);
 	*len = min(oalen, nr_luns * 8 + 8);
 out:
 	closedir(dir);
@@ -587,6 +588,7 @@ static int mmap_device(int tid, uint64_t lun, uint8_t *scb,
 			err = SAM_STAT_CHECK_CONDITION;
 	}
 	*offset = off;
+	*len = datalen;
 	dprintf("%lx %u %" PRIu64 "\n", *uaddr, datalen, off);
 
 	return err;
@@ -614,9 +616,16 @@ static inline int mmap_cmd_init(uint8_t *scb, uint8_t *rw)
 	return result;
 }
 
+#define        TGT_INVALID_DEV_ID      ~0ULL
+
 uint64_t scsi_get_devid(uint8_t *p)
 {
 	uint64_t lun = TGT_INVALID_DEV_ID;
+
+	/* ibmvstgt hack */
+	lun = (uint64_t) *p;
+	lun = (lun >> 48) & 0x001f;
+	return lun;
 
 	switch (*p >> 6) {
 	case 0:

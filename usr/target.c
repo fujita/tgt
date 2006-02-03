@@ -359,9 +359,9 @@ static int cmd_queue(int fd, char *reqbuf)
 
 	memset(resbuf, 0, sizeof(resbuf));
 	pdu = (uint8_t *) ev_req->data;
-	dprintf("%u %x\n", cid, pdu[0]);
 
 	devid = scsi_get_devid(pdu + MAX_COMMAND_SIZE);
+	dprintf("%u %x %" PRIx64 "\n", cid, pdu[0], devid);
 
 	if (target->max_device > devid && target->devt[devid])
 		uaddr = target->devt[devid]->addr;

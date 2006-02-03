@@ -4,8 +4,6 @@
 #include "log.h"
 #include "dl.h"
 
-#define	TGT_INVALID_DEV_ID	~0ULL
-
 /* temporarily */
 #define	POLLS_PER_DRV	32
 extern int nl_fd;
