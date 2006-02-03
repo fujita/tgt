@@ -342,13 +342,16 @@ static struct cmd *find_cmd(uint32_t cid)
 	return NULL;
 }
 
+#define	MAX_COMMAND_SIZE	16
+
 static int cmd_queue(int fd, char *reqbuf)
 {
 	int result, len = 0;
 	struct tgt_event *ev_req = (struct tgt_event *) reqbuf;
 	char resbuf[NLMSG_SPACE(sizeof(struct tgt_event))];
 	struct tgt_event *ev_res = NLMSG_DATA(resbuf);
-	uint64_t offset, cid = ev_req->k.cmd_req.cid, devid;
+	uint64_t offset, devid;
+	uint32_t cid = ev_req->k.cmd_req.cid;
 	uint8_t *pdu, rw = 0, try_map = 0;
 	unsigned long uaddr = 0;
 	int host_no = ev_req->k.cmd_req.host_no;
@@ -356,9 +359,9 @@ static int cmd_queue(int fd, char *reqbuf)
 
 	memset(resbuf, 0, sizeof(resbuf));
 	pdu = (uint8_t *) ev_req->data;
-	dprintf("%" PRIu64 " %x\n", cid, pdu[0]);
+	dprintf("%u %x\n", cid, pdu[0]);
 
-	devid = scsi_get_devid(pdu);
+	devid = scsi_get_devid(pdu + MAX_COMMAND_SIZE);
 
 	if (target->max_device > devid && target->devt[devid])
 		uaddr = target->devt[devid]->addr;
@@ -367,6 +370,8 @@ static int cmd_queue(int fd, char *reqbuf)
 	result = scsi_cmd_process(target->tid, pdu, &len,
 				  ev_req->k.cmd_req.data_len,
 				  &uaddr, &rw, &try_map, &offset, devid);
+
+	dprintf("%u %x %lx %" PRIu64 " %d\n", cid, pdu[0], uaddr, offset, result);
 
 	cmd = malloc(sizeof(*cmd));
 	cmd->cid = cid;
@@ -385,8 +390,6 @@ static int cmd_queue(int fd, char *reqbuf)
 	ev_res->u.cmd_res.rw = rw;
 	ev_res->u.cmd_res.try_map = try_map;
 	ev_res->u.cmd_res.offset = offset;
-
-	log_debug("scsi_cmd_process res %d len %d\n", result, len);
 
 	return __nl_write(fd, TGT_UEVENT_CMD_RES, resbuf,
 			  NLMSG_SPACE(sizeof(*ev_res)));
