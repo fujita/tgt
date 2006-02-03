@@ -234,6 +234,7 @@ static int scsi_tgt_init_cmd(struct scsi_cmnd *cmd, gfp_t gfp_mask)
 		return 0;
 	}
 
+	eprintk("cmd %p addr %p cnt %d\n", cmd, cmd->buffer, cmd->use_sg);
 	scsi_free_sgtable(cmd->request_buffer, cmd->sglist_len);
 	return -EINVAL;
 }
@@ -248,13 +249,22 @@ static int scsi_map_user_pages(struct scsi_cmnd *cmd, int rw)
 	struct bio *bio;
 	int err;
 
+	/*
+	 * TODO: We need to cheat queue_dma_alignment in
+	 * __bio_map_user_iov.
+	 */
+	len = (len + PAGE_SIZE - 1) & PAGE_MASK;
+
 	bio_list_init(&cmd->xfer_list);
 	bio_list_init(&cmd->xfer_done_list);
 
 	while (len > 0) {
-		bio = bio_map_user(q, NULL, (unsigned long)uaddr, len, rw, 1);
+		dprintk("%lx %u\n", (unsigned long) uaddr, len);
+		bio = bio_map_user(q, NULL, (unsigned long) uaddr, len, rw, 1);
 		if (IS_ERR(bio)) {
 			err = PTR_ERR(bio);
+			dprintk("fail to map %lx %u\n",
+				(unsigned long) uaddr, len);
 			goto unmap_bios;
 		}
 
@@ -284,9 +294,11 @@ static int scsi_map_user_pages(struct scsi_cmnd *cmd, int rw)
 	return 0;
 
 unmap_bios:
-	bio_unmap_user(rq->bio);
-	while ((bio = bio_list_pop(&cmd->xfer_list)))
-		bio_unmap_user(bio);
+	if (rq->bio) {
+		bio_unmap_user(rq->bio);
+		while ((bio = bio_list_pop(&cmd->xfer_list)))
+			bio_unmap_user(bio);
+	}
 
 	return err;
 }
@@ -313,11 +325,10 @@ send_uspace_err:
 	scsi_free_sgtable(cmd->request_buffer, cmd->sglist_len);
 	bio_list_add(&cmd->xfer_done_list, cmd->request->bio);
 
-	cmd->bufflen -= cmd->request_bufflen;
 	cmd->buffer += cmd->request_bufflen;
 	cmd->offset += cmd->request_bufflen;
 
-	if (!cmd->bufflen) {
+	if (!cmd->xfer_list.head) {
 		scsi_tgt_transfer_response(cmd);
 		return;
 	}
@@ -375,6 +386,9 @@ int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len, u64 offset,
 	struct scsi_cmnd *cmd;
 	struct request *rq;
 	int err = 0;
+
+	dprintk("%d %u %d %u %llu %lx %u %u\n", host_no, cid, result,
+		len, (unsigned long long) offset, uaddr, rw, try_map);
 
 	/* TODO: replace with a O(1) alg */
 	shost = scsi_host_lookup(host_no);

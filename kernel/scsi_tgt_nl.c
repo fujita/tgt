@@ -9,6 +9,7 @@
 #include <linux/netlink.h>
 #include <linux/blkdev.h>
 #include <net/tcp.h>
+#include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_tgt_if.h>
@@ -42,7 +43,8 @@ int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, gfp_t gfp_mask)
 	pid_t pid;
 
 	pid = scsi_tgt_get_pid(cmd->shost);
-	len = NLMSG_SPACE(sizeof(*ev) + MAX_COMMAND_SIZE);
+	len = NLMSG_SPACE(sizeof(*ev) +
+			  MAX_COMMAND_SIZE + sizeof(struct scsi_lun));
 	/*
 	 * TODO: add MAX_COMMAND_SIZE to ev and add mempool
 	 */
@@ -60,7 +62,12 @@ int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, gfp_t gfp_mask)
 	ev->k.cmd_req.host_no = cmd->shost->host_no;
 	ev->k.cmd_req.cid = cmd->request->tag;
 	ev->k.cmd_req.data_len = cmd->request_bufflen;
-	memcpy(ev->data, cmd->cmnd, MAX_COMMAND_SIZE);
+
+	/* FIXME: we need scsi core to do that. */
+	memcpy(cmd->cmnd, cmd->data_cmnd, MAX_COMMAND_SIZE);
+	memcpy(pdu, cmd->cmnd, MAX_COMMAND_SIZE);
+	memcpy(pdu + MAX_COMMAND_SIZE, cmd->request->end_io_data,
+	       sizeof(struct scsi_lun));
 
 	err = netlink_unicast(nls, skb, pid, 0);
 	if (err < 0)
@@ -95,14 +102,15 @@ static int send_event_res(uint16_t type, struct tgt_event *p,
 int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd, gfp_t gfp_mask)
 {
 	struct tgt_event ev;
+	char dummy[MAX_COMMAND_SIZE + sizeof(struct scsi_lun)];
 
 	memset(&ev, 0, sizeof(ev));
 	ev.k.cmd_done.host_no = cmd->shost->host_no;
-	ev.k.cmd_done.cid = (unsigned long)cmd;
+	ev.k.cmd_done.cid = cmd->request->tag;
 	ev.k.cmd_done.result = cmd->result;
 
-	return send_event_res(TGT_KEVENT_CMD_DONE, &ev, NULL, 0, gfp_mask,
-			     scsi_tgt_get_pid(cmd->shost));
+	return send_event_res(TGT_KEVENT_CMD_DONE, &ev, dummy, sizeof(dummy),
+			      gfp_mask, scsi_tgt_get_pid(cmd->shost));
 }
 
 static int scsi_tgt_bind_host(struct tgt_event *ev)
