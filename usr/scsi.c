@@ -249,13 +249,12 @@ static int mode_sense(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *l
 static int inquiry(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *len)
 {
 	uint64_t size;
-	int result = SAM_STAT_CHECK_CONDITION;
+	int err, result = SAM_STAT_CHECK_CONDITION;
 
 	if (((scb[1] & 0x3) == 0x3) || (!(scb[1] & 0x3) && scb[2]))
 		goto err;
 
-	errno = 0;
-	device_info(tid, lun, &size);
+	err = device_info(tid, lun, &size);
 
 	if (!(scb[1] & 0x3)) {
 		data[2] = 4;
@@ -309,7 +308,7 @@ static int inquiry(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *len)
 			data[4] = 0x1;
 			data[5] = 0x1;
 			data[7] = tmp;
-			if (errno == ENOENT)
+			if (err < 0)
 				sprintf(data + 8, "deadbeaf%d:%" PRIu64, tid, lun);
 			*len = tmp + 8;
 			result = SAM_STAT_GOOD;
@@ -321,8 +320,10 @@ static int inquiry(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *len)
 
 	*len = min_t(int, *len, scb[4]);
 
-	if (errno == ENOENT)
+	if (err < 0) {
+		dprintf("%" PRIu64 "\n", lun);
 		data[0] = TYPE_NO_LUN;
+	}
 
 	return SAM_STAT_GOOD;
 
@@ -618,14 +619,22 @@ static inline int mmap_cmd_init(uint8_t *scb, uint8_t *rw)
 
 #define        TGT_INVALID_DEV_ID      ~0ULL
 
+#define GETTARGET(x) ((int)((((uint64_t)(x)) >> 56) & 0x003f))
+#define GETBUS(x) ((int)((((uint64_t)(x)) >> 53) & 0x0007))
+#define GETLUN(x) ((int)((((uint64_t)(x)) >> 48) & 0x001f))
+
 uint64_t scsi_get_devid(uint8_t *p)
 {
 	uint64_t lun = TGT_INVALID_DEV_ID;
 
 	/* ibmvstgt hack */
-	lun = (uint64_t) *p;
-	lun = (lun >> 48) & 0x001f;
-	return lun;
+	lun = *((uint64_t *) p);
+	dprintf("%" PRIx64 " %u %u %u\n", lun, GETTARGET(lun), GETBUS(lun), GETLUN(lun));
+
+	if (GETBUS(lun) || GETTARGET(lun))
+		return TGT_INVALID_DEV_ID;
+	else
+		return GETLUN(lun);
 
 	switch (*p >> 6) {
 	case 0:
