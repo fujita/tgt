@@ -1,8 +1,8 @@
 diff --git a/block/ll_rw_blk.c b/block/ll_rw_blk.c
-index 8e27d0a..9e7375f 100644
+index f9fc07e..65c56b6 100644
 --- a/block/ll_rw_blk.c
 +++ b/block/ll_rw_blk.c
-@@ -2291,7 +2291,7 @@ int blk_rq_map_user(request_queue_t *q, 
+@@ -2293,7 +2293,7 @@ int blk_rq_map_user(request_queue_t *q, 
  	 */
  	uaddr = (unsigned long) ubuf;
  	if (!(uaddr & queue_dma_alignment(q)) && !(len & queue_dma_alignment(q)))
@@ -11,7 +11,7 @@ index 8e27d0a..9e7375f 100644
  	else
  		bio = bio_copy_user(q, uaddr, len, reading);
  
-@@ -2343,7 +2343,8 @@ int blk_rq_map_user_iov(request_queue_t 
+@@ -2345,7 +2345,8 @@ int blk_rq_map_user_iov(request_queue_t 
  	/* we don't allow misaligned data like bio_map_user() does.  If the
  	 * user is using sg, they're expected to know the alignment constraints
  	 * and respect them accordingly */
@@ -131,7 +131,7 @@ index 6cfa8d4..53f589b 100644
  #include <linux/init.h>
  #include <linux/mempool.h>
 diff --git a/drivers/md/dm-snap.c b/drivers/md/dm-snap.c
-index 4b9dd8f..f6d44e9 100644
+index f3759dd..2e65db8 100644
 --- a/drivers/md/dm-snap.c
 +++ b/drivers/md/dm-snap.c
 @@ -18,9 +18,9 @@
@@ -146,7 +146,7 @@ index 4b9dd8f..f6d44e9 100644
  
  /*
 diff --git a/drivers/md/dm.c b/drivers/md/dm.c
-index 097d1e5..f51568a 100644
+index e9adeb9..020f415 100644
 --- a/drivers/md/dm.c
 +++ b/drivers/md/dm.c
 @@ -6,8 +6,8 @@
@@ -160,7 +160,7 @@ index 097d1e5..f51568a 100644
  #include <linux/module.h>
  #include <linux/moduleparam.h>
 diff --git a/drivers/md/raid1.c b/drivers/md/raid1.c
-index a06ff91..76798dc 100644
+index d39f584..4e43ce2 100644
 --- a/drivers/md/raid1.c
 +++ b/drivers/md/raid1.c
 @@ -31,7 +31,7 @@
@@ -173,7 +173,7 @@ index a06ff91..76798dc 100644
  #include <linux/raid/bitmap.h>
  
 diff --git a/drivers/md/raid10.c b/drivers/md/raid10.c
-index 9e658e5..c480fe6 100644
+index ab90a6d..3ced1b9 100644
 --- a/drivers/md/raid10.c
 +++ b/drivers/md/raid10.c
 @@ -18,7 +18,7 @@
@@ -202,7 +202,7 @@ index 5881079..64e687a 100644
  	kfree(shost->shost_data);
  
 diff --git a/drivers/scsi/scsi.c b/drivers/scsi/scsi.c
-index 245ca99..48cfdf2 100644
+index 245ca99..3bf557f 100644
 --- a/drivers/scsi/scsi.c
 +++ b/drivers/scsi/scsi.c
 @@ -236,6 +236,59 @@ static struct scsi_cmnd *__scsi_get_comm
@@ -229,17 +229,17 @@ index 245ca99..48cfdf2 100644
 +	struct request *rq;
 +	struct scsi_cmnd *cmd;
 +
-+	rq = blk_get_request(shost->uspace_req_q, write, gfp_mask);
-+	if (!rq)
-+		return NULL;
-+
 +	/* Bail if we can't get a reference to the device */
 +	if (!get_device(&shost->shost_gendev))
-+		goto release_rq;
++		return NULL;
++
++	rq = blk_get_request(shost->uspace_req_q, write, gfp_mask);
++	if (!rq)
++		goto put_dev;
 +
 +	cmd = __scsi_get_command(shost, gfp_mask);
 +	if (!cmd)
-+		goto put_dev;
++		goto release_rq;
 +
 +	memset(cmd, 0, sizeof(*cmd));
 +	cmd->sc_data_direction = data_dir;
@@ -252,13 +252,13 @@ index 245ca99..48cfdf2 100644
 +
 +	return cmd;
 +
-+put_dev:
-+	put_device(&shost->shost_gendev);
 +release_rq:
 +	blk_put_request(rq);
++put_dev:
++	put_device(&shost->shost_gendev);
 +	return NULL;
 +
-+}				
++}
 +EXPORT_SYMBOL_GPL(scsi_host_get_command);
 +
 +/*
@@ -285,7 +285,7 @@ index 245ca99..48cfdf2 100644
 +	struct request_queue *q = cmd->shost->uspace_req_q;
 +	struct request *rq = cmd->request;
 +	unsigned long flags;
-+	
++
 +	/* changing locks here, don't need to restore the irq state */
 +	spin_lock_irqsave(&shost->free_list_lock, flags);
 +	if (unlikely(list_empty(&shost->free_list))) {
@@ -312,10 +312,10 @@ index 245ca99..48cfdf2 100644
   *
   * Purpose:	Free a scsi command block
 diff --git a/drivers/scsi/scsi_lib.c b/drivers/scsi/scsi_lib.c
-index 3574ba9..ab66ca4 100644
+index 4a60285..cbd16d6 100644
 --- a/drivers/scsi/scsi_lib.c
 +++ b/drivers/scsi/scsi_lib.c
-@@ -802,7 +802,7 @@ static struct scsi_cmnd *scsi_end_reques
+@@ -803,7 +803,7 @@ static struct scsi_cmnd *scsi_end_reques
  	return NULL;
  }
  
@@ -324,7 +324,7 @@ index 3574ba9..ab66ca4 100644
  {
  	struct scsi_host_sg_pool *sgp;
  	struct scatterlist *sgl;
-@@ -843,7 +843,9 @@ static struct scatterlist *scsi_alloc_sg
+@@ -844,7 +844,9 @@ static struct scatterlist *scsi_alloc_sg
  	return sgl;
  }
  
@@ -335,7 +335,7 @@ index 3574ba9..ab66ca4 100644
  {
  	struct scsi_host_sg_pool *sgp;
  
-@@ -853,6 +855,8 @@ static void scsi_free_sgtable(struct sca
+@@ -854,6 +856,8 @@ static void scsi_free_sgtable(struct sca
  	mempool_free(sgl, sgp->pool);
  }
  
@@ -344,7 +344,7 @@ index 3574ba9..ab66ca4 100644
  /*
   * Function:    scsi_release_buffers()
   *
-@@ -1685,29 +1689,40 @@ u64 scsi_calculate_bounce_limit(struct S
+@@ -1686,29 +1690,40 @@ u64 scsi_calculate_bounce_limit(struct S
  }
  EXPORT_SYMBOL(scsi_calculate_bounce_limit);
  
@@ -393,10 +393,10 @@ index 3574ba9..ab66ca4 100644
  void scsi_free_queue(struct request_queue *q)
  {
 diff --git a/fs/bio.c b/fs/bio.c
-index 7b30695..aba3ce9 100644
+index 1f3bb50..fd1e419 100644
 --- a/fs/bio.c
 +++ b/fs/bio.c
-@@ -718,19 +718,21 @@ static struct bio *__bio_map_user_iov(re
+@@ -719,19 +719,21 @@ static struct bio *__bio_map_user_iov(re
   *	@uaddr: start of user address
   *	@len: length in bytes
   *	@write_to_vm: bool indicating writing to pages or not
@@ -420,7 +420,7 @@ index 7b30695..aba3ce9 100644
  }
  
  /**
-@@ -740,13 +742,14 @@ struct bio *bio_map_user(request_queue_t
+@@ -741,13 +743,14 @@ struct bio *bio_map_user(request_queue_t
   *	@iov:	the iovec.
   *	@iov_count: number of elements in the iovec
   *	@write_to_vm: bool indicating writing to pages or not
@@ -436,7 +436,7 @@ index 7b30695..aba3ce9 100644
  {
  	struct bio *bio;
  	int len = 0, i;
-@@ -767,7 +770,7 @@ struct bio *bio_map_user_iov(request_que
+@@ -768,7 +771,7 @@ struct bio *bio_map_user_iov(request_que
  	for (i = 0; i < iov_count; i++)
  		len += iov[i].iov_len;
  
@@ -632,7 +632,7 @@ index 7529f43..ce97272 100644
  
  #endif /* _SCSI_SCSI_CMND_H */
 diff --git a/include/scsi/scsi_host.h b/include/scsi/scsi_host.h
-index 467274a..6b06850 100644
+index 8279929..8b799db 100644
 --- a/include/scsi/scsi_host.h
 +++ b/include/scsi/scsi_host.h
 @@ -7,6 +7,7 @@
@@ -680,7 +680,7 @@ index 467274a..6b06850 100644
  	 * This is an error handling strategy routine.  You don't need to
  	 * define one of these if you don't want to - there is a default
  	 * routine that is present that should work in most cases.  For those
-@@ -573,6 +604,12 @@ struct Scsi_Host {
+@@ -572,6 +603,12 @@ struct Scsi_Host {
  	 */
  	unsigned int max_host_blocked;
  
@@ -693,7 +693,7 @@ index 467274a..6b06850 100644
  	/* legacy crap */
  	unsigned long base;
  	unsigned long io_port;
-@@ -675,6 +712,9 @@ extern void scsi_unblock_requests(struct
+@@ -674,6 +711,9 @@ extern void scsi_unblock_requests(struct
  extern void scsi_block_requests(struct Scsi_Host *);
  
  struct class_container;
