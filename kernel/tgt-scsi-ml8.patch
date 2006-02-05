@@ -568,6 +568,18 @@ index 617b950..2323360 100644
  
  #define	LEVEL_MULTIPATH		(-4)
  #define	LEVEL_LINEAR		(-1)
+diff --git a/include/net/af_packet.h b/include/net/af_packet.h
+new file mode 100644
+index 0000000..e280e7c
+--- /dev/null
++++ b/include/net/af_packet.h
+@@ -0,0 +1,6 @@
++#ifndef __LINUX_NET_AFPACKET_H
++#define __LINUX_NET_AFPACKET_H
++
++extern void *packet_frame(struct sock *sk);
++
++#endif
 diff --git a/include/scsi/scsi_cmnd.h b/include/scsi/scsi_cmnd.h
 index 7529f43..ce97272 100644
 --- a/include/scsi/scsi_cmnd.h
@@ -721,10 +733,10 @@ index 0000000..c1dc0d2
 +extern void scsi_tgt_queue_command(struct scsi_cmnd *, struct scsi_lun *, int);
 diff --git a/include/scsi/scsi_tgt_if.h b/include/scsi/scsi_tgt_if.h
 new file mode 100644
-index 0000000..f7961d6
+index 0000000..51ada8d
 --- /dev/null
 +++ b/include/scsi/scsi_tgt_if.h
-@@ -0,0 +1,71 @@
+@@ -0,0 +1,81 @@
 +/*
 + * SCSI target netlink interface
 + *
@@ -745,7 +757,6 @@ index 0000000..f7961d6
 +
 +	/* kernel -> user */
 +	TGT_KEVENT_RESPONSE,
-+	TGT_KEVENT_CMD_REQ,
 +	TGT_KEVENT_CMD_DONE,
 +};
 +
@@ -755,6 +766,7 @@ index 0000000..f7961d6
 +		struct {
 +			int host_no;
 +			int pid;
++			int psfd;
 +		} target_bind;
 +		struct {
 +			int host_no;
@@ -795,4 +807,43 @@ index 0000000..f7961d6
 +	uint64_t data[0];
 +} __attribute__ ((aligned (sizeof(uint64_t))));
 +
++#ifndef __KERNEL__
++#define MAX_COMMAND_SIZE	16
 +#endif
++
++struct tgt_cmd {
++	uint8_t scb[MAX_COMMAND_SIZE];
++	uint8_t lun[8];
++	int tags;
++} __attribute__ ((aligned (sizeof(uint64_t))));
++
++#endif
+diff --git a/net/packet/af_packet.c b/net/packet/af_packet.c
+index 9db7dbd..aee86cd 100644
+--- a/net/packet/af_packet.c
++++ b/net/packet/af_packet.c
+@@ -562,6 +562,24 @@ drop:
+ }
+ 
+ #ifdef CONFIG_PACKET_MMAP
++void *packet_frame(struct sock *sk)
++{
++	struct packet_sock *po;
++	struct tpacket_hdr *h;
++	int err;
++
++	po = pkt_sk(sk);
++	spin_lock(&sk->sk_receive_queue.lock);
++	h = (struct tpacket_hdr *) packet_lookup_frame(po, po->head);
++	if (h->tp_status)
++		h = ERR_PTR(-ENOBUFS);
++	else
++		po->head = po->head != po->frame_max ? po->head+1 : 0;
++	spin_unlock(&sk->sk_receive_queue.lock);
++	return h;
++}
++EXPORT_SYMBOL_GPL(packet_frame);
++
+ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, struct net_device *orig_dev)
+ {
+ 	struct sock *sk;
