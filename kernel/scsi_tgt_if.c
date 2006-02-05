@@ -6,8 +6,10 @@
  * This code is licenced under the GPL.
  */
 
-#include <linux/netlink.h>
 #include <linux/blkdev.h>
+#include <linux/if_packet.h>
+#include <linux/netlink.h>
+#include <net/af_packet.h>
 #include <net/tcp.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
@@ -33,47 +35,67 @@ static int scsi_tgt_get_pid(struct Scsi_Host *shost)
 	}
 }
 
-int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, gfp_t gfp_mask)
+static struct sock *scsi_tgt_get_sock(struct Scsi_Host *shost)
 {
-	struct sk_buff *skb;
-	struct nlmsghdr *nlh;
+	struct scsi_tgt_queuedata *queue = shost->uspace_req_q->queuedata;
+	struct socket *sock = queue->sock;
+	return sock ? sock->sk : NULL;
+}
+
+int scsi_tgt_uspace_send(struct scsi_cmnd *cmd)
+{
+	struct sock *sk;
+	struct tpacket_hdr *h;
 	struct tgt_event *ev;
-	char *pdu;
-	int len, err;
-	pid_t pid;
+	struct tgt_cmd *tcmd;
 
-	pid = scsi_tgt_get_pid(cmd->shost);
-	len = NLMSG_SPACE(sizeof(*ev) +
-			  MAX_COMMAND_SIZE + sizeof(struct scsi_lun));
-	/*
-	 * TODO: add MAX_COMMAND_SIZE to ev and add mempool
-	 */
-	skb = alloc_skb(NLMSG_SPACE(len), gfp_mask);
-	if (!skb)
-		return -ENOMEM;
+	sk = scsi_tgt_get_sock(cmd->shost);
+	if (!sk) {
+		printk(KERN_INFO "Host%d not connected\n",
+		       cmd->shost->host_no);
+		return -ENOTCONN;
+	}
 
-	dprintk("%p %d %Zd %d\n", cmd, len, sizeof(*ev), MAX_COMMAND_SIZE);
-	nlh = __nlmsg_put(skb, pid, 0, TGT_KEVENT_CMD_REQ,
-			  len - sizeof(*nlh), 0);
-	ev = NLMSG_DATA(nlh);
-	memset(ev, 0, sizeof(*ev));
+	h = packet_frame(sk);
+	if (IS_ERR(h)) {
+		eprintk("Queue is full\n");
+		return PTR_ERR(h);
+	}
 
-	pdu = (char *) ev->data;
+	ev = (struct tgt_event *) ((char *) h + TPACKET_HDRLEN);
+
 	ev->k.cmd_req.host_no = cmd->shost->host_no;
 	ev->k.cmd_req.cid = cmd->request->tag;
 	ev->k.cmd_req.data_len = cmd->request_bufflen;
 
+	dprintk("%d %u %u\n", ev->k.cmd_req.host_no, ev->k.cmd_req.cid,
+		ev->k.cmd_req.data_len);
+
 	/* FIXME: we need scsi core to do that. */
 	memcpy(cmd->cmnd, cmd->data_cmnd, MAX_COMMAND_SIZE);
-	memcpy(pdu, cmd->cmnd, MAX_COMMAND_SIZE);
-	memcpy(pdu + MAX_COMMAND_SIZE, cmd->request->end_io_data,
-	       sizeof(struct scsi_lun));
 
-	err = netlink_unicast(nls, skb, pid, 0);
-	if (err < 0)
-		printk(KERN_ERR "scsi_tgt_uspace_send: could not send skb "
-		      "to pid %d err %d\n", pid, err);
-	return err;
+	tcmd = (struct tgt_cmd *) ev->data;
+	memcpy(tcmd->scb, cmd->cmnd, sizeof(tcmd->scb));
+	memcpy(tcmd->lun, cmd->request->end_io_data, sizeof(struct scsi_lun));
+
+	h->tp_status = TP_STATUS_USER;
+	mb();
+	{
+		struct page *p_start, *p_end;
+		char *h_end = (char *) h + TPACKET_HDRLEN +
+			sizeof(struct tgt_event) + sizeof(struct tgt_cmd) - 1;
+
+		p_start = virt_to_page(h);
+		p_end = virt_to_page(h_end);
+		while (p_start <= p_end) {
+			flush_dcache_page(p_start);
+			p_start++;
+		}
+	}
+
+	sk->sk_data_ready(sk, 0);
+
+	return 0;
 }
 
 static int send_event_res(uint16_t type, struct tgt_event *p,
@@ -113,13 +135,15 @@ int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd, gfp_t gfp_mask)
 			      gfp_mask, scsi_tgt_get_pid(cmd->shost));
 }
 
+/* TODO: unbind to call fput. */
 static int scsi_tgt_bind_host(struct tgt_event *ev)
 {
 	struct Scsi_Host *shost;
 	struct task_struct *tsk;
 	int err = 0;
 
-	dprintk("%d %d\n", ev->u.target_bind.host_no, ev->u.target_bind.pid);
+	dprintk("%d %d %d\n", ev->u.target_bind.host_no,
+		ev->u.target_bind.pid, ev->u.target_bind.psfd);
 
 	shost = scsi_host_lookup(ev->u.target_bind.host_no);
 	if (IS_ERR(shost)) {
@@ -134,6 +158,7 @@ static int scsi_tgt_bind_host(struct tgt_event *ev)
 
 		queue = shost->uspace_req_q->queuedata;
 		queue->task = tsk;
+		queue->sock = sockfd_lookup(ev->u.target_bind.psfd, &err);
 	} else {
 		eprintk("Could not find process %d\n",
 			ev->u.target_bind.pid);
@@ -141,7 +166,7 @@ static int scsi_tgt_bind_host(struct tgt_event *ev)
 	}
 
 	scsi_host_put(shost);
-	return 0;
+	return err;
 }
 
 static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
