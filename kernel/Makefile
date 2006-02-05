@@ -6,7 +6,7 @@ EXTRA_CFLAGS += -I$(obj) -I$(obj)/../include -DNETLINK_TGT=17
 
 ifneq ($(KERNELRELEASE),)
 obj-m			+= scsi_tgt_core.o
-scsi_tgt_core-objs	:= scsi_tgt_lib.o scsi_tgt_nl.o
+scsi_tgt_core-objs	:= scsi_tgt_lib.o scsi_tgt_if.o
 
 else
 
