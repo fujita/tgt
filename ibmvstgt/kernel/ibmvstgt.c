@@ -4,7 +4,7 @@
  *			   Santiago Leon (santil@us.ibm.com) IBM Corp.
  *			   Linda Xie (lxie@us.ibm.com) IBM Corp.
  *
- * Copyright (C) 2005 - 2006 FUJITA Tomonori <tomof@acm.org>
+ * Copyright (C) 2005 FUJITA Tomonori <tomof@acm.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
