@@ -581,7 +581,7 @@ index 0000000..e280e7c
 +
 +#endif
 diff --git a/include/scsi/scsi_cmnd.h b/include/scsi/scsi_cmnd.h
-index 7529f43..ce97272 100644
+index 7529f43..6d92a83 100644
 --- a/include/scsi/scsi_cmnd.h
 +++ b/include/scsi/scsi_cmnd.h
 @@ -5,9 +5,11 @@
@@ -596,15 +596,7 @@ index 7529f43..ce97272 100644
  struct scsi_device;
  struct scsi_request;
  
-@@ -31,6 +33,7 @@ struct scsi_pointer {
- struct scsi_cmnd {
- 	int     sc_magic;
- 
-+	struct Scsi_Host *shost;
- 	struct scsi_device *device;
- 	struct scsi_request *sc_request;
- 
-@@ -84,6 +87,8 @@ struct scsi_cmnd {
+@@ -84,6 +86,8 @@ struct scsi_cmnd {
  	unsigned short sglist_len;	/* size of malloc'd scatter-gather list */
  	unsigned bufflen;	/* Size of data buffer */
  	void *buffer;		/* Data buffer */
@@ -613,7 +605,7 @@ index 7529f43..ce97272 100644
  
  	unsigned underflow;	/* Return error if less than
  				   this amount is transferred */
-@@ -131,6 +136,14 @@ struct scsi_cmnd {
+@@ -131,6 +135,14 @@ struct scsi_cmnd {
  
  	unsigned char tag;	/* SCSI-II queued command tag */
  	unsigned long pid;	/* Process ID, starts at 0. Unique per host. */
@@ -628,7 +620,7 @@ index 7529f43..ce97272 100644
  };
  
  /*
-@@ -147,9 +160,14 @@ struct scsi_cmnd {
+@@ -147,9 +159,14 @@ struct scsi_cmnd {
  #define SCSI_STATE_MLQUEUE         0x100b
  
  
