@@ -27,6 +27,7 @@
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_host.h>
+#include <scsi/scsi_tgt.h>
 #include <scsi/scsi_tgt_if.h>
 
 #include "scsi_tgt_priv.h"
@@ -62,15 +63,15 @@ static void tpacket_done(struct sock *sk, struct tpacket_hdr *h, int len)
 
 int scsi_tgt_uspace_send(struct scsi_cmnd *cmd)
 {
+	struct Scsi_Host *shost = scsi_tgt_cmd_to_host(cmd);
 	struct sock *sk;
 	struct tpacket_hdr *h;
 	struct tgt_event *ev;
 	struct tgt_cmd *tcmd;
 
-	sk = scsi_tgt_get_sock(cmd->device->host);
+	sk = scsi_tgt_get_sock(shost);
 	if (!sk) {
-		printk(KERN_INFO "Host%d not connected\n",
-		       cmd->device->host->host_no);
+		printk(KERN_INFO "Host%d not connected\n", shost->host_no);
 		return -ENOTCONN;
 	}
 
@@ -82,7 +83,7 @@ int scsi_tgt_uspace_send(struct scsi_cmnd *cmd)
 
 	ev = (struct tgt_event *) ((char *) h + TPACKET_HDRLEN);
 	ev->type = TGT_KEVENT_CMD_REQ;
-	ev->k.cmd_req.host_no = cmd->device->host->host_no;
+	ev->k.cmd_req.host_no = shost->host_no;
 	ev->k.cmd_req.cid = cmd->request->tag;
 	ev->k.cmd_req.data_len = cmd->request_bufflen;
 
@@ -102,14 +103,15 @@ int scsi_tgt_uspace_send(struct scsi_cmnd *cmd)
 
 int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd, gfp_t gfp_mask)
 {
+	struct Scsi_Host *shost = scsi_tgt_cmd_to_host(cmd);
 	struct sock *sk;
 	struct tgt_event *ev;
 	struct tpacket_hdr *h;
 
-	sk = scsi_tgt_get_sock(cmd->device->host);
+	sk = scsi_tgt_get_sock(shost);
 	if (!sk) {
 		printk(KERN_INFO "Host%d not connected\n",
-		       cmd->device->host->host_no);
+		       shost->host_no);
 		return -ENOTCONN;
 	}
 
@@ -121,7 +123,7 @@ int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd, gfp_t gfp_mask)
 
 	ev = (struct tgt_event *) ((char *) h + TPACKET_HDRLEN);
 	ev->type = TGT_KEVENT_CMD_DONE;
-	ev->k.cmd_done.host_no = cmd->device->host->host_no;
+	ev->k.cmd_done.host_no = shost->host_no;
 	ev->k.cmd_done.cid = cmd->request->tag;
 	ev->k.cmd_done.result = cmd->result;
 

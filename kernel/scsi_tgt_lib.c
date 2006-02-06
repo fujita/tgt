@@ -88,6 +88,7 @@ int scsi_tgt_alloc_queue(struct Scsi_Host *shost)
 		err = -ENOMEM;
 		goto cleanup_queue;
 	}
+	queuedata->shost = shost;
 	q->queuedata = queuedata;
 
 	elevator_exit(q->elevator);
@@ -119,6 +120,13 @@ cleanup_queue:
 }
 EXPORT_SYMBOL_GPL(scsi_tgt_alloc_queue);
 
+struct Scsi_Host *scsi_tgt_cmd_to_host(struct scsi_cmnd *cmd)
+{
+	struct scsi_tgt_queuedata *queue = cmd->request->q->queuedata;
+	return queue->shost;
+}
+EXPORT_SYMBOL_GPL(scsi_tgt_cmd_to_host);
+
 /**
  * scsi_tgt_queue_command - queue command for userspace processing
  * @cmd:	scsi command
@@ -135,8 +143,7 @@ void scsi_tgt_queue_command(struct scsi_cmnd *cmd, struct scsi_lun *scsilun,
 	 * REQ_MSG_DONT_UNPLUG_IMMED_BECUASE_WE_WILL_HANDLE_IT
 	 */
 	cmd->request->end_io_data = scsilun;
-	elv_add_request(cmd->device->host->uspace_req_q, cmd->request,
-			ELEVATOR_INSERT_BACK, 1);
+	elv_add_request(cmd->request->q, cmd->request, ELEVATOR_INSERT_BACK, 1);
 }
 EXPORT_SYMBOL_GPL(scsi_tgt_queue_command);
 
@@ -164,7 +171,7 @@ static void scsi_tgt_cmd_destroy(void *data)
 
 	scsi_unmap_user_pages(cmd);
 	scsi_tgt_uspace_send_status(cmd, GFP_KERNEL);
-	scsi_host_put_command(cmd);
+	scsi_host_put_command(scsi_tgt_cmd_to_host(cmd), cmd);
 }
 
 /*
@@ -186,7 +193,7 @@ static void scsi_tgt_cmd_done(struct scsi_cmnd *cmd)
 
 static int __scsi_tgt_transfer_response(struct scsi_cmnd *cmd)
 {
-	struct Scsi_Host *shost = cmd->device->host;
+	struct Scsi_Host *shost = scsi_tgt_cmd_to_host(cmd);
 	int err;
 
 	dprintk("cmd %p\n", cmd);
@@ -242,7 +249,7 @@ static int scsi_tgt_init_cmd(struct scsi_cmnd *cmd, gfp_t gfp_mask)
 /* TODO: test this crap and replace bio_map_user with new interface maybe */
 static int scsi_map_user_pages(struct scsi_cmnd *cmd, int rw)
 {
-	struct request_queue *q = cmd->device->host->uspace_req_q;
+	struct request_queue *q = cmd->request->q;
 	struct request *rq = cmd->request;
 	void *uaddr = cmd->buffer;
 	unsigned int len = cmd->bufflen;
@@ -339,7 +346,7 @@ send_uspace_err:
 	bio = bio_list_pop(&cmd->xfer_list);
 	BUG_ON(!bio);
 
-	blk_rq_bio_prep(cmd->device->host->uspace_req_q, cmd->request, bio);
+	blk_rq_bio_prep(cmd->request->q, cmd->request, bio);
 	err = scsi_tgt_init_cmd(cmd, GFP_ATOMIC);
 	if (err) {
 		cmd->result = DID_ERROR << 16;
@@ -355,7 +362,7 @@ send_uspace_err:
 static int scsi_tgt_transfer_data(struct scsi_cmnd *cmd)
 {
 	int err;
-	struct Scsi_Host *host = cmd->device->host;
+	struct Scsi_Host *host = scsi_tgt_cmd_to_host(cmd);
 
 	err = host->hostt->transfer_data(cmd, scsi_tgt_data_transfer_done);
 	switch (err) {

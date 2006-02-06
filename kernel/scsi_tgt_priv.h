@@ -1,4 +1,5 @@
 struct scsi_cmnd;
+struct Scsi_Host;
 struct task_struct;
 
 /* tmp - will replace with SCSI logging stuff */
@@ -12,6 +13,7 @@ do {								\
 struct scsi_tgt_queuedata {
 	struct task_struct *task;
 	struct socket *sock;
+	struct Scsi_Host *shost;
 };
 
 extern void scsi_tgt_if_exit(void);
