@@ -19,10 +19,10 @@
  * the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 #include <linux/module.h>
-#include <linux/pagemap.h>
+#include <linux/bio-list.h>
 #include <linux/blkdev.h>
 #include <linux/elevator.h>
-#include <linux/bio-list.h>
+#include <linux/pagemap.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_device.h>
@@ -135,7 +135,7 @@ void scsi_tgt_queue_command(struct scsi_cmnd *cmd, struct scsi_lun *scsilun,
 	 * REQ_MSG_DONT_UNPLUG_IMMED_BECUASE_WE_WILL_HANDLE_IT
 	 */
 	cmd->request->end_io_data = scsilun;
-	elv_add_request(cmd->shost->uspace_req_q, cmd->request,
+	elv_add_request(cmd->device->host->uspace_req_q, cmd->request,
 			ELEVATOR_INSERT_BACK, 1);
 }
 EXPORT_SYMBOL_GPL(scsi_tgt_queue_command);
@@ -186,7 +186,7 @@ static void scsi_tgt_cmd_done(struct scsi_cmnd *cmd)
 
 static int __scsi_tgt_transfer_response(struct scsi_cmnd *cmd)
 {
-	struct Scsi_Host *shost = cmd->shost;
+	struct Scsi_Host *shost = cmd->device->host;
 	int err;
 
 	dprintk("cmd %p\n", cmd);
@@ -242,7 +242,7 @@ static int scsi_tgt_init_cmd(struct scsi_cmnd *cmd, gfp_t gfp_mask)
 /* TODO: test this crap and replace bio_map_user with new interface maybe */
 static int scsi_map_user_pages(struct scsi_cmnd *cmd, int rw)
 {
-	struct request_queue *q = cmd->shost->uspace_req_q;
+	struct request_queue *q = cmd->device->host->uspace_req_q;
 	struct request *rq = cmd->request;
 	void *uaddr = cmd->buffer;
 	unsigned int len = cmd->bufflen;
@@ -339,7 +339,7 @@ send_uspace_err:
 	bio = bio_list_pop(&cmd->xfer_list);
 	BUG_ON(!bio);
 
-	blk_rq_bio_prep(cmd->shost->uspace_req_q, cmd->request, bio);
+	blk_rq_bio_prep(cmd->device->host->uspace_req_q, cmd->request, bio);
 	err = scsi_tgt_init_cmd(cmd, GFP_ATOMIC);
 	if (err) {
 		cmd->result = DID_ERROR << 16;
@@ -355,8 +355,9 @@ send_uspace_err:
 static int scsi_tgt_transfer_data(struct scsi_cmnd *cmd)
 {
 	int err;
+	struct Scsi_Host *host = cmd->device->host;
 
-	err = cmd->shost->hostt->transfer_data(cmd, scsi_tgt_data_transfer_done);
+	err = host->hostt->transfer_data(cmd, scsi_tgt_data_transfer_done);
 	switch (err) {
 		case SCSI_MLQUEUE_HOST_BUSY:
 		case SCSI_MLQUEUE_DEVICE_BUSY:

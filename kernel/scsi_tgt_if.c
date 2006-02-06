@@ -13,6 +13,7 @@
 #include <net/tcp.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
+#include <scsi/scsi_device.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_tgt_if.h>
 
@@ -49,10 +50,10 @@ int scsi_tgt_uspace_send(struct scsi_cmnd *cmd)
 	struct tgt_event *ev;
 	struct tgt_cmd *tcmd;
 
-	sk = scsi_tgt_get_sock(cmd->shost);
+	sk = scsi_tgt_get_sock(cmd->device->host);
 	if (!sk) {
 		printk(KERN_INFO "Host%d not connected\n",
-		       cmd->shost->host_no);
+		       cmd->device->host->host_no);
 		return -ENOTCONN;
 	}
 
@@ -64,7 +65,7 @@ int scsi_tgt_uspace_send(struct scsi_cmnd *cmd)
 
 	ev = (struct tgt_event *) ((char *) h + TPACKET_HDRLEN);
 
-	ev->k.cmd_req.host_no = cmd->shost->host_no;
+	ev->k.cmd_req.host_no = cmd->device->host->host_no;
 	ev->k.cmd_req.cid = cmd->request->tag;
 	ev->k.cmd_req.data_len = cmd->request_bufflen;
 
@@ -127,12 +128,12 @@ int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd, gfp_t gfp_mask)
 	char dummy[MAX_COMMAND_SIZE + sizeof(struct scsi_lun)];
 
 	memset(&ev, 0, sizeof(ev));
-	ev.k.cmd_done.host_no = cmd->shost->host_no;
+	ev.k.cmd_done.host_no = cmd->device->host->host_no;
 	ev.k.cmd_done.cid = cmd->request->tag;
 	ev.k.cmd_done.result = cmd->result;
 
 	return send_event_res(TGT_KEVENT_CMD_DONE, &ev, dummy, sizeof(dummy),
-			      gfp_mask, scsi_tgt_get_pid(cmd->shost));
+			      gfp_mask, scsi_tgt_get_pid(cmd->device->host));
 }
 
 /* TODO: unbind to call fput. */
