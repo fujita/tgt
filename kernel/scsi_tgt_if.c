@@ -268,12 +268,12 @@ static void event_recv(struct sock *sk, int length)
 	}
 }
 
-void __exit scsi_tgt_nl_exit(void)
+void __exit scsi_tgt_if_exit(void)
 {
 	sock_release(nls->sk_socket);
 }
 
-int __init scsi_tgt_nl_init(void)
+int __init scsi_tgt_if_init(void)
 {
 	nls = netlink_kernel_create(NETLINK_TGT, 1, event_recv,
 				    THIS_MODULE);

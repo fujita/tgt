@@ -457,7 +457,7 @@ static int __init scsi_tgt_init(void)
 	if (!scsi_tgtd)
 		return -ENOMEM;
 
-	err = scsi_tgt_nl_init();
+	err = scsi_tgt_if_init();
 	if (err)
 		destroy_workqueue(scsi_tgtd);
 	return err;
@@ -466,7 +466,7 @@ static int __init scsi_tgt_init(void)
 static void __exit scsi_tgt_exit(void)
 {
 	destroy_workqueue(scsi_tgtd);
-	scsi_tgt_nl_exit();
+	scsi_tgt_if_exit();
 }
 
 module_init(scsi_tgt_init);

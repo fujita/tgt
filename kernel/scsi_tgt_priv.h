@@ -14,8 +14,8 @@ struct scsi_tgt_queuedata {
 	struct socket *sock;
 };
 
-extern void scsi_tgt_nl_exit(void);
-extern int scsi_tgt_nl_init(void);
+extern void scsi_tgt_if_exit(void);
+extern int scsi_tgt_if_init(void);
 
 extern int scsi_tgt_uspace_send(struct scsi_cmnd *cmd);
 extern int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd, gfp_t flags);
