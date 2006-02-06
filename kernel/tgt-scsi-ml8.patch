@@ -202,10 +202,10 @@ index 5881079..64e687a 100644
  	kfree(shost->shost_data);
  
 diff --git a/drivers/scsi/scsi.c b/drivers/scsi/scsi.c
-index 245ca99..3bf557f 100644
+index 245ca99..fbb71e7 100644
 --- a/drivers/scsi/scsi.c
 +++ b/drivers/scsi/scsi.c
-@@ -236,6 +236,59 @@ static struct scsi_cmnd *__scsi_get_comm
+@@ -236,6 +236,58 @@ static struct scsi_cmnd *__scsi_get_comm
  }
  
  /*
@@ -244,7 +244,6 @@ index 245ca99..3bf557f 100644
 +	memset(cmd, 0, sizeof(*cmd));
 +	cmd->sc_data_direction = data_dir;
 +	cmd->jiffies_at_alloc = jiffies;
-+	cmd->shost = shost;
 +	cmd->request = rq;
 +
 +	rq->special = cmd;
@@ -265,7 +264,7 @@ index 245ca99..3bf557f 100644
   * Function:	scsi_get_command()
   *
   * Purpose:	Allocate and setup a scsi command block
-@@ -274,6 +327,45 @@ struct scsi_cmnd *scsi_get_command(struc
+@@ -274,6 +326,45 @@ struct scsi_cmnd *scsi_get_command(struc
  EXPORT_SYMBOL(scsi_get_command);
  
  /*
@@ -281,8 +280,8 @@ index 245ca99..3bf557f 100644
 + */
 +void scsi_host_put_command(struct scsi_cmnd *cmd)
 +{
-+	struct Scsi_Host *shost = cmd->shost;
-+	struct request_queue *q = cmd->shost->uspace_req_q;
++	struct Scsi_Host *shost = cmd->device->host;
++	struct request_queue *q = shost->uspace_req_q;
 +	struct request *rq = cmd->request;
 +	unsigned long flags;
 +
@@ -725,20 +724,33 @@ index 0000000..c1dc0d2
 +extern void scsi_tgt_queue_command(struct scsi_cmnd *, struct scsi_lun *, int);
 diff --git a/include/scsi/scsi_tgt_if.h b/include/scsi/scsi_tgt_if.h
 new file mode 100644
-index 0000000..51ada8d
+index 0000000..0830107
 --- /dev/null
 +++ b/include/scsi/scsi_tgt_if.h
-@@ -0,0 +1,81 @@
+@@ -0,0 +1,95 @@
 +/*
-+ * SCSI target netlink interface
++ * SCSI target kernel/user interface
 + *
-+ * (C) 2005 FUJITA Tomonori <tomof@acm.org>
-+ * (C) 2005 Mike Christie <michaelc@cs.wisc.edu>
-+ * This code is licenced under the GPL.
++ * Copyright 2005 FUJITA Tomonori <tomof@acm.org>
++ * Copyright 2005 Mike Christie <michaelc@cs.wisc.edu>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2, or (at your option)
++ * any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; see the file COPYING.  If not, write to
++ * the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
 + */
 +
-+#ifndef SCSI_TARGET_FRAMEWORK_IF_H
-+#define SCSI_TARGET_FRAMEWORK_IF_H
++#ifndef __SCSI_TARGET_IF_H
++#define __SCSI_TARGET_IF_H
 +
 +enum tgt_event_type {
 +	/* user -> kernel */
@@ -749,6 +761,7 @@ index 0000000..51ada8d
 +
 +	/* kernel -> user */
 +	TGT_KEVENT_RESPONSE,
++	TGT_KEVENT_CMD_REQ,
 +	TGT_KEVENT_CMD_DONE,
 +};
 +
