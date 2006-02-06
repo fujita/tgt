@@ -35,24 +35,29 @@
 static int tgtd_pid;
 static struct sock *nls;
 
-static int scsi_tgt_get_pid(struct Scsi_Host *shost)
-{
-	struct scsi_tgt_queuedata *queue = shost->uspace_req_q->queuedata;
-
-	if (likely(queue->task))
-		return queue->task->pid;
-	else {
-		printk(KERN_INFO "Sending cmd to tgtd. Host%d is unbound\n",
-		       shost->host_no);
-		return tgtd_pid;
-	}
-}
-
 static struct sock *scsi_tgt_get_sock(struct Scsi_Host *shost)
 {
 	struct scsi_tgt_queuedata *queue = shost->uspace_req_q->queuedata;
 	struct socket *sock = queue->sock;
 	return sock ? sock->sk : NULL;
+}
+
+static void tpacket_done(struct sock *sk, struct tpacket_hdr *h, int len)
+{
+	h->tp_status = TP_STATUS_USER;
+	mb();
+	{
+		struct page *p_start, *p_end;
+		char *h_end = (char *) h + TPACKET_HDRLEN + len - 1;
+
+		p_start = virt_to_page(h);
+		p_end = virt_to_page(h_end);
+		while (p_start <= p_end) {
+			flush_dcache_page(p_start);
+			p_start++;
+		}
+	}
+	sk->sk_data_ready(sk, 0);
 }
 
 int scsi_tgt_uspace_send(struct scsi_cmnd *cmd)
@@ -76,7 +81,7 @@ int scsi_tgt_uspace_send(struct scsi_cmnd *cmd)
 	}
 
 	ev = (struct tgt_event *) ((char *) h + TPACKET_HDRLEN);
-
+	ev->type = TGT_KEVENT_CMD_REQ;
 	ev->k.cmd_req.host_no = cmd->device->host->host_no;
 	ev->k.cmd_req.cid = cmd->request->tag;
 	ev->k.cmd_req.data_len = cmd->request_bufflen;
@@ -91,23 +96,36 @@ int scsi_tgt_uspace_send(struct scsi_cmnd *cmd)
 	memcpy(tcmd->scb, cmd->cmnd, sizeof(tcmd->scb));
 	memcpy(tcmd->lun, cmd->request->end_io_data, sizeof(struct scsi_lun));
 
-	h->tp_status = TP_STATUS_USER;
-	mb();
-	{
-		struct page *p_start, *p_end;
-		char *h_end = (char *) h + TPACKET_HDRLEN +
-			sizeof(struct tgt_event) + sizeof(struct tgt_cmd) - 1;
+	tpacket_done(sk, h, sizeof(struct tgt_event) + sizeof(struct tgt_cmd));
+	return 0;
+}
 
-		p_start = virt_to_page(h);
-		p_end = virt_to_page(h_end);
-		while (p_start <= p_end) {
-			flush_dcache_page(p_start);
-			p_start++;
-		}
+int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd, gfp_t gfp_mask)
+{
+	struct sock *sk;
+	struct tgt_event *ev;
+	struct tpacket_hdr *h;
+
+	sk = scsi_tgt_get_sock(cmd->device->host);
+	if (!sk) {
+		printk(KERN_INFO "Host%d not connected\n",
+		       cmd->device->host->host_no);
+		return -ENOTCONN;
 	}
 
-	sk->sk_data_ready(sk, 0);
+	h = packet_frame(sk);
+	if (IS_ERR(h)) {
+		eprintk("Queue is full\n");
+		return PTR_ERR(h);
+	}
 
+	ev = (struct tgt_event *) ((char *) h + TPACKET_HDRLEN);
+	ev->type = TGT_KEVENT_CMD_DONE;
+	ev->k.cmd_done.host_no = cmd->device->host->host_no;
+	ev->k.cmd_done.cid = cmd->request->tag;
+	ev->k.cmd_done.result = cmd->result;
+
+	tpacket_done(sk, h, sizeof(struct tgt_event));
 	return 0;
 }
 
@@ -132,20 +150,6 @@ static int send_event_res(uint16_t type, struct tgt_event *p,
 		memcpy(ev->data, data, dlen);
 
 	return netlink_unicast(nls, skb, pid, 0);
-}
-
-int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd, gfp_t gfp_mask)
-{
-	struct tgt_event ev;
-	char dummy[MAX_COMMAND_SIZE + sizeof(struct scsi_lun)];
-
-	memset(&ev, 0, sizeof(ev));
-	ev.k.cmd_done.host_no = cmd->device->host->host_no;
-	ev.k.cmd_done.cid = cmd->request->tag;
-	ev.k.cmd_done.result = cmd->result;
-
-	return send_event_res(TGT_KEVENT_CMD_DONE, &ev, dummy, sizeof(dummy),
-			      gfp_mask, scsi_tgt_get_pid(cmd->device->host));
 }
 
 /* TODO: unbind to call fput. */
