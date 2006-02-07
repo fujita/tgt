@@ -66,11 +66,13 @@ static void scsi_unmap_user_pages(struct scsi_tgt_cmd *tcmd)
 static void scsi_tgt_cmd_destroy(void *data)
 {
 	struct scsi_cmnd *cmd = data;
+	struct scsi_tgt_cmd *tcmd = cmd->request->end_io_data;
 
 	dprintk("cmd %p\n", cmd);
 
-	scsi_unmap_user_pages(cmd->request->end_io_data);
+	scsi_unmap_user_pages(tcmd);
 	scsi_tgt_uspace_send_status(cmd, GFP_KERNEL);
+	kmem_cache_free(scsi_tgt_cmd_cache, tcmd);
 	scsi_host_put_command(scsi_tgt_cmd_to_host(cmd), cmd);
 }
 
