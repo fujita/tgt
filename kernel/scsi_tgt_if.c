@@ -61,7 +61,7 @@ static void tpacket_done(struct sock *sk, struct tpacket_hdr *h, int len)
 	sk->sk_data_ready(sk, 0);
 }
 
-int scsi_tgt_uspace_send(struct scsi_cmnd *cmd)
+int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun)
 {
 	struct Scsi_Host *shost = scsi_tgt_cmd_to_host(cmd);
 	struct sock *sk;
@@ -95,7 +95,7 @@ int scsi_tgt_uspace_send(struct scsi_cmnd *cmd)
 
 	tcmd = (struct tgt_cmd *) ev->data;
 	memcpy(tcmd->scb, cmd->cmnd, sizeof(tcmd->scb));
-	memcpy(tcmd->lun, cmd->request->end_io_data, sizeof(struct scsi_lun));
+	memcpy(tcmd->lun, lun, sizeof(struct scsi_lun));
 
 	tpacket_done(sk, h, sizeof(struct tgt_event) + sizeof(struct tgt_cmd));
 	return 0;

@@ -27,15 +27,79 @@
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_host.h>
+#include <scsi/scsi_tgt.h>
 
 #include "scsi_tgt_priv.h"
 
 static struct workqueue_struct *scsi_tgtd;
+static kmem_cache_t *scsi_tgt_cmd_cache;
+
+/*
+ * TODO: this struct will be killed when the block layer supports large bios
+ * and James's work struct code is in
+ */
+struct scsi_tgt_cmd {
+	/* TODO replace work with James b's code */
+	struct work_struct work;
+	/* TODO replace the lists with a large bio */
+	struct bio_list xfer_done_list;
+	struct bio_list xfer_list;
+	struct scsi_lun *lun;
+};
+
+static void scsi_unmap_user_pages(struct scsi_tgt_cmd *tcmd)
+{
+	struct bio *bio;
+
+	/* must call bio_endio in case bio was bounced */
+	while ((bio = bio_list_pop(&tcmd->xfer_done_list))) {
+		bio_endio(bio, bio->bi_size, 0);
+		bio_unmap_user(bio);
+	}
+
+	while ((bio = bio_list_pop(&tcmd->xfer_list))) {
+		bio_endio(bio, bio->bi_size, 0);
+		bio_unmap_user(bio);
+	}
+}
+
+static void scsi_tgt_cmd_destroy(void *data)
+{
+	struct scsi_cmnd *cmd = data;
+
+	dprintk("cmd %p\n", cmd);
+
+	scsi_unmap_user_pages(cmd->request->end_io_data);
+	scsi_tgt_uspace_send_status(cmd, GFP_KERNEL);
+	scsi_host_put_command(scsi_tgt_cmd_to_host(cmd), cmd);
+}
+
+static void init_scsi_tgt_cmd(struct request *rq, struct scsi_tgt_cmd *tcmd)
+{
+	tcmd->lun = rq->end_io_data;
+	bio_list_init(&tcmd->xfer_list);
+	bio_list_init(&tcmd->xfer_done_list);
+}
+
+static int scsi_uspace_prep_fn(struct request_queue *q, struct request *rq)
+{
+	struct scsi_tgt_cmd *tcmd;
+
+	tcmd = kmem_cache_alloc(scsi_tgt_cmd_cache, GFP_ATOMIC);
+	if (!tcmd)
+		return BLKPREP_DEFER;
+
+	init_scsi_tgt_cmd(rq, tcmd);
+	rq->end_io_data = tcmd;
+	rq->flags |= REQ_DONTPREP;
+	return BLKPREP_OK;
+}
 
 static void scsi_uspace_request_fn(struct request_queue *q)
 {
 	struct request *rq;
 	struct scsi_cmnd *cmd;
+	struct scsi_tgt_cmd *tcmd;
 
 	/*
 	 * TODO: just send everthing in the queue to userspace in
@@ -43,13 +107,14 @@ static void scsi_uspace_request_fn(struct request_queue *q)
 	 */
 	while ((rq = elv_next_request(q)) != NULL) {
 		cmd = rq->special;
+		tcmd = rq->end_io_data;
 
 		/* the completion code kicks us in case we hit this */
 		if (blk_queue_start_tag(q, rq))
 			break;
 
 		spin_unlock_irq(q->queue_lock);
-		if (scsi_tgt_uspace_send(cmd) < 0)
+		if (scsi_tgt_uspace_send(cmd, tcmd->lun) < 0)
 			goto requeue;
 		spin_lock_irq(q->queue_lock);
 	}
@@ -95,6 +160,8 @@ int scsi_tgt_alloc_queue(struct Scsi_Host *shost)
 	err = elevator_init(q, "noop");
 	if (err)
 		goto free_data;
+
+	blk_queue_prep_rq(q, scsi_uspace_prep_fn);
 	/*
 	 * this is a silly hack. We should probably just queue as many
 	 * command as is recvd to userspace. uspace can then make
@@ -147,48 +214,24 @@ void scsi_tgt_queue_command(struct scsi_cmnd *cmd, struct scsi_lun *scsilun,
 }
 EXPORT_SYMBOL_GPL(scsi_tgt_queue_command);
 
-static void scsi_unmap_user_pages(struct scsi_cmnd *cmd)
-{
-	struct bio *bio;
-
-	/* must call bio_endio in case bio was bounced */
-	while ((bio = bio_list_pop(&cmd->xfer_done_list))) {
-		bio_endio(bio, bio->bi_size, 0);
-		bio_unmap_user(bio);
-	}
-
-	while ((bio = bio_list_pop(&cmd->xfer_list))) {
-		bio_endio(bio, bio->bi_size, 0);
-		bio_unmap_user(bio);
-	}
-}
-
-static void scsi_tgt_cmd_destroy(void *data)
-{
-	struct scsi_cmnd *cmd = data;
-
-	dprintk("cmd %p\n", cmd);
-
-	scsi_unmap_user_pages(cmd);
-	scsi_tgt_uspace_send_status(cmd, GFP_KERNEL);
-	scsi_host_put_command(scsi_tgt_cmd_to_host(cmd), cmd);
-}
-
 /*
  * This is run from a interrpt handler normally and the unmap
  * needs process context so we must queue
  */
 static void scsi_tgt_cmd_done(struct scsi_cmnd *cmd)
 {
+	struct scsi_tgt_cmd *tcmd = cmd->request->end_io_data;
+
 	dprintk("cmd %p\n", cmd);
 
+	/* don't we have to call this if result is set or not */
 	if (cmd->result) {
 		scsi_tgt_uspace_send_status(cmd, GFP_ATOMIC);
 		return;
 	}
 
-	INIT_WORK(&cmd->work, scsi_tgt_cmd_destroy, cmd);
-	queue_work(scsi_tgtd, &cmd->work);
+	INIT_WORK(&tcmd->work, scsi_tgt_cmd_destroy, cmd);
+	queue_work(scsi_tgtd, &tcmd->work);
 }
 
 static int __scsi_tgt_transfer_response(struct scsi_cmnd *cmd)
@@ -247,7 +290,8 @@ static int scsi_tgt_init_cmd(struct scsi_cmnd *cmd, gfp_t gfp_mask)
 }
 
 /* TODO: test this crap and replace bio_map_user with new interface maybe */
-static int scsi_map_user_pages(struct scsi_cmnd *cmd, int rw)
+static int scsi_map_user_pages(struct scsi_tgt_cmd *tcmd, struct scsi_cmnd *cmd,
+			       int rw)
 {
 	struct request_queue *q = cmd->request->q;
 	struct request *rq = cmd->request;
@@ -261,9 +305,6 @@ static int scsi_map_user_pages(struct scsi_cmnd *cmd, int rw)
 	 * __bio_map_user_iov.
 	 */
 	len = (len + PAGE_SIZE - 1) & PAGE_MASK;
-
-	bio_list_init(&cmd->xfer_list);
-	bio_list_init(&cmd->xfer_done_list);
 
 	while (len > 0) {
 		dprintk("%lx %u\n", (unsigned long) uaddr, len);
@@ -290,7 +331,7 @@ static int scsi_map_user_pages(struct scsi_cmnd *cmd, int rw)
 			blk_rq_bio_prep(q, rq, bio);
 		else
 			/* put list of bios to transfer in next go around */
-			bio_list_add(&cmd->xfer_list, bio);
+			bio_list_add(&tcmd->xfer_list, bio);
 	}
 
 	cmd->offset = 0;
@@ -303,7 +344,7 @@ static int scsi_map_user_pages(struct scsi_cmnd *cmd, int rw)
 unmap_bios:
 	if (rq->bio) {
 		bio_unmap_user(rq->bio);
-		while ((bio = bio_list_pop(&cmd->xfer_list)))
+		while ((bio = bio_list_pop(&tcmd->xfer_list)))
 			bio_unmap_user(bio);
 	}
 
@@ -314,6 +355,7 @@ static int scsi_tgt_transfer_data(struct scsi_cmnd *);
 
 static void scsi_tgt_data_transfer_done(struct scsi_cmnd *cmd)
 {
+	struct scsi_tgt_cmd *tcmd = cmd->request->end_io_data;
 	struct bio *bio;
 	int err;
 
@@ -330,12 +372,12 @@ send_uspace_err:
 		cmd, cmd->request_bufflen, cmd->bufflen);
 
 	scsi_free_sgtable(cmd->request_buffer, cmd->sglist_len);
-	bio_list_add(&cmd->xfer_done_list, cmd->request->bio);
+	bio_list_add(&tcmd->xfer_done_list, cmd->request->bio);
 
 	cmd->buffer += cmd->request_bufflen;
 	cmd->offset += cmd->request_bufflen;
 
-	if (!cmd->xfer_list.head) {
+	if (!tcmd->xfer_list.head) {
 		scsi_tgt_transfer_response(cmd);
 		return;
 	}
@@ -343,7 +385,7 @@ send_uspace_err:
 	dprintk("cmd2 %p request_bufflen %u bufflen %u\n",
 		cmd, cmd->request_bufflen, cmd->bufflen);
 
-	bio = bio_list_pop(&cmd->xfer_list);
+	bio = bio_list_pop(&tcmd->xfer_list);
 	BUG_ON(!bio);
 
 	blk_rq_bio_prep(cmd->request->q, cmd->request, bio);
@@ -434,7 +476,7 @@ int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len, u64 offset,
 	 * TODO: Do we need to handle case where request does not
 	 * align with LLD.
 	 */
-	err = scsi_map_user_pages(cmd, rw);
+	err = scsi_map_user_pages(rq->end_io_data, cmd, rw);
 	if (err) {
 		eprintk("%p %d\n", cmd, err);
 		err = -EAGAIN;
@@ -460,13 +502,28 @@ static int __init scsi_tgt_init(void)
 {
 	int err;
 
-	scsi_tgtd = create_workqueue("scsi_tgtd");
-	if (!scsi_tgtd)
+	scsi_tgt_cmd_cache = kmem_cache_create("scsi_tgt_cmd",
+					       sizeof(struct scsi_tgt_cmd),
+					       0, 0, NULL, NULL);
+	if (!scsi_tgt_cmd_cache)
 		return -ENOMEM;
+
+	scsi_tgtd = create_workqueue("scsi_tgtd");
+	if (!scsi_tgtd) {
+		err = -ENOMEM;
+		goto free_kmemcache;
+	}
 
 	err = scsi_tgt_if_init();
 	if (err)
-		destroy_workqueue(scsi_tgtd);
+		goto destroy_wq;
+
+	return 0;
+
+destroy_wq:
+	destroy_workqueue(scsi_tgtd);	
+free_kmemcache:
+	kmem_cache_destroy(scsi_tgt_cmd_cache);
 	return err;
 }
 
@@ -474,6 +531,7 @@ static void __exit scsi_tgt_exit(void)
 {
 	destroy_workqueue(scsi_tgtd);
 	scsi_tgt_if_exit();
+	kmem_cache_destroy(scsi_tgt_cmd_cache);
 }
 
 module_init(scsi_tgt_init);
