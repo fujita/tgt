@@ -70,7 +70,7 @@ int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun)
 	}
 	sk = pk_sock->sk;
 
-	h = packet_frame(sk);
+	h = packet_socket_frame(sk);
 	if (IS_ERR(h)) {
 		eprintk("Queue is full\n");
 		return PTR_ERR(h);
@@ -110,7 +110,7 @@ int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd, gfp_t gfp_mask)
 	}
 	sk = pk_sock->sk;
 
-	h = packet_frame(sk);
+	h = packet_socket_frame(sk);
 	if (IS_ERR(h)) {
 		eprintk("Queue is full\n");
 		return PTR_ERR(h);

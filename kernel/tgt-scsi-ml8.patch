@@ -582,14 +582,14 @@ index 617b950..2323360 100644
  #define	LEVEL_LINEAR		(-1)
 diff --git a/include/net/af_packet.h b/include/net/af_packet.h
 new file mode 100644
-index 0000000..e280e7c
+index 0000000..5a75e07
 --- /dev/null
 +++ b/include/net/af_packet.h
 @@ -0,0 +1,6 @@
 +#ifndef __LINUX_NET_AFPACKET_H
 +#define __LINUX_NET_AFPACKET_H
 +
-+extern void *packet_frame(struct sock *sk);
++extern struct tpacket_hdr *packet_socket_frame(struct sock *sk);
 +
 +#endif
 diff --git a/include/scsi/scsi_cmnd.h b/include/scsi/scsi_cmnd.h
@@ -820,14 +820,14 @@ index 0000000..04be52d
 +
 +#endif
 diff --git a/net/packet/af_packet.c b/net/packet/af_packet.c
-index 9db7dbd..2ab3e7b 100644
+index 9db7dbd..4069fc8 100644
 --- a/net/packet/af_packet.c
 +++ b/net/packet/af_packet.c
 @@ -562,6 +562,23 @@ drop:
  }
  
  #ifdef CONFIG_PACKET_MMAP
-+void *packet_frame(struct sock *sk)
++struct tpacket_hdr *packet_socket_frame(struct sock *sk)
 +{
 +	struct packet_sock *po;
 +	struct tpacket_hdr *h;
