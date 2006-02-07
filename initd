@@ -32,7 +32,7 @@ start_server()
 #		${PWD}/usr/tgtadm --driver istgt --op bind --tid 1 --hostno 1
 #		${PWD}/usr/tgtadm --driver istgt --op new --tid 0 --lun 0 --params Path=/dev/sdb1
 	else
-		${PWD}/usr/tgtadm --driver ibmvstgt --op new --tid 0
+		${PWD}/usr/tgtadm --driver ibmvstgt --op new --tid 1
 		${PWD}/usr/tgtadm --driver ibmvstgt --op bind --tid 1 --hostno 1
 		${PWD}/usr/tgtadm --driver ibmvstgt --op new --tid 1 --lun 0 --params Path=/dev/sdb1
 	fi

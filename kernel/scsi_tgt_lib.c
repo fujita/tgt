@@ -521,7 +521,7 @@ static int __init scsi_tgt_init(void)
 	return 0;
 
 destroy_wq:
-	destroy_workqueue(scsi_tgtd);	
+	destroy_workqueue(scsi_tgtd);
 free_kmemcache:
 	kmem_cache_destroy(scsi_tgt_cmd_cache);
 	return err;

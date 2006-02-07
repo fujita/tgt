@@ -12,8 +12,6 @@ do {								\
 #define eprintk dprintk
 
 struct scsi_tgt_queuedata {
-	struct task_struct *task;
-	struct socket *sock;
 	struct Scsi_Host *shost;
 };
 

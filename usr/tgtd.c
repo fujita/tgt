@@ -1,5 +1,5 @@
 /*
- * Target framework user-space main daemon
+ * SCSI target user-space daemon
  *
  * (C) 2005 FUJITA Tomonori <tomof@acm.org>
  * (C) 2005 Mike Christie <michaelc@cs.wisc.edu>
@@ -26,12 +26,10 @@
 #include "tgtd.h"
 #include "dl.h"
 
-int nl_fd, ipc_fd;
-struct pollfd *poll_array;
-
 enum {
-	POLL_NL,
-	POLL_IPC,
+	POLL_NL, /* netlink socket between kernel and user space */
+	POLL_PK, /* packet socket between kernel and user space */
+	POLL_UD, /* unix domain socket for tgtdadm */
 };
 
 static struct option const long_options[] =
@@ -115,13 +113,13 @@ static void tgtd_init(void)
 
 /* TODO: rewrite makeshift poll code */
 
-static void event_loop(int nr_dls, struct pollfd *poll_array)
+static void event_loop(struct tgtd_info *ti, struct pollfd *pfd, int nr_dls)
 {
-	int err, i, poll_max = (nr_dls + 2) * POLLS_PER_DRV;
+	int err, i, poll_max = (nr_dls + 1) * POLLS_PER_DRV;
 	void (* fn)(struct pollfd *, int);
 
 	while (1) {
-		if ((err = poll(poll_array, poll_max, -1)) < 0) {
+		if ((err = poll(pfd, poll_max, -1)) < 0) {
 			if (errno != EINTR) {
 				eprintf("%d %d\n", err, errno);
 				exit(1);
@@ -129,61 +127,69 @@ static void event_loop(int nr_dls, struct pollfd *poll_array)
 			continue;
 		}
 
-		if (poll_array[POLL_NL].revents) {
-			nl_event_handle(dlinfo, nl_fd);
+		if (pfd[POLL_NL].revents) {
+			/* Currently, never happens. */
+			eprintf("bug\n");
+			exit(1);
 			err--;
 		}
 
-		if (poll_array[POLL_IPC].revents) {
-			ipc_event_handle(dlinfo, ipc_fd);
+		if (pfd[POLL_PK].revents) {
+			pk_event_handle(ti, pfd[POLL_NL].fd);
+			err--;
+		}
+
+		if (pfd[POLL_UD].revents) {
+			ipc_event_handle(dlinfo, pfd[POLL_UD].fd);
 			err--;
 		}
 
 		if (!err)
 			continue;
 
-		for (i = POLLS_PER_DRV; i < POLLS_PER_DRV * 2; i++)
-			if (poll_array[i].revents) {
-				dprintf("target process event %d\n", i);
-				pipe_event_handle(poll_array[i].fd);
-			}
-
 		for (i = 0; i < nr_dls; i++) {
 			fn = dl_poll_fn(dlinfo, i);
 			if (fn)
-				fn(poll_array + ((i + 2) * POLLS_PER_DRV), POLLS_PER_DRV);
+				fn(pfd + ((i + 1) * POLLS_PER_DRV), POLLS_PER_DRV);
 		}
 	}
 }
 
-static struct pollfd * poll_init(int nr)
+static struct pollfd * poll_init(int nr, int nl_fd, int pk_fd, int ud_fd)
 {
-	struct pollfd *array;
+	struct pollfd *pfd;
 	void (* fn)(struct pollfd *, int);
 	int i;
 
-	array = calloc((nr + 2) * POLLS_PER_DRV, sizeof(struct pollfd));
-	if (!array)
-		exit(-ENOMEM);
+	pfd = calloc((nr + 1) * POLLS_PER_DRV, sizeof(struct pollfd));
+	if (!pfd) {
+		eprintf("Out of memory\n");
+		exit(1);
+	}
 
-	array[POLL_NL].fd = nl_fd;
-	array[POLL_NL].events = POLLIN;
-	array[POLL_IPC].fd = ipc_fd;
-	array[POLL_IPC].events = POLLIN;
+	pfd[POLL_NL].fd = nl_fd;
+	pfd[POLL_NL].events = POLLIN;
+	pfd[POLL_PK].fd = pk_fd;
+	pfd[POLL_PK].events = POLLIN;
+	pfd[POLL_UD].fd = ud_fd;
+	pfd[POLL_UD].events = POLLIN;
 
 	for (i = 0; i < nr; i++) {
 		fn = dl_poll_init_fn(dlinfo, i);
 		if (fn)
-			fn(array + (i + 2) * POLLS_PER_DRV, POLLS_PER_DRV);
+			fn(pfd + (i + 1) * POLLS_PER_DRV, POLLS_PER_DRV);
 	}
 
-	return array;
+	return pfd;
 }
 
 int main(int argc, char **argv)
 {
-	int ch, longindex, nr;
+	struct tgtd_info ti;
+	struct pollfd *pfd;
+	int ch, longindex, nr, err;
 	int is_daemon = 1, is_debug = 1;
+	int nl_fd, pk_fd, ud_fd;
 
 	while ((ch = getopt_long(argc, argv, "fd:vh", long_options,
 				 &longindex)) >= 0) {
@@ -217,23 +223,21 @@ int main(int argc, char **argv)
 	if (tgt_device_init())
 		exit(1);
 
-	nl_fd = nl_init();
-	if (nl_fd < 0)
-		exit(1);
-	if (nl_start(nl_fd))
+	err = nl_init(&nl_fd, &pk_fd, &ti.ri);
+	if (err < 0)
 		exit(1);
 
-	ipc_fd = ipc_open();
-	if (ipc_fd < 0)
+	ud_fd = ipc_open();
+	if (ud_fd < 0)
 		exit(1);
 
 	nr = dl_init(dlinfo);
 	if (nr < nr)
 		exit(1);
 
-	poll_array = poll_init(nr);
+	pfd = poll_init(nr, nl_fd, pk_fd, ud_fd);
 
-	event_loop(nr, poll_array);
+	event_loop(&ti, pfd, nr);
 
 	return 0;
 }

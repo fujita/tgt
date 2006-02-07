@@ -4,27 +4,35 @@
 #include "log.h"
 #include "dl.h"
 
-/* temporarily */
+/* makeshift */
 #define	POLLS_PER_DRV	32
-extern int nl_fd;
-extern struct pollfd *poll_array;
+#define	RINGBUF_SIZE	(4096 * 8)
 
-extern int target_thread_create(int *fd);
+struct ringbuf_info {
+	char *addr;
+	uint32_t idx;
+	uint32_t frame_size;
+	uint32_t frame_nr;
+};
 
-extern int nl_init(void);
-extern void nl_event_handle(struct driver_info *, int fd);
-extern int nl_cmd_call(int fd, int type, char *sbuf, int slen, char *rbuf, int rlen);
-extern int nl_start(int fd);
+struct tgtd_info {
+	struct ringbuf_info ri;
+};
+
+extern int nl_init(int *, int *, struct ringbuf_info *);
 extern int __nl_write(int fd, int type, char *data, int len);
-extern int __nl_read(int fd, void *data, int size, int flags);
 
 extern int ipc_open(void);
 extern void ipc_event_handle(struct driver_info *, int fd);
-extern void pipe_event_handle(int fd);
 
 extern int tgt_device_init(void);
-extern int tgt_device_create(int tid, uint64_t lun, int dfd);
+extern int tgt_device_create(int tid, uint64_t lun, char *path);
 extern int tgt_device_destroy(int tid, uint64_t lun);
+extern int tgt_target_create(int tid);
+extern int tgt_target_destroy(int tid);
+extern int tgt_target_bind(int tid, int host_no);
+
+extern void pk_event_handle(struct tgtd_info *ti, int nl_fd);
 
 extern uint64_t scsi_get_devid(uint8_t *pdu);
 extern int scsi_cmd_process(int tid, uint8_t *pdu, int *len,

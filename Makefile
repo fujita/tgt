@@ -9,8 +9,8 @@ export KERNELSRC
 all:
 ifeq ($(ARCH), powerpc)
 	make -C ibmvstgt
-else
-	make -C istgt
+#else
+#	make -C istgt
 endif
 	make -C usr
 	make -C kernel

@@ -19,6 +19,7 @@
  * the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 #include <linux/blkdev.h>
+#include <linux/file.h>
 #include <linux/if_packet.h>
 #include <linux/netlink.h>
 #include <net/af_packet.h>
@@ -32,16 +33,9 @@
 
 #include "scsi_tgt_priv.h"
 
-/* default task when host is not setup in userspace yet */
 static int tgtd_pid;
-static struct sock *nls;
-
-static struct sock *scsi_tgt_get_sock(struct Scsi_Host *shost)
-{
-	struct scsi_tgt_queuedata *queue = shost->uspace_req_q->queuedata;
-	struct socket *sock = queue->sock;
-	return sock ? sock->sk : NULL;
-}
+static struct sock *nl_sk;
+static struct socket *pk_sock;
 
 static void tpacket_done(struct sock *sk, struct tpacket_hdr *h, int len)
 {
@@ -69,11 +63,11 @@ int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun)
 	struct tgt_event *ev;
 	struct tgt_cmd *tcmd;
 
-	sk = scsi_tgt_get_sock(shost);
-	if (!sk) {
+	if (!pk_sock) {
 		printk(KERN_INFO "Host%d not connected\n", shost->host_no);
 		return -ENOTCONN;
 	}
+	sk = pk_sock->sk;
 
 	h = packet_frame(sk);
 	if (IS_ERR(h)) {
@@ -82,7 +76,7 @@ int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun)
 	}
 
 	ev = (struct tgt_event *) ((char *) h + TPACKET_HDRLEN);
-	ev->type = TGT_KEVENT_CMD_REQ;
+	h->tp_len = TGT_KEVENT_CMD_REQ;
 	ev->k.cmd_req.host_no = shost->host_no;
 	ev->k.cmd_req.cid = cmd->request->tag;
 	ev->k.cmd_req.data_len = cmd->request_bufflen;
@@ -108,12 +102,12 @@ int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd, gfp_t gfp_mask)
 	struct tgt_event *ev;
 	struct tpacket_hdr *h;
 
-	sk = scsi_tgt_get_sock(shost);
-	if (!sk) {
+	if (!pk_sock) {
 		printk(KERN_INFO "Host%d not connected\n",
 		       shost->host_no);
 		return -ENOTCONN;
 	}
+	sk = pk_sock->sk;
 
 	h = packet_frame(sk);
 	if (IS_ERR(h)) {
@@ -122,7 +116,7 @@ int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd, gfp_t gfp_mask)
 	}
 
 	ev = (struct tgt_event *) ((char *) h + TPACKET_HDRLEN);
-	ev->type = TGT_KEVENT_CMD_DONE;
+	h->tp_len = TGT_KEVENT_CMD_DONE;
 	ev->k.cmd_done.host_no = shost->host_no;
 	ev->k.cmd_done.cid = cmd->request->tag;
 	ev->k.cmd_done.result = cmd->result;
@@ -151,41 +145,19 @@ static int send_event_res(uint16_t type, struct tgt_event *p,
 	if (dlen)
 		memcpy(ev->data, data, dlen);
 
-	return netlink_unicast(nls, skb, pid, 0);
+	return netlink_unicast(nl_sk, skb, pid, 0);
 }
 
-/* TODO: unbind to call fput. */
-static int scsi_tgt_bind_host(struct tgt_event *ev)
+static int tgtd_bind(struct tgt_event *ev)
 {
-	struct Scsi_Host *shost;
-	struct task_struct *tsk;
-	int err = 0;
+	int err, pk_fd = ev->u.tgtd_bind.pk_fd;
 
-	dprintk("%d %d %d\n", ev->u.target_bind.host_no,
-		ev->u.target_bind.pid, ev->u.target_bind.psfd);
-
-	shost = scsi_host_lookup(ev->u.target_bind.host_no);
-	if (IS_ERR(shost)) {
-		eprintk("Could not find host no %d\n",
-			ev->u.target_bind.host_no);
-			return -EINVAL;
+	pk_sock = sockfd_lookup(pk_fd, &err);
+	if (!pk_sock) {
+		eprintk("Invalid fd %d\n", pk_fd);
+		return err;
 	}
-
-	tsk = find_task_by_pid(ev->u.target_bind.pid);
-	if (tsk) {
-		struct scsi_tgt_queuedata *queue;
-
-		queue = shost->uspace_req_q->queuedata;
-		queue->task = tsk;
-		queue->sock = sockfd_lookup(ev->u.target_bind.psfd, &err);
-	} else {
-		eprintk("Could not find process %d\n",
-			ev->u.target_bind.pid);
-		err = EINVAL;
-	}
-
-	scsi_host_put(shost);
-	return err;
+	return 0;
 }
 
 static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
@@ -197,11 +169,9 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 		nlh->nlmsg_pid, current->pid);
 
 	switch (nlh->nlmsg_type) {
-	case TGT_UEVENT_START:
+	case TGT_UEVENT_TGTD_BIND:
 		tgtd_pid = NETLINK_CREDS(skb)->pid;
-		break;
-	case TGT_UEVENT_TARGET_BIND:
-		err = scsi_tgt_bind_host(ev);
+		err = tgtd_bind(ev);
 		break;
 	case TGT_UEVENT_CMD_RES:
 		/* TODO: handle multiple cmds in one event */
@@ -276,14 +246,16 @@ static void event_recv(struct sock *sk, int length)
 
 void __exit scsi_tgt_if_exit(void)
 {
-	sock_release(nls->sk_socket);
+	sock_release(nl_sk->sk_socket);
+	if (pk_sock)
+		fput(pk_sock->file);
 }
 
 int __init scsi_tgt_if_init(void)
 {
-	nls = netlink_kernel_create(NETLINK_TGT, 1, event_recv,
+	nl_sk = netlink_kernel_create(NETLINK_TGT, 1, event_recv,
 				    THIS_MODULE);
-	if (!nls)
+	if (!nl_sk)
 		return -ENOMEM;
 
 	return 0;

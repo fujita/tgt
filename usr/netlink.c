@@ -10,16 +10,19 @@
 
 #include <errno.h>
 #include <inttypes.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
 #include <unistd.h>
-#include <signal.h>
-#include <sys/signal.h>
+#include <sys/mman.h>
 #include <sys/poll.h>
+#include <sys/signal.h>
 #include <sys/socket.h>
 #include <asm/types.h>
+#include <linux/if_ether.h>
+#include <linux/if_packet.h>
 #include <linux/netlink.h>
 
 #include <scsi/scsi_tgt_if.h>
@@ -48,7 +51,7 @@ int __nl_write(int fd, int type, char *data, int len)
 		      sizeof(daddr));
 }
 
-int __nl_read(int fd, void *data, int size, int flags)
+static int __nl_read(int fd, void *data, int size, int flags)
 {
 	struct sockaddr_nl saddr;
 	socklen_t slen = sizeof(saddr);
@@ -93,31 +96,6 @@ read_again:
 	return err;
 }
 
-void nl_event_handle(struct driver_info *dinfo, int fd)
-{
-	struct nlmsghdr *nlh;
-	struct tgt_event *ev;
-	char rbuf[NL_BUFSIZE];
-	int err;
-
-	err = nl_read(fd, rbuf);
-	if (err < 0)
-		return;
-
-	nlh = (struct nlmsghdr *) rbuf;
-	ev = (struct tgt_event *) NLMSG_DATA(nlh);
-
-	dprintf("%d %d\n", getpid(), nlh->nlmsg_type);
-
-	switch (nlh->nlmsg_type) {
-	default:
-		/* kernel module bug */
-		eprintf("unknown event %u\n", nlh->nlmsg_type);
-		exit(-1);
-		break;
-	}
-}
-
 int nl_cmd_call(int fd, int type, char *sbuf, int slen, char *rbuf, int rlen)
 {
 	int err;
@@ -143,18 +121,55 @@ int nl_cmd_call(int fd, int type, char *sbuf, int slen, char *rbuf, int rlen)
 	return err;
 }
 
-int nl_start(int fd)
+static int ringbuf_init(int pk_fd, struct ringbuf_info *ri)
+{
+	struct tpacket_req req;
+	int err;
+	socklen_t len = sizeof(req);
+	unsigned int size = RINGBUF_SIZE;
+	void *addr;
+
+	req.tp_frame_size = TPACKET_ALIGN(TPACKET_HDRLEN +
+					  sizeof(struct tgt_event) +
+					  sizeof(struct tgt_cmd));
+	req.tp_block_size = size;
+	req.tp_frame_nr = req.tp_block_size / req.tp_frame_size;
+	req.tp_block_nr = 1;
+
+	err = setsockopt(pk_fd, SOL_PACKET, PACKET_RX_RING, &req, len);
+	dprintf("%d %u %u\n", errno, req.tp_frame_size, req.tp_frame_nr);
+	if (err < 0)
+		return err;
+
+	addr = mmap(0, size, PROT_READ|PROT_WRITE, MAP_SHARED, pk_fd, 0);
+
+	ri->frame_size = req.tp_frame_size;
+	ri->frame_nr = req.tp_frame_nr;
+	ri->addr = addr;
+	ri->idx = 0;
+
+	dprintf("%p\n",addr);
+
+	if (addr == MAP_FAILED) {
+		eprintf("fail to mmap %d\n", errno);
+		return -EINVAL;
+	} else
+		return 0;
+}
+
+static int tgtd_bind(int nl_fd, int pk_fd)
 {
 	int err;
 	struct tgt_event *ev;
-	char nlmsg[NLMSG_SPACE(sizeof(struct tgt_event))];
-	char buf[NL_BUFSIZE];
+	char sbuf[NL_BUFSIZE], rbuf[NL_BUFSIZE];
 
-	err = nl_cmd_call(fd, TGT_UEVENT_START, nlmsg,
+	ev = (struct tgt_event *) NLMSG_DATA(sbuf);
+	ev->u.tgtd_bind.pk_fd = pk_fd;
+	err = nl_cmd_call(nl_fd, TGT_UEVENT_TGTD_BIND, sbuf,
 			  NLMSG_SPACE(sizeof(struct tgt_event)),
-			  buf, NL_BUFSIZE);
+			  rbuf, NL_BUFSIZE);
 
-	ev = (struct tgt_event *) NLMSG_DATA(buf);
+	ev = (struct tgt_event *) NLMSG_DATA(rbuf);
 	if (err < 0 || ev->k.event_res.err < 0) {
 		eprintf("%d %d\n", err, ev->k.event_res.err);
 		return -EINVAL;
@@ -163,13 +178,31 @@ int nl_start(int fd)
 	return 0;
 }
 
-int nl_init(void)
+int nl_init(int *nfd, int *pfd, struct ringbuf_info *ri)
 {
-	int fd;
+	int err, nl_fd, pk_fd;
 
-	fd = socket(PF_NETLINK, SOCK_RAW, NETLINK_TGT);
-	if (fd < 0)
+	nl_fd = socket(PF_NETLINK, SOCK_RAW, NETLINK_TGT);
+	if (nl_fd < 0) {
 		eprintf("Fail to create the netlink socket %d\n", errno);
+		exit(1);
+	}
 
-	return fd;
+	pk_fd = socket(PF_PACKET, SOCK_RAW, 0);
+	if (pk_fd < 0) {
+		eprintf("Fail to create the packet socket %d\n", errno);
+		exit(1);
+	}
+
+	err = ringbuf_init(pk_fd, ri);
+	if (err)
+		exit(1);
+
+	err = tgtd_bind(nl_fd, pk_fd);
+	if (err)
+		exit(1);
+
+	*nfd = nl_fd;
+	*pfd = pk_fd;
+	return 0;
 }
