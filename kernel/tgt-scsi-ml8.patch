@@ -541,6 +541,19 @@ index b60ffe3..fc0906c 100644
  extern void bio_unmap_user(struct bio *);
  extern struct bio *bio_map_kern(struct request_queue *, void *, unsigned int,
  				gfp_t);
+diff --git a/include/linux/if_packet.h b/include/linux/if_packet.h
+index b925585..c66d555 100644
+--- a/include/linux/if_packet.h
++++ b/include/linux/if_packet.h
+@@ -48,7 +48,7 @@ struct tpacket_stats
+ 
+ struct tpacket_hdr
+ {
+-	unsigned long	tp_status;
++	unsigned int	tp_status;
+ #define TP_STATUS_KERNEL	0
+ #define TP_STATUS_USER		1
+ #define TP_STATUS_COPY		2
 diff --git a/include/linux/netlink.h b/include/linux/netlink.h
 index 6a2ccf7..580fb42 100644
 --- a/include/linux/netlink.h
@@ -710,40 +723,39 @@ index 0000000..91ad6bc
 +extern void scsi_tgt_queue_command(struct scsi_cmnd *, struct scsi_lun *, int);
 diff --git a/include/scsi/scsi_tgt_if.h b/include/scsi/scsi_tgt_if.h
 new file mode 100644
-index 0000000..0830107
+index 0000000..04be52d
 --- /dev/null
 +++ b/include/scsi/scsi_tgt_if.h
-@@ -0,0 +1,95 @@
+@@ -0,0 +1,92 @@
 +/*
 + * SCSI target kernel/user interface
 + *
-+ * Copyright 2005 FUJITA Tomonori <tomof@acm.org>
-+ * Copyright 2005 Mike Christie <michaelc@cs.wisc.edu>
++ * Copyright (C) 2005 FUJITA Tomonori <tomof@acm.org>
++ * Copyright (C) 2005 Mike Christie <michaelc@cs.wisc.edu>
 + *
-+ * This program is free software; you can redistribute it and/or modify
-+ * it under the terms of the GNU General Public License as published by
-+ * the Free Software Foundation; either version 2, or (at your option)
-+ * any later version.
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License as
++ * published by the Free Software Foundation; either version 2 of the
++ * License, or (at your option) any later version.
 + *
-+ * This program is distributed in the hope that it will be useful,
-+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
-+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-+ * GNU General Public License for more details.
++ * This program is distributed in the hope that it will be useful, but
++ * WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * General Public License for more details.
 + *
 + * You should have received a copy of the GNU General Public License
-+ * along with this program; see the file COPYING.  If not, write to
-+ * the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
++ * 02110-1301 USA
 + */
-+
 +#ifndef __SCSI_TARGET_IF_H
 +#define __SCSI_TARGET_IF_H
 +
 +enum tgt_event_type {
 +	/* user -> kernel */
-+	TGT_UEVENT_START,
++	TGT_UEVENT_TGTD_BIND,
 +	TGT_UEVENT_TARGET_SETUP,
 +	TGT_UEVENT_CMD_RES,
-+	TGT_UEVENT_TARGET_BIND,
 +
 +	/* kernel -> user */
 +	TGT_KEVENT_RESPONSE,
@@ -755,10 +767,8 @@ index 0000000..0830107
 +	/* user-> kernel */
 +	union {
 +		struct {
-+			int host_no;
-+			int pid;
-+			int psfd;
-+		} target_bind;
++			int pk_fd;
++		} tgtd_bind;
 +		struct {
 +			int host_no;
 +			uint32_t cid;
@@ -810,10 +820,10 @@ index 0000000..0830107
 +
 +#endif
 diff --git a/net/packet/af_packet.c b/net/packet/af_packet.c
-index 9db7dbd..aee86cd 100644
+index 9db7dbd..2ab3e7b 100644
 --- a/net/packet/af_packet.c
 +++ b/net/packet/af_packet.c
-@@ -562,6 +562,24 @@ drop:
+@@ -562,6 +562,23 @@ drop:
  }
  
  #ifdef CONFIG_PACKET_MMAP
@@ -821,7 +831,6 @@ index 9db7dbd..aee86cd 100644
 +{
 +	struct packet_sock *po;
 +	struct tpacket_hdr *h;
-+	int err;
 +
 +	po = pkt_sk(sk);
 +	spin_lock(&sk->sk_receive_queue.lock);
