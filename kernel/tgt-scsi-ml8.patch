@@ -820,7 +820,7 @@ index 0000000..04be52d
 +
 +#endif
 diff --git a/net/packet/af_packet.c b/net/packet/af_packet.c
-index 9db7dbd..4069fc8 100644
+index 9db7dbd..b5fbd74 100644
 --- a/net/packet/af_packet.c
 +++ b/net/packet/af_packet.c
 @@ -562,6 +562,23 @@ drop:
@@ -842,7 +842,7 @@ index 9db7dbd..4069fc8 100644
 +	spin_unlock(&sk->sk_receive_queue.lock);
 +	return h;
 +}
-+EXPORT_SYMBOL_GPL(packet_frame);
++EXPORT_SYMBOL_GPL(packet_socket_frame);
 +
  static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, struct net_device *orig_dev)
  {
