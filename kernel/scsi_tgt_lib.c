@@ -117,7 +117,7 @@ static void scsi_uspace_request_fn(struct request_queue *q)
 			break;
 
 		spin_unlock_irq(q->queue_lock);
-		if (scsi_tgt_uspace_send(cmd, tcmd->lun) < 0)
+		if (scsi_tgt_uspace_send(cmd, tcmd->lun, GFP_ATOMIC) < 0)
 			goto requeue;
 		spin_lock_irq(q->queue_lock);
 	}

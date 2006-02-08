@@ -22,8 +22,6 @@
 #include <sys/stat.h>
 
 #include <linux/fs.h>
-#include <linux/if_ether.h>
-#include <linux/if_packet.h>
 #include <linux/netlink.h>
 #include <scsi/scsi_tgt_if.h>
 
@@ -428,20 +426,49 @@ static void cmd_done(struct tgt_event *ev)
 	free(cmd);
 }
 
-void pk_event_handle(struct tgtd_info *ti, int nl_fd)
+static int set_pdu_size(int fd)
 {
-	struct ringbuf_info *ri = &ti->ri;
-	struct tpacket_hdr *h;
+	struct nlmsghdr *nlh;
+	char buf[1024];
+	int err;
+
+peek_again:
+	err = __nl_read(fd, buf, sizeof(buf), MSG_PEEK);
+	if (err < 0) {
+		if (errno == EAGAIN || errno == EINTR)
+			goto peek_again;
+		return err;
+	}
+
+	nlh = (struct nlmsghdr *) buf;
+
+	dprintf("%d\n", nlh->nlmsg_len);
+
+	return nlh->nlmsg_len;
+}
+
+void nl_event_handle(int nl_fd)
+{
+	struct nlmsghdr *nlh;
 	struct tgt_event *ev;
-retry:
-	h = (struct tpacket_hdr *) (ri->addr + ri->idx * ri->frame_size);
+	static int pdu_size;
+	char buf[1024];
+	int err;
 
-	dprintf("%x %u %p\n", h->tp_status, ri->idx, ri->addr);
-	if (!(h->tp_status & TP_STATUS_USER))
-		return;
+	if (!pdu_size)
+		pdu_size = set_pdu_size(nl_fd);
 
-	ev = (struct tgt_event *) ((char *) h + TPACKET_HDRLEN);
-	switch (h->tp_len) {
+	err = __nl_read(nl_fd, buf, pdu_size, MSG_WAITALL);
+
+	nlh = (struct nlmsghdr *) buf;
+	ev = (struct tgt_event *) NLMSG_DATA(nlh);
+
+	if (nlh->nlmsg_len != pdu_size) {
+		eprintf("unexpected len %d %d\n", nlh->nlmsg_len, pdu_size);
+		exit(1);
+	}
+
+	switch (nlh->nlmsg_type) {
 	case TGT_KEVENT_CMD_REQ:
 		cmd_queue(ev, nl_fd);
 		break;
@@ -449,14 +476,9 @@ retry:
 		cmd_done(ev);
 		break;
 	default:
-		eprintf("unknown event %u\n", h->tp_len);
+		eprintf("unknown event %u\n", nlh->nlmsg_type);
 		exit(1);
 	}
-
-	ri->idx = ri->idx == ri->frame_nr - 1 ? 0: ri->idx + 1;
-	h->tp_status &= ~TP_STATUS_USER;
-
-	goto retry;
 }
 
 int tgt_target_bind(int tid, int host_no)

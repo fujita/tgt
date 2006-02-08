@@ -28,7 +28,6 @@
 
 enum {
 	POLL_NL, /* netlink socket between kernel and user space */
-	POLL_PK, /* packet socket between kernel and user space */
 	POLL_UD, /* unix domain socket for tgtdadm */
 };
 
@@ -113,7 +112,7 @@ static void tgtd_init(void)
 
 /* TODO: rewrite makeshift poll code */
 
-static void event_loop(struct tgtd_info *ti, struct pollfd *pfd, int nr_dls)
+static void event_loop(struct driver_info *dlinfo, struct pollfd *pfd, int nr_dls)
 {
 	int err, i, poll_max = (nr_dls + 1) * POLLS_PER_DRV;
 	void (* fn)(struct pollfd *, int);
@@ -128,14 +127,7 @@ static void event_loop(struct tgtd_info *ti, struct pollfd *pfd, int nr_dls)
 		}
 
 		if (pfd[POLL_NL].revents) {
-			/* Currently, never happens. */
-			eprintf("bug\n");
-			exit(1);
-			err--;
-		}
-
-		if (pfd[POLL_PK].revents) {
-			pk_event_handle(ti, pfd[POLL_NL].fd);
+			nl_event_handle(pfd[POLL_NL].fd);
 			err--;
 		}
 
@@ -155,7 +147,7 @@ static void event_loop(struct tgtd_info *ti, struct pollfd *pfd, int nr_dls)
 	}
 }
 
-static struct pollfd * poll_init(int nr, int nl_fd, int pk_fd, int ud_fd)
+static struct pollfd * poll_init(int nr, int nl_fd, int ud_fd)
 {
 	struct pollfd *pfd;
 	void (* fn)(struct pollfd *, int);
@@ -169,8 +161,6 @@ static struct pollfd * poll_init(int nr, int nl_fd, int pk_fd, int ud_fd)
 
 	pfd[POLL_NL].fd = nl_fd;
 	pfd[POLL_NL].events = POLLIN;
-	pfd[POLL_PK].fd = pk_fd;
-	pfd[POLL_PK].events = POLLIN;
 	pfd[POLL_UD].fd = ud_fd;
 	pfd[POLL_UD].events = POLLIN;
 
@@ -185,11 +175,10 @@ static struct pollfd * poll_init(int nr, int nl_fd, int pk_fd, int ud_fd)
 
 int main(int argc, char **argv)
 {
-	struct tgtd_info ti;
 	struct pollfd *pfd;
-	int ch, longindex, nr, err;
+	int ch, longindex, nr;
 	int is_daemon = 1, is_debug = 1;
-	int nl_fd, pk_fd, ud_fd;
+	int nl_fd, ud_fd;
 
 	while ((ch = getopt_long(argc, argv, "fd:vh", long_options,
 				 &longindex)) >= 0) {
@@ -223,8 +212,8 @@ int main(int argc, char **argv)
 	if (tgt_device_init())
 		exit(1);
 
-	err = nl_init(&nl_fd, &pk_fd, &ti.ri);
-	if (err < 0)
+	nl_fd = nl_init();
+	if (nl_fd < 0)
 		exit(1);
 
 	ud_fd = ipc_open();
@@ -235,9 +224,9 @@ int main(int argc, char **argv)
 	if (nr < nr)
 		exit(1);
 
-	pfd = poll_init(nr, nl_fd, pk_fd, ud_fd);
+	pfd = poll_init(nr, nl_fd, ud_fd);
 
-	event_loop(&ti, pfd, nr);
+	event_loop(dlinfo, pfd, nr);
 
 	return 0;
 }
