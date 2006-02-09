@@ -22,7 +22,6 @@
 #include <linux/blkdev.h>
 #include <linux/file.h>
 #include <linux/netlink.h>
-#include <net/af_packet.h>
 #include <net/tcp.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>

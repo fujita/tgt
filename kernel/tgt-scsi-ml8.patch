@@ -21,170 +21,6 @@ index f9fc07e..65c56b6 100644
  	if (IS_ERR(bio))
  		return PTR_ERR(bio);
  
-diff --git a/drivers/md/dm-bio-list.h b/drivers/md/dm-bio-list.h
-deleted file mode 100644
-index bbf4615..0000000
---- a/drivers/md/dm-bio-list.h
-+++ /dev/null
-@@ -1,71 +0,0 @@
--/*
-- * Copyright (C) 2004 Red Hat UK Ltd.
-- *
-- * This file is released under the GPL.
-- */
--
--#ifndef DM_BIO_LIST_H
--#define DM_BIO_LIST_H
--
--#include <linux/bio.h>
--
--struct bio_list {
--	struct bio *head;
--	struct bio *tail;
--};
--
--static inline void bio_list_init(struct bio_list *bl)
--{
--	bl->head = bl->tail = NULL;
--}
--
--static inline void bio_list_add(struct bio_list *bl, struct bio *bio)
--{
--	bio->bi_next = NULL;
--
--	if (bl->tail)
--		bl->tail->bi_next = bio;
--	else
--		bl->head = bio;
--
--	bl->tail = bio;
--}
--
--static inline void bio_list_merge(struct bio_list *bl, struct bio_list *bl2)
--{
--	if (!bl2->head)
--		return;
--
--	if (bl->tail)
--		bl->tail->bi_next = bl2->head;
--	else
--		bl->head = bl2->head;
--
--	bl->tail = bl2->tail;
--}
--
--static inline struct bio *bio_list_pop(struct bio_list *bl)
--{
--	struct bio *bio = bl->head;
--
--	if (bio) {
--		bl->head = bl->head->bi_next;
--		if (!bl->head)
--			bl->tail = NULL;
--
--		bio->bi_next = NULL;
--	}
--
--	return bio;
--}
--
--static inline struct bio *bio_list_get(struct bio_list *bl)
--{
--	struct bio *bio = bl->head;
--
--	bl->head = bl->tail = NULL;
--
--	return bio;
--}
--
--#endif
-diff --git a/drivers/md/dm-mpath.c b/drivers/md/dm-mpath.c
-index f72a82f..c6e206f 100644
---- a/drivers/md/dm-mpath.c
-+++ b/drivers/md/dm-mpath.c
-@@ -8,9 +8,9 @@
- #include "dm.h"
- #include "dm-path-selector.h"
- #include "dm-hw-handler.h"
--#include "dm-bio-list.h"
- #include "dm-bio-record.h"
- 
-+#include <linux/bio-list.h>
- #include <linux/ctype.h>
- #include <linux/init.h>
- #include <linux/mempool.h>
-diff --git a/drivers/md/dm-raid1.c b/drivers/md/dm-raid1.c
-index 6cfa8d4..53f589b 100644
---- a/drivers/md/dm-raid1.c
-+++ b/drivers/md/dm-raid1.c
-@@ -5,11 +5,11 @@
-  */
- 
- #include "dm.h"
--#include "dm-bio-list.h"
- #include "dm-io.h"
- #include "dm-log.h"
- #include "kcopyd.h"
- 
-+#include <linux/bio-list.h>
- #include <linux/ctype.h>
- #include <linux/init.h>
- #include <linux/mempool.h>
-diff --git a/drivers/md/dm-snap.c b/drivers/md/dm-snap.c
-index f3759dd..2e65db8 100644
---- a/drivers/md/dm-snap.c
-+++ b/drivers/md/dm-snap.c
-@@ -18,9 +18,9 @@
- #include <linux/module.h>
- #include <linux/slab.h>
- #include <linux/vmalloc.h>
-+#include <linux/bio-list.h>
- 
- #include "dm-snap.h"
--#include "dm-bio-list.h"
- #include "kcopyd.h"
- 
- /*
-diff --git a/drivers/md/dm.c b/drivers/md/dm.c
-index e9adeb9..020f415 100644
---- a/drivers/md/dm.c
-+++ b/drivers/md/dm.c
-@@ -6,8 +6,8 @@
-  */
- 
- #include "dm.h"
--#include "dm-bio-list.h"
- 
-+#include <linux/bio-list.h>
- #include <linux/init.h>
- #include <linux/module.h>
- #include <linux/moduleparam.h>
-diff --git a/drivers/md/raid1.c b/drivers/md/raid1.c
-index d39f584..4e43ce2 100644
---- a/drivers/md/raid1.c
-+++ b/drivers/md/raid1.c
-@@ -31,7 +31,7 @@
-  * Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
-  */
- 
--#include "dm-bio-list.h"
-+#include <linux/bio-list.h>
- #include <linux/raid/raid1.h>
- #include <linux/raid/bitmap.h>
- 
-diff --git a/drivers/md/raid10.c b/drivers/md/raid10.c
-index ab90a6d..3ced1b9 100644
---- a/drivers/md/raid10.c
-+++ b/drivers/md/raid10.c
-@@ -18,7 +18,7 @@
-  * Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
-  */
- 
--#include "dm-bio-list.h"
-+#include <linux/bio-list.h>
- #include <linux/raid/raid10.h>
- #include <linux/raid/bitmap.h>
- 
 diff --git a/drivers/scsi/hosts.c b/drivers/scsi/hosts.c
 index ef57f25..a122624 100644
 --- a/drivers/scsi/hosts.c
@@ -444,83 +280,6 @@ index 1f3bb50..fd1e419 100644
  		return bio;
  
  	/*
-diff --git a/include/linux/bio-list.h b/include/linux/bio-list.h
-new file mode 100644
-index 0000000..4653516
---- /dev/null
-+++ b/include/linux/bio-list.h
-@@ -0,0 +1,71 @@
-+/*
-+ * Copyright (C) 2004 Red Hat UK Ltd.
-+ *
-+ * This file is released under the GPL.
-+ */
-+
-+#ifndef _BIO_LIST_H
-+#define _BIO_LIST_H
-+
-+#include <linux/bio.h>
-+
-+struct bio_list {
-+	struct bio *head;
-+	struct bio *tail;
-+};
-+
-+static inline void bio_list_init(struct bio_list *bl)
-+{
-+	bl->head = bl->tail = NULL;
-+}
-+
-+static inline void bio_list_add(struct bio_list *bl, struct bio *bio)
-+{
-+	bio->bi_next = NULL;
-+
-+	if (bl->tail)
-+		bl->tail->bi_next = bio;
-+	else
-+		bl->head = bio;
-+
-+	bl->tail = bio;
-+}
-+
-+static inline void bio_list_merge(struct bio_list *bl, struct bio_list *bl2)
-+{
-+	if (!bl2->head)
-+		return;
-+
-+	if (bl->tail)
-+		bl->tail->bi_next = bl2->head;
-+	else
-+		bl->head = bl2->head;
-+
-+	bl->tail = bl2->tail;
-+}
-+
-+static inline struct bio *bio_list_pop(struct bio_list *bl)
-+{
-+	struct bio *bio = bl->head;
-+
-+	if (bio) {
-+		bl->head = bl->head->bi_next;
-+		if (!bl->head)
-+			bl->tail = NULL;
-+
-+		bio->bi_next = NULL;
-+	}
-+
-+	return bio;
-+}
-+
-+static inline struct bio *bio_list_get(struct bio_list *bl)
-+{
-+	struct bio *bio = bl->head;
-+
-+	bl->head = bl->tail = NULL;
-+
-+	return bio;
-+}
-+
-+#endif
 diff --git a/include/linux/bio.h b/include/linux/bio.h
 index b60ffe3..fc0906c 100644
 --- a/include/linux/bio.h
@@ -541,19 +300,6 @@ index b60ffe3..fc0906c 100644
  extern void bio_unmap_user(struct bio *);
  extern struct bio *bio_map_kern(struct request_queue *, void *, unsigned int,
  				gfp_t);
-diff --git a/include/linux/if_packet.h b/include/linux/if_packet.h
-index b925585..c66d555 100644
---- a/include/linux/if_packet.h
-+++ b/include/linux/if_packet.h
-@@ -48,7 +48,7 @@ struct tpacket_stats
- 
- struct tpacket_hdr
- {
--	unsigned long	tp_status;
-+	unsigned int	tp_status;
- #define TP_STATUS_KERNEL	0
- #define TP_STATUS_USER		1
- #define TP_STATUS_COPY		2
 diff --git a/include/linux/netlink.h b/include/linux/netlink.h
 index 6a2ccf7..580fb42 100644
 --- a/include/linux/netlink.h
@@ -566,41 +312,11 @@ index 6a2ccf7..580fb42 100644
  
  #define MAX_LINKS 32		
  
-diff --git a/include/linux/raid/md_k.h b/include/linux/raid/md_k.h
-index 617b950..2323360 100644
---- a/include/linux/raid/md_k.h
-+++ b/include/linux/raid/md_k.h
-@@ -15,8 +15,7 @@
- #ifndef _MD_K_H
- #define _MD_K_H
- 
--/* and dm-bio-list.h is not under include/linux because.... ??? */
--#include "../../../drivers/md/dm-bio-list.h"
-+#include <linux/bio-list.h>
- 
- #define	LEVEL_MULTIPATH		(-4)
- #define	LEVEL_LINEAR		(-1)
-diff --git a/include/net/af_packet.h b/include/net/af_packet.h
-new file mode 100644
-index 0000000..5a75e07
---- /dev/null
-+++ b/include/net/af_packet.h
-@@ -0,0 +1,6 @@
-+#ifndef __LINUX_NET_AFPACKET_H
-+#define __LINUX_NET_AFPACKET_H
-+
-+extern struct tpacket_hdr *packet_socket_frame(struct sock *sk);
-+
-+#endif
 diff --git a/include/scsi/scsi_cmnd.h b/include/scsi/scsi_cmnd.h
-index 1ace1b9..59f0981 100644
+index 1ace1b9..8f64515 100644
 --- a/include/scsi/scsi_cmnd.h
 +++ b/include/scsi/scsi_cmnd.h
-@@ -5,9 +5,11 @@
- #include <linux/list.h>
- #include <linux/types.h>
- #include <linux/timer.h>
-+#include <linux/bio-list.h>
+@@ -8,6 +8,7 @@
  
  struct request;
  struct scatterlist;
@@ -608,7 +324,7 @@ index 1ace1b9..59f0981 100644
  struct scsi_device;
  struct scsi_request;
  
-@@ -84,6 +86,8 @@ struct scsi_cmnd {
+@@ -84,6 +85,8 @@ struct scsi_cmnd {
  	unsigned short sglist_len;	/* size of malloc'd scatter-gather list */
  	unsigned bufflen;	/* Size of data buffer */
  	void *buffer;		/* Data buffer */
@@ -617,7 +333,7 @@ index 1ace1b9..59f0981 100644
  
  	unsigned underflow;	/* Return error if less than
  				   this amount is transferred */
-@@ -147,9 +151,14 @@ struct scsi_cmnd {
+@@ -147,9 +150,14 @@ struct scsi_cmnd {
  #define SCSI_STATE_MLQUEUE         0x100b
  
  
@@ -819,31 +535,3 @@ index 0000000..04be52d
 +} __attribute__ ((aligned (sizeof(uint64_t))));
 +
 +#endif
-diff --git a/net/packet/af_packet.c b/net/packet/af_packet.c
-index 9db7dbd..b5fbd74 100644
---- a/net/packet/af_packet.c
-+++ b/net/packet/af_packet.c
-@@ -562,6 +562,23 @@ drop:
- }
- 
- #ifdef CONFIG_PACKET_MMAP
-+struct tpacket_hdr *packet_socket_frame(struct sock *sk)
-+{
-+	struct packet_sock *po;
-+	struct tpacket_hdr *h;
-+
-+	po = pkt_sk(sk);
-+	spin_lock(&sk->sk_receive_queue.lock);
-+	h = (struct tpacket_hdr *) packet_lookup_frame(po, po->head);
-+	if (h->tp_status)
-+		h = ERR_PTR(-ENOBUFS);
-+	else
-+		po->head = po->head != po->frame_max ? po->head+1 : 0;
-+	spin_unlock(&sk->sk_receive_queue.lock);
-+	return h;
-+}
-+EXPORT_SYMBOL_GPL(packet_socket_frame);
-+
- static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, struct net_device *orig_dev)
- {
- 	struct sock *sk;

@@ -19,7 +19,6 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  */
-#include <linux/bio-list.h>
 #include <linux/blkdev.h>
 #include <linux/elevator.h>
 #include <linux/module.h>
@@ -29,6 +28,7 @@
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_tgt.h>
+#include <../drivers/md/dm-bio-list.h>
 
 #include "scsi_tgt_priv.h"
 
