@@ -278,7 +278,7 @@ static int scsi_tgt_init_cmd(struct scsi_cmnd *cmd, gfp_t gfp_mask)
 	if (!cmd->request_buffer)
 		return -ENOMEM;
 
-	cmd->request_bufflen = rq->nr_sectors << 9;
+	cmd->request_bufflen = rq->data_len;
 
 	dprintk("cmd %p addr %p cnt %d\n", cmd, cmd->buffer, cmd->use_sg);
 	count = blk_rq_map_sg(rq->q, rq, cmd->request_buffer);
@@ -303,12 +303,6 @@ static int scsi_map_user_pages(struct scsi_tgt_cmd *tcmd, struct scsi_cmnd *cmd,
 	struct bio *bio;
 	int err;
 
-	/*
-	 * TODO: We need to cheat queue_dma_alignment in
-	 * __bio_map_user_iov.
-	 */
-	len = (len + PAGE_SIZE - 1) & PAGE_MASK;
-
 	while (len > 0) {
 		dprintk("%lx %u\n", (unsigned long) uaddr, len);
 		bio = bio_map_user(q, NULL, (unsigned long) uaddr, len, rw, 1);
@@ -330,9 +324,10 @@ static int scsi_map_user_pages(struct scsi_tgt_cmd *tcmd, struct scsi_cmnd *cmd,
 		 * already but for really large IO we may want to try and
 		 * merge these.
 		 */
-		if (!rq->bio)
+		if (!rq->bio) {
 			blk_rq_bio_prep(q, rq, bio);
-		else
+			rq->data_len = bio->bi_size;
+		} else
 			/* put list of bios to transfer in next go around */
 			bio_list_add(&tcmd->xfer_list, bio);
 	}
@@ -392,6 +387,7 @@ send_uspace_err:
 	BUG_ON(!bio);
 
 	blk_rq_bio_prep(cmd->request->q, cmd->request, bio);
+	cmd->request->data_len = bio->bi_size;
 	err = scsi_tgt_init_cmd(cmd, GFP_ATOMIC);
 	if (err) {
 		cmd->result = DID_ERROR << 16;
