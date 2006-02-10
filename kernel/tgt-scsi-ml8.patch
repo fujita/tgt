@@ -228,10 +228,23 @@ index 5ac8749..2dcc500 100644
  void scsi_free_queue(struct request_queue *q)
  {
 diff --git a/fs/bio.c b/fs/bio.c
-index 1f3bb50..fd1e419 100644
+index 1f3bb50..3e940c9 100644
 --- a/fs/bio.c
 +++ b/fs/bio.c
-@@ -719,19 +719,21 @@ static struct bio *__bio_map_user_iov(re
+@@ -620,10 +620,9 @@ static struct bio *__bio_map_user_iov(re
+ 
+ 		nr_pages += end - start;
+ 		/*
+-		 * transfer and buffer must be aligned to at least hardsector
+-		 * size for now, in the future we can relax this restriction
++		 * buffer must be aligned to at least hardsector size for now
+ 		 */
+-		if ((uaddr & queue_dma_alignment(q)) || (len & queue_dma_alignment(q)))
++		if (uaddr & queue_dma_alignment(q))
+ 			return ERR_PTR(-EINVAL);
+ 	}
+ 
+@@ -719,19 +718,21 @@ static struct bio *__bio_map_user_iov(re
   *	@uaddr: start of user address
   *	@len: length in bytes
   *	@write_to_vm: bool indicating writing to pages or not
@@ -255,7 +268,7 @@ index 1f3bb50..fd1e419 100644
  }
  
  /**
-@@ -741,13 +743,14 @@ struct bio *bio_map_user(request_queue_t
+@@ -741,13 +742,14 @@ struct bio *bio_map_user(request_queue_t
   *	@iov:	the iovec.
   *	@iov_count: number of elements in the iovec
   *	@write_to_vm: bool indicating writing to pages or not
@@ -271,7 +284,7 @@ index 1f3bb50..fd1e419 100644
  {
  	struct bio *bio;
  	int len = 0, i;
-@@ -768,7 +771,7 @@ struct bio *bio_map_user_iov(request_que
+@@ -768,7 +770,7 @@ struct bio *bio_map_user_iov(request_que
  	for (i = 0; i < iov_count; i++)
  		len += iov[i].iov_len;
  
