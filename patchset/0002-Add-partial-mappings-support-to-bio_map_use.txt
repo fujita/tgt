@@ -1,0 +1,108 @@
+Subject: [PATCH] Add partial mappings support to bio_map_use
+
+---
+
+ block/ll_rw_blk.c   |    5 +++--
+ fs/bio.c            |   11 +++++++----
+ include/linux/bio.h |    5 +++--
+ 3 files changed, 13 insertions(+), 8 deletions(-)
+
+717736911a4e68d224e377d5d6b529c7a358336e
+diff --git a/block/ll_rw_blk.c b/block/ll_rw_blk.c
+index f9fc07e..65c56b6 100644
+--- a/block/ll_rw_blk.c
++++ b/block/ll_rw_blk.c
+@@ -2293,7 +2293,7 @@ int blk_rq_map_user(request_queue_t *q, 
+ 	 */
+ 	uaddr = (unsigned long) ubuf;
+ 	if (!(uaddr & queue_dma_alignment(q)) && !(len & queue_dma_alignment(q)))
+-		bio = bio_map_user(q, NULL, uaddr, len, reading);
++		bio = bio_map_user(q, NULL, uaddr, len, reading, 0);
+ 	else
+ 		bio = bio_copy_user(q, uaddr, len, reading);
+ 
+@@ -2345,7 +2345,8 @@ int blk_rq_map_user_iov(request_queue_t 
+ 	/* we don't allow misaligned data like bio_map_user() does.  If the
+ 	 * user is using sg, they're expected to know the alignment constraints
+ 	 * and respect them accordingly */
+-	bio = bio_map_user_iov(q, NULL, iov, iov_count, rq_data_dir(rq)== READ);
++	bio = bio_map_user_iov(q, NULL, iov, iov_count, rq_data_dir(rq)== READ,
++				0);
+ 	if (IS_ERR(bio))
+ 		return PTR_ERR(bio);
+ 
+diff --git a/fs/bio.c b/fs/bio.c
+index d8259d9..3e940c9 100644
+--- a/fs/bio.c
++++ b/fs/bio.c
+@@ -718,19 +718,21 @@ static struct bio *__bio_map_user_iov(re
+  *	@uaddr: start of user address
+  *	@len: length in bytes
+  *	@write_to_vm: bool indicating writing to pages or not
++ *	@support_partial: support partial mappings
+  *
+  *	Map the user space address into a bio suitable for io to a block
+  *	device. Returns an error pointer in case of error.
+  */
+ struct bio *bio_map_user(request_queue_t *q, struct block_device *bdev,
+-			 unsigned long uaddr, unsigned int len, int write_to_vm)
++			 unsigned long uaddr, unsigned int len, int write_to_vm,
++			 int support_partial)
+ {
+ 	struct sg_iovec iov;
+ 
+ 	iov.iov_base = (void __user *)uaddr;
+ 	iov.iov_len = len;
+ 
+-	return bio_map_user_iov(q, bdev, &iov, 1, write_to_vm);
++	return bio_map_user_iov(q, bdev, &iov, 1, write_to_vm, support_partial);
+ }
+ 
+ /**
+@@ -740,13 +742,14 @@ struct bio *bio_map_user(request_queue_t
+  *	@iov:	the iovec.
+  *	@iov_count: number of elements in the iovec
+  *	@write_to_vm: bool indicating writing to pages or not
++ *	@support_partial: support partial mappings
+  *
+  *	Map the user space address into a bio suitable for io to a block
+  *	device. Returns an error pointer in case of error.
+  */
+ struct bio *bio_map_user_iov(request_queue_t *q, struct block_device *bdev,
+ 			     struct sg_iovec *iov, int iov_count,
+-			     int write_to_vm)
++			     int write_to_vm, int support_partial)
+ {
+ 	struct bio *bio;
+ 	int len = 0, i;
+@@ -767,7 +770,7 @@ struct bio *bio_map_user_iov(request_que
+ 	for (i = 0; i < iov_count; i++)
+ 		len += iov[i].iov_len;
+ 
+-	if (bio->bi_size == len)
++	if (bio->bi_size == len || support_partial)
+ 		return bio;
+ 
+ 	/*
+diff --git a/include/linux/bio.h b/include/linux/bio.h
+index b60ffe3..fc0906c 100644
+--- a/include/linux/bio.h
++++ b/include/linux/bio.h
+@@ -295,12 +295,13 @@ extern int bio_add_page(struct bio *, st
+ extern int bio_add_pc_page(struct request_queue *, struct bio *, struct page *,
+ 			   unsigned int, unsigned int);
+ extern int bio_get_nr_vecs(struct block_device *);
++extern int __bio_get_nr_vecs(struct request_queue *);
+ extern struct bio *bio_map_user(struct request_queue *, struct block_device *,
+-				unsigned long, unsigned int, int);
++				unsigned long, unsigned int, int, int);
+ struct sg_iovec;
+ extern struct bio *bio_map_user_iov(struct request_queue *,
+ 				    struct block_device *,
+-				    struct sg_iovec *, int, int);
++				    struct sg_iovec *, int, int, int);
+ extern void bio_unmap_user(struct bio *);
+ extern struct bio *bio_map_kern(struct request_queue *, void *, unsigned int,
+ 				gfp_t);
+-- 
+1.1.3

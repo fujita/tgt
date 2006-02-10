@@ -1,0 +1,27 @@
+Subject: [PATCH] block layer: kill length alignment test in bin_map_user
+
+---
+
+ fs/bio.c |    5 ++---
+ 1 files changed, 2 insertions(+), 3 deletions(-)
+
+de7a82b3681434b79baae0f2636d20bb1c4e004f
+diff --git a/fs/bio.c b/fs/bio.c
+index 1f3bb50..d8259d9 100644
+--- a/fs/bio.c
++++ b/fs/bio.c
+@@ -620,10 +620,9 @@ static struct bio *__bio_map_user_iov(re
+ 
+ 		nr_pages += end - start;
+ 		/*
+-		 * transfer and buffer must be aligned to at least hardsector
+-		 * size for now, in the future we can relax this restriction
++		 * buffer must be aligned to at least hardsector size for now
+ 		 */
+-		if ((uaddr & queue_dma_alignment(q)) || (len & queue_dma_alignment(q)))
++		if (uaddr & queue_dma_alignment(q))
+ 			return ERR_PTR(-EINVAL);
+ 	}
+ 
+-- 
+1.1.3
