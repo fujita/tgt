@@ -15,7 +15,7 @@ start_server()
 {
 	insmod ${PWD}/kernel/scsi_tgt_core.ko
 
-	if [ $TARGET = "istgt" ] ; then
+	if [ "$TARGET" = "istgt" ] ; then
 		modprobe -q crc32c
 		insmod ${PWD}/istgt/kernel/istgt.ko
 	else
@@ -26,7 +26,7 @@ start_server()
 
 	sleep 1
 
-	if [ $TARGET = "istgt" ] ; then
+	if [ "$TARGET" = "istgt" ] ; then
 		echo "Start istgt"    
 #		${PWD}/usr/tgtadm --driver istgt --op new --tid 0 --params iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
 #		${PWD}/usr/tgtadm --driver istgt --op bind --tid 1 --hostno 1
@@ -40,7 +40,7 @@ start_server()
 	
 stop_server()
 {
-	if [ $TARGET = "istgt" ] ; then
+	if [ "$TARGET" = "istgt" ] ; then
 		${PWD}/usr/tgtadm --driver istgt --op delete
 	else
 		${PWD}/usr/tgtadm --driver ibmvstgt --op delete
@@ -50,7 +50,7 @@ stop_server()
 
 	sleep 1
 
-	if [ $TARGET = "istgt" ] ; then
+	if [ "$TARGET" = "istgt" ] ; then
 		rmmod istgt
 	else
 		rmmod ibmvstgt
