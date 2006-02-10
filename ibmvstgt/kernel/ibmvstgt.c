@@ -412,7 +412,7 @@ static int direct_data(struct scsi_cmnd *scmd, struct memory_descriptor *md,
 		return 0;
 	}
 
-	rest = min(scmd->bufflen, md->length);
+	rest = min(scmd->request_bufflen, md->length);
 
 	for (i = 0, done = 0; i < nsg && rest; i++) {
 		token = sg_dma_address(sg + i);
@@ -492,7 +492,7 @@ rdma:
 
 	sidx = soff = 0;
 	token = sg_dma_address(sg + sidx);
-	rest = min(scmd->bufflen, id->total_length);
+	rest = min(scmd->request_bufflen, id->total_length);
 	for (i = 0; i < nmd && rest; i++) {
 		unsigned int mdone, mlen;
 
@@ -585,11 +585,15 @@ static int handle_cmd_data(struct scsi_cmnd *scmd, int op)
 	return err;
 }
 
+/* TODO: this can be called multiple times for a single command. */
 static int recv_cmd_data(struct scsi_cmnd *scmd,
 			 void (*done)(struct scsi_cmnd *))
 {
-	/* TODO: this can be called multiple times for a single command. */
-	handle_cmd_data(scmd, RECV);
+	struct iu_entry	*iue = (struct iu_entry *) scmd->SCp.ptr;
+	int rw;
+
+	rw = test_bit(V_WRITE, &iue->req.flags) ? RECV : SEND;
+	handle_cmd_data(scmd, rw);
 	done(scmd);
 	return 0;
 }
@@ -631,7 +635,6 @@ static void put_iu(struct iu_entry *iue)
 static int ibmvstgt_cmd_done(struct scsi_cmnd *scmd,
 			     void (*done)(struct scsi_cmnd *))
 {
-	int sent = 0;
 	unsigned long flags;
 	struct iu_entry *iue = (struct iu_entry *) scmd->SCp.ptr;
 	struct server_adapter *adapter = iue->adapter;
@@ -646,44 +649,11 @@ static int ibmvstgt_cmd_done(struct scsi_cmnd *scmd,
 		eprintk("operation failed %p %d %x\n",
 			iue, scmd->result, vio_iu(iue)->srp.cmd.cdb[0]);
 		send_rsp(iue, HARDWARE_ERROR, 0x00);
-		goto out;
-	}
-
-	/* FIXME */
-	switch (vio_iu(iue)->srp.cmd.cdb[0]) {
-	case WRITE_6:
-	case WRITE_10:
-	case WRITE_12:
-	case WRITE_16:
-	case WRITE_VERIFY:
-	case WRITE_VERIFY_12:
-	case START_STOP:
-	case TEST_UNIT_READY:
-	case SYNCHRONIZE_CACHE:
-	case VERIFY:
-	case VERIFY_16:
-	case RESERVE:
-	case RELEASE:
-	case RESERVE_10:
-	case RELEASE_10:
-		send_rsp(iue, NO_SENSE, 0x00);
-		goto out;
-	default:
-		break;
-	}
-
-	sent = handle_cmd_data(scmd, SEND);
-	if (sent != scmd->bufflen) {
-		eprintk("sending data on response %p (tried %u, sent %d\n",
-			iue, scmd->bufflen, sent);
-		send_rsp(iue, ABORTED_COMMAND, 0x00);
 	} else
 		send_rsp(iue, NO_SENSE, 0x00);
 
-out:
 	done(scmd);
 	put_iu(iue);
-
 	return 0;
 }
 
