@@ -2,61 +2,15 @@ Subject: [PATCH] scsi tgt core functions
 
 ---
 
- drivers/scsi/Kconfig         |    7 +
- drivers/scsi/Makefile        |    3 
  drivers/scsi/scsi_tgt_if.c   |  214 +++++++++++++++++
  drivers/scsi/scsi_tgt_lib.c  |  540 ++++++++++++++++++++++++++++++++++++++++++
  drivers/scsi/scsi_tgt_priv.h |   25 ++
- include/linux/netlink.h      |    1 
- include/scsi/scsi_tgt.h      |   11 +
- include/scsi/scsi_tgt_if.h   |   92 +++++++
- 8 files changed, 893 insertions(+), 0 deletions(-)
+ 3 files changed, 779 insertions(+), 0 deletions(-)
  create mode 100644 drivers/scsi/scsi_tgt_if.c
  create mode 100644 drivers/scsi/scsi_tgt_lib.c
  create mode 100644 drivers/scsi/scsi_tgt_priv.h
- create mode 100644 include/scsi/scsi_tgt.h
- create mode 100644 include/scsi/scsi_tgt_if.h
 
-f8f0430d4d268391f61d32745efbd464d861a37a
-diff --git a/drivers/scsi/Kconfig b/drivers/scsi/Kconfig
-index 3c606cf..d09c792 100644
---- a/drivers/scsi/Kconfig
-+++ b/drivers/scsi/Kconfig
-@@ -27,6 +27,13 @@ config SCSI
- 	  However, do not compile this as a module if your root file system
- 	  (the one containing the directory /) is located on a SCSI device.
- 
-+config SCSI_TGT
-+	tristate "SCSI target support"
-+	depends on SCSI && EXPERIMENTAL
-+	---help---
-+	  If you want to use SCSI target mode drivers enable this option.
-+	  If you choose M, the module will be called scsi_tgt.
-+
- config SCSI_PROC_FS
- 	bool "legacy /proc/scsi/ support"
- 	depends on SCSI && PROC_FS
-diff --git a/drivers/scsi/Makefile b/drivers/scsi/Makefile
-index 320e765..3d81b8d 100644
---- a/drivers/scsi/Makefile
-+++ b/drivers/scsi/Makefile
-@@ -21,6 +21,7 @@ CFLAGS_seagate.o =   -DARBITRATE -DPARIT
- subdir-$(CONFIG_PCMCIA)		+= pcmcia
- 
- obj-$(CONFIG_SCSI)		+= scsi_mod.o
-+obj-$(CONFIG_SCSI_TGT)		+= scsi_tgt.o
- 
- obj-$(CONFIG_RAID_ATTRS)	+= raid_class.o
- 
-@@ -155,6 +156,8 @@ scsi_mod-y			+= scsi.o hosts.o scsi_ioct
- scsi_mod-$(CONFIG_SYSCTL)	+= scsi_sysctl.o
- scsi_mod-$(CONFIG_SCSI_PROC_FS)	+= scsi_proc.o
- 
-+scsi_tgt-y			+= scsi_tgt_lib.o scsi_tgt_if.o
-+
- sd_mod-objs	:= sd.o
- sr_mod-objs	:= sr.o sr_ioctl.o sr_vendor.o
- ncr53c8xx-flags-$(CONFIG_SCSI_ZALON) \
+78f36da6a49c874dcbde755b98ba128356f69275
 diff --git a/drivers/scsi/scsi_tgt_if.c b/drivers/scsi/scsi_tgt_if.c
 new file mode 100644
 index 0000000..38b35da
@@ -854,132 +808,5 @@ index 0000000..4236e50
 +extern int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len,
 +				u64 offset, unsigned long uaddr, u8 rw,
 +				u8 try_map);
-diff --git a/include/linux/netlink.h b/include/linux/netlink.h
-index 6a2ccf7..580fb42 100644
---- a/include/linux/netlink.h
-+++ b/include/linux/netlink.h
-@@ -21,6 +21,7 @@
- #define NETLINK_DNRTMSG		14	/* DECnet routing messages */
- #define NETLINK_KOBJECT_UEVENT	15	/* Kernel messages to userspace */
- #define NETLINK_GENERIC		16
-+#define NETLINK_TGT		17	/* SCSI target */
- 
- #define MAX_LINKS 32		
- 
-diff --git a/include/scsi/scsi_tgt.h b/include/scsi/scsi_tgt.h
-new file mode 100644
-index 0000000..91ad6bc
---- /dev/null
-+++ b/include/scsi/scsi_tgt.h
-@@ -0,0 +1,11 @@
-+/*
-+ * SCSI target definitions
-+ */
-+
-+struct Scsi_Host;
-+struct scsi_cmnd;
-+struct scsi_lun;
-+
-+extern struct Scsi_Host *scsi_tgt_cmd_to_host(struct scsi_cmnd *cmd);
-+extern int scsi_tgt_alloc_queue(struct Scsi_Host *);
-+extern void scsi_tgt_queue_command(struct scsi_cmnd *, struct scsi_lun *, int);
-diff --git a/include/scsi/scsi_tgt_if.h b/include/scsi/scsi_tgt_if.h
-new file mode 100644
-index 0000000..04be52d
---- /dev/null
-+++ b/include/scsi/scsi_tgt_if.h
-@@ -0,0 +1,92 @@
-+/*
-+ * SCSI target kernel/user interface
-+ *
-+ * Copyright (C) 2005 FUJITA Tomonori <tomof@acm.org>
-+ * Copyright (C) 2005 Mike Christie <michaelc@cs.wisc.edu>
-+ *
-+ * This program is free software; you can redistribute it and/or
-+ * modify it under the terms of the GNU General Public License as
-+ * published by the Free Software Foundation; either version 2 of the
-+ * License, or (at your option) any later version.
-+ *
-+ * This program is distributed in the hope that it will be useful, but
-+ * WITHOUT ANY WARRANTY; without even the implied warranty of
-+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-+ * General Public License for more details.
-+ *
-+ * You should have received a copy of the GNU General Public License
-+ * along with this program; if not, write to the Free Software
-+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
-+ * 02110-1301 USA
-+ */
-+#ifndef __SCSI_TARGET_IF_H
-+#define __SCSI_TARGET_IF_H
-+
-+enum tgt_event_type {
-+	/* user -> kernel */
-+	TGT_UEVENT_TGTD_BIND,
-+	TGT_UEVENT_TARGET_SETUP,
-+	TGT_UEVENT_CMD_RES,
-+
-+	/* kernel -> user */
-+	TGT_KEVENT_RESPONSE,
-+	TGT_KEVENT_CMD_REQ,
-+	TGT_KEVENT_CMD_DONE,
-+};
-+
-+struct tgt_event {
-+	/* user-> kernel */
-+	union {
-+		struct {
-+			int pk_fd;
-+		} tgtd_bind;
-+		struct {
-+			int host_no;
-+			uint32_t cid;
-+			uint32_t len;
-+			int result;
-+			uint64_t uaddr;
-+			uint64_t offset;
-+			uint8_t rw;
-+			uint8_t try_map;
-+		} cmd_res;
-+	} u;
-+
-+	/* kernel -> user */
-+	union {
-+		struct {
-+			int err;
-+		} event_res;
-+		struct {
-+			int host_no;
-+			uint32_t cid;
-+			uint32_t data_len;
-+			uint64_t dev_id;
-+		} cmd_req;
-+		struct {
-+			int host_no;
-+			uint32_t cid;
-+			int result;
-+		} cmd_done;
-+	} k;
-+
-+	/*
-+	 * I think a pointer is a unsigned long but this struct
-+	 * gets passed around from the kernel to userspace and
-+	 * back again so to handle some ppc64 setups where userspace is
-+	 * 32 bits but the kernel is 64 we do this odd thing
-+	 */
-+	uint64_t data[0];
-+} __attribute__ ((aligned (sizeof(uint64_t))));
-+
-+#ifndef __KERNEL__
-+#define MAX_COMMAND_SIZE	16
-+#endif
-+
-+struct tgt_cmd {
-+	uint8_t scb[MAX_COMMAND_SIZE];
-+	uint8_t lun[8];
-+	int tags;
-+} __attribute__ ((aligned (sizeof(uint64_t))));
-+
-+#endif
 -- 
 1.1.3

@@ -9,7 +9,7 @@ Subject: [PATCH] scsi-ml: export scsi-ml functions needed by tgt_scsi_lib and it
  include/scsi/scsi_host.h |   40 ++++++++++++++++++++
  5 files changed, 168 insertions(+), 9 deletions(-)
 
-c8d4fed9e1642f3fcfeb18cdde52aaaadabc55fd
+4ab7d1a25185748e2aaf86b30784c280bbf5de2b
 diff --git a/drivers/scsi/hosts.c b/drivers/scsi/hosts.c
 index ef57f25..a122624 100644
 --- a/drivers/scsi/hosts.c

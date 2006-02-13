@@ -5,7 +5,7 @@ Subject: [PATCH] block layer: kill length alignment test in bin_map_user
  fs/bio.c |    5 ++---
  1 files changed, 2 insertions(+), 3 deletions(-)
 
-de7a82b3681434b79baae0f2636d20bb1c4e004f
+8e515bd33c31c8dc5e9727792d2c3cbe08bc28e1
 diff --git a/fs/bio.c b/fs/bio.c
 index 1f3bb50..d8259d9 100644
 --- a/fs/bio.c
