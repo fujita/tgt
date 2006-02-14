@@ -215,11 +215,6 @@ EXPORT_SYMBOL_GPL(scsi_tgt_cmd_to_host);
 void scsi_tgt_queue_command(struct scsi_cmnd *cmd, struct scsi_lun *scsilun,
 			    int noblock)
 {
-	struct request_queue *q = cmd->request->q;
-	struct request_list *rl = &q->rq;
-	dprintk("%d %d %lu\n", rl->count[0], rl->count[1],
-		rq_data_dir(cmd->request));
-
 	/*
 	 * For now this just calls the request_fn from this context.
 	 * For HW llds though we do not want to execute from here so
@@ -323,8 +318,8 @@ static int scsi_map_user_pages(struct scsi_tgt_cmd *tcmd, struct scsi_cmnd *cmd,
 		bio = bio_map_user(q, NULL, (unsigned long) uaddr, len, rw, 1);
 		if (IS_ERR(bio)) {
 			err = PTR_ERR(bio);
-			dprintk("fail to map %lx %u\n",
-				(unsigned long) uaddr, len);
+			dprintk("fail to map %lx %u %d %x\n",
+				(unsigned long) uaddr, len, err, cmd->cmnd[0]);
 			goto unmap_bios;
 		}
 
@@ -469,8 +464,8 @@ int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len, u64 offset,
 	}
 	cmd = rq->special;
 
-	dprintk("cmd %p result %d len %d bufflen %u %lu\n", cmd,
-		result, len, cmd->request_bufflen, rq_data_dir(rq));
+	dprintk("cmd %p result %d len %d bufflen %u %lu %x\n", cmd,
+		result, len, cmd->request_bufflen, rq_data_dir(rq), cmd->cmnd[0]);
 
 	/*
 	 * store the userspace values here, the working values are
