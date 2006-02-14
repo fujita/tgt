@@ -101,7 +101,6 @@ struct server_adapter {
 	unsigned long liobn;
 	unsigned long riobn;
 
-	int max_sectors;
 	struct Scsi_Host *shost;
 };
 
@@ -362,9 +361,6 @@ static int process_cmd(struct iu_entry *iue)
 
 	scmd = scsi_host_get_command(shost, data_dir, GFP_KERNEL);
 	BUG_ON(!scmd);
-
-	dprintk("%p %x %lx %d %d %d\n",
-		iue, iu->srp.cmd.cdb[0], iu->srp.cmd.lun, data_dir, len, tags);
 
 	scmd->SCp.ptr = (char *) iue;
 	memcpy(scmd->data_cmnd, iu->srp.cmd.cdb, MAX_COMMAND_SIZE);
@@ -668,6 +664,7 @@ int send_adapter_info(struct iu_entry *iue,
 		      dma_addr_t remote_buffer, uint16_t length)
 {
 	struct server_adapter *adapter = iue->adapter;
+	struct Scsi_Host *shost = adapter->shost;
 	dma_addr_t data_token;
 	struct mad_adapter_info_data *info;
 	int err;
@@ -696,7 +693,7 @@ int send_adapter_info(struct iu_entry *iue,
 	info->partition_number = partition_number;
 	info->mad_version = 1;
 	info->os_type = 2;
-	info->port_max_txu[0] = adapter->max_sectors << 9;
+	info->port_max_txu[0] = shost->hostt->max_sectors << 9;
 
 	/* Send our info to remote */
 	err = h_copy_rdma(sizeof(*info), adapter->liobn, data_token,
@@ -1102,7 +1099,6 @@ static int ibmvstgt_probe(struct vio_dev *dev, const struct vio_device_id *id)
 	adapter->dev = &dev->dev;
 	adapter->dev->driver_data = adapter;
 	adapter->next_rsp_delta = 0;
-	adapter->max_sectors = DEFAULT_MAX_SECTORS;
 	spin_lock_init(&adapter->lock);
 
 	dma = (unsigned int *)
