@@ -96,7 +96,7 @@ static struct device *device_get(struct target *target, uint64_t dev_id)
 	if (dev_id < target->max_device || dev_id < MAX_NR_DEVICE)
 		return target->devt[dev_id];
 
-	eprintf("Invalid device id %" PRIu64 "%d\n", dev_id, MAX_NR_DEVICE);
+	dprintf("Invalid device id %" PRIu64 "%d\n", dev_id, MAX_NR_DEVICE);
 	return NULL;
 }
 
@@ -123,13 +123,14 @@ static void resize_device_table(struct target *target, uint64_t did)
 
 static uint64_t try_mmap_device(int fd, uint64_t size)
 {
-	void *p;
+/* 	void *p; */
 
-	p = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	if (p == MAP_FAILED)
-		return 0;
-	else
-		return (unsigned long) p;
+/* 	p = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); */
+/* 	if (p == MAP_FAILED) */
+/* 		return 0; */
+/* 	else */
+/* 		return (unsigned long) p; */
+	return 0;
 }
 
 static int device_dir_create(int tid, uint64_t dev_id, int dev_fd, uint64_t size)
