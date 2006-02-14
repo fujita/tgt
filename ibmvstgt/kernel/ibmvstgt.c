@@ -136,6 +136,7 @@ struct iu_entry {
 };
 
 
+static struct workqueue_struct *vtgtd;
 static kmem_cache_t *iu_cache;
 
 /*
@@ -362,10 +363,16 @@ static int process_cmd(struct iu_entry *iue)
 	scmd = scsi_host_get_command(shost, data_dir, GFP_KERNEL);
 	BUG_ON(!scmd);
 
+	dprintk("%p %x %lx %d %d %d\n",
+		iue, iu->srp.cmd.cdb[0], iu->srp.cmd.lun, data_dir, len, tags);
+
 	scmd->SCp.ptr = (char *) iue;
 	memcpy(scmd->data_cmnd, iu->srp.cmd.cdb, MAX_COMMAND_SIZE);
 	scmd->request_bufflen = len;
 	scsi_tgt_queue_command(scmd, (struct scsi_lun *) &iu->srp.cmd.lun, 0);
+
+	dprintk("%p %x %lx %d %d %d\n",
+		iue, iu->srp.cmd.cdb[0], iu->srp.cmd.lun, data_dir, len, tags);
 
 	return 0;
 }
@@ -877,7 +884,7 @@ static irqreturn_t ibmvstgt_interrupt(int irq, void *dev_instance,
 	struct server_adapter *adapter = (struct server_adapter *)dev_instance;
 
 	vio_disable_interrupts(adapter->dma_dev);
-	kblockd_schedule_work(&adapter->crq_work);
+	queue_work(vtgtd, &adapter->crq_work);
 
 	return IRQ_HANDLED;
 }
@@ -1195,7 +1202,7 @@ static int get_system_info(void)
 
 static int ibmvstgt_init(void)
 {
-	int err;
+	int err = -ENOMEM;
 	size_t size = sizeof(struct iu_entry) + sizeof(union viosrp_iu);
 
 	printk("IBM eServer i/pSeries Virtual SCSI Target Driver\n");
@@ -1205,18 +1212,24 @@ static int ibmvstgt_init(void)
 				     SLAB_HWCACHE_ALIGN | SLAB_NO_REAP,
 				     NULL, NULL);
 	if (!iu_cache)
-		return -ENOMEM;
+		return err;
+
+	vtgtd = create_workqueue("ibmvtgtd");
+	if (!vtgtd)
+		goto free_iu_cache;
 
 	err = get_system_info();
 	if (err < 0)
-		goto free_iu_cache;
+		goto destroy_wq;
 
 	err = vio_register_driver(&ibmvstgt_driver);
 	if (err)
-		goto free_iu_cache;
+		goto destroy_wq;
 
 	return 0;
 
+destroy_wq:
+	destroy_workqueue(vtgtd);
 free_iu_cache:
 	kmem_cache_destroy(iu_cache);
 
@@ -1227,6 +1240,7 @@ static void ibmvstgt_exit(void)
 {
 	printk("Unregister IBM virtual SCSI driver\n");
 
+	destroy_workqueue(vtgtd);
 	vio_unregister_driver(&ibmvstgt_driver);
 	kmem_cache_destroy(iu_cache);
 }
