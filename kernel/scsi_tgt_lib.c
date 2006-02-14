@@ -69,7 +69,16 @@ static void scsi_tgt_cmd_destroy(void *data)
 	struct scsi_cmnd *cmd = data;
 	struct scsi_tgt_cmd *tcmd = cmd->request->end_io_data;
 
-	dprintk("cmd %p\n", cmd);
+	dprintk("cmd %p %d %lu\n", cmd, cmd->sc_data_direction,
+		rq_data_dir(cmd->request));
+	/*
+	 * We must set rq->flags here because bio_map_user and
+	 * blk_rq_bio_prep ruined ti.
+	 */
+	if (cmd->sc_data_direction == DMA_TO_DEVICE)
+		cmd->request->flags |= 1;
+	else
+		cmd->request->flags &= ~1UL;
 
 	scsi_unmap_user_pages(tcmd);
 	scsi_tgt_uspace_send_status(cmd, GFP_KERNEL);
@@ -206,6 +215,11 @@ EXPORT_SYMBOL_GPL(scsi_tgt_cmd_to_host);
 void scsi_tgt_queue_command(struct scsi_cmnd *cmd, struct scsi_lun *scsilun,
 			    int noblock)
 {
+	struct request_queue *q = cmd->request->q;
+	struct request_list *rl = &q->rq;
+	dprintk("%d %d %lu\n", rl->count[0], rl->count[1],
+		rq_data_dir(cmd->request));
+
 	/*
 	 * For now this just calls the request_fn from this context.
 	 * For HW llds though we do not want to execute from here so
@@ -225,7 +239,7 @@ static void scsi_tgt_cmd_done(struct scsi_cmnd *cmd)
 {
 	struct scsi_tgt_cmd *tcmd = cmd->request->end_io_data;
 
-	dprintk("cmd %p\n", cmd);
+	dprintk("cmd %p %lu\n", cmd, rq_data_dir(cmd->request));
 
 	/* don't we have to call this if result is set or not */
 	if (cmd->result) {
@@ -242,7 +256,7 @@ static int __scsi_tgt_transfer_response(struct scsi_cmnd *cmd)
 	struct Scsi_Host *shost = scsi_tgt_cmd_to_host(cmd);
 	int err;
 
-	dprintk("cmd %p\n", cmd);
+	dprintk("cmd %p %lu\n", cmd, rq_data_dir(cmd->request));
 
 	err = shost->hostt->transfer_response(cmd, scsi_tgt_cmd_done);
 	switch (err) {
@@ -280,7 +294,8 @@ static int scsi_tgt_init_cmd(struct scsi_cmnd *cmd, gfp_t gfp_mask)
 
 	cmd->request_bufflen = rq->data_len;
 
-	dprintk("cmd %p addr %p cnt %d\n", cmd, cmd->buffer, cmd->use_sg);
+	dprintk("cmd %p addr %p cnt %d %lu\n", cmd, cmd->buffer, cmd->use_sg,
+		rq_data_dir(rq));
 	count = blk_rq_map_sg(rq->q, rq, cmd->request_buffer);
 	if (likely(count <= cmd->use_sg)) {
 		cmd->use_sg = count;
@@ -454,8 +469,8 @@ int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len, u64 offset,
 	}
 	cmd = rq->special;
 
-	dprintk("cmd %p result %d len %d bufflen %u\n", cmd,
-		result, len, cmd->request_bufflen);
+	dprintk("cmd %p result %d len %d bufflen %u %lu\n", cmd,
+		result, len, cmd->request_bufflen, rq_data_dir(rq));
 
 	/*
 	 * store the userspace values here, the working values are
