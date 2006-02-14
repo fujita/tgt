@@ -3,14 +3,14 @@ Subject: [PATCH] scsi tgt core functions
 ---
 
  drivers/scsi/scsi_tgt_if.c   |  214 ++++++++++++++++
- drivers/scsi/scsi_tgt_lib.c  |  551 ++++++++++++++++++++++++++++++++++++++++++
+ drivers/scsi/scsi_tgt_lib.c  |  550 ++++++++++++++++++++++++++++++++++++++++++
  drivers/scsi/scsi_tgt_priv.h |   25 ++
- 3 files changed, 790 insertions(+), 0 deletions(-)
+ 3 files changed, 789 insertions(+), 0 deletions(-)
  create mode 100644 drivers/scsi/scsi_tgt_if.c
  create mode 100644 drivers/scsi/scsi_tgt_lib.c
  create mode 100644 drivers/scsi/scsi_tgt_priv.h
 
-0e2ea12891c6e55ae21b8824ca0488342f083f50
+de47d09f27130e7847b2012f9c8a7a05f32e90c4
 diff --git a/drivers/scsi/scsi_tgt_if.c b/drivers/scsi/scsi_tgt_if.c
 new file mode 100644
 index 0000000..38b35da
@@ -233,10 +233,10 @@ index 0000000..38b35da
 +}
 diff --git a/drivers/scsi/scsi_tgt_lib.c b/drivers/scsi/scsi_tgt_lib.c
 new file mode 100644
-index 0000000..9f50e4e
+index 0000000..8746236
 --- /dev/null
 +++ b/drivers/scsi/scsi_tgt_lib.c
-@@ -0,0 +1,551 @@
+@@ -0,0 +1,550 @@
 +/*
 + * SCSI target lib functions
 + *
@@ -559,7 +559,6 @@ index 0000000..9f50e4e
 +			err = PTR_ERR(bio);
 +			dprintk("fail to map %lx %u %d %x\n",
 +				(unsigned long) uaddr, len, err, cmd->cmnd[0]);
-+			BUG();
 +			goto unmap_bios;
 +		}
 +

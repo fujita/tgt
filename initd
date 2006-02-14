@@ -22,7 +22,7 @@ start_server()
 		insmod ${PWD}/ibmvstgt/kernel/ibmvstgt.ko
 	fi
 
-	${PWD}/usr/tgtd -d1
+	${PWD}/usr/tgtd -d0
 
 	sleep 1
 
