@@ -356,8 +356,9 @@ static int process_cmd(struct iu_entry *iue)
 		len = vscsis_data_length(&iu->srp.cmd, 0);
 	}
 
-	dprintk("%p %x %lx %d %d %d\n",
-		iue, iu->srp.cmd.cdb[0], iu->srp.cmd.lun, data_dir, len, tags);
+	dprintk("%p %x %lx %d %d %d %llx\n",
+		iue, iu->srp.cmd.cdb[0], iu->srp.cmd.lun, data_dir, len, tags,
+		(unsigned long long) iu->srp.cmd.tag);
 
 	scmd = scsi_host_get_command(shost, data_dir, GFP_KERNEL);
 	BUG_ON(!scmd);
@@ -367,8 +368,8 @@ static int process_cmd(struct iu_entry *iue)
 	scmd->request_bufflen = len;
 	scsi_tgt_queue_command(scmd, (struct scsi_lun *) &iu->srp.cmd.lun, 0);
 
-	dprintk("%p %x %lx %d %d %d\n",
-		iue, iu->srp.cmd.cdb[0], iu->srp.cmd.lun, data_dir, len, tags);
+	dprintk("%p %p %x %lx %d %d %d\n",
+		iue, scmd, iu->srp.cmd.cdb[0], iu->srp.cmd.lun, data_dir, len, tags);
 
 	return 0;
 }
@@ -752,7 +753,37 @@ static void process_device_reset(struct iu_entry *iue)
 
 static void process_abort(struct iu_entry *iue)
 {
+	union viosrp_iu *iu = vio_iu(iue), *tmp_iu = NULL;
+	struct iu_entry *tmp_iue;
 	unsigned char status = ABORTED_COMMAND;
+	uint64_t tag = iu->srp.tsk_mgmt.managed_task_tag;
+	unsigned long flags;
+
+	eprintk("Not supported yet %p %llx\n", iue, (unsigned long long) tag);
+
+	spin_lock_irqsave(&iue->adapter->lock, flags);
+
+	list_for_each_entry(tmp_iue, &iue->adapter->cmd_queue, ilist) {
+		tmp_iu = vio_iu(tmp_iue);
+		if (tmp_iu->srp.cmd.tag != tag)
+			continue;
+
+		__set_bit(V_ABORTED, &tmp_iue->req.flags);
+		status = NO_SENSE;
+		break;
+	}
+
+	spin_unlock_irqrestore(&iue->adapter->lock, flags);
+
+	if (status == NO_SENSE) {
+		int len = vscsis_data_length(&tmp_iu->srp.cmd,
+					     tmp_iu->srp.cmd.data_out_format);
+		dprintk("%p %x %lx %d\n",
+			tmp_iue, tmp_iu->srp.cmd.cdb[0], tmp_iu->srp.cmd.lun, len);
+		dprintk("abort successful\n");
+		BUG();
+	} else
+		dprintk("unable to abort cmd\n");
 
 	send_rsp(iue, status, 0x14);
 }
@@ -761,8 +792,6 @@ static void process_tsk_mgmt(struct iu_entry *iue)
 {
 	union viosrp_iu *iu = vio_iu(iue);
 	uint8_t flags = iu->srp.tsk_mgmt.task_mgmt_flags;
-
-	eprintk("Not supported yet %p %x\n", iue, flags);
 
 	if (flags == 0x01)
 		process_abort(iue);
