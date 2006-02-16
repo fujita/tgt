@@ -1,5 +1,15 @@
 Subject: [PATCH] scsi tgt core functions
 
+Core scsi tgt functionality. We are currently using netlink for
+the interface. We plan on trying to use the packet layer or maybe
+relay fs so we can quickly pipe requests to userspace. We are not
+sure yet though and the packet socket code needs work. So hopefully
+this can be done after merging this but before it goes to mainline.
+
+Signed-off-by: Mike Christie <michaelc@cs.wisc.edu>
+Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
+
+
 ---
 
  drivers/scsi/scsi_tgt_if.c   |  214 ++++++++++++++++

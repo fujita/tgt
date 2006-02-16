@@ -1,5 +1,22 @@
 Subject: [PATCH] block layer: add partial mappings support to bio_map_user
 
+For target mode we could end up with the case where we get very large
+request from the initiator. The request could be so large that we
+cannot transfer all the data in one operation. For example the
+HBA's segment or max_sector limits might limit us to a 1 MB transfer.
+To send a 5 MB command then we need to transfer the command chunk by chunk.
+
+To do this, tgt core will map in as much data as possible into a bio,
+send this off, then when that transfer is completed we send off another
+request/bio. To be able to pack as much data into a bio as possible
+we need bio_map_user to support partially mapped bios. The attached patch
+just adds a new argument to the those functions and if set will not
+return a failure if the bio is partially mapped.
+
+
+Signed-off-by: Mike Christie <michaelc@cs.wisc.edu>
+Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
+
 ---
 
  block/ll_rw_blk.c   |    5 +++--

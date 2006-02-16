@@ -1,5 +1,12 @@
 Subject: [PATCH] scsi-ml: add public stgt include files
 
+public header files
+
+
+Signed-off-by: Mike Christie <michaelc@cs.wisc.edu>
+Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
+
+
 ---
 
  include/scsi/scsi_tgt.h    |   11 +++++

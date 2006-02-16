@@ -1,5 +1,12 @@
 Subject: [PATCH] scsi-ml: Makefile and Kconfig changes for stgt
 
+
+Makefile and Kconfig stuff.
+
+Signed-off-by: Mike Christie <michaelc@cs.wisc.edu>
+Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
+
+
 ---
 
  drivers/scsi/Kconfig  |    7 +++++++

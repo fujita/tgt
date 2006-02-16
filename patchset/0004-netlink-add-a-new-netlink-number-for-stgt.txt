@@ -1,5 +1,14 @@
 Subject: [PATCH] netlink: add a new netlink number for stgt
 
+Need a netlink number for our interface. Since this stuff is going
+to be cleaned up in tree. I am not ccing netdev. It might some time
+before tgt goes in so might need a new number by then.
+
+
+Signed-off-by: Mike Christie <michaelc@cs.wisc.edu>
+Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
+
+
 ---
 
  include/linux/netlink.h |    1 +

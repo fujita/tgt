@@ -1,5 +1,11 @@
 Subject: [PATCH] scsi-ml: export scsi-ml functions needed by tgt_scsi_lib and its LLDs
 
+This patch contains the needed changes to the scsi-ml to support targets.
+
+Signed-off-by: Mike Christie <michaelc@cs.wisc.edu>
+Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
+
+
 ---
 
  drivers/scsi/hosts.c     |    5 +++

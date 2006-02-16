@@ -1,5 +1,24 @@
 Subject: [PATCH] block layer: kill length alignment test in bin_map_user
 
+The tgt project is mapping in bios using bio_map_user. The current targets
+do not need their len to be aligned with a queue limit so this check is
+causing some problems.
+
+The major user, blk_bio_map_user checks for the len before mapping
+and is not affected by this patch.
+
+And the semi-newly added user blk_rq_map_user_iov has been failing
+out when the len is not aligned properly so maybe people have been
+good and not sending misaligned lens or that path is not used very
+often and this change will not be very dangerous. st and sg do not
+check the length and we have not seen any problem reports from those
+wider used paths so this patch should be fairly safe - for mm 
+and wider testing at least.
+
+
+Signed-off-by: Mike Christie <michaelc@cs.wisc.edu>
+Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
+
 ---
 
  fs/bio.c |    5 ++---
