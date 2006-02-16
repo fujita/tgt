@@ -2,6 +2,21 @@ Subject: [PATCH] scsi-ml: export scsi-ml functions needed by tgt_scsi_lib and it
 
 This patch contains the needed changes to the scsi-ml to support targets.
 
+Note, per the last review we moved almost all the fields we added
+to the scsi_cmnd to our internal data structure which we are going
+to try and kill off when we can replace it with support from other
+parts of the kernel.
+
+The one field we left on was the offset variable. This is needed to handle
+the case where the target gets request that is so large that it cannot
+execute it in one dma operation. So max_secotors or a segment limit may
+limit the size of the transfer. In this case our tgt core code will
+break up the command into managable transfers and send them to the
+LLD one at a time. The offset is then used to tell the LLD where in
+the command we are at. Is there another field on the scsi_cmd for
+that?
+
+
 Signed-off-by: Mike Christie <michaelc@cs.wisc.edu>
 Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
 
