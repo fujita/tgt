@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <syscall.h>
 #include <unistd.h>
 #include <asm/byteorder.h>
 #include <asm/page.h>
@@ -579,18 +580,21 @@ static int mmap_device(int tid, uint64_t lun, uint8_t *scb,
 	off <<= 9;
 
 	if (*uaddr)
-		*uaddr = *uaddr + (off & PAGE_MASK);
+		*uaddr = *uaddr + off;
 	else {
-		p = mmap(NULL, pgcnt(datalen, off) << PAGE_SHIFT,
-			 PROT_READ | PROT_WRITE, MAP_SHARED, fd, off & PAGE_MASK);
+		p = mmap64(NULL, pgcnt(datalen, off) << PAGE_SHIFT,
+			   PROT_READ | PROT_WRITE, MAP_SHARED, fd,
+			   off & ~((1ULL << PAGE_SHIFT) - 1));
 
-		*uaddr = (unsigned long) p;
-		if (p == MAP_FAILED)
+		*uaddr = (unsigned long) p + (off & ~PAGE_MASK);
+		if (p == MAP_FAILED) {
 			err = SAM_STAT_CHECK_CONDITION;
+			eprintf("%lx %u %" PRIu64 "\n", *uaddr, datalen, off);
+		}
 	}
 	*offset = off;
 	*len = datalen;
-	dprintf("%lx %u %" PRIu64 "\n", *uaddr, datalen, off);
+	printf("%lx %u %" PRIu64 "\n", *uaddr, datalen, off);
 
 	return err;
 }
@@ -757,9 +761,13 @@ int scsi_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
 
 	dprintf("%d %d %" PRIx64 " %d\n", do_munmap, do_free, uaddr, len);
 
-	if (do_munmap)
+	if (do_munmap) {
+		len = pgcnt(len, (uaddr & ~PAGE_MASK)) << PAGE_SHIFT;
+		uaddr &= PAGE_MASK;
 		err = munmap((void *) (unsigned long) uaddr, len);
-	else if (do_free)
+		if (err)
+			eprintf("%" PRIx64 " %d\n", uaddr, len);
+	} else if (do_free)
 		free((void *) (unsigned long) uaddr);
 
 	return err;
