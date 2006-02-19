@@ -21,16 +21,11 @@
 #include <syscall.h>
 #include <unistd.h>
 #include <asm/byteorder.h>
-#include <asm/page.h>
-#include <scsi/iscsi_proto.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_tgt_if.h>
 #include <sys/mman.h>
-#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-
-#include <linux/netlink.h>
 
 #include "tgtd.h"
 #include "tgt_sysfs.h"
@@ -52,17 +47,6 @@
 
 #define READ 0
 #define WRITE 1
-
-#ifndef REPORT_LUNS
-#define REPORT_LUNS           0xa0
-#endif
-
-#ifndef SERVICE_ACTION_IN
-#define SERVICE_ACTION_IN     0x9e
-#endif
-
-#define SAM_STAT_GOOD            0x00
-#define SAM_STAT_CHECK_CONDITION 0x02
 
 static uint32_t blk_shift = 9;
 
