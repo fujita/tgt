@@ -46,7 +46,7 @@
 #define cpu_to_be64 __cpu_to_be64
 #define be64_to_cpu __be64_to_cpu
 
-static uint32_t blk_shift = 9;
+#define BLK_SHIFT	9
 
 #define min(x,y) ({ \
 	typeof(x) _x = (x);	\
@@ -173,7 +173,7 @@ static int mode_sense(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *l
 	}
 
 	*len = 4;
-	size >>= blk_shift;
+	size >>= BLK_SHIFT;
 
 	if ((scb[1] & 0x8))
 		data[3] = 0;
@@ -182,7 +182,7 @@ static int mode_sense(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *l
 		*len += 8;
 		*(uint32_t *)(data + 4) = (size >> 32) ?
 			cpu_to_be32(0xffffffff) : cpu_to_be32(size);
-		*(uint32_t *)(data + 8) = cpu_to_be32(1 << blk_shift);
+		*(uint32_t *)(data + 8) = cpu_to_be32(1 << BLK_SHIFT);
 	}
 
 	switch (pcode) {
@@ -396,11 +396,11 @@ static int read_capacity(int tid, uint64_t lun, uint8_t *scb, uint8_t *p, int *l
 		return SAM_STAT_CHECK_CONDITION;
 	}
 
-	size >>= blk_shift;
+	size >>= BLK_SHIFT;
 
 	data[0] = (size >> 32) ?
 		cpu_to_be32(0xffffffff) : cpu_to_be32(size - 1);
-	data[1] = cpu_to_be32(1U << blk_shift);
+	data[1] = cpu_to_be32(1U << BLK_SHIFT);
 	*len = 8;
 
 	return SAM_STAT_GOOD;
@@ -518,11 +518,11 @@ static int sevice_action(int tid, uint64_t lun, uint8_t *scb, uint8_t *p, int *l
 					0x25, 0);
 		return SAM_STAT_CHECK_CONDITION;
 	}
-	size >>= blk_shift;
+	size >>= BLK_SHIFT;
 
 	data64 = (uint64_t *) data;
 	data64[0] = cpu_to_be64(size - 1);
-	data[2] = cpu_to_be32(1UL << blk_shift);
+	data[2] = cpu_to_be32(1UL << BLK_SHIFT);
 
 	*len = 32;
 
@@ -559,7 +559,7 @@ static int mmap_device(int tid, uint64_t lun, uint8_t *scb,
 		break;
 	}
 
-	off <<= 9;
+	off <<= BLK_SHIFT;
 
 	if (*uaddr)
 		*uaddr = *uaddr + off;
