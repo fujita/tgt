@@ -21,6 +21,7 @@
 #include <syscall.h>
 #include <unistd.h>
 #include <asm/byteorder.h>
+#include <linux/fs.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_tgt_if.h>
 #include <sys/mman.h>
@@ -44,9 +45,6 @@
 #define be32_to_cpu __be32_to_cpu
 #define cpu_to_be64 __cpu_to_be64
 #define be64_to_cpu __be64_to_cpu
-
-#define READ 0
-#define WRITE 1
 
 static uint32_t blk_shift = 9;
 
