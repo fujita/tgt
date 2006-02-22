@@ -85,6 +85,7 @@ static void scsi_tgt_cmd_destroy(void *data)
 	scsi_tgt_uspace_send_status(cmd, GFP_KERNEL);
 	kmem_cache_free(scsi_tgt_cmd_cache, tcmd);
 	scsi_host_put_command(scsi_tgt_cmd_to_host(cmd), cmd);
+	blk_run_queue(q);
 }
 
 static void init_scsi_tgt_cmd(struct request *rq, struct scsi_tgt_cmd *tcmd)
