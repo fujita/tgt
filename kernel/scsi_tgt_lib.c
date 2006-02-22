@@ -68,6 +68,7 @@ static void scsi_tgt_cmd_destroy(void *data)
 {
 	struct scsi_cmnd *cmd = data;
 	struct scsi_tgt_cmd *tcmd = cmd->request->end_io_data;
+	struct request_queue *q = cmd->request->q;
 
 	dprintk("cmd %p %d %lu\n", cmd, cmd->sc_data_direction,
 		rq_data_dir(cmd->request));
@@ -122,8 +123,10 @@ static void scsi_uspace_request_fn(struct request_queue *q)
 		tcmd = rq->end_io_data;
 
 		/* the completion code kicks us in case we hit this */
-		if (blk_queue_start_tag(q, rq))
+		if (blk_queue_start_tag(q, rq)) {
+			eprintk("failed to tag: %p\n", cmd);
 			break;
+		}
 
 		spin_unlock_irq(q->queue_lock);
 		if (scsi_tgt_uspace_send(cmd, tcmd->lun, GFP_ATOMIC) < 0)
@@ -136,7 +139,7 @@ requeue:
 	spin_lock_irq(q->queue_lock);
 	/* need to track cnts and plug */
 	blk_requeue_request(q, rq);
-	spin_lock_irq(q->queue_lock);
+	spin_unlock_irq(q->queue_lock);
 }
 
 /**
