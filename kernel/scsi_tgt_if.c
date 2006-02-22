@@ -83,7 +83,7 @@ int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun, gfp_t gfp_
 	ev->k.cmd_req.cid = cmd->request->tag;
 	ev->k.cmd_req.data_len = cmd->request_bufflen;
 
-	dprintk("%d %u %u\n", ev->k.cmd_req.host_no, ev->k.cmd_req.cid,
+	dprintk("%p %d %u %u\n", cmd, ev->k.cmd_req.host_no, ev->k.cmd_req.cid,
 		ev->k.cmd_req.data_len);
 
 	/* FIXME: we need scsi core to do that. */
