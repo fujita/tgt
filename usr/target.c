@@ -371,9 +371,9 @@ static int cmd_queue(struct tgt_event *ev_req, int nl_fd)
 	if (device)
 		uaddr = target->devt[dev_id]->addr;
 
-	result = scsi_cmd_process(target->tid, scmd->scb, &len,
+	result = scsi_cmd_process(host_no, target->tid, scmd->scb, &len,
 				  ev_req->k.cmd_req.data_len,
-				  &uaddr, &rw, &try_map, &offset, dev_id);
+				  &uaddr, &rw, &try_map, &offset, scmd->lun);
 
 	dprintf("%u %x %lx %" PRIu64 " %d\n",
 		cid, scmd->scb[0], uaddr, offset, result);

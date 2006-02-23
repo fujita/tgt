@@ -65,6 +65,10 @@
 #define max_t(type,x,y) \
 	({ type __x = (x); type __y = (y); __x > __y ? __x: __y; })
 
+#define GETTARGET(x) ((int)((((uint64_t)(x)) >> 56) & 0x003f))
+#define GETBUS(x) ((int)((((uint64_t)(x)) >> 53) & 0x0007))
+#define GETLUN(x) ((int)((((uint64_t)(x)) >> 48) & 0x001f))
+
 static int device_info(int tid, uint64_t lun, uint64_t *size)
 {
 	int fd, err;
@@ -166,6 +170,8 @@ static int mode_sense(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *l
 	uint8_t pcode = scb[2] & 0x3f;
 	uint64_t size;
 
+	eprintf("%d %" PRIx64 " %x %x\n", tid, lun, pcode, scb[1]);
+
 	if (device_info(tid, lun, &size) < 0) {
 		*len = sense_data_build(data, 0x70, ILLEGAL_REQUEST,
 					0x25, 0);
@@ -229,17 +235,102 @@ static int mode_sense(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *l
 #define PRODUCT_ID	"VIRTUAL-DISK"
 #define PRODUCT_REV	"0"
 
-static int inquiry(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *len)
+struct inquiry_data {
+	uint8_t qual_type;
+	uint8_t rmb_reserve;
+	uint8_t version;
+	uint8_t aerc_naca_hisup_format;
+	uint8_t addl_len;
+	uint8_t sccs_reserved;
+	uint8_t bque_encserv_vs_multip_mchngr_reserved;
+	uint8_t reladr_reserved_linked_cmdqueue_vs;
+	char vendor[8];
+	char product[16];
+	char revision[4];
+	char vendor_specific[20];
+	char reserved1[2];
+	char version_descriptor[16];
+	char reserved2[22];
+	char unique[158];
+};
+
+#define	IBMVSTGT_HOSTDIR	"/sys/class/scsi_host/host"
+
+static int ibmvstgt_inquiry(int host_no, uint64_t lun, uint8_t *data)
 {
-	uint64_t size;
+	struct inquiry_data *id = (struct inquiry_data *) data;
+	char system_id[256], path[256], buf[32];
+	int fd, err, partition_number;
+	unsigned int unit_address;
+
+	snprintf(path, sizeof(path), IBMVSTGT_HOSTDIR "%d/system_id", host_no);
+	fd = open(path, O_RDONLY);
+	memset(system_id, 0, sizeof(system_id));
+	err = read(fd, system_id, sizeof(system_id));
+	close(fd);
+
+	snprintf(path, sizeof(path), IBMVSTGT_HOSTDIR "%d/partition_number",
+		 host_no);
+	fd = open(path, O_RDONLY);
+	err = read(fd, buf, sizeof(buf));
+	partition_number = strtoul(buf, NULL, 10);
+	close(fd);
+
+	snprintf(path, sizeof(path), IBMVSTGT_HOSTDIR "%d/unit_address",
+		 host_no);
+	fd = open(path, O_RDONLY);
+	err = read(fd, buf, sizeof(buf));
+	unit_address = strtoul(buf, NULL, 0);
+	close(fd);
+
+	eprintf("%d %s %d %x %" PRIx64 "\n",
+		host_no, system_id, partition_number, unit_address, lun);
+
+	id->qual_type = TYPE_DISK;
+	id->rmb_reserve = 0x00;
+	id->version = 0x84;	/* ISO/IE		  */
+	id->aerc_naca_hisup_format = 0x22;/* naca & fmt 0x02 */
+	id->addl_len = sizeof(*id) - 4;
+	id->bque_encserv_vs_multip_mchngr_reserved = 0x00;
+	id->reladr_reserved_linked_cmdqueue_vs = 0x02;/*CMDQ*/
+	memcpy(id->vendor, "IBM	    ", 8);
+	/* Don't even ask about the next bit.  AIX uses
+	 * hardcoded device naming to recognize device types
+	 * and their client won't  work unless we use VOPTA and
+	 * VDASD.
+	 */
+	memcpy(id->product, "VDASD blkdev    ", 16);
+	memcpy(id->revision, "0001", 4);
+	snprintf(id->unique,sizeof(id->unique),
+		 "IBM-VSCSI-%s-P%d-%x-%d-%d-%d\n",
+		 system_id,
+		 partition_number,
+		 unit_address,
+		 GETBUS(lun),
+		 GETTARGET(lun),
+		 GETLUN(lun));
+
+	return sizeof(*id);
+}
+
+static int inquiry(int host_no, int tid, uint8_t *lun_buf,
+		   uint8_t *scb, uint8_t *data, int *len)
+{
+	uint64_t size, lun;
 	int err, result = SAM_STAT_CHECK_CONDITION;
+
+	lun = scsi_get_devid(lun_buf);
 
 	if (((scb[1] & 0x3) == 0x3) || (!(scb[1] & 0x3) && scb[2]))
 		goto err;
 
 	err = device_info(tid, lun, &size);
 
+	dprintf("%" PRIx64 " %d %x %x\n", lun, err, scb[1], scb[2]);
+
 	if (!(scb[1] & 0x3)) {
+		*len = ibmvstgt_inquiry(host_no, *((uint64_t *) lun_buf), data);
+#if 0
 		data[2] = 4;
 		data[3] = 0x42;
 		data[4] = 59;
@@ -258,6 +349,7 @@ static int inquiry(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *len)
 		data[62] = 0x03;
 		data[63] = 0x00;
 		*len = 64;
+#endif
 		result = SAM_STAT_GOOD;
 	} else if (scb[1] & 0x2) {
 		/* CmdDt bit is set */
@@ -316,7 +408,8 @@ err:
 	return SAM_STAT_CHECK_CONDITION;
 }
 
-static int report_luns(int tid, uint32_t unused, uint8_t *scb, uint8_t *p, int *len)
+static int report_luns(int tid, uint8_t *lun_buf, uint8_t *scb, uint8_t *p,
+		       int *len)
 {
 	uint64_t lun, *data = (uint64_t *) p;
 	int idx, alen, oalen, nr_luns, rbuflen = 4096;
@@ -343,6 +436,12 @@ static int report_luns(int tid, uint32_t unused, uint8_t *scb, uint8_t *p, int *
 
 	alen &= ~(8 - 1);
 	oalen = alen;
+
+	if ((*((uint64_t *) lun_buf))) {
+		eprintf("Another sick hack for ibmvstgt\n");
+		nr_luns = 1;
+		goto done;
+	}
 
 	alen -= 8;
 	rbuflen -= 8; /* FIXME */
@@ -372,7 +471,8 @@ static int report_luns(int tid, uint32_t unused, uint8_t *scb, uint8_t *p, int *
 		}
 	}
 
-	*data = (cpu_to_be64(nr_luns * 8) << 32);
+done:
+	*((uint32_t *) data) = cpu_to_be32(nr_luns * 8);
 	*len = min(oalen, nr_luns * 8 + 8);
 out:
 	closedir(dir);
@@ -605,10 +705,6 @@ static inline int mmap_cmd_init(uint8_t *scb, uint8_t *rw)
 
 #define        TGT_INVALID_DEV_ID      ~0ULL
 
-#define GETTARGET(x) ((int)((((uint64_t)(x)) >> 56) & 0x003f))
-#define GETBUS(x) ((int)((((uint64_t)(x)) >> 53) & 0x0007))
-#define GETLUN(x) ((int)((((uint64_t)(x)) >> 48) & 0x001f))
-
 uint64_t scsi_get_devid(uint8_t *p)
 {
 	uint64_t lun = TGT_INVALID_DEV_ID;
@@ -638,12 +734,15 @@ uint64_t scsi_get_devid(uint8_t *p)
 	return lun;
 }
 
-int scsi_cmd_process(int tid, uint8_t *pdu, int *len,
+int scsi_cmd_process(int host_no, int tid, uint8_t *pdu, int *len,
 		     uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
-		     uint8_t *try_map, uint64_t *offset, uint64_t lun)
+		     uint8_t *try_map, uint64_t *offset, uint8_t *lun_buf)
 {
 	int fd, result = SAM_STAT_GOOD;
 	uint8_t *data = NULL, *scb = pdu;
+	uint64_t lun;
+
+	lun = scsi_get_devid(lun_buf);
 
 	dprintf("%d %" PRIu64 " %x %u\n", tid, lun, scb[0], datalen);
 
@@ -669,10 +768,10 @@ int scsi_cmd_process(int tid, uint8_t *pdu, int *len,
 
 	switch (scb[0]) {
 	case INQUIRY:
-		result = inquiry(tid, lun, scb, data, len);
+		result = inquiry(host_no, tid, lun_buf, scb, data, len);
 		break;
 	case REPORT_LUNS:
-		result = report_luns(tid, lun, scb, data, len);
+		result = report_luns(tid, lun_buf, scb, data, len);
 		break;
 	case READ_CAPACITY:
 		result = read_capacity(tid, lun, scb, data, len);
@@ -725,7 +824,7 @@ int scsi_cmd_process(int tid, uint8_t *pdu, int *len,
 	case RESERVE_10:
 	case RELEASE_10:
 	default:
-		dprintf("BUG? %u %" PRIu64 "\n", scb[0], lun);
+		eprintf("BUG? %u %" PRIu64 "\n", scb[0], lun);
 		*len = 0;
 		break;
 	}
