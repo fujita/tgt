@@ -130,8 +130,10 @@ static void scsi_uspace_request_fn(struct request_queue *q)
 		}
 
 		spin_unlock_irq(q->queue_lock);
-		if (scsi_tgt_uspace_send(cmd, tcmd->lun, GFP_ATOMIC) < 0)
+		if (scsi_tgt_uspace_send(cmd, tcmd->lun, GFP_ATOMIC) < 0) {
+			eprintk("failed to send: %p\n", cmd);
 			goto requeue;
+		}
 		spin_lock_irq(q->queue_lock);
 	}
 
@@ -183,8 +185,8 @@ int scsi_tgt_alloc_queue(struct Scsi_Host *shost)
 	 * command as is recvd to userspace. uspace can then make
 	 * sure we do not overload the HBA
 	 */
-	q->nr_requests = shost->hostt->can_queue;
-	blk_queue_init_tags(q, shost->hostt->can_queue, NULL);
+	q->nr_requests = shost->hostt->can_queue * 2;
+	blk_queue_init_tags(q, q->nr_requests, NULL);
 	/*
 	 * We currently only support software LLDs so this does
 	 * not matter for now. Do we need this for the cards we support?
