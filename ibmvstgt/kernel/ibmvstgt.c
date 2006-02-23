@@ -36,7 +36,6 @@
 #include <asm/vio.h>
 
 #include "viosrp.h"
-#include "srp.h"
 
 #define DEFAULT_TIMEOUT		30*HZ
 #define	INITIAL_SRP_LIMIT	16
