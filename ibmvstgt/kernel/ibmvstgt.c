@@ -1093,6 +1093,39 @@ static int ibmvstgt_eh_abort_handler(struct scsi_cmnd *cmd)
 	return 0;
 }
 
+#define	host_to_adapter(x)	(((struct server_adapter *) x->hostdata))
+
+static ssize_t
+system_id_show(struct class_device *cdev, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%s\n", system_id);
+}
+
+static ssize_t
+partition_number_show(struct class_device *cdev, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%x\n", partition_number);
+}
+
+static ssize_t
+unit_address_show(struct class_device *cdev, char *buf)
+{
+	struct Scsi_Host *shost = class_to_shost(cdev);
+	struct server_adapter *adapter = host_to_adapter(shost);
+	return snprintf(buf, PAGE_SIZE, "%x\n", adapter->dma_dev->unit_address);
+}
+
+static CLASS_DEVICE_ATTR(system_id, S_IRUGO, system_id_show, NULL);
+static CLASS_DEVICE_ATTR(partition_number, S_IRUGO, partition_number_show, NULL);
+static CLASS_DEVICE_ATTR(unit_address, S_IRUGO, unit_address_show, NULL);
+
+static struct class_device_attribute *ibmvstgt_attrs[] = {
+	&class_device_attr_system_id,
+	&class_device_attr_partition_number,
+	&class_device_attr_unit_address,
+	NULL,
+};
+
 static struct scsi_host_template ibmvstgt_sht = {
 	.name			= TGT_NAME,
 	.module			= THIS_MODULE,
@@ -1103,6 +1136,7 @@ static struct scsi_host_template ibmvstgt_sht = {
 	.transfer_response	= ibmvstgt_cmd_done,
 	.transfer_data		= recv_cmd_data,
 	.eh_abort_handler	= ibmvstgt_eh_abort_handler,
+	.shost_attrs		= ibmvstgt_attrs,
 	.proc_name		= TGT_NAME,
 };
 
