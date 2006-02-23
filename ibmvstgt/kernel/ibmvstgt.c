@@ -36,6 +36,7 @@
 #include <asm/vio.h>
 
 #include "viosrp.h"
+#include "srp.h"
 
 #define DEFAULT_TIMEOUT		30*HZ
 #define	INITIAL_SRP_LIMIT	16
@@ -111,6 +112,13 @@ enum iue_flags {
 	V_ABORTED,
 	V_FLYING,
 	V_DONE,
+};
+
+enum srp_task_attributes {
+	SRP_SIMPLE_TASK = 0,
+	SRP_HEAD_TASK = 1,
+	SRP_ORDERED_TASK = 2,
+	SRP_ACA_TASK = 4
 };
 
 /*
@@ -314,31 +322,31 @@ static int process_cmd(struct iu_entry *iue)
 	union viosrp_iu *iu = vio_iu(iue);
 	enum dma_data_direction data_dir;
 	struct scsi_cmnd *scmd;
-	int tags, len;
+	int tag, len;
 
 	dprintk("%p %p\n", iue->adapter, iue);
 
 	if (getlink(iue))
 		__set_bit(V_LINKED, &iue->req.flags);
 
-	tags = MSG_SIMPLE_TAG;
-#if 0
+	tag = MSG_SIMPLE_TAG;
+
 	switch (iu->srp.cmd.task_attribute) {
 	case SRP_SIMPLE_TASK:
-		tags = MSG_SIMPLE_TAG;
+		tag = MSG_SIMPLE_TAG;
 		break;
 	case SRP_ORDERED_TASK:
-		tags = MSG_ORDERED_TAG;
+		tag = MSG_ORDERED_TAG;
 		break;
 	case SRP_HEAD_TASK:
-		tags = MSG_HEAD_TAG;
+		tag = MSG_HEAD_TAG;
 		break;
 	default:
 		eprintk("Task attribute %d not supported, assuming barrier\n",
 			iu->srp.cmd.task_attribute);
-		tags = MSG_ORDERED_TAG;
+		tag = MSG_ORDERED_TAG;
 	}
-#endif
+
 	switch (iu->srp.cmd.cdb[0]) {
 	case WRITE_6:
 	case WRITE_10:
@@ -357,7 +365,7 @@ static int process_cmd(struct iu_entry *iue)
 	}
 
 	dprintk("%p %x %lx %d %d %d %llx\n",
-		iue, iu->srp.cmd.cdb[0], iu->srp.cmd.lun, data_dir, len, tags,
+		iue, iu->srp.cmd.cdb[0], iu->srp.cmd.lun, data_dir, len, tag,
 		(unsigned long long) iu->srp.cmd.tag);
 
 	scmd = scsi_host_get_command(shost, data_dir, GFP_KERNEL);
@@ -366,10 +374,11 @@ static int process_cmd(struct iu_entry *iue)
 	scmd->SCp.ptr = (char *) iue;
 	memcpy(scmd->data_cmnd, iu->srp.cmd.cdb, MAX_COMMAND_SIZE);
 	scmd->request_bufflen = len;
+	scmd->tag= tag;
 	scsi_tgt_queue_command(scmd, (struct scsi_lun *) &iu->srp.cmd.lun, 0);
 
 	dprintk("%p %p %x %lx %d %d %d\n",
-		iue, scmd, iu->srp.cmd.cdb[0], iu->srp.cmd.lun, data_dir, len, tags);
+		iue, scmd, iu->srp.cmd.cdb[0], iu->srp.cmd.lun, data_dir, len, tag);
 
 	return 0;
 }
