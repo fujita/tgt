@@ -126,13 +126,13 @@ static int tgtd_bind(int nl_fd)
 	char sbuf[NL_BUFSIZE], rbuf[NL_BUFSIZE];
 
 	ev = (struct tgt_event *) NLMSG_DATA(sbuf);
-	err = nl_cmd_call(nl_fd, TGT_UEVENT_TGTD_BIND, sbuf,
+	err = nl_cmd_call(nl_fd, TGT_UEVENT_REQ, sbuf,
 			  NLMSG_SPACE(sizeof(struct tgt_event)),
 			  rbuf, NL_BUFSIZE);
 
 	ev = (struct tgt_event *) NLMSG_DATA(rbuf);
-	if (err < 0 || ev->k.event_res.err < 0) {
-		eprintf("%d %d\n", err, ev->k.event_res.err);
+	if (err < 0 || ev->k.event_rsp.err < 0) {
+		eprintf("%d %d\n", err, ev->k.event_rsp.err);
 		return -EINVAL;
 	}
 

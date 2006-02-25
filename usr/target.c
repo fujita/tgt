@@ -349,7 +349,6 @@ static int cmd_queue(struct tgt_event *ev_req, int nl_fd)
 	int result, len = 0;
 	char resbuf[NLMSG_SPACE(sizeof(struct tgt_event))];
 	struct tgt_event *ev_res = NLMSG_DATA(resbuf);
-	struct tgt_cmd *scmd;
 	uint64_t offset, dev_id;
 	uint32_t cid = ev_req->k.cmd_req.cid;
 	uint8_t rw = 0, try_map = 0;
@@ -362,21 +361,21 @@ static int cmd_queue(struct tgt_event *ev_req, int nl_fd)
 		eprintf("%d is not bind to any target\n", host_no);
 		return 0;
 	}
-	scmd = (struct tgt_cmd *) ev_req->data;
 
-	dev_id = scsi_get_devid(scmd->lun);
-	dprintf("%u %x %" PRIx64 "\n", cid, scmd->scb[0], dev_id);
+	dev_id = scsi_get_devid(ev_req->k.cmd_req.lun);
+	dprintf("%u %x %" PRIx64 "\n", cid, ev_req->k.cmd_req.scb[0], dev_id);
 
 	device = device_get(target, dev_id);
 	if (device)
 		uaddr = target->devt[dev_id]->addr;
 
-	result = scsi_cmd_process(host_no, target->tid, scmd->scb, &len,
-				  ev_req->k.cmd_req.data_len,
-				  &uaddr, &rw, &try_map, &offset, scmd->lun);
+	result = scsi_cmd_process(host_no, target->tid, ev_req->k.cmd_req.scb,
+				  &len, ev_req->k.cmd_req.data_len,
+				  &uaddr, &rw, &try_map, &offset,
+				  ev_req->k.cmd_req.lun);
 
 	dprintf("%u %x %lx %" PRIu64 " %d\n",
-		cid, scmd->scb[0], uaddr, offset, result);
+		cid, ev_req->k.cmd_req.scb[0], uaddr, offset, result);
 
 	/* TODO: preallocate cmd */
 	cmd = malloc(sizeof(*cmd));
@@ -388,16 +387,14 @@ static int cmd_queue(struct tgt_event *ev_req, int nl_fd)
 
 	insque(&cmd->clist, &target->cqueue);
 
-	ev_res->u.cmd_res.host_no = host_no;
-	ev_res->u.cmd_res.cid = cid;
-	ev_res->u.cmd_res.len = len;
-	ev_res->u.cmd_res.result = result;
-	ev_res->u.cmd_res.uaddr = uaddr;
-	ev_res->u.cmd_res.rw = rw;
-	ev_res->u.cmd_res.try_map = try_map;
-	ev_res->u.cmd_res.offset = offset;
+	ev_res->u.cmd_rsp.host_no = host_no;
+	ev_res->u.cmd_rsp.cid = cid;
+	ev_res->u.cmd_rsp.len = len;
+	ev_res->u.cmd_rsp.result = result;
+	ev_res->u.cmd_rsp.uaddr = uaddr;
+	ev_res->u.cmd_rsp.rw = rw;
 
-	return __nl_write(nl_fd, TGT_UEVENT_CMD_RES, resbuf,
+	return __nl_write(nl_fd, TGT_UEVENT_CMD_RSP, resbuf,
 			  NLMSG_SPACE(sizeof(*ev_res)));
 }
 
