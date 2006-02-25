@@ -16,10 +16,8 @@ LLD one at a time. The offset is then used to tell the LLD where in
 the command we are at. Is there another field on the scsi_cmd for
 that?
 
-
 Signed-off-by: Mike Christie <michaelc@cs.wisc.edu>
 Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
-
 
 ---
 
@@ -30,9 +28,9 @@ Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
  include/scsi/scsi_host.h |   40 ++++++++++++++++++++
  5 files changed, 168 insertions(+), 9 deletions(-)
 
-4ab7d1a25185748e2aaf86b30784c280bbf5de2b
+b7a992fe8af27b25c30fc5e7c36abfe6ebb6fe84
 diff --git a/drivers/scsi/hosts.c b/drivers/scsi/hosts.c
-index ef57f25..a122624 100644
+index 5881079..64e687a 100644
 --- a/drivers/scsi/hosts.c
 +++ b/drivers/scsi/hosts.c
 @@ -264,6 +264,11 @@ static void scsi_host_dev_release(struct
@@ -48,10 +46,10 @@ index ef57f25..a122624 100644
  	kfree(shost->shost_data);
  
 diff --git a/drivers/scsi/scsi.c b/drivers/scsi/scsi.c
-index d182bad..701973e 100644
+index 245ca99..a2295ed 100644
 --- a/drivers/scsi/scsi.c
 +++ b/drivers/scsi/scsi.c
-@@ -234,6 +234,58 @@ static struct scsi_cmnd *__scsi_get_comm
+@@ -236,6 +236,58 @@ static struct scsi_cmnd *__scsi_get_comm
  }
  
  /*
@@ -110,7 +108,7 @@ index d182bad..701973e 100644
   * Function:	scsi_get_command()
   *
   * Purpose:	Allocate and setup a scsi command block
-@@ -272,6 +324,45 @@ struct scsi_cmnd *scsi_get_command(struc
+@@ -274,6 +326,45 @@ struct scsi_cmnd *scsi_get_command(struc
  EXPORT_SYMBOL(scsi_get_command);
  
  /*
@@ -157,10 +155,10 @@ index d182bad..701973e 100644
   *
   * Purpose:	Free a scsi command block
 diff --git a/drivers/scsi/scsi_lib.c b/drivers/scsi/scsi_lib.c
-index 5ac8749..2dcc500 100644
+index 4362dcd..7307705 100644
 --- a/drivers/scsi/scsi_lib.c
 +++ b/drivers/scsi/scsi_lib.c
-@@ -802,7 +802,7 @@ static struct scsi_cmnd *scsi_end_reques
+@@ -804,7 +804,7 @@ static struct scsi_cmnd *scsi_end_reques
  	return NULL;
  }
  
@@ -169,7 +167,7 @@ index 5ac8749..2dcc500 100644
  {
  	struct scsi_host_sg_pool *sgp;
  	struct scatterlist *sgl;
-@@ -843,7 +843,9 @@ static struct scatterlist *scsi_alloc_sg
+@@ -845,7 +845,9 @@ static struct scatterlist *scsi_alloc_sg
  	return sgl;
  }
  
@@ -180,7 +178,7 @@ index 5ac8749..2dcc500 100644
  {
  	struct scsi_host_sg_pool *sgp;
  
-@@ -853,6 +855,8 @@ static void scsi_free_sgtable(struct sca
+@@ -855,6 +857,8 @@ static void scsi_free_sgtable(struct sca
  	mempool_free(sgl, sgp->pool);
  }
  
@@ -189,7 +187,7 @@ index 5ac8749..2dcc500 100644
  /*
   * Function:    scsi_release_buffers()
   *
-@@ -1685,29 +1689,40 @@ u64 scsi_calculate_bounce_limit(struct S
+@@ -1687,29 +1691,40 @@ u64 scsi_calculate_bounce_limit(struct S
  }
  EXPORT_SYMBOL(scsi_calculate_bounce_limit);
  
@@ -238,7 +236,7 @@ index 5ac8749..2dcc500 100644
  void scsi_free_queue(struct request_queue *q)
  {
 diff --git a/include/scsi/scsi_cmnd.h b/include/scsi/scsi_cmnd.h
-index 1ace1b9..8f64515 100644
+index 7529f43..51156c7 100644
 --- a/include/scsi/scsi_cmnd.h
 +++ b/include/scsi/scsi_cmnd.h
 @@ -8,6 +8,7 @@
@@ -346,4 +344,4 @@ index 8279929..8b799db 100644
   * These two functions are used to allocate and free a pseudo device
   * which will connect to the host adapter itself rather than any
 -- 
-1.1.3
+1.1.5

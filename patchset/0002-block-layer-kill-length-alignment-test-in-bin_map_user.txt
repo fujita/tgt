@@ -12,9 +12,8 @@ out when the len is not aligned properly so maybe people have been
 good and not sending misaligned lens or that path is not used very
 often and this change will not be very dangerous. st and sg do not
 check the length and we have not seen any problem reports from those
-wider used paths so this patch should be fairly safe - for mm 
+wider used paths so this patch should be fairly safe - for mm
 and wider testing at least.
-
 
 Signed-off-by: Mike Christie <michaelc@cs.wisc.edu>
 Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
@@ -24,7 +23,7 @@ Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
  fs/bio.c |    5 ++---
  1 files changed, 2 insertions(+), 3 deletions(-)
 
-8e515bd33c31c8dc5e9727792d2c3cbe08bc28e1
+20ed0ebdd84e1a93550413f487dceaf1ab29a2cd
 diff --git a/fs/bio.c b/fs/bio.c
 index 1f3bb50..d8259d9 100644
 --- a/fs/bio.c
@@ -43,4 +42,4 @@ index 1f3bb50..d8259d9 100644
  	}
  
 -- 
-1.1.3
+1.1.5

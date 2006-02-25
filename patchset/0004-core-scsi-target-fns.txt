@@ -1,4 +1,4 @@
-The core scsi target lib functions.
+Subject: [PATCH] The core scsi target lib functions.
 
 TODO:
 - mv md/dm-bio-list.h to linux/bio-list.h so md and us do not have to
@@ -19,17 +19,26 @@ and reqeusts so we would need a shell queue like what dm uses.
 model in userspace).
 - must remove our request->flags hack
 
-
 Signed-off-by: Mike Christie <michaelc@cs.wisc.edu>
 Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
 
+---
 
+ drivers/scsi/scsi_tgt_lib.c  |  556 ++++++++++++++++++++++++++++++++++++++++++
+ drivers/scsi/scsi_tgt_priv.h |   25 ++
+ include/scsi/scsi_tgt.h      |   11 +
+ 3 files changed, 592 insertions(+), 0 deletions(-)
+ create mode 100644 drivers/scsi/scsi_tgt_lib.c
+ create mode 100644 drivers/scsi/scsi_tgt_priv.h
+ create mode 100644 include/scsi/scsi_tgt.h
+
+ef599065dcacab6ed526d6156a369ed478d595a2
 diff --git a/drivers/scsi/scsi_tgt_lib.c b/drivers/scsi/scsi_tgt_lib.c
 new file mode 100644
-index 0000000..8746236
+index 0000000..4665ce4
 --- /dev/null
 +++ b/drivers/scsi/scsi_tgt_lib.c
-@@ -0,0 +1,550 @@
+@@ -0,0 +1,556 @@
 +/*
 + * SCSI target lib functions
 + *
@@ -100,6 +109,7 @@ index 0000000..8746236
 +{
 +	struct scsi_cmnd *cmd = data;
 +	struct scsi_tgt_cmd *tcmd = cmd->request->end_io_data;
++	struct request_queue *q = cmd->request->q;
 +
 +	dprintk("cmd %p %d %lu\n", cmd, cmd->sc_data_direction,
 +		rq_data_dir(cmd->request));
@@ -116,6 +126,7 @@ index 0000000..8746236
 +	scsi_tgt_uspace_send_status(cmd, GFP_KERNEL);
 +	kmem_cache_free(scsi_tgt_cmd_cache, tcmd);
 +	scsi_host_put_command(scsi_tgt_cmd_to_host(cmd), cmd);
++	blk_run_queue(q);
 +}
 +
 +static void init_scsi_tgt_cmd(struct request *rq, struct scsi_tgt_cmd *tcmd)
@@ -154,12 +165,16 @@ index 0000000..8746236
 +		tcmd = rq->end_io_data;
 +
 +		/* the completion code kicks us in case we hit this */
-+		if (blk_queue_start_tag(q, rq))
++		if (blk_queue_start_tag(q, rq)) {
++			eprintk("failed to tag: %p\n", cmd);
 +			break;
++		}
 +
 +		spin_unlock_irq(q->queue_lock);
-+		if (scsi_tgt_uspace_send(cmd, tcmd->lun, GFP_ATOMIC) < 0)
++		if (scsi_tgt_uspace_send(cmd, tcmd->lun, GFP_ATOMIC) < 0) {
++			eprintk("failed to send: %p\n", cmd);
 +			goto requeue;
++		}
 +		spin_lock_irq(q->queue_lock);
 +	}
 +
@@ -168,7 +183,7 @@ index 0000000..8746236
 +	spin_lock_irq(q->queue_lock);
 +	/* need to track cnts and plug */
 +	blk_requeue_request(q, rq);
-+	spin_lock_irq(q->queue_lock);
++	spin_unlock_irq(q->queue_lock);
 +}
 +
 +/**
@@ -211,8 +226,8 @@ index 0000000..8746236
 +	 * command as is recvd to userspace. uspace can then make
 +	 * sure we do not overload the HBA
 +	 */
-+	q->nr_requests = shost->hostt->can_queue;
-+	blk_queue_init_tags(q, shost->hostt->can_queue, NULL);
++	q->nr_requests = shost->hostt->can_queue * 2;
++	blk_queue_init_tags(q, q->nr_requests, NULL);
 +	/*
 +	 * We currently only support software LLDs so this does
 +	 * not matter for now. Do we need this for the cards we support?
@@ -347,7 +362,7 @@ index 0000000..8746236
 +
 +	while (len > 0) {
 +		dprintk("%lx %u\n", (unsigned long) uaddr, len);
-+		bio = bio_map_user(q, NULL, (unsigned long) uaddr, len, rw, 1);
++		bio = bio_map_user(q, NULL, (unsigned long) uaddr, len, rw);
 +		if (IS_ERR(bio)) {
 +			err = PTR_ERR(bio);
 +			dprintk("fail to map %lx %u %d %x\n",
@@ -470,16 +485,16 @@ index 0000000..8746236
 +	return 0;
 +}
 +
-+int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len, u64 offset,
-+			 unsigned long uaddr, u8 rw, u8 try_map)
++int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len,
++			 unsigned long uaddr, u8 rw)
 +{
 +	struct Scsi_Host *shost;
 +	struct scsi_cmnd *cmd;
 +	struct request *rq;
 +	int err = 0;
 +
-+	dprintk("%d %u %d %u %llu %lx %u %u\n", host_no, cid, result,
-+		len, (unsigned long long) offset, uaddr, rw, try_map);
++	dprintk("%d %u %d %u %lx %u\n", host_no, cid, result,
++		len, uaddr, rw);
 +
 +	/* TODO: replace with a O(1) alg */
 +	shost = scsi_host_lookup(host_no);
@@ -582,7 +597,7 @@ index 0000000..8746236
 +MODULE_LICENSE("GPL");
 diff --git a/drivers/scsi/scsi_tgt_priv.h b/drivers/scsi/scsi_tgt_priv.h
 new file mode 100644
-index 0000000..4236e50
+index 0000000..fcf2ec6
 --- /dev/null
 +++ b/drivers/scsi/scsi_tgt_priv.h
 @@ -0,0 +1,25 @@
@@ -609,8 +624,8 @@ index 0000000..4236e50
 +extern int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun, gfp_t flags);
 +extern int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd, gfp_t flags);
 +extern int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len,
-+				u64 offset, unsigned long uaddr, u8 rw,
-+				u8 try_map);
++				unsigned long uaddr, u8 rw);
++
 diff --git a/include/scsi/scsi_tgt.h b/include/scsi/scsi_tgt.h
 new file mode 100644
 index 0000000..91ad6bc
@@ -628,3 +643,5 @@ index 0000000..91ad6bc
 +extern struct Scsi_Host *scsi_tgt_cmd_to_host(struct scsi_cmnd *cmd);
 +extern int scsi_tgt_alloc_queue(struct Scsi_Host *);
 +extern void scsi_tgt_queue_command(struct scsi_cmnd *, struct scsi_lun *, int);
+-- 
+1.1.5

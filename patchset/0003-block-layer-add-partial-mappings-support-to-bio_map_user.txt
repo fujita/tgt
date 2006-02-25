@@ -9,117 +9,140 @@ To send a 5 MB command then we need to transfer the command chunk by chunk.
 To do this, tgt core will map in as much data as possible into a bio,
 send this off, then when that transfer is completed we send off another
 request/bio. To be able to pack as much data into a bio as possible
-we need bio_map_user to support partially mapped bios. The attached patch
-just adds a new argument to the those functions and if set will not
-return a failure if the bio is partially mapped.
+we need bio_map_user to support partially mapped bios.
 
+The attached patch allows bio_map_user to map bios partially. The two
+users (blk_rq_map_user and blk_rq_map_user_iov) will fail if the bio
+is partially mapped.
 
 Signed-off-by: Mike Christie <michaelc@cs.wisc.edu>
 Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
 
 ---
 
- block/ll_rw_blk.c   |    5 +++--
- fs/bio.c            |   11 +++++++----
- include/linux/bio.h |    5 +++--
- 3 files changed, 13 insertions(+), 8 deletions(-)
+ block/ll_rw_blk.c      |   29 ++++++++++++++++++-----------
+ block/scsi_ioctl.c     |    3 ++-
+ fs/bio.c               |   14 +-------------
+ include/linux/blkdev.h |    3 ++-
+ 4 files changed, 23 insertions(+), 26 deletions(-)
 
-97fbe8e42375284c82814b95cde3bc18c00721cd
+95e0133e03f75a5edc7ca4eb7ce0c0347cf841bf
 diff --git a/block/ll_rw_blk.c b/block/ll_rw_blk.c
-index f9fc07e..65c56b6 100644
+index 03d9c82..6849859 100644
 --- a/block/ll_rw_blk.c
 +++ b/block/ll_rw_blk.c
-@@ -2293,7 +2293,7 @@ int blk_rq_map_user(request_queue_t *q, 
- 	 */
- 	uaddr = (unsigned long) ubuf;
- 	if (!(uaddr & queue_dma_alignment(q)) && !(len & queue_dma_alignment(q)))
--		bio = bio_map_user(q, NULL, uaddr, len, reading);
-+		bio = bio_map_user(q, NULL, uaddr, len, reading, 0);
+@@ -2291,19 +2291,20 @@ int blk_rq_map_user(request_queue_t *q, 
  	else
  		bio = bio_copy_user(q, uaddr, len, reading);
  
-@@ -2345,7 +2345,8 @@ int blk_rq_map_user_iov(request_queue_t 
- 	/* we don't allow misaligned data like bio_map_user() does.  If the
- 	 * user is using sg, they're expected to know the alignment constraints
- 	 * and respect them accordingly */
--	bio = bio_map_user_iov(q, NULL, iov, iov_count, rq_data_dir(rq)== READ);
-+	bio = bio_map_user_iov(q, NULL, iov, iov_count, rq_data_dir(rq)== READ,
-+				0);
+-	if (!IS_ERR(bio)) {
+-		rq->bio = rq->biotail = bio;
+-		blk_rq_bio_prep(q, rq, bio);
++	if (IS_ERR(bio))
++		return PTR_ERR(bio);
+ 
+-		rq->buffer = rq->data = NULL;
+-		rq->data_len = len;
+-		return 0;
++	if (bio->bi_size != len) {
++		bio_endio(bio, bio->bi_size, 0);
++		bio_unmap_user(bio);
++		return -EINVAL;
+ 	}
+ 
+-	/*
+-	 * bio is the err-ptr
+-	 */
+-	return PTR_ERR(bio);
++	rq->bio = rq->biotail = bio;
++	blk_rq_bio_prep(q, rq, bio);
++	rq->buffer = rq->data = NULL;
++	rq->data_len = len;
++	return 0;
+ }
+ 
+ EXPORT_SYMBOL(blk_rq_map_user);
+@@ -2329,7 +2330,7 @@ EXPORT_SYMBOL(blk_rq_map_user);
+  *    unmapping.
+  */
+ int blk_rq_map_user_iov(request_queue_t *q, struct request *rq,
+-			struct sg_iovec *iov, int iov_count)
++			struct sg_iovec *iov, int iov_count, unsigned int len)
+ {
+ 	struct bio *bio;
+ 
+@@ -2343,6 +2344,12 @@ int blk_rq_map_user_iov(request_queue_t 
  	if (IS_ERR(bio))
  		return PTR_ERR(bio);
  
++	if (bio->bi_size != len) {
++		bio_endio(bio, bio->bi_size, 0);
++		bio_unmap_user(bio);
++		return -EINVAL;
++	}
++
+ 	rq->bio = rq->biotail = bio;
+ 	blk_rq_bio_prep(q, rq, bio);
+ 	rq->buffer = rq->data = NULL;
+diff --git a/block/scsi_ioctl.c b/block/scsi_ioctl.c
+index 24f7af9..ef9900d 100644
+--- a/block/scsi_ioctl.c
++++ b/block/scsi_ioctl.c
+@@ -274,7 +274,8 @@ static int sg_io(struct file *file, requ
+ 			goto out;
+ 		}
+ 
+-		ret = blk_rq_map_user_iov(q, rq, iov, hdr->iovec_count);
++		ret = blk_rq_map_user_iov(q, rq, iov, hdr->iovec_count,
++					  hdr->dxfer_len);
+ 		kfree(iov);
+ 	} else if (hdr->dxfer_len)
+ 		ret = blk_rq_map_user(q, rq, hdr->dxferp, hdr->dxfer_len);
 diff --git a/fs/bio.c b/fs/bio.c
-index 1f3bb50..fd1e419 100644
+index 1f3bb50..f75c2f4 100644
 --- a/fs/bio.c
 +++ b/fs/bio.c
-@@ -719,19 +719,21 @@ static struct bio *__bio_map_user_iov(re
-  *	@uaddr: start of user address
-  *	@len: length in bytes
-  *	@write_to_vm: bool indicating writing to pages or not
-+ *	@support_partial: support partial mappings
-  *
-  *	Map the user space address into a bio suitable for io to a block
-  *	device. Returns an error pointer in case of error.
-  */
- struct bio *bio_map_user(request_queue_t *q, struct block_device *bdev,
--			 unsigned long uaddr, unsigned int len, int write_to_vm)
-+			 unsigned long uaddr, unsigned int len, int write_to_vm,
-+			 int support_partial)
- {
- 	struct sg_iovec iov;
- 
- 	iov.iov_base = (void __user *)uaddr;
- 	iov.iov_len = len;
- 
--	return bio_map_user_iov(q, bdev, &iov, 1, write_to_vm);
-+	return bio_map_user_iov(q, bdev, &iov, 1, write_to_vm, support_partial);
- }
- 
- /**
-@@ -741,13 +743,14 @@ struct bio *bio_map_user(request_queue_t
-  *	@iov:	the iovec.
-  *	@iov_count: number of elements in the iovec
-  *	@write_to_vm: bool indicating writing to pages or not
-+ *	@support_partial: support partial mappings
-  *
-  *	Map the user space address into a bio suitable for io to a block
-  *	device. Returns an error pointer in case of error.
-  */
- struct bio *bio_map_user_iov(request_queue_t *q, struct block_device *bdev,
- 			     struct sg_iovec *iov, int iov_count,
--			     int write_to_vm)
-+			     int write_to_vm, int support_partial)
+@@ -750,7 +750,6 @@ struct bio *bio_map_user_iov(request_que
+ 			     int write_to_vm)
  {
  	struct bio *bio;
- 	int len = 0, i;
-@@ -768,7 +771,7 @@ struct bio *bio_map_user_iov(request_que
- 	for (i = 0; i < iov_count; i++)
- 		len += iov[i].iov_len;
+-	int len = 0, i;
  
+ 	bio = __bio_map_user_iov(q, bdev, iov, iov_count, write_to_vm);
+ 
+@@ -765,18 +764,7 @@ struct bio *bio_map_user_iov(request_que
+ 	 */
+ 	bio_get(bio);
+ 
+-	for (i = 0; i < iov_count; i++)
+-		len += iov[i].iov_len;
+-
 -	if (bio->bi_size == len)
-+	if (bio->bi_size == len || support_partial)
- 		return bio;
+-		return bio;
+-
+-	/*
+-	 * don't support partial mappings
+-	 */
+-	bio_endio(bio, bio->bi_size, 0);
+-	bio_unmap_user(bio);
+-	return ERR_PTR(-EINVAL);
++	return bio;
+ }
  
- 	/*
-diff --git a/include/linux/bio.h b/include/linux/bio.h
-index b60ffe3..fc0906c 100644
---- a/include/linux/bio.h
-+++ b/include/linux/bio.h
-@@ -295,12 +295,13 @@ extern int bio_add_page(struct bio *, st
- extern int bio_add_pc_page(struct request_queue *, struct bio *, struct page *,
- 			   unsigned int, unsigned int);
- extern int bio_get_nr_vecs(struct block_device *);
-+extern int __bio_get_nr_vecs(struct request_queue *);
- extern struct bio *bio_map_user(struct request_queue *, struct block_device *,
--				unsigned long, unsigned int, int);
-+				unsigned long, unsigned int, int, int);
- struct sg_iovec;
- extern struct bio *bio_map_user_iov(struct request_queue *,
- 				    struct block_device *,
--				    struct sg_iovec *, int, int);
-+				    struct sg_iovec *, int, int, int);
- extern void bio_unmap_user(struct bio *);
- extern struct bio *bio_map_kern(struct request_queue *, void *, unsigned int,
- 				gfp_t);
+ static void __bio_unmap_user(struct bio *bio)
+diff --git a/include/linux/blkdev.h b/include/linux/blkdev.h
+index 860e7a4..619ef1d 100644
+--- a/include/linux/blkdev.h
++++ b/include/linux/blkdev.h
+@@ -611,7 +611,8 @@ extern void blk_queue_activity_fn(reques
+ extern int blk_rq_map_user(request_queue_t *, struct request *, void __user *, unsigned int);
+ extern int blk_rq_unmap_user(struct bio *, unsigned int);
+ extern int blk_rq_map_kern(request_queue_t *, struct request *, void *, unsigned int, gfp_t);
+-extern int blk_rq_map_user_iov(request_queue_t *, struct request *, struct sg_iovec *, int);
++extern int blk_rq_map_user_iov(request_queue_t *, struct request *,
++			       struct sg_iovec *, int, unsigned int);
+ extern int blk_execute_rq(request_queue_t *, struct gendisk *,
+ 			  struct request *, int);
+ extern void blk_execute_rq_nowait(request_queue_t *, struct gendisk *,
 -- 
-1.1.3
+1.1.5
