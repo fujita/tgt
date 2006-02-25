@@ -21,5 +21,5 @@ extern int scsi_tgt_if_init(void);
 extern int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun, gfp_t flags);
 extern int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd, gfp_t flags);
 extern int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len,
-				u64 offset, unsigned long uaddr, u8 rw,
-				u8 try_map);
+				unsigned long uaddr, u8 rw);
+

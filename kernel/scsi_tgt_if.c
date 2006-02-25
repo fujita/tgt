@@ -35,15 +35,15 @@
 static int tgtd_pid;
 static struct sock *nl_sk;
 
-static int send_event_res(uint16_t type, struct tgt_event *p,
-			  void *data, int dlen, gfp_t flags, pid_t pid)
+static int send_event_rsp(uint16_t type, struct tgt_event *p, gfp_t flags,
+			  pid_t pid)
 {
 	struct tgt_event *ev;
 	struct nlmsghdr *nlh;
 	struct sk_buff *skb;
 	uint32_t len;
 
-	len = NLMSG_SPACE(sizeof(*ev) + dlen);
+	len = NLMSG_SPACE(sizeof(*ev));
 	skb = alloc_skb(len, flags);
 	if (!skb)
 		return -ENOMEM;
@@ -52,8 +52,6 @@ static int send_event_res(uint16_t type, struct tgt_event *p,
 
 	ev = NLMSG_DATA(nlh);
 	memcpy(ev, p, sizeof(*ev));
-	if (dlen)
-		memcpy(ev->data, data, dlen);
 
 	return netlink_unicast(nl_sk, skb, pid, 0);
 }
@@ -64,10 +62,12 @@ int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun, gfp_t gfp_
 	struct sk_buff *skb;
 	struct nlmsghdr *nlh;
 	struct tgt_event *ev;
-	struct tgt_cmd *tcmd;
 	int err, len;
 
-	len = NLMSG_SPACE(sizeof(*ev) + sizeof(struct tgt_cmd));
+	/* FIXME: we need scsi core to do that. */
+	memcpy(cmd->cmnd, cmd->data_cmnd, MAX_COMMAND_SIZE);
+
+	len = NLMSG_SPACE(sizeof(*ev));
 	/*
 	 * TODO: add MAX_COMMAND_SIZE to ev and add mempool
 	 */
@@ -82,21 +82,16 @@ int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun, gfp_t gfp_
 	ev->k.cmd_req.host_no = shost->host_no;
 	ev->k.cmd_req.cid = cmd->request->tag;
 	ev->k.cmd_req.data_len = cmd->request_bufflen;
+	memcpy(ev->k.cmd_req.scb, cmd->cmnd, sizeof(ev->k.cmd_req.scb));
+	memcpy(ev->k.cmd_req.lun, lun, sizeof(ev->k.cmd_req.lun));
+	ev->k.cmd_req.attribute = cmd->tag;
 
-	dprintk("%p %d %u %u\n", cmd, ev->k.cmd_req.host_no, ev->k.cmd_req.cid,
-		ev->k.cmd_req.data_len);
-
-	/* FIXME: we need scsi core to do that. */
-	memcpy(cmd->cmnd, cmd->data_cmnd, MAX_COMMAND_SIZE);
-
-	tcmd = (struct tgt_cmd *) ev->data;
-	memcpy(tcmd->scb, cmd->cmnd, sizeof(tcmd->scb));
-	memcpy(tcmd->lun, lun, sizeof(struct scsi_lun));
+	dprintk("%p %d %u %u %x\n", cmd, shost->host_no, ev->k.cmd_req.cid,
+		ev->k.cmd_req.data_len, cmd->tag);
 
 	err = netlink_unicast(nl_sk, skb, tgtd_pid, 0);
 	if (err < 0)
-		printk(KERN_ERR "scsi_tgt_uspace_send: could not send skb %d\n",
-		       err);
+		eprintk(KERN_ERR "could not send skb %d\n", err);
 	return err;
 }
 
@@ -104,15 +99,13 @@ int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd, gfp_t gfp_mask)
 {
 	struct Scsi_Host *shost = scsi_tgt_cmd_to_host(cmd);
 	struct tgt_event ev;
-	char dummy[sizeof(struct tgt_cmd)];
 
 	memset(&ev, 0, sizeof(ev));
 	ev.k.cmd_done.host_no = shost->host_no;
 	ev.k.cmd_done.cid = cmd->request->tag;
 	ev.k.cmd_done.result = cmd->result;
 
-	return send_event_res(TGT_KEVENT_CMD_DONE, &ev, dummy, sizeof(dummy),
-			      gfp_mask, tgtd_pid);
+	return send_event_rsp(TGT_KEVENT_CMD_DONE, &ev, gfp_mask, tgtd_pid);
 }
 
 static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
@@ -124,19 +117,17 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 		nlh->nlmsg_pid, current->pid);
 
 	switch (nlh->nlmsg_type) {
-	case TGT_UEVENT_TGTD_BIND:
+	case TGT_UEVENT_REQ:
 		tgtd_pid = NETLINK_CREDS(skb)->pid;
 		break;
-	case TGT_UEVENT_CMD_RES:
+	case TGT_UEVENT_CMD_RSP:
 		/* TODO: handle multiple cmds in one event */
-		err = scsi_tgt_kspace_exec(ev->u.cmd_res.host_no,
-					   ev->u.cmd_res.cid,
-					   ev->u.cmd_res.result,
-					   ev->u.cmd_res.len,
-					   ev->u.cmd_res.offset,
-					   ev->u.cmd_res.uaddr,
-					   ev->u.cmd_res.rw,
-					   ev->u.cmd_res.try_map);
+		err = scsi_tgt_kspace_exec(ev->u.cmd_rsp.host_no,
+					   ev->u.cmd_rsp.cid,
+					   ev->u.cmd_rsp.result,
+					   ev->u.cmd_rsp.len,
+					   ev->u.cmd_rsp.uaddr,
+					   ev->u.cmd_rsp.rw);
 		break;
 	default:
 		eprintk("unknown type %d\n", nlh->nlmsg_type);
@@ -166,12 +157,12 @@ static int event_recv_skb(struct sk_buff *skb)
 		 * TODO for passthru commands the lower level should
 		 * probably handle the result or we should modify this
 		 */
-		if (nlh->nlmsg_type != TGT_UEVENT_CMD_RES) {
+		if (nlh->nlmsg_type != TGT_UEVENT_CMD_RSP) {
 			struct tgt_event ev;
 
 			memset(&ev, 0, sizeof(ev));
-			ev.k.event_res.err = err;
-			send_event_res(TGT_KEVENT_RESPONSE, &ev, NULL, 0,
+			ev.k.event_rsp.err = err;
+			send_event_rsp(TGT_KEVENT_RSP, &ev,
 				       GFP_KERNEL | __GFP_NOFAIL,
 					nlh->nlmsg_pid);
 		}

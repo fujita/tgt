@@ -321,7 +321,7 @@ static int scsi_map_user_pages(struct scsi_tgt_cmd *tcmd, struct scsi_cmnd *cmd,
 
 	while (len > 0) {
 		dprintk("%lx %u\n", (unsigned long) uaddr, len);
-		bio = bio_map_user(q, NULL, (unsigned long) uaddr, len, rw, 1);
+		bio = bio_map_user(q, NULL, (unsigned long) uaddr, len, rw);
 		if (IS_ERR(bio)) {
 			err = PTR_ERR(bio);
 			dprintk("fail to map %lx %u %d %x\n",
@@ -444,16 +444,16 @@ static int scsi_tgt_copy_sense(struct scsi_cmnd *cmd, unsigned long uaddr,
 	return 0;
 }
 
-int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len, u64 offset,
-			 unsigned long uaddr, u8 rw, u8 try_map)
+int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len,
+			 unsigned long uaddr, u8 rw)
 {
 	struct Scsi_Host *shost;
 	struct scsi_cmnd *cmd;
 	struct request *rq;
 	int err = 0;
 
-	dprintk("%d %u %d %u %llu %lx %u %u\n", host_no, cid, result,
-		len, (unsigned long long) offset, uaddr, rw, try_map);
+	dprintk("%d %u %d %u %lx %u\n", host_no, cid, result,
+		len, uaddr, rw);
 
 	/* TODO: replace with a O(1) alg */
 	shost = scsi_host_lookup(host_no);
