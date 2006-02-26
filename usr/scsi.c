@@ -27,7 +27,6 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/user.h>
 
 #include "tgtd.h"
 #include "tgt_sysfs.h"

@@ -1,3 +1,5 @@
+#include <sys/user.h>
+
 /* taken from linux kernel */
 
 #undef offsetof
@@ -24,6 +26,12 @@
 	for (pos = list_entry((head)->q_forw, typeof(*pos), member);	\
 	     &pos->member != (head); 	\
 	     pos = list_entry(pos->member.q_forw, typeof(*pos), member))
+
+#ifndef PAGE_SHIFT
+#define	PAGE_SHIFT	12
+#define	PAGE_SIZE	(1UL << PAGE_SHIFT)
+#define	PAGE_MASK	(~(PAGE_SIZE-1))
+#endif
 
 #define pgcnt(size, offset)	((((size) + ((offset) & ~PAGE_MASK)) + PAGE_SIZE - 1) >> PAGE_SHIFT)
 
