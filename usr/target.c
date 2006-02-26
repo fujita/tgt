@@ -180,10 +180,6 @@ static int device_dir_create(int tid, uint64_t dev_id, int dev_fd, uint64_t size
 	return 0;
 }
 
-#ifndef O_LARGEFILE
-#define O_LARGEFILE	0100000
-#endif
-
 int tgt_device_create(int tid, uint64_t dev_id, char *path)
 {
 	struct target *target;
