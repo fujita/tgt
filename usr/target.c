@@ -33,7 +33,6 @@
 #include <sys/poll.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
-#include <sys/user.h>
 
 #include <linux/fs.h>
 #include <linux/netlink.h>
@@ -452,45 +451,21 @@ static void cmd_done(struct tgt_event *ev)
 	free(cmd);
 }
 
-static int set_pdu_size(int fd)
-{
-	struct nlmsghdr *nlh;
-	char buf[1024];
-	int err;
-
-peek_again:
-	err = __nl_read(fd, buf, sizeof(buf), MSG_PEEK);
-	if (err < 0) {
-		if (errno == EAGAIN || errno == EINTR)
-			goto peek_again;
-		return err;
-	}
-
-	nlh = (struct nlmsghdr *) buf;
-
-	dprintf("%d\n", nlh->nlmsg_len);
-
-	return nlh->nlmsg_len;
-}
-
 void nl_event_handle(int nl_fd)
 {
 	struct nlmsghdr *nlh;
 	struct tgt_event *ev;
-	static int pdu_size;
-	char buf[1024];
+	char buf[NLMSG_SPACE(sizeof(struct tgt_event))];
 	int err;
 
-	if (!pdu_size)
-		pdu_size = set_pdu_size(nl_fd);
-
-	err = __nl_read(nl_fd, buf, pdu_size, MSG_WAITALL);
+	err = __nl_read(nl_fd, buf, sizeof(buf), MSG_WAITALL);
 
 	nlh = (struct nlmsghdr *) buf;
 	ev = (struct tgt_event *) NLMSG_DATA(nlh);
 
-	if (nlh->nlmsg_len != pdu_size) {
-		eprintf("unexpected len %d %d\n", nlh->nlmsg_len, pdu_size);
+	if (nlh->nlmsg_len != err) {
+		eprintf("unexpected len %d %d %d %d\n",
+			nlh->nlmsg_len, sizeof(*ev), sizeof(buf), err);
 		exit(1);
 	}
 
