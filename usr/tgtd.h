@@ -6,7 +6,6 @@
 
 /* makeshift */
 #define	POLLS_PER_DRV	32
-#define	RINGBUF_SIZE	(4096 * 8)
 
 extern int nl_init(void);
 extern int __nl_write(int fd, int type, char *data, int len);
