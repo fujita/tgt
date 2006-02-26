@@ -25,6 +25,8 @@
 	     &pos->member != (head); 	\
 	     pos = list_entry(pos->member.q_forw, typeof(*pos), member))
 
+#define pgcnt(size, offset)	((((size) + ((offset) & ~PAGE_MASK)) + PAGE_SIZE - 1) >> PAGE_SHIFT)
+
 struct qelem {
 	struct qelem *q_forw;
 	struct qelem *q_back;

@@ -27,19 +27,11 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/user.h>
 
 #include "tgtd.h"
 #include "tgt_sysfs.h"
-
-/*
- * FIXME: in some architectures (e.g., powerpc) don't export PAGE_* to
- * user space by asm/page.h. How should we handle this?
- */
-#ifndef PAGE_SHIFT
-#define	PAGE_SHIFT	12
-#define	PAGE_SIZE	(1UL << PAGE_SHIFT)
-#define	PAGE_MASK	(~(PAGE_SIZE-1))
-#endif
+#include "util.h"
 
 #define cpu_to_be32 __cpu_to_be32
 #define be32_to_cpu __be32_to_cpu
@@ -629,8 +621,6 @@ static int sevice_action(int tid, uint64_t lun, uint8_t *scb, uint8_t *p, int *l
 	return SAM_STAT_GOOD;
 }
 
-#define pgcnt(size, offset)	((((size) + ((offset) & ~PAGE_MASK)) + PAGE_SIZE - 1) >> PAGE_SHIFT)
-
 static int mmap_device(int tid, uint64_t lun, uint8_t *scb,
 		       int *len, int fd, uint32_t datalen, unsigned long *uaddr,
 		       uint64_t *offset)
@@ -834,22 +824,4 @@ out:
 		*uaddr = (unsigned long) data;
 
 	return result;
-}
-
-int scsi_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
-{
-	int err = 0;
-
-	dprintf("%d %d %" PRIx64 " %d\n", do_munmap, do_free, uaddr, len);
-
-	if (do_munmap) {
-		len = pgcnt(len, (uaddr & ~PAGE_MASK)) << PAGE_SHIFT;
-		uaddr &= PAGE_MASK;
-		err = munmap((void *) (unsigned long) uaddr, len);
-		if (err)
-			eprintf("%" PRIx64 " %d\n", uaddr, len);
-	} else if (do_free)
-		free((void *) (unsigned long) uaddr);
-
-	return err;
 }

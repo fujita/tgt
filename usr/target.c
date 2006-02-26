@@ -33,6 +33,7 @@
 #include <sys/poll.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/user.h>
 
 #include <linux/fs.h>
 #include <linux/netlink.h>
@@ -392,6 +393,24 @@ static int cmd_queue(struct tgt_event *ev_req, int nl_fd)
 
 	return __nl_write(nl_fd, TGT_UEVENT_CMD_RSP, resbuf,
 			  NLMSG_SPACE(sizeof(*ev_res)));
+}
+
+static int scsi_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
+{
+	int err = 0;
+
+	dprintf("%d %d %" PRIx64 " %d\n", do_munmap, do_free, uaddr, len);
+
+	if (do_munmap) {
+		len = pgcnt(len, (uaddr & ~PAGE_MASK)) << PAGE_SHIFT;
+		uaddr &= PAGE_MASK;
+		err = munmap((void *) (unsigned long) uaddr, len);
+		if (err)
+			eprintf("%" PRIx64 " %d\n", uaddr, len);
+	} else if (do_free)
+		free((void *) (unsigned long) uaddr);
+
+	return err;
 }
 
 static void cmd_done(struct tgt_event *ev)
