@@ -1,0 +1,10 @@
+#!/bin/bash
+#
+# Temporary script to start ibmvstgt
+#
+
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+
+${PWD}/usr/tgtadm --driver ibmvstgt --op new --tid 1
+${PWD}/usr/tgtadm --driver ibmvstgt --op bind --tid 1 --hostno $1
+${PWD}/usr/tgtadm --driver ibmvstgt --op new --tid 1 --lun 0 --params Path=/dev/sdb1
