@@ -82,7 +82,7 @@ static void scsi_tgt_cmd_destroy(void *data)
 		cmd->request->flags &= ~1UL;
 
 	scsi_unmap_user_pages(tcmd);
-	scsi_tgt_uspace_send_status(cmd, GFP_KERNEL);
+	scsi_tgt_uspace_send_status(cmd, GFP_ATOMIC);
 	kmem_cache_free(scsi_tgt_cmd_cache, tcmd);
 	scsi_host_put_command(scsi_tgt_cmd_to_host(cmd), cmd);
 	blk_run_queue(q);
