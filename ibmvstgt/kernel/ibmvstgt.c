@@ -127,9 +127,9 @@ enum srp_task_attributes {
  */
 struct iu_entry {
 	struct server_adapter *adapter;
-
 	struct list_head ilist;
 	dma_addr_t iu_token;
+	struct scsi_cmnd *scmd;
 
 	struct {
 		dma_addr_t remote_token;
@@ -374,6 +374,7 @@ static int process_cmd(struct iu_entry *iue)
 	memcpy(scmd->data_cmnd, iu->srp.cmd.cdb, MAX_COMMAND_SIZE);
 	scmd->request_bufflen = len;
 	scmd->tag= tag;
+	iue->scmd = scmd;
 	scsi_tgt_queue_command(scmd, (struct scsi_lun *) &iu->srp.cmd.lun, 0);
 
 	dprintk("%p %p %x %lx %d %d %d\n",
@@ -786,9 +787,11 @@ static void process_abort(struct iu_entry *iue)
 	if (status == NO_SENSE) {
 		int len = vscsis_data_length(&tmp_iu->srp.cmd,
 					     tmp_iu->srp.cmd.data_out_format);
-		dprintk("%p %x %lx %d\n",
-			tmp_iue, tmp_iu->srp.cmd.cdb[0], tmp_iu->srp.cmd.lun, len);
-		dprintk("abort successful\n");
+		dprintk("abort cmd: %p %p %lx %x %lx %d\n",
+			tmp_iue, tmp_iue->scmd,
+			tmp_iue->scmd->request->flags,
+			tmp_iu->srp.cmd.cdb[0],
+			tmp_iu->srp.cmd.lun, len);
 		BUG();
 	} else
 		dprintk("unable to abort cmd\n");
