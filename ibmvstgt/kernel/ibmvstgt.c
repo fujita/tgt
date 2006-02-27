@@ -1221,11 +1221,10 @@ static int ibmvstgt_remove(struct vio_dev *dev)
 		(struct server_adapter *) dev->dev.driver_data;
 	struct Scsi_Host *shost = adapter->shost;
 
-	scsi_remove_host(shost);
-	scsi_host_put(shost);
 	crq_queue_destroy(adapter);
 	mempool_destroy(adapter->iu_pool);
-
+	scsi_remove_host(shost);
+	scsi_host_put(shost);
 	return 0;
 }
 
