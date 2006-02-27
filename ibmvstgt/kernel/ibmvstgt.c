@@ -72,8 +72,8 @@ do {								\
 	printk("%s(%d) " fmt, __FUNCTION__, __LINE__, ##args);	\
 } while (0)
 
-/* #define dprintk eprintk */
-#define dprintk(fmt, args...)
+#define dprintk eprintk
+/* #define dprintk(fmt, args...) */
 
 /*
  * an RPA command/response transport queue.  This is our structure
