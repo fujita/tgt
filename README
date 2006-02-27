@@ -1,92 +1,80 @@
 Introduction
 -------------
-Note that linux target framework software (tgt) is under active
+Note that linux target framework (tgt) is under active
 development. Don't play with important data.
 
-Currently, tgt supports two SCSI targets, iSCSI software target
-(istgt) and IBM virtual SCSI target (ibmvstgt).
+Currently, tgt supports only one low level driver, IBM VIO server
+(ibmvstgt).
 
 
 Starting
 -------------
 The software consists of kernel modules and user-space tools (daemon,
-management tool, dynamic libraries). The compilation of the kernel
-modules require the path to above kernel sources:
+management tool, dynamic libraries).
 
-host:~/tgt$ make KERNELSRC=<kernel-src>
+First, get kernel sources from James's scsi-rc-fixes-2.6 git tree.
 
-Make sure that everything is built successfully. Now you can start tgt
-by type the followings.
+The kernel itself requires the patches in the patchset
+directory. Apply all the patches except the 6th patch, rebuild the
+kernel, and reboot with the new kernel.
 
-host:~/tgt$ su
-host:~/tgt# ./initd start
+The compilation of the kernel modules require the path to above kernel
+source:
 
-You need to be in the tgt source code directory to execute the script
-correctly.
+host:~/use-scsi-ml$ make KERNELSRC=<kernel-src>
 
-You can see /sys/class/tgt_type directory to make sure kernel modules
-loaded.
+Make sure that everything is built successfully. Now you can load the
+kernel modules by typing the followings.
 
-host:~/tgt# cat /sys/class/tgt_type/driver1/name
-istgt
-host:~/tgt# cat /sys/class/tgt_type/driver1/protocol
-scsi
+host:~/use-scsi-ml$ su
+host:~/use-scsi-ml# ./initd start
 
-The number in the directory path is driver id. The istgt driver id is
-1 in the above example.
+See /var/log/kern.log (your Linux distributions may use the different
+log file name) to make sure that the kernel modules are loaded
+properly. You should see messages like the followings:
 
-By defaults, tgt generates logs of debug messages. Please see
-/var/log/kern.log and /var/log/daemon.log (your Linux distributions
-may use the different log file names).
+Feb 27 19:37:52 lilac kernel: IBM eServer i/pSeries Virtual SCSI Target Driver
+Feb 27 19:37:52 lilac kernel: vio_register_driver: driver ibmvscsi registering
+Feb 27 19:37:52 lilac kernel: scsi1 : ibmvstgt
+
+You need the scsi host number (it is 1 in this example) in the next
+stage (configuration).
 
 
 Configuration
 -------------
+
 Everyting is configured via the tgtadm management tool. Currenlty, tgt
-does not support persistent configurations. The tgtadm alayws requires
-you to specify the driver name like the following examples.
+does not support persistent configurations. You can use a makeshift
+script, 'ibmv' to do the necessary job.
 
-host:~/tgt# ./usr/tgtadm --driver istgt --help
-host:~/tgt# ./usr/tgtadm --driver ibmvstgt --help
+Note that the ibmv script exports /dev/sdb1 to initiators as LUN 0 by
+defaults. You MUST change the device path if your /dev/sdb1 stores
+important data or your box does not have /dev/sdb1.
 
-First, you need to create a target.
+host:~/use-scsi-ml# ./ibmv 1
 
-host:~/tgt# ./usr/tgtadm --driver istgt --op new --tid 0 \
---params Name=iqn.2001-04.com.example:storage.disk1.sys1.xyz
+You need to specify the scsi host number as the first argument.
 
-If you use ibmvstgt, you don't need to create a target because they
-are created automatically. A target is created per virtual bus.
+Please see /var/log/daemon.log (your Linux distributions may use the
+different log file name again) to make sure that everything is
+fine. You should see something like the followings:
 
-You can see /sys/class/tgt_target directory to make sure the target is
-ready.
+Feb 27 22:36:40 lilac tgtd: dl_init(71) istgt library is not loaded.
+Feb 27 22:36:40 lilac tgtd: dl_init(71) ibmvstgt library is not loaded.
+Feb 27 22:37:08 lilac tgtd: tgt_target_create(572) Succeed to create a new target 1
+Feb 27 22:37:08 lilac tgtd: tgt_target_bind(517) Succeed to bind the target 1 to the scsi host 1
+Feb 27 22:37:08 lilac tgtd: tgt_device_create(238) Succeed to add a logical unit 0 to the target 1
 
-host:~/tgt# cat /sys/class/tgt_target/target0/typeid
-1
 
-This number is the driver id. That is, this target (tid 0) belongs to
-the driver id 1.
+Now you are ready. Boot up VIO clients.
 
-The number in the directory path is target id (tid). tid is 0 in the
-above example.
-
-Then, you need to add a device to the target (tid 0).
-
-host:~/tgt# ./usr/tgtadm --driver istgt --op new --tid 0 --lun 0 \
---params Path=/dev/sdb1,Type=tgt_vsd
-
-You can see /sys/class/tgt_device directory to make sure the device
-was added successfully.
-
-host:~/tgt# cat /sys/class/tgt_device/device0\:0/size
-9006649344
-
-Note that every target must need a device whose lun is zero. Now the
-target is ready for accepting accesses from initiators.
+Note that the tgt kernel modules enable the debug option by
+defaults. We are not ready for improving performance.
 
 
 Stopping
 -------------
 Simply execute:
 
-host:~/tgt# ./initd stop
-
+host:~/use-scsi-ml# ./initd stop
