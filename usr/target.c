@@ -123,13 +123,15 @@ static void resize_device_table(struct target *target, uint64_t did)
 
 static uint64_t try_mmap_device(int fd, uint64_t size)
 {
-/* 	void *p; */
+	void *p;
 
-/* 	p = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); */
-/* 	if (p == MAP_FAILED) */
-/* 		return 0; */
-/* 	else */
-/* 		return (unsigned long) p; */
+	if (size != (size_t) size)
+		return 0;
+	p = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	if (p == MAP_FAILED)
+		return 0;
+	else
+		return (unsigned long) p;
 	return 0;
 }
 
