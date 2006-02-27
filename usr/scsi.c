@@ -161,8 +161,6 @@ static int mode_sense(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *l
 	uint8_t pcode = scb[2] & 0x3f;
 	uint64_t size;
 
-	eprintf("%d %" PRIx64 " %x %x\n", tid, lun, pcode, scb[1]);
-
 	if (device_info(tid, lun, &size) < 0) {
 		*len = sense_data_build(data, 0x70, ILLEGAL_REQUEST,
 					0x25, 0);
@@ -274,7 +272,7 @@ static int ibmvstgt_inquiry(int host_no, uint64_t lun, uint8_t *data)
 	unit_address = strtoul(buf, NULL, 0);
 	close(fd);
 
-	eprintf("%d %s %d %x %" PRIx64 "\n",
+	dprintf("%d %s %d %x %" PRIx64 "\n",
 		host_no, system_id, partition_number, unit_address, lun);
 
 	id->qual_type = TYPE_DISK;
