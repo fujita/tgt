@@ -72,7 +72,8 @@ do {								\
 	printk("%s(%d) " fmt, __FUNCTION__, __LINE__, ##args);	\
 } while (0)
 
-#define dprintk eprintk
+/* #define dprintk eprintk */
+#define dprintk(fmt, args...)
 
 /*
  * an RPA command/response transport queue.  This is our structure
@@ -785,8 +786,9 @@ static void process_abort(struct iu_entry *iue)
 	spin_unlock_irqrestore(&iue->adapter->lock, flags);
 
 	if (status == NO_SENSE) {
-		int len = vscsis_data_length(&tmp_iu->srp.cmd,
-					     tmp_iu->srp.cmd.data_out_format);
+		int len;
+		len = vscsis_data_length(&tmp_iu->srp.cmd,
+					 tmp_iu->srp.cmd.data_out_format);
 		dprintk("abort cmd: %p %p %lx %x %lx %d\n",
 			tmp_iue, tmp_iue->scmd,
 			tmp_iue->scmd->request->flags,

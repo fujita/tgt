@@ -9,7 +9,8 @@ do {								\
 	printk("%s(%d) " fmt, __FUNCTION__, __LINE__, ##args);	\
 } while (0)
 
-#define dprintk eprintk
+/* #define dprintk eprintk */
+#define dprintk(fmt, args...)
 
 struct scsi_tgt_queuedata {
 	struct Scsi_Host *shost;
