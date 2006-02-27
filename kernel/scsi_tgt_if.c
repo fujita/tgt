@@ -35,7 +35,7 @@
 static int tgtd_pid;
 static struct sock *nl_sk;
 
-static int send_event_rsp(uint16_t type, struct tgt_event *p, gfp_t flags,
+static int send_event_rsp(uint16_t type, struct tgt_event *p, gfp_t gfp_mask,
 			  pid_t pid)
 {
 	struct tgt_event *ev;
@@ -44,7 +44,7 @@ static int send_event_rsp(uint16_t type, struct tgt_event *p, gfp_t flags,
 	uint32_t len;
 
 	len = NLMSG_SPACE(sizeof(*ev));
-	skb = alloc_skb(len, flags);
+	skb = alloc_skb(len, gfp_mask);
 	if (!skb)
 		return -ENOMEM;
 
@@ -53,10 +53,11 @@ static int send_event_rsp(uint16_t type, struct tgt_event *p, gfp_t flags,
 	ev = NLMSG_DATA(nlh);
 	memcpy(ev, p, sizeof(*ev));
 
-	return netlink_unicast(nl_sk, skb, pid, 0);
+	return netlink_unicast(nl_sk, skb, pid, gfp_mask & GFP_ATOMIC);
 }
 
-int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun, gfp_t gfp_mask)
+int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun,
+			 gfp_t gfp_mask)
 {
 	struct Scsi_Host *shost = scsi_tgt_cmd_to_host(cmd);
 	struct sk_buff *skb;
@@ -89,9 +90,9 @@ int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun, gfp_t gfp_
 	dprintk("%p %d %u %u %x\n", cmd, shost->host_no, ev->k.cmd_req.cid,
 		ev->k.cmd_req.data_len, cmd->tag);
 
-	err = netlink_unicast(nl_sk, skb, tgtd_pid, 0);
+	err = netlink_unicast(nl_sk, skb, tgtd_pid, gfp_mask & GFP_ATOMIC);
 	if (err < 0)
-		eprintk(KERN_ERR "could not send skb %d\n", err);
+		eprintk("fail to send skb %d\n", err);
 	return err;
 }
 
