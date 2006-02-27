@@ -486,6 +486,9 @@ void nl_event_handle(int nl_fd)
 
 int tgt_target_bind(int tid, int host_no)
 {
+	char path[PATH_MAX], buf[64];
+	int fd, err;
+
 	if (!tgtt[tid]) {
 		eprintf("target is not found %d\n", tid);
 		return -EINVAL;
@@ -495,6 +498,17 @@ int tgt_target_bind(int tid, int host_no)
 		eprintf("host is already binded %d %d\n", tid, host_no);
 		return -EINVAL;
 	}
+
+	snprintf(path, sizeof(path), TGT_TARGET_SYSFSDIR "/target%d/hostno", tid);
+	fd = open(path, O_RDWR|O_CREAT|O_EXCL, fmode);
+	if (fd < 0)
+		return -EINVAL;
+
+	snprintf(buf, sizeof(buf), "%d", host_no);
+	err = write(fd, buf, strlen(buf));
+	close(fd);
+	if (err < 0)
+		return -EINVAL;
 
 	hostt[host_no] = tgtt[tid];
 	return 0;
