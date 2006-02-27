@@ -234,6 +234,9 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 		eprintf("Succeed to mmap the device %" PRIx64 "\n",
 			device->addr);
 
+	eprintf("Succeed to add a logical unit %" PRIu64 " to the target %d\n",
+		dev_id, tid);
+
 	return 0;
 close_dev_fd:
 	close(dev_fd);
@@ -510,6 +513,8 @@ int tgt_target_bind(int tid, int host_no)
 	if (err < 0)
 		return -EINVAL;
 
+	eprintf("Succeed to bind the target %d to the scsi host %d\n",
+		tid, host_no);
 	hostt[host_no] = tgtt[tid];
 	return 0;
 }
@@ -564,6 +569,7 @@ int tgt_target_create(int tid)
 	if (err < 0)
 		goto free_device_table;
 
+	eprintf("Succeed to create a new target %d\n", tid);
 	tgtt[tid] = target;
 	return 0;
 

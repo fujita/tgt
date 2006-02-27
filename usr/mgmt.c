@@ -124,7 +124,7 @@ int tgt_mgmt(char *sbuf, char *rbuf)
 	req = NLMSG_DATA(nlh);
 	params = (char *) req + sizeof(*req);
 
-	eprintf("%d %d %d %d %d %" PRIx64 " %" PRIx64 " %s %d\n",
+	dprintf("%d %d %d %d %d %" PRIx64 " %" PRIx64 " %s %d\n",
 		nlh->nlmsg_len,	req->typeid, req->mode, req->op,
 		req->tid, req->sid, req->lun, params, getpid());
 
