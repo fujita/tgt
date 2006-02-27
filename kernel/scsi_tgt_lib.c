@@ -185,7 +185,7 @@ int scsi_tgt_alloc_queue(struct Scsi_Host *shost)
 	 * command as is recvd to userspace. uspace can then make
 	 * sure we do not overload the HBA
 	 */
-	q->nr_requests = shost->hostt->can_queue * 2;
+	q->nr_requests = shost->hostt->can_queue;
 	blk_queue_init_tags(q, q->nr_requests, NULL);
 	/*
 	 * We currently only support software LLDs so this does
