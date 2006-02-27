@@ -4,12 +4,12 @@ struct Scsi_Host;
 struct task_struct;
 
 /* tmp - will replace with SCSI logging stuff */
-#define dprintk(fmt, args...)					\
+#define eprintk(fmt, args...)					\
 do {								\
 	printk("%s(%d) " fmt, __FUNCTION__, __LINE__, ##args);	\
 } while (0)
 
-#define eprintk dprintk
+#define dprintk eprintk
 
 struct scsi_tgt_queuedata {
 	struct Scsi_Host *shost;

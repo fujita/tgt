@@ -67,12 +67,12 @@ MODULE_AUTHOR("Dave Boutcher");
 MODULE_LICENSE("GPL");
 
 /* tmp - will replace with SCSI logging stuff */
-#define dprintk(fmt, args...)					\
+#define eprintk(fmt, args...)					\
 do {								\
 	printk("%s(%d) " fmt, __FUNCTION__, __LINE__, ##args);	\
 } while (0)
 
-#define eprintk dprintk
+#define dprintk eprintk
 
 /*
  * an RPA command/response transport queue.  This is our structure
