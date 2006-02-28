@@ -59,6 +59,12 @@ struct scsi_tgt_queuedata {
 	struct Scsi_Host *shost;
 	struct list_head cmd_hash[1 << TGT_HASH_ORDER];
 	spinlock_t cmd_hash_lock;
+
+	struct work_struct uspace_send_work;
+
+	spinlock_t cmd_req_lock;
+	struct mutex cmd_req_mutex;
+	struct list_head cmd_req;
 };
 
 static void scsi_unmap_user_pages(struct scsi_tgt_cmd *tcmd)
@@ -81,7 +87,6 @@ static void scsi_tgt_cmd_destroy(void *data)
 {
 	struct scsi_cmnd *cmd = data;
 	struct scsi_tgt_cmd *tcmd = cmd->request->end_io_data;
-	struct request_queue *q = cmd->request->q;
 
 	dprintk("cmd %p %d %lu\n", cmd, cmd->sc_data_direction,
 		rq_data_dir(cmd->request));
@@ -98,14 +103,13 @@ static void scsi_tgt_cmd_destroy(void *data)
 	scsi_tgt_uspace_send_status(cmd, GFP_ATOMIC);
 	kmem_cache_free(scsi_tgt_cmd_cache, tcmd);
 	scsi_host_put_command(scsi_tgt_cmd_to_host(cmd), cmd);
-	blk_run_queue(q);
 }
 
 static void init_scsi_tgt_cmd(struct request *rq, struct scsi_tgt_cmd *tcmd)
 {
 	struct scsi_tgt_queuedata *qdata = rq->q->queuedata;
-	unsigned long flags;
 	struct list_head *head;
+	unsigned long flags;
 	static u32 tag = 0;
 
 	tcmd->lun = rq->end_io_data;
@@ -117,53 +121,72 @@ static void init_scsi_tgt_cmd(struct request *rq, struct scsi_tgt_cmd *tcmd)
 	head = &qdata->cmd_hash[cmd_hashfn(rq->tag)];
 	list_add(&tcmd->hash_list, head);
 	spin_unlock_irqrestore(&qdata->cmd_hash_lock, flags);
-}
 
-static int scsi_uspace_prep_fn(struct request_queue *q, struct request *rq)
-{
-	struct scsi_tgt_cmd *tcmd;
-
-	tcmd = kmem_cache_alloc(scsi_tgt_cmd_cache, GFP_ATOMIC);
-	if (!tcmd)
-		return BLKPREP_DEFER;
-
-	init_scsi_tgt_cmd(rq, tcmd);
 	tcmd->rq = rq;
 	rq->end_io_data = tcmd;
 	rq->flags |= REQ_DONTPREP;
-	return BLKPREP_OK;
 }
 
-static void scsi_uspace_request_fn(struct request_queue *q)
+static void scsi_tgt_uspace_send_fn(void *data)
 {
+	struct request_queue *q = data;
+	struct scsi_tgt_queuedata *qdata = q->queuedata;
 	struct request *rq;
 	struct scsi_cmnd *cmd;
 	struct scsi_tgt_cmd *tcmd;
+	unsigned long flags;
+	int err;
 
-	/*
-	 * TODO: just send everthing in the queue to userspace in
-	 * one vector instead of multiple calls
-	 */
-	while ((rq = elv_next_request(q)) != NULL) {
-		cmd = rq->special;
-		tcmd = rq->end_io_data;
+retry:
+	err = 0;
+	if (list_empty(&qdata->cmd_req))
+		return;
 
-		blkdev_dequeue_request(rq);
-
-		spin_unlock_irq(q->queue_lock);
-		if (scsi_tgt_uspace_send(cmd, tcmd->lun, GFP_ATOMIC) < 0) {
-			eprintk("failed to send: %p\n", cmd);
-			goto requeue;
-		}
-		spin_lock_irq(q->queue_lock);
+	tcmd = kmem_cache_alloc(scsi_tgt_cmd_cache, GFP_ATOMIC);
+	if (!tcmd) {
+		err = -ENOMEM;
+		goto out;
 	}
 
-	return;
-requeue:
-	spin_lock_irq(q->queue_lock);
-	/* need to track cnts and plug */
-	blk_requeue_request(q, rq);
-	spin_unlock_irq(q->queue_lock);
+	mutex_lock(&qdata->cmd_req_mutex);
+
+	spin_lock_irqsave(&qdata->cmd_req_lock, flags);
+	if (list_empty(&qdata->cmd_req)) {
+		spin_unlock_irqrestore(&qdata->cmd_req_lock, flags);
+		mutex_unlock(&qdata->cmd_req_mutex);
+		kmem_cache_free(scsi_tgt_cmd_cache, tcmd);
+		goto out;
+	}
+	rq = list_entry_rq(qdata->cmd_req.next);
+	list_del_init(&rq->queuelist);
+	spin_unlock_irqrestore(&qdata->cmd_req_lock, flags);
+
+	if ((rq->flags & REQ_DONTPREP)) {
+		kmem_cache_free(scsi_tgt_cmd_cache, tcmd);
+		tcmd = rq->end_io_data;
+	} else
+		init_scsi_tgt_cmd(rq, tcmd);
+
+	cmd = rq->special;
+
+	err = scsi_tgt_uspace_send(cmd, tcmd->lun, GFP_ATOMIC);
+	if (err < 0) {
+		eprintk("failed to send: %p %d\n", cmd, err);
+
+		spin_lock_irqsave(&qdata->cmd_req_lock, flags);
+		list_add(&rq->queuelist, &qdata->cmd_req);
+		spin_unlock_irqrestore(&qdata->cmd_req_lock, flags);
+	}
+
+	mutex_unlock(&qdata->cmd_req_mutex);
+
+out:
+	/* TODO: proper error handling */
+	if (err < 0)
+		queue_delayed_work(scsi_tgtd, &qdata->uspace_send_work,
+				   HZ / 10);
+	else
+		goto retry;
 }
 
 /**
@@ -183,7 +206,7 @@ int scsi_tgt_alloc_queue(struct Scsi_Host *shost)
 	 * Do we need to send a netlink event or should uspace
 	 * just respond to the hotplug event?
 	 */
-	q = __scsi_alloc_queue(shost, scsi_uspace_request_fn);
+	q = __scsi_alloc_queue(shost, NULL);
 	if (!q)
 		return -ENOMEM;
 
@@ -195,12 +218,6 @@ int scsi_tgt_alloc_queue(struct Scsi_Host *shost)
 	queuedata->shost = shost;
 	q->queuedata = queuedata;
 
-	elevator_exit(q->elevator);
-	err = elevator_init(q, "noop");
-	if (err)
-		goto free_data;
-
-	blk_queue_prep_rq(q, scsi_uspace_prep_fn);
 	/*
 	 * this is a silly hack. We should probably just queue as many
 	 * command as is recvd to userspace. uspace can then make
@@ -219,10 +236,13 @@ int scsi_tgt_alloc_queue(struct Scsi_Host *shost)
 		INIT_LIST_HEAD(&queuedata->cmd_hash[i]);
 	spin_lock_init(&queuedata->cmd_hash_lock);
 
+	INIT_LIST_HEAD(&queuedata->cmd_req);
+	spin_lock_init(&queuedata->cmd_req_lock);
+	INIT_WORK(&queuedata->uspace_send_work, scsi_tgt_uspace_send_fn, q);
+	mutex_init(&queuedata->cmd_req_mutex);
+
 	return 0;
 
-free_data:
-	kfree(queuedata);
 cleanup_queue:
 	blk_cleanup_queue(q);
 	return err;
@@ -245,14 +265,17 @@ EXPORT_SYMBOL_GPL(scsi_tgt_cmd_to_host);
 void scsi_tgt_queue_command(struct scsi_cmnd *cmd, struct scsi_lun *scsilun,
 			    int noblock)
 {
-	/*
-	 * For now this just calls the request_fn from this context.
-	 * For HW llds though we do not want to execute from here so
-	 * the elevator code needs something like a REQ_TGT_CMD or
-	 * REQ_MSG_DONT_UNPLUG_IMMED_BECUASE_WE_WILL_HANDLE_IT
-	 */
+	struct request_queue *q = cmd->request->q;
+	struct scsi_tgt_queuedata *qdata = q->queuedata;
+	unsigned long flags;
+
 	cmd->request->end_io_data = scsilun;
-	elv_add_request(cmd->request->q, cmd->request, ELEVATOR_INSERT_BACK, 1);
+
+	spin_lock_irqsave(&qdata->cmd_req_lock, flags);
+	list_add_tail(&cmd->request->queuelist, &qdata->cmd_req);
+	spin_unlock_irqrestore(&qdata->cmd_req_lock, flags);
+
+	queue_work(scsi_tgtd, &qdata->uspace_send_work);
 }
 EXPORT_SYMBOL_GPL(scsi_tgt_queue_command);
 
