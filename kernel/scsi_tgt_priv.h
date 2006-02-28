@@ -12,10 +12,6 @@ do {								\
 #define dprintk eprintk
 /* #define dprintk(fmt, args...) */
 
-struct scsi_tgt_queuedata {
-	struct Scsi_Host *shost;
-};
-
 extern void scsi_tgt_if_exit(void);
 extern int scsi_tgt_if_init(void);
 

@@ -48,6 +48,10 @@ struct scsi_tgt_cmd {
 	struct scsi_lun *lun;
 };
 
+struct scsi_tgt_queuedata {
+	struct Scsi_Host *shost;
+};
+
 static void scsi_unmap_user_pages(struct scsi_tgt_cmd *tcmd)
 {
 	struct bio *bio;
