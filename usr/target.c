@@ -40,9 +40,7 @@
 
 #include "tgtd.h"
 #include "tgtadm.h"
-#include "dl.h"
 #include "tgt_sysfs.h"
-#include "util.h"
 
 #define	MAX_NR_TARGET		1024
 #define	MAX_NR_HOST		1024
@@ -58,18 +56,9 @@ struct cmd {
 	int mmap;
 };
 
-struct device {
-	int fd;
-	uint64_t addr; /* persistent mapped address */
-	uint64_t size;
-	int state;
-
-	/* queue */
-};
-
 struct target {
 	int tid;
-	struct device **devt;
+	struct tgt_device **devt;
 	uint64_t max_device;
 
 	/* TODO: move to device */
@@ -91,7 +80,7 @@ static struct target *target_get(int tid)
 	return tgtt[tid];
 }
 
-static struct device *device_get(struct target *target, uint64_t dev_id)
+static struct tgt_device *device_get(struct target *target, uint64_t dev_id)
 {
 	if (dev_id < target->max_device || dev_id < MAX_NR_DEVICE)
 		return target->devt[dev_id];
@@ -110,7 +99,7 @@ static struct target *host_to_target(int host_no)
 
 static void resize_device_table(struct target *target, uint64_t did)
 {
-	struct device *device;
+	struct tgt_device *device;
 	void *p, *q;
 
 	p = calloc(did + 1, sizeof(device));
@@ -185,7 +174,7 @@ static int device_dir_create(int tid, uint64_t dev_id, int dev_fd, uint64_t size
 int tgt_device_create(int tid, uint64_t dev_id, char *path)
 {
 	struct target *target;
-	struct device *device;
+	struct tgt_device *device;
 	int err, dev_fd;
 	uint64_t size;
 
@@ -270,7 +259,7 @@ static void device_dir_remove(int tid, uint64_t dev_id)
 int tgt_device_destroy(int tid, uint64_t dev_id)
 {
 	struct target *target;
-	struct device *device;
+	struct tgt_device *device;
 	char path[PATH_MAX], buf[64];
 	int dev_fd, fd, err;
 
@@ -346,7 +335,7 @@ static struct cmd *find_cmd(struct target *target, uint32_t cid)
 static int cmd_queue(struct tgt_event *ev_req, int nl_fd)
 {
 	struct target *target;
-	struct device *device;
+	struct tgt_device *device;
 	int result, len = 0;
 	char resbuf[NLMSG_SPACE(sizeof(struct tgt_event))];
 	struct tgt_event *ev_res = NLMSG_DATA(resbuf);
@@ -420,7 +409,7 @@ static int scsi_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
 static void cmd_done(struct tgt_event *ev)
 {
 	struct target *target;
-	struct device *device;
+	struct tgt_device *device;
 	struct cmd *cmd;
 	int err, do_munmap, host_no = ev->k.cmd_done.host_no;
 	uint32_t cid = ev->k.cmd_done.cid;
@@ -557,7 +546,7 @@ int tgt_target_create(int tid)
 	target->tid = tid;
 	INIT_LIST_HEAD(&target->cqueue);
 
-	target->devt = calloc(DEFAULT_NR_DEVICE, sizeof(struct device *));
+	target->devt = calloc(DEFAULT_NR_DEVICE, sizeof(struct tgt_device *));
 	if (!target->devt) {
 		eprintf("Out of memoryn\n");
 		err = 0;

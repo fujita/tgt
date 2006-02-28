@@ -38,7 +38,6 @@
 #include <scsi/scsi_tgt_if.h>
 
 #include "tgtd.h"
-#include "dl.h"
 #include "log.h"
 #include "tgtadm.h"
 

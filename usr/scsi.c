@@ -30,7 +30,6 @@
 
 #include "tgtd.h"
 #include "tgt_sysfs.h"
-#include "util.h"
 
 #define cpu_to_be32 __cpu_to_be32
 #define be32_to_cpu __be32_to_cpu

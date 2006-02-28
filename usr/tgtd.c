@@ -33,11 +33,10 @@
 #include <sys/poll.h>
 #include <sys/signal.h>
 #include <sys/stat.h>
-#include <dirent.h>
-
 #include <scsi/scsi_tgt_if.h>
+
 #include "tgtd.h"
-#include "dl.h"
+
 
 enum {
 	POLL_NL, /* netlink socket between kernel and user space */

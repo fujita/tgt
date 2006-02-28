@@ -3,6 +3,18 @@
 
 #include "log.h"
 #include "dl.h"
+#include "util.h"
+
+struct tgt_device {
+	int fd;
+	uint64_t addr; /* persistent mapped address */
+	uint64_t size;
+	unsigned long state;
+
+	struct qelem cmd_list;
+
+	struct tgt_device *next_device;
+};
 
 /* makeshift */
 #define	POLLS_PER_DRV	32

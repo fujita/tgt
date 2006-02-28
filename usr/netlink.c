@@ -16,16 +16,15 @@
 #include <string.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <asm/types.h>
 #include <sys/mman.h>
 #include <sys/poll.h>
 #include <sys/signal.h>
 #include <sys/socket.h>
-#include <asm/types.h>
+#include <scsi/scsi_tgt_if.h>
 #include <linux/netlink.h>
 
-#include <scsi/scsi_tgt_if.h>
 #include "tgtd.h"
-#include "dl.h"
 
 #define	NL_BUFSIZE	1024
 
