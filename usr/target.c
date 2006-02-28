@@ -217,6 +217,8 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 	device->state = 0;
 	device->addr = try_mmap_device(dev_fd, size);
 	device->size = size;
+	snprintf(device->scsi_id, sizeof(device->scsi_id),
+		 "deadbeaf%d:%" PRIu64, tid, dev_id);
 	target->devt[dev_id] = device;
 
 	if (device->addr)

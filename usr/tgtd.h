@@ -5,11 +5,14 @@
 #include "dl.h"
 #include "util.h"
 
+#define	SCSI_ID_LEN	24
+
 struct tgt_device {
 	int fd;
 	uint64_t addr; /* persistent mapped address */
 	uint64_t size;
 	unsigned long state;
+	char scsi_id[SCSI_ID_LEN];
 
 	struct qelem cmd_list;
 
