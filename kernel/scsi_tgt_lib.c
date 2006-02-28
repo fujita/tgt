@@ -21,6 +21,7 @@
  */
 #include <linux/blkdev.h>
 #include <linux/elevator.h>
+#include <linux/hash.h>
 #include <linux/module.h>
 #include <linux/pagemap.h>
 #include <scsi/scsi.h>
@@ -46,10 +47,18 @@ struct scsi_tgt_cmd {
 	struct bio_list xfer_done_list;
 	struct bio_list xfer_list;
 	struct scsi_lun *lun;
+
+	struct list_head hash_list;
+	struct request *rq;
 };
+
+#define	TGT_HASH_ORDER	4
+#define	cmd_hashfn(cid)	hash_long((cid), TGT_HASH_ORDER)
 
 struct scsi_tgt_queuedata {
 	struct Scsi_Host *shost;
+	struct list_head cmd_hash[1 << TGT_HASH_ORDER];
+	spinlock_t cmd_hash_lock;
 };
 
 static void scsi_unmap_user_pages(struct scsi_tgt_cmd *tcmd)
@@ -94,9 +103,20 @@ static void scsi_tgt_cmd_destroy(void *data)
 
 static void init_scsi_tgt_cmd(struct request *rq, struct scsi_tgt_cmd *tcmd)
 {
+	struct scsi_tgt_queuedata *qdata = rq->q->queuedata;
+	unsigned long flags;
+	struct list_head *head;
+	static u32 tag = 0;
+
 	tcmd->lun = rq->end_io_data;
 	bio_list_init(&tcmd->xfer_list);
 	bio_list_init(&tcmd->xfer_done_list);
+
+	spin_lock_irqsave(&qdata->cmd_hash_lock, flags);
+	rq->tag = tag++;
+	head = &qdata->cmd_hash[cmd_hashfn(rq->tag)];
+	list_add(&tcmd->hash_list, head);
+	spin_unlock_irqrestore(&qdata->cmd_hash_lock, flags);
 }
 
 static int scsi_uspace_prep_fn(struct request_queue *q, struct request *rq)
@@ -108,6 +128,7 @@ static int scsi_uspace_prep_fn(struct request_queue *q, struct request *rq)
 		return BLKPREP_DEFER;
 
 	init_scsi_tgt_cmd(rq, tcmd);
+	tcmd->rq = rq;
 	rq->end_io_data = tcmd;
 	rq->flags |= REQ_DONTPREP;
 	return BLKPREP_OK;
@@ -127,11 +148,7 @@ static void scsi_uspace_request_fn(struct request_queue *q)
 		cmd = rq->special;
 		tcmd = rq->end_io_data;
 
-		/* the completion code kicks us in case we hit this */
-		if (blk_queue_start_tag(q, rq)) {
-			eprintk("failed to tag: %p\n", cmd);
-			break;
-		}
+		blkdev_dequeue_request(rq);
 
 		spin_unlock_irq(q->queue_lock);
 		if (scsi_tgt_uspace_send(cmd, tcmd->lun, GFP_ATOMIC) < 0) {
@@ -160,7 +177,7 @@ int scsi_tgt_alloc_queue(struct Scsi_Host *shost)
 {
 	struct scsi_tgt_queuedata *queuedata;
 	struct request_queue *q;
-	int err;
+	int err, i;
 
 	/*
 	 * Do we need to send a netlink event or should uspace
@@ -190,7 +207,6 @@ int scsi_tgt_alloc_queue(struct Scsi_Host *shost)
 	 * sure we do not overload the HBA
 	 */
 	q->nr_requests = shost->hostt->can_queue;
-	blk_queue_init_tags(q, q->nr_requests, NULL);
 	/*
 	 * We currently only support software LLDs so this does
 	 * not matter for now. Do we need this for the cards we support?
@@ -198,6 +214,10 @@ int scsi_tgt_alloc_queue(struct Scsi_Host *shost)
 	 */
 	blk_queue_dma_alignment(q, 0);
 	shost->uspace_req_q = q;
+
+	for (i = 0; i < ARRAY_SIZE(queuedata->cmd_hash); i++)
+		INIT_LIST_HEAD(&queuedata->cmd_hash[i]);
+	spin_lock_init(&queuedata->cmd_hash_lock);
 
 	return 0;
 
@@ -448,6 +468,28 @@ static int scsi_tgt_copy_sense(struct scsi_cmnd *cmd, unsigned long uaddr,
 	return 0;
 }
 
+static struct request *tgt_cmd_hash_end(struct request_queue *q, u32 cid)
+{
+	struct scsi_tgt_queuedata *qdata = q->queuedata;
+	struct request *rq = NULL;
+	struct list_head *head;
+	struct scsi_tgt_cmd *tcmd;
+	unsigned long flags;
+
+	head = &qdata->cmd_hash[cmd_hashfn(cid)];
+	spin_lock_irqsave(&qdata->cmd_hash_lock, flags);
+	list_for_each_entry(tcmd, head, hash_list) {
+		if (tcmd->rq->tag == cid) {
+			rq = tcmd->rq;
+			list_del(&tcmd->hash_list);
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&qdata->cmd_hash_lock, flags);
+
+	return rq;
+}
+
 int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len,
 			 unsigned long uaddr, u8 rw)
 {
@@ -466,7 +508,7 @@ int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len,
 		return -EINVAL;
 	}
 
-	rq = blk_queue_find_tag(shost->uspace_req_q, cid);
+	rq = tgt_cmd_hash_end(shost->uspace_req_q, cid);
 	if (!rq) {
 		printk(KERN_ERR "Could not find cid %u\n", cid);
 		err = -EINVAL;
