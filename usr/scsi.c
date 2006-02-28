@@ -154,20 +154,14 @@ static int insert_geo_m_pg(uint8_t *ptr, uint64_t sec)
 	return sizeof(geo_m_pg);
 }
 
-static int mode_sense(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int *len)
+static int mode_sense(struct tgt_device *dev, uint8_t *scb, uint8_t *data, int *len)
 {
 	int result = SAM_STAT_GOOD;
 	uint8_t pcode = scb[2] & 0x3f;
 	uint64_t size;
 
-	if (device_info(tid, lun, &size) < 0) {
-		*len = sense_data_build(data, 0x70, ILLEGAL_REQUEST,
-					0x25, 0);
-		return SAM_STAT_CHECK_CONDITION;
-	}
-
 	*len = 4;
-	size >>= BLK_SHIFT;
+	size = dev->size >> BLK_SHIFT;
 
 	if ((scb[1] & 0x8))
 		data[3] = 0;
@@ -467,7 +461,7 @@ out:
 	return result;
 }
 
-static int read_capacity(int tid, uint64_t lun, uint8_t *scb, uint8_t *p, int *len)
+static int read_capacity(struct tgt_device *dev, uint8_t *scb, uint8_t *p, int *len)
 {
 	uint32_t *data = (uint32_t *) p;
 	uint64_t size;
@@ -478,13 +472,7 @@ static int read_capacity(int tid, uint64_t lun, uint8_t *scb, uint8_t *p, int *l
 		return SAM_STAT_CHECK_CONDITION;
 	}
 
-	if (device_info(tid, lun, &size) < 0) {
-		*len = sense_data_build(p, 0x70, ILLEGAL_REQUEST,
-					0x25, 0);
-		return SAM_STAT_CHECK_CONDITION;
-	}
-
-	size >>= BLK_SHIFT;
+	size = dev->size >> BLK_SHIFT;
 
 	data[0] = (size >> 32) ?
 		cpu_to_be32(0xffffffff) : cpu_to_be32(size - 1);
@@ -494,72 +482,13 @@ static int read_capacity(int tid, uint64_t lun, uint8_t *scb, uint8_t *p, int *l
 	return SAM_STAT_GOOD;
 }
 
-static int getfd(int tid, uint64_t lun)
+static int sync_cache(struct tgt_device *dev, uint8_t *data, int *len)
 {
-	int fd, err;
-	char path[PATH_MAX], buf[PATH_MAX];
+	int err;
 
-	sprintf(path, TGT_DEVICE_SYSFSDIR "/device%d:%" PRIu64 "/fd",
-		tid, lun);
-
-	fd = open(path, O_RDONLY);
-	if (fd < 0) {
-		log_error("scsi sync_cache could not get LU's fd err %d",
-			  errno);
-		goto out;
-	}
-
-	err = read(fd, buf, sizeof(buf));
-	close(fd);
-	if (err < 0) {
-		log_error("scsi sync_cache could not read LUN path err %d",
-			  errno);
-		fd = -EIO;
-		goto out;
-	}
-
-	fd = 0;
-	sscanf(buf, "%d\n", &fd);
-
-out:
-	return fd;
-}
-
-static int sync_cache(int tid, uint64_t lun, uint8_t *scb, uint8_t *data,
-		      int *len)
-{
-	int fd, err;
-	char path[PATH_MAX], buf[PATH_MAX];
-
-	sprintf(path, TGT_DEVICE_SYSFSDIR "/device%d:%" PRIu64 "/fd",
-		tid, lun);
-
-	fd = open(path, O_RDONLY);
-	if (fd < 0) {
-		log_error("scsi sync_cache could not get LU's fd err %d",
-			  errno);
-		err = EINVAL;
-		goto einval;
-	}
-
-	err = read(fd, buf, sizeof(buf));
-	close(fd);
-	if (err < 0) {
-		log_error("scsi sync_cache could not read LUN path err %d",
-			  errno);
-		err = EIO;
-		goto eio;
-	}
-	/*
-	 * yuck! wtf should I be using
-	 */
-	fd = 0;
-	sscanf(buf, "%d\n", &fd);
-
-	err = fsync(fd);
+	err = fsync(dev->fd);
 	if (err) {
-		log_error("scsi sync_cache fsync of fd %d failed err %d",
-			   fd, errno);
+		eprintf("fd %d failed err %d", dev->fd, errno);
 		/*
 		 * this is what we should do but for now we lie.
 		 * err = errno;
@@ -571,12 +500,8 @@ static int sync_cache(int tid, uint64_t lun, uint8_t *scb, uint8_t *data,
 	case EROFS:
 	case EINVAL:
 	case EBADF:
-einval:
-		/* is this the right sense code? */
-		*len = sense_data_build(data, 0x70, ILLEGAL_REQUEST, 0, 0);
-		return SAM_STAT_CHECK_CONDITION;
 	case EIO:
-eio:
+		/* is this the right sense code? */
 		/* what should I put for the asc/ascq? */
 		*len = sense_data_build(data, 0x70, ILLEGAL_REQUEST, 0, 0);
 		return SAM_STAT_CHECK_CONDITION;
@@ -589,24 +514,19 @@ eio:
 /*
  * TODO: We always assume autosense.
  */
-static int request_sense(int tid, uint64_t lun, uint8_t *scb, uint8_t *data, int* len)
+static int request_sense(uint8_t *data, int* len)
 {
 	*len = sense_data_build(data, 0x70, NO_SENSE, 0, 0);
 
 	return SAM_STAT_GOOD;
 }
 
-static int sevice_action(int tid, uint64_t lun, uint8_t *scb, uint8_t *p, int *len)
+static int sevice_action(struct tgt_device *dev, uint8_t *scb, uint8_t *p, int *len)
 {
 	uint32_t *data = (uint32_t *) p;
 	uint64_t *data64, size;
 
-	if (device_info(tid, lun, &size) < 0) {
-		*len = sense_data_build(p, 0x70, ILLEGAL_REQUEST,
-					0x25, 0);
-		return SAM_STAT_CHECK_CONDITION;
-	}
-	size >>= BLK_SHIFT;
+	size = dev->size >> BLK_SHIFT;
 
 	data64 = (uint64_t *) data;
 	data64[0] = cpu_to_be64(size - 1);
@@ -617,8 +537,7 @@ static int sevice_action(int tid, uint64_t lun, uint8_t *scb, uint8_t *p, int *l
 	return SAM_STAT_GOOD;
 }
 
-static int mmap_device(int tid, uint64_t lun, uint8_t *scb,
-		       int *len, int fd, uint32_t datalen, unsigned long *uaddr,
+static int mmap_device(uint8_t *scb, int *len, int fd, uint32_t datalen, unsigned long *uaddr,
 		       uint64_t *offset)
 {
 	void *p;
@@ -722,9 +641,10 @@ uint64_t scsi_get_devid(uint8_t *p)
 
 int scsi_cmd_process(int host_no, int tid, uint8_t *pdu, int *len,
 		     uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
-		     uint8_t *try_map, uint64_t *offset, uint8_t *lun_buf)
+		     uint8_t *try_map, uint64_t *offset, uint8_t *lun_buf,
+		     struct tgt_device *dev)
 {
-	int fd, result = SAM_STAT_GOOD;
+	int result = SAM_STAT_GOOD;
 	uint8_t *data = NULL, *scb = pdu;
 	uint64_t lun;
 
@@ -736,7 +656,7 @@ int scsi_cmd_process(int host_no, int tid, uint8_t *pdu, int *len,
 	if (!mmap_cmd_init(scb, rw))
 		data = valloc(PAGE_SIZE);
 
-	if (lun == TGT_INVALID_DEV_ID)
+	if (!dev)
 		switch (scb[0]) {
 		case REQUEST_SENSE:
 		case INQUIRY:
@@ -760,19 +680,19 @@ int scsi_cmd_process(int host_no, int tid, uint8_t *pdu, int *len,
 		result = report_luns(tid, lun_buf, scb, data, len);
 		break;
 	case READ_CAPACITY:
-		result = read_capacity(tid, lun, scb, data, len);
+		result = read_capacity(dev, scb, data, len);
 		break;
 	case MODE_SENSE:
-		result = mode_sense(tid, lun, scb, data, len);
+		result = mode_sense(dev, scb, data, len);
 		break;
 	case REQUEST_SENSE:
-		result = request_sense(tid, lun, scb, data, len);
+		result = request_sense(data, len);
 		break;
 	case SERVICE_ACTION_IN:
-		result = sevice_action(tid, lun, scb, data, len);
+		result = sevice_action(dev, scb, data, len);
 		break;
 	case SYNCHRONIZE_CACHE:
-		result = sync_cache(tid, lun, scb, data, len);
+		result = sync_cache(dev, data, len);
 		break;
 	case START_STOP:
 	case TEST_UNIT_READY:
@@ -786,18 +706,11 @@ int scsi_cmd_process(int host_no, int tid, uint8_t *pdu, int *len,
 	case WRITE_10:
 	case WRITE_16:
 	case WRITE_VERIFY:
-		if (*uaddr)
-			fd = 0;
-		else
-			fd = getfd(tid, lun);
-		if (fd >= 0) {
-			result = mmap_device(tid, lun, scb, len, fd, datalen,
-					     uaddr, offset);
-			if (result == SAM_STAT_GOOD)
-				*try_map = 1;
-		}
-
-		if (fd < 0 || result != SAM_STAT_GOOD) {
+		result = mmap_device(scb, len, dev->fd, datalen,
+				     uaddr, offset);
+		if (result == SAM_STAT_GOOD)
+			*try_map = 1;
+		else {
 			*offset = 0;
 			if (!data)
 				data = valloc(PAGE_SIZE);

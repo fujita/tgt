@@ -364,7 +364,7 @@ static int cmd_queue(struct tgt_event *ev_req, int nl_fd)
 	result = scsi_cmd_process(host_no, target->tid, ev_req->k.cmd_req.scb,
 				  &len, ev_req->k.cmd_req.data_len,
 				  &uaddr, &rw, &try_map, &offset,
-				  ev_req->k.cmd_req.lun);
+				  ev_req->k.cmd_req.lun, device);
 
 	dprintf("%u %x %lx %" PRIu64 " %d\n",
 		cid, ev_req->k.cmd_req.scb[0], uaddr, offset, result);
