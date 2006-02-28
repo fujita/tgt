@@ -141,11 +141,17 @@ static int tgtd_bind(int nl_fd)
 
 int nl_init(void)
 {
-	int err, nl_fd;
+	int err, nl_fd, rsize = 256 * 1024;
 
 	nl_fd = socket(PF_NETLINK, SOCK_RAW, NETLINK_TGT);
 	if (nl_fd < 0) {
 		eprintf("Fail to create the netlink socket %d\n", errno);
+		exit(1);
+	}
+
+	err = setsockopt(nl_fd, SOL_SOCKET, SO_RCVBUF, &rsize, sizeof(rsize));
+	if (err) {
+		eprintf("fail to setsockopt %d\n", errno);
 		exit(1);
 	}
 
