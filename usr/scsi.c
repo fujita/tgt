@@ -11,7 +11,6 @@
  */
 
 #include <errno.h>
-#include <dirent.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -25,8 +24,6 @@
 #include <scsi/scsi.h>
 #include <scsi/scsi_tgt_if.h>
 #include <sys/mman.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 
 #include "tgtd.h"
 
@@ -458,8 +455,8 @@ static int sync_cache(struct tgt_device *dev, uint8_t *data, int *len)
 	case EIO:
 		/*
 		 * is this the right sense code?
-		/* what should I put for the asc/ascq?
-		*/
+		 * what should I put for the asc/ascq?
+		 */
 		*len = sense_data_build(data, 0x70, ILLEGAL_REQUEST, 0, 0);
 		return SAM_STAT_CHECK_CONDITION;
 	default:
