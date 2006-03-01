@@ -450,22 +450,16 @@ static int sync_cache(struct tgt_device *dev, uint8_t *data, int *len)
 	int err;
 
 	err = fsync(dev->fd);
-	if (err) {
-		eprintf("fd %d failed err %d", dev->fd, errno);
-		/*
-		 * this is what we should do but for now we lie.
-		 * err = errno;
-		 */
-		err = 0;
-	}
 
 	switch (err) {
 	case EROFS:
 	case EINVAL:
 	case EBADF:
 	case EIO:
-		/* is this the right sense code? */
-		/* what should I put for the asc/ascq? */
+		/*
+		 * is this the right sense code?
+		/* what should I put for the asc/ascq?
+		*/
 		*len = sense_data_build(data, 0x70, ILLEGAL_REQUEST, 0, 0);
 		return SAM_STAT_CHECK_CONDITION;
 	default:
