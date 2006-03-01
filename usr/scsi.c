@@ -29,7 +29,6 @@
 #include <sys/types.h>
 
 #include "tgtd.h"
-#include "tgt_sysfs.h"
 
 #define cpu_to_be32 __cpu_to_be32
 #define be32_to_cpu __be32_to_cpu
@@ -58,26 +57,6 @@
 #define GETTARGET(x) ((int)((((uint64_t)(x)) >> 56) & 0x003f))
 #define GETBUS(x) ((int)((((uint64_t)(x)) >> 53) & 0x0007))
 #define GETLUN(x) ((int)((((uint64_t)(x)) >> 48) & 0x001f))
-
-static int device_info(int tid, uint64_t lun, uint64_t *size)
-{
-	int fd, err;
-	char path[PATH_MAX], buf[128];
-
-	sprintf(path, TGT_DEVICE_SYSFSDIR "/device%d:%" PRIu64 "/size",
-		tid, lun);
-
-	fd = open(path, O_RDONLY);
-	if (fd < 0)
-		return fd;
-	err = read(fd, buf, sizeof(buf));
-	if (err < 0)
-		return err;
-	*size = strtoull(buf, NULL, 10);
-
-	close(fd);
-	return 0;
-}
 
 static int sense_data_build(uint8_t *data, uint8_t res_code, uint8_t key,
 		      uint8_t ascode, uint8_t ascodeq)
@@ -295,20 +274,18 @@ static int ibmvstgt_inquiry(int host_no, uint64_t lun, uint8_t *data)
 	return sizeof(*id);
 }
 
-static int inquiry(int host_no, int tid, uint8_t *lun_buf,
+static int inquiry(struct tgt_device *dev, int host_no, uint8_t *lun_buf,
 		   uint8_t *scb, uint8_t *data, int *len)
 {
-	uint64_t size, lun;
-	int err, result = SAM_STAT_CHECK_CONDITION;
+	uint64_t lun;
+	int result = SAM_STAT_CHECK_CONDITION;
 
 	lun = scsi_get_devid(lun_buf);
 
 	if (((scb[1] & 0x3) == 0x3) || (!(scb[1] & 0x3) && scb[2]))
 		goto err;
 
-	err = device_info(tid, lun, &size);
-
-	dprintf("%" PRIx64 " %d %x %x\n", lun, err, scb[1], scb[2]);
+	dprintf("%" PRIx64 " %x %x\n", lun, scb[1], scb[2]);
 
 	if (!(scb[1] & 0x3)) {
 		*len = ibmvstgt_inquiry(host_no, *((uint64_t *) lun_buf), data);
@@ -357,7 +334,6 @@ static int inquiry(int host_no, int tid, uint8_t *lun_buf,
 			*len = 8;
 			result = SAM_STAT_GOOD;
 		} else if (scb[2] == 0x83) {
-#define SCSI_ID_LEN	24
 			uint32_t tmp = SCSI_ID_LEN * sizeof(uint8_t);
 
 			data[1] = 0x83;
@@ -365,8 +341,8 @@ static int inquiry(int host_no, int tid, uint8_t *lun_buf,
 			data[4] = 0x1;
 			data[5] = 0x1;
 			data[7] = tmp;
-			if (err < 0)
-				sprintf(data + 8, "deadbeaf%d:%" PRIu64, tid, lun);
+			if (dev)
+				strncpy(data + 8, dev->scsi_id, SCSI_ID_LEN);
 			*len = tmp + 8;
 			result = SAM_STAT_GOOD;
 		}
@@ -377,7 +353,7 @@ static int inquiry(int host_no, int tid, uint8_t *lun_buf,
 
 	*len = min_t(int, *len, scb[4]);
 
-	if (err < 0) {
+	if (!dev) {
 		dprintf("%" PRIu64 "\n", lun);
 		data[0] = TYPE_NO_LUN;
 	}
@@ -390,37 +366,28 @@ err:
 	return SAM_STAT_CHECK_CONDITION;
 }
 
-static int report_luns(int tid, uint8_t *lun_buf, uint8_t *scb, uint8_t *p,
-		       int *len)
+static int report_luns(struct qelem *dev_list, uint8_t *lun_buf, uint8_t *scb,
+		       uint8_t *p, int *len)
 {
+	struct tgt_device *dev;
 	uint64_t lun, *data = (uint64_t *) p;
 	int idx, alen, oalen, nr_luns, rbuflen = 4096;
-	DIR *dir;
-	struct dirent *ent;
-	char buf[128];
 	int result = SAM_STAT_GOOD;
 
 	memset(data, 0, rbuflen);
-
-	dir = opendir(TGT_DEVICE_SYSFSDIR);
-	if (!dir) {
-		eprintf("can't open %s %d\n", TGT_DEVICE_SYSFSDIR, errno);
-		exit(0);
-	}
 
 	alen = be32_to_cpu(*(uint32_t *)&scb[6]);
 	if (alen < 16) {
 		*len = sense_data_build(p, 0x70, ILLEGAL_REQUEST,
 					0x24, 0);
-		result = SAM_STAT_CHECK_CONDITION;
-		goto out;
+		return SAM_STAT_CHECK_CONDITION;
 	}
 
 	alen &= ~(8 - 1);
 	oalen = alen;
 
 	if ((*((uint64_t *) lun_buf))) {
-		eprintf("Another sick hack for ibmvstgt\n");
+		dprintf("Another sick hack for ibmvstgt\n");
 		nr_luns = 1;
 		goto done;
 	}
@@ -434,30 +401,26 @@ static int report_luns(int tid, uint8_t *lun_buf, uint8_t *scb, uint8_t *p,
 	idx = 2;
 	nr_luns = 1;
 
-	sprintf(buf, "device%d:", tid);
-	while ((ent = readdir(dir))) {
-		if (!strncmp(ent->d_name, buf, strlen(buf))) {
-			sscanf(ent->d_name, "device%d:%" SCNu64, &tid, &lun);
+	list_for_each_entry(dev, dev_list, dlist) {
+		lun = dev->lun;
 
-			lun = (0x8000 | (lun & 0x001f)) << 48;
-			dprintf("%d %" PRIx64 "\n", tid, lun);
-
-			data[idx++] = cpu_to_be64(lun);
-			if (!(alen -= 8))
-				break;
-			if (!(rbuflen -= 8)) {
-				fprintf(stderr, "FIXME: too many luns\n");
-				exit(-1);
-			}
-			nr_luns++;
+		/* ibmvstgt hack */
+		lun = (0x8000 | (lun & 0x001f)) << 48;
+		dprintf("%" PRIx64 "\n", lun);
+		data[idx++] = cpu_to_be64(lun);
+		if (!(alen -= 8))
+			break;
+		if (!(rbuflen -= 8)) {
+			fprintf(stderr, "FIXME: too many luns\n");
+			exit(-1);
 		}
+		nr_luns++;
 	}
 
 done:
 	*((uint32_t *) data) = cpu_to_be32(nr_luns * 8);
 	*len = min(oalen, nr_luns * 8 + 8);
-out:
-	closedir(dir);
+
 	return result;
 }
 
@@ -639,10 +602,10 @@ uint64_t scsi_get_devid(uint8_t *p)
 	return lun;
 }
 
-int scsi_cmd_process(int host_no, int tid, uint8_t *pdu, int *len,
+int scsi_cmd_process(int host_no, uint8_t *pdu, int *len,
 		     uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
 		     uint8_t *try_map, uint64_t *offset, uint8_t *lun_buf,
-		     struct tgt_device *dev)
+		     struct tgt_device *dev, struct qelem *dev_list)
 {
 	int result = SAM_STAT_GOOD;
 	uint8_t *data = NULL, *scb = pdu;
@@ -650,7 +613,7 @@ int scsi_cmd_process(int host_no, int tid, uint8_t *pdu, int *len,
 
 	lun = scsi_get_devid(lun_buf);
 
-	dprintf("%d %" PRIu64 " %x %u\n", tid, lun, scb[0], datalen);
+	dprintf("%" PRIu64 " %x %u\n", lun, scb[0], datalen);
 
 	*offset = 0;
 	if (!mmap_cmd_init(scb, rw))
@@ -674,10 +637,10 @@ int scsi_cmd_process(int host_no, int tid, uint8_t *pdu, int *len,
 
 	switch (scb[0]) {
 	case INQUIRY:
-		result = inquiry(host_no, tid, lun_buf, scb, data, len);
+		result = inquiry(dev, host_no, lun_buf, scb, data, len);
 		break;
 	case REPORT_LUNS:
-		result = report_luns(tid, lun_buf, scb, data, len);
+		result = report_luns(dev_list, lun_buf, scb, data, len);
 		break;
 	case READ_CAPACITY:
 		result = read_capacity(dev, scb, data, len);

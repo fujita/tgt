@@ -58,8 +58,10 @@ struct cmd {
 
 struct target {
 	int tid;
-	struct tgt_device **devt;
+
 	uint64_t max_device;
+	struct tgt_device **devt;
+	struct qelem device_list;
 
 	/* TODO: move to device */
 	struct qelem cqueue;
@@ -171,6 +173,19 @@ static int device_dir_create(int tid, uint64_t dev_id, int dev_fd, uint64_t size
 	return 0;
 }
 
+static void tgt_device_link(struct target *target, struct tgt_device *dev)
+{
+	struct tgt_device *ent;
+	struct qelem *pos;
+
+	list_for_each(pos, &target->device_list) {
+		ent = list_entry(pos, struct tgt_device, dlist);
+		if (dev->lun < ent->lun)
+			break;
+	}
+	insque(&dev->dlist, pos);
+}
+
 int tgt_device_create(int tid, uint64_t dev_id, char *path)
 {
 	struct target *target;
@@ -217,6 +232,7 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 	device->state = 0;
 	device->addr = try_mmap_device(dev_fd, size);
 	device->size = size;
+	device->lun = dev_id;
 	snprintf(device->scsi_id, sizeof(device->scsi_id),
 		 "deadbeaf%d:%" PRIu64, tid, dev_id);
 	target->devt[dev_id] = device;
@@ -224,6 +240,8 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 	if (device->addr)
 		eprintf("Succeed to mmap the device %" PRIx64 "\n",
 			device->addr);
+
+	tgt_device_link(target, device);
 
 	eprintf("Succeed to add a logical unit %" PRIu64 " to the target %d\n",
 		dev_id, tid);
@@ -299,6 +317,8 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 
 	device_dir_remove(tid, dev_id);
 
+	remque(&device->dlist);
+
 	free(device);
 	return err;
 }
@@ -361,10 +381,11 @@ static int cmd_queue(struct tgt_event *ev_req, int nl_fd)
 	if (device)
 		uaddr = target->devt[dev_id]->addr;
 
-	result = scsi_cmd_process(host_no, target->tid, ev_req->k.cmd_req.scb,
+	result = scsi_cmd_process(host_no, ev_req->k.cmd_req.scb,
 				  &len, ev_req->k.cmd_req.data_len,
 				  &uaddr, &rw, &try_map, &offset,
-				  ev_req->k.cmd_req.lun, device);
+				  ev_req->k.cmd_req.lun, device,
+				  &target->device_list);
 
 	dprintf("%u %x %lx %" PRIu64 " %d\n",
 		cid, ev_req->k.cmd_req.scb[0], uaddr, offset, result);
@@ -559,6 +580,8 @@ int tgt_target_create(int tid)
 	err = target_dir_create(tid);
 	if (err < 0)
 		goto free_device_table;
+
+	INIT_LIST_HEAD(&target->device_list);
 
 	eprintf("Succeed to create a new target %d\n", tid);
 	tgtt[tid] = target;

@@ -22,6 +22,9 @@
 #define list_entry(ptr, type, member) \
 	container_of(ptr, type, member)
 
+#define list_for_each(pos, head) \
+	for (pos = (head)->q_forw; pos != (head); pos = pos->q_forw)
+
 #define list_for_each_entry(pos, head, member)				\
 	for (pos = list_entry((head)->q_forw, typeof(*pos), member);	\
 	     &pos->member != (head); 	\

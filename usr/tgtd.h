@@ -11,12 +11,12 @@ struct tgt_device {
 	int fd;
 	uint64_t addr; /* persistent mapped address */
 	uint64_t size;
+	uint64_t lun;
 	unsigned long state;
 	char scsi_id[SCSI_ID_LEN];
+	struct qelem dlist;
 
-	struct qelem cmd_list;
-
-	struct tgt_device *next_device;
+	struct qelem cmd_queue;
 };
 
 /* makeshift */
@@ -38,9 +38,9 @@ extern int tgt_target_destroy(int tid);
 extern int tgt_target_bind(int tid, int host_no);
 
 extern uint64_t scsi_get_devid(uint8_t *pdu);
-extern int scsi_cmd_process(int host_no, int tid, uint8_t *pdu, int *len,
+extern int scsi_cmd_process(int host_no, uint8_t *pdu, int *len,
 			    uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
 			    uint8_t *try_map, uint64_t *offset, uint8_t *lun,
-			    struct tgt_device *dev);
+			    struct tgt_device *dev, struct qelem *dev_list);
 
 #endif
