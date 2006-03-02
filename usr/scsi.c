@@ -363,6 +363,15 @@ err:
 	return SAM_STAT_CHECK_CONDITION;
 }
 
+uint64_t make_lun(unsigned int bus, unsigned int target, unsigned int lun)
+{
+	uint16_t result = (0x8000 |
+			   ((target & 0x003f) << 8) |
+			   ((bus & 0x0007) << 5) |
+			   (lun & 0x001f));
+	return ((uint64_t) result) << 48;
+}
+
 static int report_luns(struct qelem *dev_list, uint8_t *lun_buf, uint8_t *scb,
 		       uint8_t *p, int *len)
 {
@@ -402,7 +411,7 @@ static int report_luns(struct qelem *dev_list, uint8_t *lun_buf, uint8_t *scb,
 		lun = dev->lun;
 
 		/* ibmvstgt hack */
-		lun = (0x8000 | (lun & 0x001f)) << 48;
+		lun = make_lun(0, lun & 0x003f, 0);
 		dprintf("%" PRIx64 "\n", lun);
 		data[idx++] = cpu_to_be64(lun);
 		if (!(alen -= 8))
@@ -572,10 +581,10 @@ uint64_t scsi_get_devid(uint8_t *p)
 	lun = *((uint64_t *) p);
 	dprintf("%" PRIx64 " %u %u %u\n", lun, GETTARGET(lun), GETBUS(lun), GETLUN(lun));
 
-	if (GETBUS(lun) || GETTARGET(lun))
+	if (GETBUS(lun) || GETLUN(lun))
 		return TGT_INVALID_DEV_ID;
 	else
-		return GETLUN(lun);
+		return GETTARGET(lun);
 
 	switch (*p >> 6) {
 	case 0:
