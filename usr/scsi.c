@@ -411,8 +411,10 @@ static int report_luns(struct qelem *dev_list, uint8_t *lun_buf, uint8_t *scb,
 		lun = dev->lun;
 
 		/* ibmvstgt hack */
+/* 		lun = ((lun > 0xff) ? (0x1 << 30) : 0) | ((0x3ff & lun) << 16); */
 		lun = make_lun(0, lun & 0x003f, 0);
 		dprintf("%" PRIx64 "\n", lun);
+/* 		data[idx++] = cpu_to_be64(lun << 32); */
 		data[idx++] = cpu_to_be64(lun);
 		if (!(alen -= 8))
 			break;
