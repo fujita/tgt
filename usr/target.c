@@ -280,10 +280,10 @@ static int cmd_pre_perform(struct tgt_cmd_queue *q, struct cmd *cmd)
 {
 	int enabled = 0;
 
-	if (cmd->attribute != MSG_SIMPLE_TAG) {
-		eprintf("non simple attribute %u %x\n", cmd->cid, cmd->attribute);
-		cmd->attribute = MSG_SIMPLE_TAG;
-	}
+	if (cmd->attribute != MSG_SIMPLE_TAG)
+		dprintf("non simple attribute %u %x %" PRIu64 " %d\n",
+			cmd->cid, cmd->attribute, cmd->dev ? cmd->dev->lun : ~0ULL,
+			q->active_cmd);
 
 	switch (cmd->attribute) {
 	case MSG_SIMPLE_TAG:
@@ -318,7 +318,7 @@ static void cmd_post_perform(struct tgt_cmd_queue *q, struct cmd *cmd,
 	cmd->mmapped = mmapped;
 
 	q->active_cmd++;
-	switch(cmd->attribute) {
+	switch (cmd->attribute) {
 	case MSG_ORDERED_TAG:
 	case MSG_HEAD_TAG:
 		q->state |= (1UL << TGT_QUEUE_BLOCKED);
@@ -378,10 +378,51 @@ static void cmd_queue(struct tgt_event *ev_req, int nl_fd)
 
 		tgt_kspace_send_cmd(nl_fd, cmd, result, rw);
 	} else {
+		dprintf("blocked %u %x %" PRIu64 " %d\n",
+			cmd->cid, ev_req->k.cmd_req.scb[0],
+			cmd->dev ? cmd->dev->lun : ~0ULL,
+			q->active_cmd);
+
 		memcpy(cmd->scb, ev_req->k.cmd_req.scb, sizeof(cmd->scb));
 		memcpy(cmd->lun, ev_req->k.cmd_req.lun, sizeof(cmd->lun));
 		cmd->len = ev_req->k.cmd_req.data_len;
 		list_add_tail(&cmd->qlist, &q->queue);
+	}
+}
+
+static void post_cmd_done(int nl_fd, struct tgt_cmd_queue *q)
+{
+	struct cmd *cmd, *tmp;
+	int enabled, result, len = 0;
+	uint8_t rw = 0, mmapped = 0;
+	uint64_t offset;
+	unsigned long uaddr = 0;
+	struct target *target;
+
+	list_for_each_entry_safe(cmd, tmp, &q->queue, qlist) {
+		enabled = cmd_pre_perform(q, cmd);
+		if (enabled) {
+			list_del(&cmd->qlist);
+			target = host_to_target(cmd->hostno);
+			if (!target) {
+				eprintf("fail to find target!\n");
+				exit(1);
+			}
+			dprintf("perform %u %x\n", cmd->cid, cmd->attribute);
+			result = scsi_cmd_perform(cmd->hostno, cmd->scb,
+						  &len,
+						  cmd->len,
+						  &uaddr,
+						  &rw,
+						  &mmapped,
+						  &offset,
+						  cmd->lun,
+						  cmd->dev,
+						  &target->device_list);
+			cmd_post_perform(q, cmd, uaddr, len, mmapped);
+			tgt_kspace_send_cmd(nl_fd, cmd, result, rw);
+		} else
+			break;
 	}
 }
 
@@ -415,7 +456,7 @@ static int scsi_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
 	return err;
 }
 
-static void cmd_done(struct tgt_event *ev)
+static void cmd_done(struct tgt_event *ev, int nl_fd)
 {
 	struct target *target;
 	struct tgt_cmd_queue *q;
@@ -463,6 +504,8 @@ static void cmd_done(struct tgt_event *ev)
 	}
 
 	free(cmd);
+
+	post_cmd_done(nl_fd, q);
 }
 
 void nl_event_handle(int nl_fd)
@@ -488,7 +531,7 @@ void nl_event_handle(int nl_fd)
 		cmd_queue(ev, nl_fd);
 		break;
 	case TGT_KEVENT_CMD_DONE:
-		cmd_done(ev);
+		cmd_done(ev, nl_fd);
 		break;
 	default:
 		eprintf("unknown event %u\n", nlh->nlmsg_type);
