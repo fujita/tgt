@@ -37,6 +37,7 @@
 
 #include "tgtd.h"
 
+extern int tgt_sysfs_init(void);
 
 enum {
 	POLL_NL, /* netlink socket between kernel and user space */
@@ -221,7 +222,7 @@ int main(int argc, char **argv)
 	if (log_init(program_name, LOG_SPACE_SIZE, is_daemon, is_debug))
 		exit(1);
 
-	if (tgt_device_init())
+	if (tgt_sysfs_init())
 		exit(1);
 
 	nl_fd = nl_init();

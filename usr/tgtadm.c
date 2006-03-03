@@ -126,28 +126,23 @@ static int filter(const struct dirent *dir)
 static void all_devices_destroy(int tid)
 {
 	struct dirent **namelist;
-	char *p, cmd[1024];
+	char path[PATH_MAX], key[] = "device";
 	int i, nr, err;
-	uint64_t devid;
+	uint64_t dev_id;
 
-	nr = scandir(TGT_DEVICE_SYSFSDIR, &namelist, filter, alphasort);
+	snprintf(path, sizeof(path), TGT_TARGET_SYSFSDIR "/target%d", tid);
+	nr = scandir(path, &namelist, filter, alphasort);
 	if (!nr)
 		return;
 
 	for (i = 0; i < nr; i++) {
-
-		for (p = namelist[i]->d_name; !isdigit((int) *p); p++)
-			;
-		if (tid != atoi(p))
+		if (strncmp(namelist[i]->d_name, key, strlen(key)))
 			continue;
-		p = strchr(p, ':');
-		if (!p)
-			continue;
-		devid = strtoull(++p, NULL, 10);
-		snprintf(cmd, sizeof(cmd),
-			 "./usr/tgtadm --driver %s --op delete --tid %d --lun %" PRIu64,
-			 driver, tid, devid);
-		err = system(cmd);
+		dev_id = strtoull(namelist[i]->d_name + strlen(key), NULL, 10);
+		snprintf(path, sizeof(path),
+			 "./usr/tgtadm --driver %s --op delete --tid %d --lun %"
+			 PRIu64, driver, tid, dev_id);
+		err = system(path);
 	}
 
 	for (i = 0; i < nr; i++)

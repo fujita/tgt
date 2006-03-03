@@ -5,7 +5,6 @@
 
 #define	TGT_LLD_SYSFSDIR	"/var/run/tgt_lld"
 #define	TGT_TARGET_SYSFSDIR	"/var/run/tgt_target"
-#define	TGT_DEVICE_SYSFSDIR	"/var/run/tgt_device"
 
 
 extern int tgt_target_dir_create(int tid);

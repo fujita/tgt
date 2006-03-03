@@ -70,7 +70,6 @@ struct target {
 static struct target *tgtt[MAX_NR_TARGET];
 static struct target *hostt[MAX_NR_HOST];
 
-static mode_t dmode = S_IRUSR|S_IWUSR|S_IXUSR|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH;
 static mode_t fmode = S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH;
 
 static struct target *target_get(int tid)
@@ -236,26 +235,6 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 
 	free(device);
 	return 0;
-}
-
-int tgt_device_init(void)
-{
-	int err;
-
-	system("rm -rf " TGT_TARGET_SYSFSDIR);
-	system("rm -rf " TGT_DEVICE_SYSFSDIR);
-
-	err = mkdir(TGT_TARGET_SYSFSDIR, dmode);
-	if (err < 0) {
-		perror("Cannot create " TGT_TARGET_SYSFSDIR);
-		return err;
-	}
-
-	err = mkdir(TGT_DEVICE_SYSFSDIR, dmode);
-	if (err < 0)
-		perror("Cannot create " TGT_DEVICE_SYSFSDIR);
-
-	return err;
 }
 
 static struct cmd *find_cmd(struct target *target, uint32_t cid)

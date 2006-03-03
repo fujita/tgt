@@ -39,6 +39,8 @@ enum tgt_fs_op {
 	DELETE,
 };
 
+static mode_t dmode = S_IRUSR|S_IWUSR|S_IXUSR|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH;
+
 static int tgt_set_string(char *buf, int size, const char *fmt, va_list ap)
 {
 	int err;
@@ -54,7 +56,6 @@ static int tgt_dir(int op, const char *fmt, ...)
 {
 	int err;
 	char path[PATH_MAX];
-	mode_t dmode = S_IRUSR|S_IWUSR|S_IXUSR|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH;
 
 	va_list ap;
 	va_start(ap, fmt);
@@ -133,12 +134,25 @@ int tgt_target_dir_delete(int tid)
 
 int tgt_device_dir_create(int tid, uint64_t dev_id)
 {
-	return tgt_dir(CREATE, TGT_DEVICE_SYSFSDIR
-		       "/device%d:%" PRIu64, tid, dev_id);
+	return tgt_dir(CREATE, TGT_TARGET_SYSFSDIR
+		       "/target%d/device%" PRIu64, tid, dev_id);
 }
 
 int tgt_device_dir_delete(int tid, uint64_t dev_id)
 {
-	return tgt_dir(DELETE, TGT_DEVICE_SYSFSDIR
-		       "/device%d:%" PRIu64, tid, dev_id);
+	return tgt_dir(DELETE, TGT_TARGET_SYSFSDIR
+		       "/target%d/device%" PRIu64, tid, dev_id);
+}
+
+int tgt_sysfs_init(void)
+{
+	int err;
+
+	system("rm -rf " TGT_TARGET_SYSFSDIR);
+
+	err = mkdir(TGT_TARGET_SYSFSDIR, dmode);
+	if (err < 0)
+		perror("Cannot create " TGT_TARGET_SYSFSDIR);
+
+	return err;
 }
