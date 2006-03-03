@@ -3,7 +3,7 @@ PROGRAMS = tgtd tgtadm
 
 all: $(PROGRAMS)
 
-tgtd: tgtd.o netlink.o dl.o mgmt.o target.o scsi.o log.o
+tgtd: tgtd.o netlink.o dl.o mgmt.o target.o scsi.o log.o tgt_sysfs.o
 	$(CC) -rdynamic -ldl $^ -o $@
 
 tgtadm: tgtadm.o

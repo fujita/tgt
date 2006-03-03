@@ -126,53 +126,6 @@ static uint64_t try_mmap_device(int fd, uint64_t size)
 	return 0;
 }
 
-static int device_dir_create(int tid, uint64_t dev_id, int dev_fd, uint64_t size)
-{
-	char path[PATH_MAX], buf[64];
-	int fd, err;
-
-	snprintf(path, sizeof(path), TGT_DEVICE_SYSFSDIR
-		 "/device%d:%" PRIu64, tid, dev_id);
-
-	err = mkdir(path, dmode);
-	if (err < 0) {
-		eprintf("Cannot create %s\n", path);
-		return err;
-	}
-
-	snprintf(path, sizeof(path), TGT_DEVICE_SYSFSDIR
-		 "/device%d:%" PRIu64 "/fd", tid, dev_id);
-	fd = open(path, O_RDWR|O_CREAT|O_EXCL, fmode);
-	if (fd < 0) {
-		eprintf("Cannot create %s\n", path);
-		return err;
-	}
-	snprintf(buf, sizeof(buf), "%d", dev_fd);
-	err = write(fd, buf, strlen(buf));
-	close(fd);
-	if (err < 0) {
-		eprintf("Cannot write %s\n", path);
-		return err;
-	}
-
-	snprintf(path, sizeof(path), TGT_DEVICE_SYSFSDIR
-		 "/device%d:%" PRIu64 "/size", tid, dev_id);
-	fd = open(path, O_RDWR|O_CREAT|O_EXCL, fmode);
-	if (fd < 0) {
-		eprintf("Cannot create %s\n", path);
-		return err;
-	}
-	snprintf(buf, sizeof(buf), "%" PRIu64, size);
-	err = write(fd, buf, strlen(buf));
-	close(fd);
-	if (err < 0) {
-		eprintf("Cannot write %s\n", path);
-		return err;
-	}
-
-	return 0;
-}
-
 static void tgt_device_link(struct target *target, struct tgt_device *dev)
 {
 	struct tgt_device *ent;
@@ -217,7 +170,7 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 		return err;
 	}
 
-	err = device_dir_create(tid, dev_id, dev_fd, size);
+	err = tgt_device_dir_create(tid, dev_id, dev_fd, size);
 	if (err < 0)
 		goto close_dev_fd;
 
@@ -252,36 +205,10 @@ close_dev_fd:
 	return err;
 }
 
-static void device_dir_remove(int tid, uint64_t dev_id)
-{
-	int err;
-	char path[PATH_MAX];
-
-	snprintf(path, sizeof(path), TGT_DEVICE_SYSFSDIR
-		 "/device%d:%" PRIu64 "/fd", tid, dev_id);
-	err = unlink(path);
-	if (err < 0)
-		eprintf("Cannot unlink %s\n", path);
-
-	snprintf(path, sizeof(path), TGT_DEVICE_SYSFSDIR
-		 "/device%d:%" PRIu64 "/size", tid, dev_id);
-	err = unlink(path);
-	if (err < 0)
-		eprintf("Cannot unlink %s\n", path);
-
-	snprintf(path, sizeof(path), TGT_DEVICE_SYSFSDIR
-		 "/device%d:%" PRIu64, tid, dev_id);
-	err = rmdir(path);
-	if (err < 0)
-		eprintf("Cannot unlink %s\n", path);
-}
-
 int tgt_device_destroy(int tid, uint64_t dev_id)
 {
 	struct target *target;
 	struct tgt_device *device;
-	char path[PATH_MAX], buf[64];
-	int dev_fd, fd, err;
 
 	/* TODO: check whether the device has flying commands. */
 
@@ -301,26 +228,14 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 	if (device->addr)
 		munmap((void *) (unsigned long) device->addr, device->size);
 
-	snprintf(path, sizeof(path), TGT_DEVICE_SYSFSDIR
-		 "/device%d:%" PRIu64 "/fd", tid, dev_id);
-	fd = open(path, O_RDONLY);
-	if (fd < 0)
-		eprintf("%s %d\n", path, errno);
+	close(device->fd);
 
-	err = read(fd, buf, sizeof(buf));
-	close(fd);
-	if (err < 0)
-		eprintf("%d\n", err);
-
-	sscanf(buf, "%d\n", &dev_fd);
-	close(dev_fd);
-
-	device_dir_remove(tid, dev_id);
+	tgt_device_dir_delete(tid, dev_id);
 
 	remque(&device->dlist);
 
 	free(device);
-	return err;
+	return 0;
 }
 
 int tgt_device_init(void)
@@ -531,20 +446,6 @@ int tgt_target_bind(int tid, int host_no)
 	return 0;
 }
 
-static int target_dir_create(int tid)
-{
-	char path[PATH_MAX];
-	int err;
-
-	snprintf(path, sizeof(path), TGT_TARGET_SYSFSDIR "/target%d", tid);
-	err = mkdir(path, dmode);
-	if (err < 0) {
-		eprintf("Cannot create %s %d\n", path, errno);
-		return err;
-	}
-	return 0;
-}
-
 int tgt_target_create(int tid)
 {
 	int err;
@@ -577,7 +478,7 @@ int tgt_target_create(int tid)
 	}
 	target->max_device = DEFAULT_NR_DEVICE;
 
-	err = target_dir_create(tid);
+	err = tgt_target_dir_create(tid);
 	if (err < 0)
 		goto free_device_table;
 
@@ -596,6 +497,5 @@ free_target:
 
 int tgt_target_destroy(int tid)
 {
-	/* TODO */
 	return 0;
 }
