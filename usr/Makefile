@@ -1,4 +1,4 @@
-CFLAGS += -O2 -fno-inline -Wall -Wstrict-prototypes -fPIC -I$(KERNELSRC)/include -I../include -D_LARGEFILE64_SOURCE
+CFLAGS += -O2 -fno-inline -Wall -Wstrict-prototypes -fPIC -I$(KERNELSRC)/include -D_LARGEFILE64_SOURCE
 PROGRAMS = tgtd tgtadm
 
 all: $(PROGRAMS)
