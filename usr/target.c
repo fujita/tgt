@@ -55,9 +55,8 @@ struct cmd {
 	uint32_t cid;
 	uint64_t uaddr;
 	uint32_t len;
-	uint64_t dev_id;
-	int mmap;
-	struct tgt_cmd_queue *queue;
+	int mmapped;
+	struct tgt_device *dev;
 };
 
 struct target {
@@ -277,10 +276,10 @@ static int cmd_queue(struct tgt_event *ev_req, int nl_fd)
 	/* TODO: preallocate cmd */
 	cmd = malloc(sizeof(*cmd));
  	cmd->cid = cid;
-	cmd->dev_id = dev_id;
+	cmd->dev = device;
 	cmd->uaddr = uaddr;
 	cmd->len = len;
-	cmd->mmap = try_map;
+	cmd->mmapped = try_map;
 
 	insque(&cmd->hlist, &target->cmd_hash_list[cmd_hashfn(cid)]);
 
@@ -328,7 +327,6 @@ static int scsi_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
 static void cmd_done(struct tgt_event *ev)
 {
 	struct target *target;
-	struct tgt_device *device;
 	struct cmd *cmd;
 	int err, do_munmap, host_no = ev->k.cmd_done.host_no;
 	uint32_t cid = ev->k.cmd_done.cid;
@@ -345,21 +343,19 @@ static void cmd_done(struct tgt_event *ev)
 		return;
 	}
 	remque(&cmd->hlist);
-	do_munmap = cmd->mmap;
-
+	do_munmap = cmd->mmapped;
 	if (do_munmap) {
-		device = device_get(target, cmd->dev_id);
-		if (!device) {
-			eprintf("%" PRIu64 " is null\n", cmd->dev_id);
+		if (!cmd->dev) {
+			eprintf("device is null\n");
 			exit(1);
 		}
 
-		if (device->addr)
+		if (cmd->dev->addr)
 			do_munmap = 0;
 	}
-	err = scsi_cmd_done(do_munmap, !cmd->mmap, cmd->uaddr, cmd->len);
+	err = scsi_cmd_done(do_munmap, !cmd->mmapped, cmd->uaddr, cmd->len);
 
-	dprintf("%d %" PRIx64 " %u %d\n", cmd->mmap, cmd->uaddr, cmd->len, err);
+	dprintf("%d %" PRIx64 " %u %d\n", cmd->mmapped, cmd->uaddr, cmd->len, err);
 
 	free(cmd);
 }
