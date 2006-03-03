@@ -102,26 +102,6 @@ out:
 	return err;
 }
 
-static int tgt_write(int fd, const char *fmt, ...)
-{
-	int err;
-	char buf[PATH_MAX];
-	va_list ap;
-
-	va_start(ap, fmt);
-	err = tgt_set_string(buf, sizeof(buf), fmt, ap);
-	if (err)
-		goto out;
-
-	err = write(fd, buf, strlen(buf));
-	if (err < 0)
-		eprintf("fail to write %s\n", buf);
-out:
-	close(fd);
-	va_end(ap);
-	return err;
-}
-
 int tgt_target_dir_create(int tid)
 {
 	return tgt_dir(CREATE, TGT_TARGET_SYSFSDIR "/target%d", tid);
@@ -155,4 +135,36 @@ int tgt_sysfs_init(void)
 		perror("Cannot create " TGT_TARGET_SYSFSDIR);
 
 	return err;
+}
+
+int tgt_target_dir_attr_create(int tid, const char *name, const char *fmt, ...)
+{
+	int err, fd = 0;
+	char buf[PATH_MAX];
+	va_list ap;
+
+	va_start(ap, fmt);
+
+	err = tgt_set_string(buf, sizeof(buf), fmt, ap);
+	if (err)
+		goto out;
+
+	fd = tgt_file(CREATE, TGT_TARGET_SYSFSDIR "/target%d/%s", tid, name);
+	if (fd < 0) {
+		err = -errno;
+		goto out;
+	}
+	err = write(fd, buf, strlen(buf));
+	if (err < 0)
+		eprintf("fail to write %s\n", buf);
+out:
+	if (fd > 0)
+		close(fd);
+	va_end(ap);
+	return err;
+}
+
+int tgt_target_dir_attr_delete(int tid, char *name)
+{
+	return tgt_file(DELETE, TGT_TARGET_SYSFSDIR "/target%d/%s", tid, name);
 }

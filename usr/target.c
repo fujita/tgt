@@ -32,7 +32,6 @@
 #include <sys/mman.h>
 #include <sys/poll.h>
 #include <sys/socket.h>
-#include <sys/stat.h>
 
 #include <linux/fs.h>
 #include <linux/netlink.h>
@@ -69,8 +68,6 @@ struct target {
 
 static struct target *tgtt[MAX_NR_TARGET];
 static struct target *hostt[MAX_NR_HOST];
-
-static mode_t fmode = S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH;
 
 static struct target *target_get(int tid)
 {
@@ -395,8 +392,7 @@ void nl_event_handle(int nl_fd)
 
 int tgt_target_bind(int tid, int host_no)
 {
-	char path[PATH_MAX], buf[64];
-	int fd, err;
+	int err;
 
 	if (!tgtt[tid]) {
 		eprintf("target is not found %d\n", tid);
@@ -408,14 +404,7 @@ int tgt_target_bind(int tid, int host_no)
 		return -EINVAL;
 	}
 
-	snprintf(path, sizeof(path), TGT_TARGET_SYSFSDIR "/target%d/hostno", tid);
-	fd = open(path, O_RDWR|O_CREAT|O_EXCL, fmode);
-	if (fd < 0)
-		return -EINVAL;
-
-	snprintf(buf, sizeof(buf), "%d", host_no);
-	err = write(fd, buf, strlen(buf));
-	close(fd);
+	err = tgt_target_dir_attr_create(tid, "hostno", "%d\n", host_no);
 	if (err < 0)
 		return -EINVAL;
 
