@@ -32,7 +32,7 @@
 #include <sys/socket.h>
 
 #include <linux/fs.h>
-#define	BITS_PER_LONG 32
+#define	BITS_PER_LONG	32
 #include <linux/hash.h>
 #include <linux/netlink.h>
 #include <scsi/scsi_tgt_if.h>
@@ -40,6 +40,11 @@
 #include "tgtd.h"
 #include "tgtadm.h"
 #include "tgt_sysfs.h"
+
+/* better if we can include the followings in kernel header files. */
+#define	MSG_SIMPLE_TAG	0x20
+#define	MSG_HEAD_TAG	0x21
+#define	MSG_ORDERED_TAG	0x22
 
 #define	MAX_NR_TARGET		1024
 #define	MAX_NR_HOST		1024
@@ -49,6 +54,10 @@
 #define	HASH_ORDER	4
 #define	cmd_hashfn(cid)	hash_long((cid), HASH_ORDER)
 
+enum {
+	TGT_QUEUE_BLOCKED,
+};
+
 struct cmd {
 	struct qelem hlist;
 	struct qelem qlist;
@@ -57,6 +66,13 @@ struct cmd {
 	uint32_t len;
 	int mmapped;
 	struct tgt_device *dev;
+
+	/* Kill the followings when we use shared memory instead of netlink. */
+	int hostno;
+	uint32_t data_len;
+	uint8_t scb[16];
+	uint8_t lun[8];
+	int attribute;
 };
 
 struct target {
@@ -139,6 +155,13 @@ static void tgt_device_link(struct target *target, struct tgt_device *dev)
 	insque(&dev->dlist, pos);
 }
 
+void tgt_cmd_queue_init(struct tgt_cmd_queue *q)
+{
+	q->active_cmd = 0;
+	q->state = 0;
+	INIT_LIST_HEAD(&q->queue);
+}
+
 int tgt_device_create(int tid, uint64_t dev_id, char *path)
 {
 	struct target *target;
@@ -194,6 +217,7 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 			device->addr);
 
 	tgt_device_link(target, device);
+	tgt_cmd_queue_init(&device->cmd_queue);
 
 	eprintf("Succeed to add a logical unit %" PRIu64 " to the target %d\n",
 		dev_id, tid);
@@ -237,61 +261,92 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 	return 0;
 }
 
-static int cmd_queue(struct tgt_event *ev_req, int nl_fd)
+static int tgt_kspace_send_cmd(int nl_fd, struct cmd *cmd, int result, int rw)
 {
-	struct target *target;
-	struct tgt_device *device;
-	int result, len = 0;
 	char resbuf[NLMSG_SPACE(sizeof(struct tgt_event))];
 	struct tgt_event *ev_res = NLMSG_DATA(resbuf);
-	uint64_t offset, dev_id;
-	uint32_t cid = ev_req->k.cmd_req.cid;
-	uint8_t rw = 0, try_map = 0;
-	unsigned long uaddr = 0;
-	int host_no = ev_req->k.cmd_req.host_no;
-	struct cmd *cmd;
 
-	target = host_to_target(host_no);
-	if (!target) {
-		eprintf("%d is not bind to any target\n", host_no);
-		return 0;
-	}
-
-	dev_id = scsi_get_devid(ev_req->k.cmd_req.lun);
-	dprintf("%u %x %" PRIx64 "\n", cid, ev_req->k.cmd_req.scb[0], dev_id);
-
-	device = device_get(target, dev_id);
-	if (device)
-		uaddr = target->devt[dev_id]->addr;
-
-	result = scsi_cmd_process(host_no, ev_req->k.cmd_req.scb,
-				  &len, ev_req->k.cmd_req.data_len,
-				  &uaddr, &rw, &try_map, &offset,
-				  ev_req->k.cmd_req.lun, device,
-				  &target->device_list);
-
-	dprintf("%u %x %lx %" PRIu64 " %d\n",
-		cid, ev_req->k.cmd_req.scb[0], uaddr, offset, result);
-
-	/* TODO: preallocate cmd */
-	cmd = malloc(sizeof(*cmd));
- 	cmd->cid = cid;
-	cmd->dev = device;
-	cmd->uaddr = uaddr;
-	cmd->len = len;
-	cmd->mmapped = try_map;
-
-	insque(&cmd->hlist, &target->cmd_hash_list[cmd_hashfn(cid)]);
-
-	ev_res->u.cmd_rsp.host_no = host_no;
-	ev_res->u.cmd_rsp.cid = cid;
-	ev_res->u.cmd_rsp.len = len;
+	ev_res->u.cmd_rsp.host_no = cmd->hostno;
+	ev_res->u.cmd_rsp.cid = cmd->cid;
+	ev_res->u.cmd_rsp.len = cmd->len;
 	ev_res->u.cmd_rsp.result = result;
-	ev_res->u.cmd_rsp.uaddr = uaddr;
+	ev_res->u.cmd_rsp.uaddr = cmd->uaddr;
 	ev_res->u.cmd_rsp.rw = rw;
 
 	return __nl_write(nl_fd, TGT_UEVENT_CMD_RSP, resbuf,
 			  NLMSG_SPACE(sizeof(*ev_res)));
+}
+
+static int cmd_pre_perform(struct tgt_cmd_queue *queue, int attribute)
+{
+	return 1;
+}
+
+static void cmd_post_perform(struct cmd *cmd, unsigned long uaddr,
+			     int len, uint8_t mmapped)
+{
+	cmd->uaddr = uaddr;
+	cmd->len = len;
+	cmd->mmapped = mmapped;
+}
+
+static void cmd_queue(struct tgt_event *ev_req, int nl_fd)
+{
+	struct target *target;
+	struct tgt_cmd_queue *q;
+	struct cmd *cmd;
+	int result, enabled, len = 0;
+	uint64_t offset, dev_id;
+	uint8_t rw = 0, mmapped = 0;
+	unsigned long uaddr = 0;
+
+	target = host_to_target(ev_req->k.cmd_req.host_no);
+	if (!target) {
+		eprintf("%d is not bind to any target\n",
+			ev_req->k.cmd_req.host_no);
+		return;
+	}
+
+	/* TODO: preallocate cmd */
+	cmd = malloc(sizeof(*cmd));
+	cmd->hostno = ev_req->k.cmd_req.host_no;
+ 	cmd->cid = ev_req->k.cmd_req.cid;
+	insque(&cmd->hlist, &target->cmd_hash_list[cmd_hashfn(cmd->cid)]);
+
+	dev_id = scsi_get_devid(ev_req->k.cmd_req.lun);
+	dprintf("%u %x %" PRIx64 "\n", cmd->cid, ev_req->k.cmd_req.scb[0],
+		dev_id);
+
+	cmd->dev = device_get(target, dev_id);
+	if (cmd->dev) {
+		uaddr = target->devt[dev_id]->addr;
+		q = &cmd->dev->cmd_queue;
+	} else
+		q = &target->cmd_queue;
+
+	enabled = cmd_pre_perform(q, ev_req->k.cmd_req.attribute);
+
+	if (enabled) {
+		result = scsi_cmd_perform(cmd->hostno, ev_req->k.cmd_req.scb,
+					  &len, ev_req->k.cmd_req.data_len,
+					  &uaddr, &rw, &mmapped, &offset,
+					  ev_req->k.cmd_req.lun, cmd->dev,
+					  &target->device_list);
+
+		cmd_post_perform(cmd, uaddr, len, mmapped);
+		q->active_cmd++;
+
+		dprintf("%u %x %lx %" PRIu64 " %d\n",
+			cmd->cid, ev_req->k.cmd_req.scb[0], uaddr,
+			offset, result);
+
+		tgt_kspace_send_cmd(nl_fd, cmd, result, rw);
+	} else {
+		memcpy(cmd->scb, ev_req->k.cmd_req.scb, sizeof(cmd->scb));
+		memcpy(cmd->lun, ev_req->k.cmd_req.lun, sizeof(cmd->lun));
+		cmd->len = ev_req->k.cmd_req.data_len;
+		insque(&cmd->qlist, q);
+	}
 }
 
 static struct cmd *find_cmd(struct target *target, uint32_t cid)
@@ -327,6 +382,7 @@ static int scsi_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
 static void cmd_done(struct tgt_event *ev)
 {
 	struct target *target;
+	struct tgt_cmd_queue *q;
 	struct cmd *cmd;
 	int err, do_munmap, host_no = ev->k.cmd_done.host_no;
 	uint32_t cid = ev->k.cmd_done.cid;
@@ -343,6 +399,14 @@ static void cmd_done(struct tgt_event *ev)
 		return;
 	}
 	remque(&cmd->hlist);
+
+	if (cmd->dev)
+		q = &cmd->dev->cmd_queue;
+	else
+		q = &target->cmd_queue;
+
+	q->active_cmd--;
+
 	do_munmap = cmd->mmapped;
 	if (do_munmap) {
 		if (!cmd->dev) {
@@ -453,6 +517,8 @@ int tgt_target_create(int tid)
 	err = tgt_target_dir_create(tid);
 	if (err < 0)
 		goto free_device_table;
+
+	tgt_cmd_queue_init(&target->cmd_queue);
 
 	eprintf("Succeed to create a new target %d\n", tid);
 	tgtt[tid] = target;

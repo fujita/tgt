@@ -604,7 +604,7 @@ uint64_t scsi_get_devid(uint8_t *p)
 	return lun;
 }
 
-int scsi_cmd_process(int host_no, uint8_t *pdu, int *len,
+int scsi_cmd_perform(int host_no, uint8_t *pdu, int *len,
 		     uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
 		     uint8_t *try_map, uint64_t *offset, uint8_t *lun_buf,
 		     struct tgt_device *dev, struct qelem *dev_list)

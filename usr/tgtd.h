@@ -8,8 +8,9 @@
 #define	SCSI_ID_LEN	24
 
 struct tgt_cmd_queue {
+	int active_cmd;
 	unsigned long state;
-	struct qelem cmd_queue;
+	struct qelem queue;
 };
 
 struct tgt_device {
@@ -42,7 +43,7 @@ extern int tgt_target_destroy(int tid);
 extern int tgt_target_bind(int tid, int host_no);
 
 extern uint64_t scsi_get_devid(uint8_t *pdu);
-extern int scsi_cmd_process(int host_no, uint8_t *pdu, int *len,
+extern int scsi_cmd_perform(int host_no, uint8_t *pdu, int *len,
 			    uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
 			    uint8_t *try_map, uint64_t *offset, uint8_t *lun,
 			    struct tgt_device *dev, struct qelem *dev_list);
