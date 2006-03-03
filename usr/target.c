@@ -37,6 +37,9 @@
 #include <linux/netlink.h>
 #include <scsi/scsi_tgt_if.h>
 
+#define	BITS_PER_LONG 32
+#include <linux/hash.h>
+
 #include "tgtd.h"
 #include "tgtadm.h"
 #include "tgt_sysfs.h"
@@ -46,13 +49,18 @@
 #define	DEFAULT_NR_DEVICE	64
 #define	MAX_NR_DEVICE		(1 << 20)
 
+#define	HASH_ORDER	4
+#define	cmd_hashfn(cid)	hash_long((cid), HASH_ORDER)
+
 struct cmd {
-	struct qelem clist;
+	struct qelem hlist;
+	struct qelem qlist;
 	uint32_t cid;
-	uint64_t dev_id;
 	uint64_t uaddr;
 	uint32_t len;
+	uint64_t dev_id;
 	int mmap;
+	struct tgt_cmd_queue *queue;
 };
 
 struct target {
@@ -62,8 +70,8 @@ struct target {
 	struct tgt_device **devt;
 	struct qelem device_list;
 
-	/* TODO: move to device */
-	struct qelem cqueue;
+	struct qelem cmd_hash_list[1 << HASH_ORDER];
+	struct tgt_cmd_queue cmd_queue;
 };
 
 static struct target *tgtt[MAX_NR_TARGET];
@@ -178,7 +186,6 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 		goto close_dev_fd;
 
 	device->fd = dev_fd;
-	device->state = 0;
 	device->addr = try_mmap_device(dev_fd, size);
 	device->size = size;
 	device->lun = dev_id;
@@ -234,17 +241,6 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 	return 0;
 }
 
-static struct cmd *find_cmd(struct target *target, uint32_t cid)
-{
-	struct cmd *cmd;
-	list_for_each_entry(cmd, &target->cqueue, clist) {
-		if (cmd->cid == cid)
-			return cmd;
-	}
-	return NULL;
-}
-
-/* TODO: coalesce responses */
 static int cmd_queue(struct tgt_event *ev_req, int nl_fd)
 {
 	struct target *target;
@@ -289,7 +285,7 @@ static int cmd_queue(struct tgt_event *ev_req, int nl_fd)
 	cmd->len = len;
 	cmd->mmap = try_map;
 
-	insque(&cmd->clist, &target->cqueue);
+	insque(&cmd->hlist, &target->cmd_hash_list[cmd_hashfn(cid)]);
 
 	ev_res->u.cmd_rsp.host_no = host_no;
 	ev_res->u.cmd_rsp.cid = cid;
@@ -300,6 +296,18 @@ static int cmd_queue(struct tgt_event *ev_req, int nl_fd)
 
 	return __nl_write(nl_fd, TGT_UEVENT_CMD_RSP, resbuf,
 			  NLMSG_SPACE(sizeof(*ev_res)));
+}
+
+static struct cmd *find_cmd(struct target *target, uint32_t cid)
+{
+	struct cmd *cmd;
+	struct qelem *head = &target->cmd_hash_list[cmd_hashfn(cid)];
+
+	list_for_each_entry(cmd, head, hlist) {
+		if (cmd->cid == cid)
+			return cmd;
+	}
+	return NULL;
 }
 
 static int scsi_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
@@ -339,7 +347,7 @@ static void cmd_done(struct tgt_event *ev)
 		eprintf("Cannot find cmd %d %u\n", host_no, cid);
 		return;
 	}
-	remque(&cmd->clist);
+	remque(&cmd->hlist);
 	do_munmap = cmd->mmap;
 
 	if (do_munmap) {
@@ -416,7 +424,7 @@ int tgt_target_bind(int tid, int host_no)
 
 int tgt_target_create(int tid)
 {
-	int err;
+	int err, i;
 	struct target *target;
 
 	if (tid >= MAX_NR_TARGET) {
@@ -436,7 +444,10 @@ int tgt_target_create(int tid)
 	}
 
 	target->tid = tid;
-	INIT_LIST_HEAD(&target->cqueue);
+	for (i = 0; i < ARRAY_SIZE(target->cmd_hash_list); i++)
+		INIT_LIST_HEAD(&target->cmd_hash_list[i]);
+
+	INIT_LIST_HEAD(&target->device_list);
 
 	target->devt = calloc(DEFAULT_NR_DEVICE, sizeof(struct tgt_device *));
 	if (!target->devt) {
@@ -449,8 +460,6 @@ int tgt_target_create(int tid)
 	err = tgt_target_dir_create(tid);
 	if (err < 0)
 		goto free_device_table;
-
-	INIT_LIST_HEAD(&target->device_list);
 
 	eprintf("Succeed to create a new target %d\n", tid);
 	tgtt[tid] = target;

@@ -2,6 +2,8 @@
 
 /* taken from linux kernel */
 
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+
 #undef offsetof
 #ifdef __compiler_offsetof
 #define offsetof(TYPE,MEMBER) __compiler_offsetof(TYPE,MEMBER)

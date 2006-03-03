@@ -7,16 +7,20 @@
 
 #define	SCSI_ID_LEN	24
 
+struct tgt_cmd_queue {
+	unsigned long state;
+	struct qelem cmd_queue;
+};
+
 struct tgt_device {
 	int fd;
 	uint64_t addr; /* persistent mapped address */
 	uint64_t size;
 	uint64_t lun;
-	unsigned long state;
 	char scsi_id[SCSI_ID_LEN];
 	struct qelem dlist;
 
-	struct qelem cmd_queue;
+	struct tgt_cmd_queue cmd_queue;
 };
 
 /* makeshift */
