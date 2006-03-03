@@ -22,7 +22,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,15 +29,13 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
-#include <sys/poll.h>
 #include <sys/socket.h>
 
 #include <linux/fs.h>
-#include <linux/netlink.h>
-#include <scsi/scsi_tgt_if.h>
-
 #define	BITS_PER_LONG 32
 #include <linux/hash.h>
+#include <linux/netlink.h>
+#include <scsi/scsi_tgt_if.h>
 
 #include "tgtd.h"
 #include "tgtadm.h"
