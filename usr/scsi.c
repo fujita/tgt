@@ -372,7 +372,7 @@ uint64_t make_lun(unsigned int bus, unsigned int target, unsigned int lun)
 	return ((uint64_t) result) << 48;
 }
 
-static int report_luns(struct qelem *dev_list, uint8_t *lun_buf, uint8_t *scb,
+static int report_luns(struct list_head *dev_list, uint8_t *lun_buf, uint8_t *scb,
 		       uint8_t *p, int *len)
 {
 	struct tgt_device *dev;
@@ -607,7 +607,7 @@ uint64_t scsi_get_devid(uint8_t *p)
 int scsi_cmd_perform(int host_no, uint8_t *pdu, int *len,
 		     uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
 		     uint8_t *try_map, uint64_t *offset, uint8_t *lun_buf,
-		     struct tgt_device *dev, struct qelem *dev_list)
+		     struct tgt_device *dev, struct list_head *dev_list)
 {
 	int result = SAM_STAT_GOOD;
 	uint8_t *data = NULL, *scb = pdu;

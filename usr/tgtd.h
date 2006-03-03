@@ -10,7 +10,7 @@
 struct tgt_cmd_queue {
 	int active_cmd;
 	unsigned long state;
-	struct qelem queue;
+	struct list_head queue;
 };
 
 struct tgt_device {
@@ -19,7 +19,7 @@ struct tgt_device {
 	uint64_t size;
 	uint64_t lun;
 	char scsi_id[SCSI_ID_LEN];
-	struct qelem dlist;
+	struct list_head dlist;
 
 	struct tgt_cmd_queue cmd_queue;
 };
@@ -46,6 +46,6 @@ extern uint64_t scsi_get_devid(uint8_t *pdu);
 extern int scsi_cmd_perform(int host_no, uint8_t *pdu, int *len,
 			    uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
 			    uint8_t *try_map, uint64_t *offset, uint8_t *lun,
-			    struct tgt_device *dev, struct qelem *dev_list);
+			    struct tgt_device *dev, struct list_head *dev_list);
 
 #endif

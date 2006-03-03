@@ -25,7 +25,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <search.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
@@ -59,8 +58,8 @@ enum {
 };
 
 struct cmd {
-	struct qelem hlist;
-	struct qelem qlist;
+	struct list_head hlist;
+	struct list_head qlist;
 	uint32_t cid;
 	uint64_t uaddr;
 	uint32_t len;
@@ -80,9 +79,9 @@ struct target {
 
 	uint64_t max_device;
 	struct tgt_device **devt;
-	struct qelem device_list;
+	struct list_head device_list;
 
-	struct qelem cmd_hash_list[1 << HASH_ORDER];
+	struct list_head cmd_hash_list[1 << HASH_ORDER];
 	struct tgt_cmd_queue cmd_queue;
 };
 
@@ -145,14 +144,14 @@ static uint64_t try_mmap_device(int fd, uint64_t size)
 static void tgt_device_link(struct target *target, struct tgt_device *dev)
 {
 	struct tgt_device *ent;
-	struct qelem *pos;
+	struct list_head *pos;
 
 	list_for_each(pos, &target->device_list) {
 		ent = list_entry(pos, struct tgt_device, dlist);
 		if (dev->lun < ent->lun)
 			break;
 	}
-	insque(&dev->dlist, pos);
+	list_add(&dev->dlist, pos);
 }
 
 void tgt_cmd_queue_init(struct tgt_cmd_queue *q)
@@ -255,7 +254,7 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 
 	tgt_device_dir_delete(tid, dev_id);
 
-	remque(&device->dlist);
+	list_del(&device->dlist);
 
 	free(device);
 	return 0;
@@ -349,7 +348,7 @@ static void cmd_queue(struct tgt_event *ev_req, int nl_fd)
 	cmd->hostno = ev_req->k.cmd_req.host_no;
  	cmd->cid = ev_req->k.cmd_req.cid;
 	cmd->attribute = ev_req->k.cmd_req.attribute;
-	insque(&cmd->hlist, &target->cmd_hash_list[cmd_hashfn(cmd->cid)]);
+	list_add(&cmd->hlist, &target->cmd_hash_list[cmd_hashfn(cmd->cid)]);
 
 	dev_id = scsi_get_devid(ev_req->k.cmd_req.lun);
 	dprintf("%u %x %" PRIx64 "\n", cmd->cid, ev_req->k.cmd_req.scb[0],
@@ -382,14 +381,14 @@ static void cmd_queue(struct tgt_event *ev_req, int nl_fd)
 		memcpy(cmd->scb, ev_req->k.cmd_req.scb, sizeof(cmd->scb));
 		memcpy(cmd->lun, ev_req->k.cmd_req.lun, sizeof(cmd->lun));
 		cmd->len = ev_req->k.cmd_req.data_len;
-		insque(&cmd->qlist, q->queue.q_back);
+		list_add_tail(&cmd->qlist, &q->queue);
 	}
 }
 
 static struct cmd *find_cmd(struct target *target, uint32_t cid)
 {
 	struct cmd *cmd;
-	struct qelem *head = &target->cmd_hash_list[cmd_hashfn(cid)];
+	struct list_head *head = &target->cmd_hash_list[cmd_hashfn(cid)];
 
 	list_for_each_entry(cmd, head, hlist) {
 		if (cmd->cid == cid)
@@ -435,7 +434,7 @@ static void cmd_done(struct tgt_event *ev)
 		eprintf("Cannot find cmd %d %u\n", host_no, cid);
 		return;
 	}
-	remque(&cmd->hlist);
+	list_del(&cmd->hlist);
 
 	do_munmap = cmd->mmapped;
 	if (do_munmap) {
