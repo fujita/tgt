@@ -11,15 +11,25 @@
 #define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
 #endif
 
+#define container_of(ptr, type, member) ({			\
+        const typeof( ((type *)0)->member ) *__mptr = (ptr);	\
+        (type *)( (char *)__mptr - offsetof(type,member) );})
+
+struct qelem {
+	struct qelem *q_forw;
+	struct qelem *q_back;
+};
+
 #define LIST_HEAD_INIT(name) { &(name), &(name) }
 
 #define INIT_LIST_HEAD(ptr) do { \
 	(ptr)->q_forw = (ptr); (ptr)->q_back = (ptr); \
 } while (0)
 
-#define container_of(ptr, type, member) ({			\
-        const typeof( ((type *)0)->member ) *__mptr = (ptr);	\
-        (type *)( (char *)__mptr - offsetof(type,member) );})
+static inline int list_empty(const struct qelem *head)
+{
+	return head->q_forw == head;
+}
 
 #define list_entry(ptr, type, member) \
 	container_of(ptr, type, member)
@@ -40,7 +50,3 @@
 
 #define pgcnt(size, offset)	((((size) + ((offset) & ~PAGE_MASK)) + PAGE_SIZE - 1) >> PAGE_SHIFT)
 
-struct qelem {
-	struct qelem *q_forw;
-	struct qelem *q_back;
-};

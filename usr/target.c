@@ -277,17 +277,54 @@ static int tgt_kspace_send_cmd(int nl_fd, struct cmd *cmd, int result, int rw)
 			  NLMSG_SPACE(sizeof(*ev_res)));
 }
 
-static int cmd_pre_perform(struct tgt_cmd_queue *queue, int attribute)
+static int cmd_pre_perform(struct tgt_cmd_queue *q, struct cmd *cmd)
 {
-	return 1;
+	int enabled = 0;
+
+	if (cmd->attribute != MSG_SIMPLE_TAG) {
+		eprintf("non simple attribute %u %x\n", cmd->cid, cmd->attribute);
+		cmd->attribute = MSG_SIMPLE_TAG;
+	}
+
+	switch (cmd->attribute) {
+	case MSG_SIMPLE_TAG:
+		if (!(q->state & (1UL << TGT_QUEUE_BLOCKED)))
+			enabled = 1;
+		break;
+	case MSG_ORDERED_TAG:
+		if (!(q->state & (1UL << TGT_QUEUE_BLOCKED)) &&
+		    !q->active_cmd)
+			enabled = 1;
+		break;
+	case MSG_HEAD_TAG:
+		enabled = 1;
+		break;
+	default:
+		eprintf("unknown command attribute %x\n", cmd->attribute);
+		cmd->attribute = MSG_HEAD_TAG;
+		if (!(q->state & (1UL << TGT_QUEUE_BLOCKED)) &&
+		    !q->active_cmd)
+			enabled = 1;
+	}
+
+	return enabled;
 }
 
-static void cmd_post_perform(struct cmd *cmd, unsigned long uaddr,
+static void cmd_post_perform(struct tgt_cmd_queue *q, struct cmd *cmd,
+			     unsigned long uaddr,
 			     int len, uint8_t mmapped)
 {
 	cmd->uaddr = uaddr;
 	cmd->len = len;
 	cmd->mmapped = mmapped;
+
+	q->active_cmd++;
+	switch(cmd->attribute) {
+	case MSG_ORDERED_TAG:
+	case MSG_HEAD_TAG:
+		q->state |= (1UL << TGT_QUEUE_BLOCKED);
+		break;
+	}
 }
 
 static void cmd_queue(struct tgt_event *ev_req, int nl_fd)
@@ -311,6 +348,7 @@ static void cmd_queue(struct tgt_event *ev_req, int nl_fd)
 	cmd = malloc(sizeof(*cmd));
 	cmd->hostno = ev_req->k.cmd_req.host_no;
  	cmd->cid = ev_req->k.cmd_req.cid;
+	cmd->attribute = ev_req->k.cmd_req.attribute;
 	insque(&cmd->hlist, &target->cmd_hash_list[cmd_hashfn(cmd->cid)]);
 
 	dev_id = scsi_get_devid(ev_req->k.cmd_req.lun);
@@ -324,7 +362,7 @@ static void cmd_queue(struct tgt_event *ev_req, int nl_fd)
 	} else
 		q = &target->cmd_queue;
 
-	enabled = cmd_pre_perform(q, ev_req->k.cmd_req.attribute);
+	enabled = cmd_pre_perform(q, cmd);
 
 	if (enabled) {
 		result = scsi_cmd_perform(cmd->hostno, ev_req->k.cmd_req.scb,
@@ -333,8 +371,7 @@ static void cmd_queue(struct tgt_event *ev_req, int nl_fd)
 					  ev_req->k.cmd_req.lun, cmd->dev,
 					  &target->device_list);
 
-		cmd_post_perform(cmd, uaddr, len, mmapped);
-		q->active_cmd++;
+		cmd_post_perform(q, cmd, uaddr, len, mmapped);
 
 		dprintf("%u %x %lx %" PRIu64 " %d\n",
 			cmd->cid, ev_req->k.cmd_req.scb[0], uaddr,
@@ -345,7 +382,7 @@ static void cmd_queue(struct tgt_event *ev_req, int nl_fd)
 		memcpy(cmd->scb, ev_req->k.cmd_req.scb, sizeof(cmd->scb));
 		memcpy(cmd->lun, ev_req->k.cmd_req.lun, sizeof(cmd->lun));
 		cmd->len = ev_req->k.cmd_req.data_len;
-		insque(&cmd->qlist, q);
+		insque(&cmd->qlist, q->queue.q_back);
 	}
 }
 
@@ -400,13 +437,6 @@ static void cmd_done(struct tgt_event *ev)
 	}
 	remque(&cmd->hlist);
 
-	if (cmd->dev)
-		q = &cmd->dev->cmd_queue;
-	else
-		q = &target->cmd_queue;
-
-	q->active_cmd--;
-
 	do_munmap = cmd->mmapped;
 	if (do_munmap) {
 		if (!cmd->dev) {
@@ -420,6 +450,18 @@ static void cmd_done(struct tgt_event *ev)
 	err = scsi_cmd_done(do_munmap, !cmd->mmapped, cmd->uaddr, cmd->len);
 
 	dprintf("%d %" PRIx64 " %u %d\n", cmd->mmapped, cmd->uaddr, cmd->len, err);
+
+	if (cmd->dev)
+		q = &cmd->dev->cmd_queue;
+	else
+		q = &target->cmd_queue;
+
+	q->active_cmd--;
+	switch (cmd->attribute) {
+	case MSG_ORDERED_TAG:
+	case MSG_HEAD_TAG:
+		q->state &= ~(1UL << TGT_QUEUE_BLOCKED);
+	}
 
 	free(cmd);
 }
