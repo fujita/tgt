@@ -11,7 +11,7 @@
 extern int tgt_target_dir_create(int tid);
 extern int tgt_target_dir_delete(int tid);
 
-extern int tgt_device_dir_create(int tid, uint64_t dev_id, int dev_fd, uint64_t size);
+extern int tgt_device_dir_create(int tid, uint64_t dev_id);
 extern int tgt_device_dir_delete(int tid, uint64_t dev_id);
 
 #endif

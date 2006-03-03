@@ -131,46 +131,14 @@ int tgt_target_dir_delete(int tid)
 	return tgt_dir(DELETE, TGT_TARGET_SYSFSDIR "/target%d", tid);
 }
 
-int tgt_device_dir_create(int tid, uint64_t dev_id, int dev_fd, uint64_t size)
+int tgt_device_dir_create(int tid, uint64_t dev_id)
 {
-	int err;
-
-	err = tgt_dir(CREATE, TGT_DEVICE_SYSFSDIR
-		      "/device%d:%" PRIu64, tid, dev_id);
-	if (err < 0)
-		return err;
-
-	err = tgt_file(CREATE, TGT_DEVICE_SYSFSDIR
-			    "/device%d:%" PRIu64 "/fd", tid, dev_id);
-	if (err < 0)
-		return err;
-	err = tgt_write(err, "%d", dev_fd);
-	if (err < 0)
-		return err;
-
-	err = tgt_file(CREATE, TGT_DEVICE_SYSFSDIR
-		       "/device%d:%" PRIu64 "/size", tid, dev_id);
-	if (err < 0)
-		return err;
-	err = write(err, "%" PRIu64, size);
-	if (err < 0)
-		return err;
-
-	return 0;
+	return tgt_dir(CREATE, TGT_DEVICE_SYSFSDIR
+		       "/device%d:%" PRIu64, tid, dev_id);
 }
 
 int tgt_device_dir_delete(int tid, uint64_t dev_id)
 {
-	int err;
-
-	err = tgt_file(DELETE, TGT_DEVICE_SYSFSDIR
-		       "/device%d:%" PRIu64 "/fd", tid, dev_id);
-
-	err = tgt_file(DELETE, TGT_DEVICE_SYSFSDIR
-		       "/device%d:%" PRIu64 "/size", tid, dev_id);
-
-	err = tgt_dir(DELETE, TGT_DEVICE_SYSFSDIR
-		      "/device%d:%" PRIu64, tid, dev_id);
-
-	return 0;
+	return tgt_dir(DELETE, TGT_DEVICE_SYSFSDIR
+		       "/device%d:%" PRIu64, tid, dev_id);
 }

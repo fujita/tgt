@@ -170,7 +170,7 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 		return err;
 	}
 
-	err = tgt_device_dir_create(tid, dev_id, dev_fd, size);
+	err = tgt_device_dir_create(tid, dev_id);
 	if (err < 0)
 		goto close_dev_fd;
 
