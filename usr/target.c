@@ -31,7 +31,7 @@
 #include <sys/socket.h>
 
 #include <linux/fs.h>
-#define	BITS_PER_LONG	32
+#define BITS_PER_LONG (ULONG_MAX == 0xFFFFFFFFUL ? 32 : 64)
 #include <linux/hash.h>
 #include <linux/netlink.h>
 #include <scsi/scsi_tgt_if.h>
