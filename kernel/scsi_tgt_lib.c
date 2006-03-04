@@ -87,9 +87,16 @@ static void scsi_tgt_cmd_destroy(void *data)
 {
 	struct scsi_cmnd *cmd = data;
 	struct scsi_tgt_cmd *tcmd = cmd->request->end_io_data;
+	struct scsi_tgt_queuedata *qdata = cmd->request->q->queuedata;
+	unsigned long flags;
 
 	dprintk("cmd %p %d %lu\n", cmd, cmd->sc_data_direction,
 		rq_data_dir(cmd->request));
+
+	spin_lock_irqsave(&qdata->cmd_hash_lock, flags);
+	list_del(&tcmd->hash_list);
+	spin_unlock_irqrestore(&qdata->cmd_hash_lock, flags);
+
 	/*
 	 * We must set rq->flags here because bio_map_user and
 	 * blk_rq_bio_prep ruined ti.
@@ -491,7 +498,7 @@ static int scsi_tgt_copy_sense(struct scsi_cmnd *cmd, unsigned long uaddr,
 	return 0;
 }
 
-static struct request *tgt_cmd_hash_end(struct request_queue *q, u32 cid)
+static struct request *tgt_cmd_hash_lookup(struct request_queue *q, u32 cid)
 {
 	struct scsi_tgt_queuedata *qdata = q->queuedata;
 	struct request *rq = NULL;
@@ -504,7 +511,6 @@ static struct request *tgt_cmd_hash_end(struct request_queue *q, u32 cid)
 	list_for_each_entry(tcmd, head, hash_list) {
 		if (tcmd->rq->tag == cid) {
 			rq = tcmd->rq;
-			list_del(&tcmd->hash_list);
 			break;
 		}
 	}
@@ -532,7 +538,7 @@ int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len,
 	}
 	scsi_host_put(shost);
 
-	rq = tgt_cmd_hash_end(shost->uspace_req_q, cid);
+	rq = tgt_cmd_hash_lookup(shost->uspace_req_q, cid);
 	if (!rq) {
 		printk(KERN_ERR "Could not find cid %u\n", cid);
 		err = -EINVAL;
