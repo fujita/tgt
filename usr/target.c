@@ -55,6 +55,7 @@
 
 enum {
 	TGT_QUEUE_BLOCKED,
+	TGT_QUEUE_DELETED,
 };
 
 struct cmd {
@@ -87,6 +88,28 @@ struct target {
 
 static struct target *tgtt[MAX_NR_TARGET];
 static struct target *hostt[MAX_NR_HOST];
+
+#define QUEUE_FNS(bit, name)						\
+static inline void set_queue_##name(struct tgt_cmd_queue *q)		\
+{									\
+	(q)->state |= (1UL << TGT_QUEUE_##bit);				\
+}									\
+static inline void clear_queue_##name(struct tgt_cmd_queue *q)		\
+{									\
+	(q)->state &= ~(1UL << TGT_QUEUE_##bit);			\
+}									\
+static inline int queue_##name(const struct tgt_cmd_queue *q)		\
+{									\
+	return ((q)->state & (1UL << TGT_QUEUE_##bit));			\
+}
+
+static inline int queue_active(const struct tgt_cmd_queue *q)		\
+{									\
+	return ((q)->active_cmd);					\
+}
+
+QUEUE_FNS(BLOCKED, blocked)
+QUEUE_FNS(DELETED, deleted)
 
 static struct target *target_get(int tid)
 {
@@ -287,12 +310,11 @@ static int cmd_pre_perform(struct tgt_cmd_queue *q, struct cmd *cmd)
 
 	switch (cmd->attribute) {
 	case MSG_SIMPLE_TAG:
-		if (!(q->state & (1UL << TGT_QUEUE_BLOCKED)))
+		if (!queue_blocked(q))
 			enabled = 1;
 		break;
 	case MSG_ORDERED_TAG:
-		if (!(q->state & (1UL << TGT_QUEUE_BLOCKED)) &&
-		    !q->active_cmd)
+		if (!queue_blocked(q) && !queue_active(q))
 			enabled = 1;
 		break;
 	case MSG_HEAD_TAG:
@@ -300,9 +322,8 @@ static int cmd_pre_perform(struct tgt_cmd_queue *q, struct cmd *cmd)
 		break;
 	default:
 		eprintf("unknown command attribute %x\n", cmd->attribute);
-		cmd->attribute = MSG_HEAD_TAG;
-		if (!(q->state & (1UL << TGT_QUEUE_BLOCKED)) &&
-		    !q->active_cmd)
+		cmd->attribute = MSG_ORDERED_TAG;
+		if (!queue_blocked(q) && !queue_active(q))
 			enabled = 1;
 	}
 
@@ -321,7 +342,7 @@ static void cmd_post_perform(struct tgt_cmd_queue *q, struct cmd *cmd,
 	switch (cmd->attribute) {
 	case MSG_ORDERED_TAG:
 	case MSG_HEAD_TAG:
-		q->state |= (1UL << TGT_QUEUE_BLOCKED);
+		set_queue_blocked(q);
 		break;
 	}
 }
@@ -500,7 +521,8 @@ static void cmd_done(struct tgt_event *ev, int nl_fd)
 	switch (cmd->attribute) {
 	case MSG_ORDERED_TAG:
 	case MSG_HEAD_TAG:
-		q->state &= ~(1UL << TGT_QUEUE_BLOCKED);
+		clear_queue_blocked(q);
+		break;
 	}
 
 	free(cmd);
