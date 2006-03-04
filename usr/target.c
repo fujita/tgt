@@ -255,8 +255,6 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 	struct target *target;
 	struct tgt_device *device;
 
-	/* TODO: check whether the device has flying commands. */
-
 	dprintf("%u %" PRIu64 "\n", tid, dev_id);
 
 	target = target_get(tid);
@@ -268,6 +266,9 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 		eprintf("device %" PRIu64 " not found\n", dev_id);
 		return -EINVAL;
 	}
+
+	if (!list_empty(&device->cmd_queue.queue))
+		return -EBUSY;
 
 	target->devt[dev_id] = NULL;
 	if (device->addr)
