@@ -640,5 +640,26 @@ free_target:
 
 int tgt_target_destroy(int tid)
 {
+	struct target *target = target_get(tid);
+
+	if (!target)
+		return -ENOENT;
+
+	if (!list_empty(&target->device_list)) {
+		eprintf("target %d still has devices\n", tid);
+		return -EBUSY;
+	}
+
+	if (!list_empty(&target->cmd_queue.queue))
+		return -EBUSY;
+
+	free(target->devt);
+
+	tgt_target_dir_attr_delete(tid, "hostno");
+	tgt_target_dir_delete(tid);
+
+	tgtt[tid] = NULL;
+	free(target);
+
 	return 0;
 }
