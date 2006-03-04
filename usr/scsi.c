@@ -676,6 +676,7 @@ int scsi_cmd_perform(int host_no, uint8_t *pdu, int *len,
 		if (result == SAM_STAT_GOOD)
 			*try_map = 1;
 		else {
+			*rw = READ;
 			*offset = 0;
 			if (!data)
 				data = valloc(PAGE_SIZE);
