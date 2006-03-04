@@ -530,6 +530,7 @@ int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len,
 		printk(KERN_ERR "Could not find host no %d\n", host_no);
 		return -EINVAL;
 	}
+	scsi_host_put(shost);
 
 	rq = tgt_cmd_hash_end(shost->uspace_req_q, cid);
 	if (!rq) {
@@ -578,7 +579,6 @@ int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len,
 	err = scsi_tgt_transfer_data(cmd);
 
 done:
-	scsi_host_put(shost);
 	return err;
 }
 
