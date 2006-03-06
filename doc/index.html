@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+
+<head>
+<meta name="author" content="FUJITA Tomonori and Mike Christie" />
+<meta name="copyright" content="Copyright (C) 2006 FUJITA Tomonori and Mike Christie" />
+<meta name="description" content="Use all information at this site only at your own responsibility. I am not taking any responsibility for it on your behalf." />
+<meta name="robots" content="INDEX,FOLLOW" />
+<title>Linux SCSI target framework (tgt) project</title>
+<style type =" text/css">
+body { margin:20px; }
+a:link {
+text-decoration: none;
+}
+
+a:visited {
+text-decoration: none;
+}
+
+a:hover {
+text-decoration: none;
+}
+</style>
+</head>
+
+<body>
+
+<div class="header">
+<div class="title"><h1>Linux SCSI target framework (tgt) project</h1></div>
+</div>
+
+<div class="body">
+<div class="ex">
+<div>
+<p>
+Linux target framework (tgt) aims to simplify various SCSI target driver
+(iSCSI, Fibre Channel, RDMA, etc) creation and maintenance. Our key goal
+is implementing a great portion of tgt in user space.
+</p>
+
+<p>
+The tgt code (kernel-space and user-space) is available on <a href="http://developer.berlios.de/svn/?group_id=4492">the subversion repository</a>. We will move the kernel-space code to <a href="http://www.kernel.org/git/?p=linux/kernel/git/jejb/scsi-target-2.6.git;a=summary">scsi-target git tree</a> shortly.
+</p>
+
+</div>
+
+
+<div>
+<p>
+<strong>Target drivers</strong>
+</p>
+
+<ul>
+
+<li>
+<p>
+Virtual SCSI target driver in IBM pSeries
+</p>
+</li>
+
+<li>
+<p>
+Qlogic qla2xxx FC target driver (not yet)
+</p>
+</li>
+
+<li>
+<p>
+LSI logic fusion FC target driver (not yet)
+</p>
+</li>
+
+<li>
+<p>
+iSCSI software target driver for Ethernet NICs (not yet)
+</p>
+</li>
+
+<li>
+<p>
+Qlogic qla4xxx iSCSI target driver (not yet)
+</p>
+</li>
+
+</ul>
+</div>
+
+
+<div>
+<p>
+<strong>TODO</strong>
+</p>
+
+<ul>
+
+<li>
+<p>
+Writing target drivers
+</p>
+</li>
+
+<li>
+<p>
+Fix out-of-memory bugs
+</p>
+</li>
+
+<li>
+<p>
+Implement TMF (task management function)
+</p>
+</li>
+
+<li>
+<p>
+Implement Reserve/Release command support
+</p>
+</li>
+
+</ul>
+</div>
+
+
+<hr />
+
+<div>
+<img style="float:right; vertical-align:middle;" width="124px" height="32px" border="0" alt="BerliOS Developer Logo" src="http://developer.berlios.de/bslogo.php?group_id=3467">
+Linux target framework project was started and has been maintained by Mike Christie (michaelc at cs.wisc.edu) and FUJITA Tomonori (tomof at acm.org).
+<br />
+$Date:$
+</div>
+
+</div>
+</div>
+</body>
+</html>
