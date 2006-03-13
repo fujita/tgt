@@ -40,7 +40,7 @@ extern int tgt_device_create(int tid, uint64_t lun, char *path);
 extern int tgt_device_destroy(int tid, uint64_t lun);
 extern int tgt_target_create(int tid);
 extern int tgt_target_destroy(int tid);
-extern int tgt_target_bind(int tid, int host_no);
+extern int tgt_target_bind(int tid, int host_no, int lid);
 
 extern uint64_t scsi_get_devid(uint8_t *pdu);
 extern int scsi_cmd_perform(int host_no, uint8_t *pdu, int *len,

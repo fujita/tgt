@@ -77,6 +77,7 @@ struct cmd {
 
 struct target {
 	int tid;
+	int lid;
 
 	uint64_t max_device;
 	struct tgt_device **devt;
@@ -562,7 +563,7 @@ void nl_event_handle(int nl_fd)
 	}
 }
 
-int tgt_target_bind(int tid, int host_no)
+int tgt_target_bind(int tid, int host_no, int lid)
 {
 	int err;
 
@@ -570,6 +571,7 @@ int tgt_target_bind(int tid, int host_no)
 		eprintf("target is not found %d\n", tid);
 		return -EINVAL;
 	}
+	tgtt[tid]->lid = lid;
 
 	if (hostt[host_no]) {
 		eprintf("host is already binded %d %d\n", tid, host_no);

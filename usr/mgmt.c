@@ -78,7 +78,7 @@ static int target_mgmt(struct tgtadm_req *req, char *params,
 		err = tgt_target_destroy(req->tid);
 		break;
 	case OP_BIND:
-		err = tgt_target_bind(req->tid, req->host_no);
+		err = tgt_target_bind(req->tid, req->host_no, req->typeid);
 		break;
 	default:
 		break;
