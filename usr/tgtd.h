@@ -42,8 +42,8 @@ extern int tgt_target_create(int tid);
 extern int tgt_target_destroy(int tid);
 extern int tgt_target_bind(int tid, int host_no, int lid);
 
-extern uint64_t scsi_get_devid(uint8_t *pdu);
-extern int scsi_cmd_perform(int host_no, uint8_t *pdu, int *len,
+extern uint64_t scsi_get_devid(int lid, uint8_t *pdu);
+extern int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu, int *len,
 			    uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
 			    uint8_t *try_map, uint64_t *offset, uint8_t *lun,
 			    struct tgt_device *dev, struct list_head *dev_list);

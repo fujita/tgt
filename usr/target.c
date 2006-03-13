@@ -373,7 +373,7 @@ static void cmd_queue(struct tgt_event *ev_req, int nl_fd)
 	cmd->attribute = ev_req->k.cmd_req.attribute;
 	list_add(&cmd->hlist, &target->cmd_hash_list[cmd_hashfn(cmd->cid)]);
 
-	dev_id = scsi_get_devid(ev_req->k.cmd_req.lun);
+	dev_id = scsi_get_devid(target->lid, ev_req->k.cmd_req.lun);
 	dprintf("%u %x %" PRIx64 "\n", cmd->cid, ev_req->k.cmd_req.scb[0],
 		dev_id);
 
@@ -387,7 +387,8 @@ static void cmd_queue(struct tgt_event *ev_req, int nl_fd)
 	enabled = cmd_pre_perform(q, cmd);
 
 	if (enabled) {
-		result = scsi_cmd_perform(cmd->hostno, ev_req->k.cmd_req.scb,
+		result = scsi_cmd_perform(target->lid,
+					  cmd->hostno, ev_req->k.cmd_req.scb,
 					  &len, ev_req->k.cmd_req.data_len,
 					  &uaddr, &rw, &mmapped, &offset,
 					  ev_req->k.cmd_req.lun, cmd->dev,
@@ -432,7 +433,8 @@ static void post_cmd_done(int nl_fd, struct tgt_cmd_queue *q)
 				exit(1);
 			}
 			dprintf("perform %u %x\n", cmd->cid, cmd->attribute);
-			result = scsi_cmd_perform(cmd->hostno, cmd->scb,
+			result = scsi_cmd_perform(target->lid,
+						  cmd->hostno, cmd->scb,
 						  &len,
 						  cmd->len,
 						  &uaddr,

@@ -7,7 +7,7 @@
 #define	DL_FN_POLL_EVENT	1
 #define	DL_FN_IPC_MGMT		2
 #define	DL_FN_SCSI_INQUIRY	3
-#define	DL_FN_SCSI_REPORT_LUN	4
+#define	DL_FN_SCSI_REPORT_LUNS	4
 #define	DL_FN_SCSI_LUN_TO_INT	5
 #define	DL_FN_END		6
 

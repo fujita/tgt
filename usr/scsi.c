@@ -249,8 +249,8 @@ static int ibmvstgt_inquiry(int host_no, uint64_t lun, uint8_t *data)
 	return sizeof(*id);
 }
 
-static int inquiry(struct tgt_device *dev, int host_no, uint8_t *lun_buf,
-		   uint8_t *scb, uint8_t *data, int *len)
+static int __inquiry(struct tgt_device *dev, int host_no, uint8_t *lun_buf,
+		     uint8_t *scb, uint8_t *data, int *len)
 {
 	int result = SAM_STAT_CHECK_CONDITION;
 
@@ -336,6 +336,14 @@ err:
 	return SAM_STAT_CHECK_CONDITION;
 }
 
+static int inquiry(int lid, struct tgt_device *dev, int host_no,
+		   uint8_t *lun_buf, uint8_t *scb, uint8_t *data, int *len)
+{
+	typeof(__inquiry) *fn;
+	fn = dl_fn(dlinfo, lid, DL_FN_SCSI_INQUIRY) ? : __inquiry;
+	return fn(dev, host_no, lun_buf, scb, data, len);
+}
+
 uint64_t make_lun(unsigned int bus, unsigned int target, unsigned int lun)
 {
 	uint16_t result = (0x8000 |
@@ -345,8 +353,8 @@ uint64_t make_lun(unsigned int bus, unsigned int target, unsigned int lun)
 	return ((uint64_t) result) << 48;
 }
 
-static int report_luns(struct list_head *dev_list, uint8_t *lun_buf, uint8_t *scb,
-		       uint8_t *p, int *len)
+static int __report_luns(struct list_head *dev_list, uint8_t *lun_buf,
+			 uint8_t *scb, uint8_t *p, int *len)
 {
 	struct tgt_device *dev;
 	uint64_t lun, *data = (uint64_t *) p;
@@ -403,6 +411,14 @@ done:
 	*len = min(oalen, nr_luns * 8 + 8);
 
 	return result;
+}
+
+static int report_luns(int lid, struct list_head *dev_list, uint8_t *lun_buf,
+		       uint8_t *scb, uint8_t *p, int *len)
+{
+	typeof(__report_luns) *fn;
+	fn = dl_fn(dlinfo, lid, DL_FN_SCSI_REPORT_LUNS) ? : __report_luns;
+	return fn(dev_list, lun_buf, scb, p, len);
 }
 
 static int read_capacity(struct tgt_device *dev, uint8_t *scb, uint8_t *p, int *len)
@@ -548,7 +564,7 @@ static inline int mmap_cmd_init(uint8_t *scb, uint8_t *rw)
 
 #define        TGT_INVALID_DEV_ID      ~0ULL
 
-uint64_t scsi_get_devid(uint8_t *p)
+static uint64_t __scsi_get_devid(uint8_t *p)
 {
 	uint64_t lun = TGT_INVALID_DEV_ID;
 
@@ -577,7 +593,14 @@ uint64_t scsi_get_devid(uint8_t *p)
 	return lun;
 }
 
-int scsi_cmd_perform(int host_no, uint8_t *pdu, int *len,
+uint64_t scsi_get_devid(int lid, uint8_t *p)
+{
+	typeof(__scsi_get_devid) *fn;
+	fn = dl_fn(dlinfo, lid, DL_FN_SCSI_LUN_TO_INT) ? : __scsi_get_devid;
+	return fn(p);
+}
+
+int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu, int *len,
 		     uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
 		     uint8_t *try_map, uint64_t *offset, uint8_t *lun_buf,
 		     struct tgt_device *dev, struct list_head *dev_list)
@@ -609,10 +632,10 @@ int scsi_cmd_perform(int host_no, uint8_t *pdu, int *len,
 
 	switch (scb[0]) {
 	case INQUIRY:
-		result = inquiry(dev, host_no, lun_buf, scb, data, len);
+		result = inquiry(lid, dev, host_no, lun_buf, scb, data, len);
 		break;
 	case REPORT_LUNS:
-		result = report_luns(dev_list, lun_buf, scb, data, len);
+		result = report_luns(lid, dev_list, lun_buf, scb, data, len);
 		break;
 	case READ_CAPACITY:
 		result = read_capacity(dev, scb, data, len);
