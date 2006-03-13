@@ -72,7 +72,7 @@ static int target_mgmt(struct tgtadm_req *req, char *params,
 
 	switch (req->op) {
 	case OP_NEW:
-		err = tgt_target_create(req->typeid);
+		err = tgt_target_create(req->tid);
 		break;
 	case OP_DELETE:
 		err = tgt_target_destroy(req->tid);
