@@ -53,7 +53,7 @@ static char *dl_fn_table[] = {
 	"poll_event",
 	"ipc_mgmt",
 	"scsi_inquiry",
-	"scsi_report_lun",
+	"scsi_report_luns",
 	"scsi_lun_to_int",
 };
 

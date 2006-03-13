@@ -48,4 +48,6 @@ extern int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu, int *len,
 			    uint8_t *try_map, uint64_t *offset, uint8_t *lun,
 			    struct tgt_device *dev, struct list_head *dev_list);
 
+extern int sense_data_build(uint8_t *data, uint8_t res_code, uint8_t key,
+			    uint8_t ascode, uint8_t ascodeq);
 #endif

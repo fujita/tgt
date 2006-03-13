@@ -29,12 +29,8 @@
 
 #define BLK_SHIFT	9
 
-#define GETTARGET(x) ((int)((((uint64_t)(x)) >> 56) & 0x003f))
-#define GETBUS(x) ((int)((((uint64_t)(x)) >> 53) & 0x0007))
-#define GETLUN(x) ((int)((((uint64_t)(x)) >> 48) & 0x001f))
-
-static int sense_data_build(uint8_t *data, uint8_t res_code, uint8_t key,
-		      uint8_t ascode, uint8_t ascodeq)
+int sense_data_build(uint8_t *data, uint8_t res_code, uint8_t key,
+		     uint8_t ascode, uint8_t ascodeq)
 {
 	int len = 6;
 
@@ -171,84 +167,6 @@ static int mode_sense(struct tgt_device *dev, uint8_t *scb, uint8_t *data, int *
 #define PRODUCT_ID	"VIRTUAL-DISK"
 #define PRODUCT_REV	"0"
 
-struct inquiry_data {
-	uint8_t qual_type;
-	uint8_t rmb_reserve;
-	uint8_t version;
-	uint8_t aerc_naca_hisup_format;
-	uint8_t addl_len;
-	uint8_t sccs_reserved;
-	uint8_t bque_encserv_vs_multip_mchngr_reserved;
-	uint8_t reladr_reserved_linked_cmdqueue_vs;
-	char vendor[8];
-	char product[16];
-	char revision[4];
-	char vendor_specific[20];
-	char reserved1[2];
-	char version_descriptor[16];
-	char reserved2[22];
-	char unique[158];
-};
-
-#define	IBMVSTGT_HOSTDIR	"/sys/class/scsi_host/host"
-
-static int ibmvstgt_inquiry(int host_no, uint64_t lun, uint8_t *data)
-{
-	struct inquiry_data *id = (struct inquiry_data *) data;
-	char system_id[256], path[256], buf[32];
-	int fd, err, partition_number;
-	unsigned int unit_address;
-
-	snprintf(path, sizeof(path), IBMVSTGT_HOSTDIR "%d/system_id", host_no);
-	fd = open(path, O_RDONLY);
-	memset(system_id, 0, sizeof(system_id));
-	err = read(fd, system_id, sizeof(system_id));
-	close(fd);
-
-	snprintf(path, sizeof(path), IBMVSTGT_HOSTDIR "%d/partition_number",
-		 host_no);
-	fd = open(path, O_RDONLY);
-	err = read(fd, buf, sizeof(buf));
-	partition_number = strtoul(buf, NULL, 10);
-	close(fd);
-
-	snprintf(path, sizeof(path), IBMVSTGT_HOSTDIR "%d/unit_address",
-		 host_no);
-	fd = open(path, O_RDONLY);
-	err = read(fd, buf, sizeof(buf));
-	unit_address = strtoul(buf, NULL, 0);
-	close(fd);
-
-	dprintf("%d %s %d %x %" PRIx64 "\n",
-		host_no, system_id, partition_number, unit_address, lun);
-
-	id->qual_type = TYPE_DISK;
-	id->rmb_reserve = 0x00;
-	id->version = 0x84;	/* ISO/IE		  */
-	id->aerc_naca_hisup_format = 0x22;/* naca & fmt 0x02 */
-	id->addl_len = sizeof(*id) - 4;
-	id->bque_encserv_vs_multip_mchngr_reserved = 0x00;
-	id->reladr_reserved_linked_cmdqueue_vs = 0x02;/*CMDQ*/
-	memcpy(id->vendor, "IBM	    ", 8);
-	/* Don't even ask about the next bit.  AIX uses
-	 * hardcoded device naming to recognize device types
-	 * and their client won't  work unless we use VOPTA and
-	 * VDASD.
-	 */
-	memcpy(id->product, "VDASD blkdev    ", 16);
-	memcpy(id->revision, "0001", 4);
-	snprintf(id->unique,sizeof(id->unique),
-		 "IBM-VSCSI-%s-P%d-%x-%d-%d-%d\n",
-		 system_id,
-		 partition_number,
-		 unit_address,
-		 GETBUS(lun),
-		 GETTARGET(lun),
-		 GETLUN(lun));
-
-	return sizeof(*id);
-}
-
 static int __inquiry(struct tgt_device *dev, int host_no, uint8_t *lun_buf,
 		     uint8_t *scb, uint8_t *data, int *len)
 {
@@ -260,8 +178,6 @@ static int __inquiry(struct tgt_device *dev, int host_no, uint8_t *lun_buf,
 	dprintf("%x %x\n", scb[1], scb[2]);
 
 	if (!(scb[1] & 0x3)) {
-		*len = ibmvstgt_inquiry(host_no, *((uint64_t *) lun_buf), data);
-#if 0
 		data[2] = 4;
 		data[3] = 0x42;
 		data[4] = 59;
@@ -280,7 +196,6 @@ static int __inquiry(struct tgt_device *dev, int host_no, uint8_t *lun_buf,
 		data[62] = 0x03;
 		data[63] = 0x00;
 		*len = 64;
-#endif
 		result = SAM_STAT_GOOD;
 	} else if (scb[1] & 0x2) {
 		/* CmdDt bit is set */
@@ -344,15 +259,6 @@ static int inquiry(int lid, struct tgt_device *dev, int host_no,
 	return fn(dev, host_no, lun_buf, scb, data, len);
 }
 
-uint64_t make_lun(unsigned int bus, unsigned int target, unsigned int lun)
-{
-	uint16_t result = (0x8000 |
-			   ((target & 0x003f) << 8) |
-			   ((bus & 0x0007) << 5) |
-			   (lun & 0x001f));
-	return ((uint64_t) result) << 48;
-}
-
 static int __report_luns(struct list_head *dev_list, uint8_t *lun_buf,
 			 uint8_t *scb, uint8_t *p, int *len)
 {
@@ -373,30 +279,16 @@ static int __report_luns(struct list_head *dev_list, uint8_t *lun_buf,
 	alen &= ~(8 - 1);
 	oalen = alen;
 
-	if ((*((uint64_t *) lun_buf))) {
-		dprintf("Another sick hack for ibmvstgt\n");
-		nr_luns = 1;
-		goto done;
-	}
-
 	alen -= 8;
 	rbuflen -= 8; /* FIXME */
 	idx = 1;
 	nr_luns = 0;
 
-	/* ibmvstgt hack */
-	idx = 2;
-	nr_luns = 1;
-
 	list_for_each_entry(dev, dev_list, dlist) {
 		lun = dev->lun;
 
-		/* ibmvstgt hack */
-/* 		lun = ((lun > 0xff) ? (0x1 << 30) : 0) | ((0x3ff & lun) << 16); */
-		lun = make_lun(0, lun & 0x003f, 0);
-		dprintf("%" PRIx64 "\n", lun);
-/* 		data[idx++] = __cpu_to_be64(lun << 32); */
-		data[idx++] = __cpu_to_be64(lun);
+		lun = ((lun > 0xff) ? (0x1 << 30) : 0) | ((0x3ff & lun) << 16);
+		data[idx++] = __cpu_to_be64(lun << 32);
 		if (!(alen -= 8))
 			break;
 		if (!(rbuflen -= 8)) {
@@ -406,7 +298,6 @@ static int __report_luns(struct list_head *dev_list, uint8_t *lun_buf,
 		nr_luns++;
 	}
 
-done:
 	*((uint32_t *) data) = __cpu_to_be32(nr_luns * 8);
 	*len = min(oalen, nr_luns * 8 + 8);
 
@@ -567,15 +458,6 @@ static inline int mmap_cmd_init(uint8_t *scb, uint8_t *rw)
 static uint64_t __scsi_get_devid(uint8_t *p)
 {
 	uint64_t lun = TGT_INVALID_DEV_ID;
-
-	/* ibmvstgt hack */
-	lun = *((uint64_t *) p);
-	dprintf("%" PRIx64 " %u %u %u\n", lun, GETTARGET(lun), GETBUS(lun), GETLUN(lun));
-
-	if (GETBUS(lun) || GETLUN(lun))
-		return TGT_INVALID_DEV_ID;
-	else
-		return GETTARGET(lun);
 
 	switch (*p >> 6) {
 	case 0:
