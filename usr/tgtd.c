@@ -153,7 +153,7 @@ static void event_loop(struct driver_info *dlinfo, struct pollfd *pfd, int nr_dl
 			continue;
 
 		for (i = 0; i < nr_dls; i++) {
-			fn = dl_poll_fn(dlinfo, i);
+			fn = dl_fn(dlinfo, i, DL_FN_POLL_EVENT);
 			if (fn)
 				fn(pfd + ((i + 1) * POLLS_PER_DRV), POLLS_PER_DRV);
 		}
@@ -178,7 +178,7 @@ static struct pollfd * poll_init(int nr, int nl_fd, int ud_fd)
 	pfd[POLL_UD].events = POLLIN;
 
 	for (i = 0; i < nr; i++) {
-		fn = dl_poll_init_fn(dlinfo, i);
+		fn = dl_fn(dlinfo, i, DL_FN_POLL_INIT);
 		if (fn)
 			fn(pfd + (i + 1) * POLLS_PER_DRV, POLLS_PER_DRV);
 	}

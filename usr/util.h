@@ -11,3 +11,5 @@
 
 #define pgcnt(size, offset)	((((size) + ((offset) & ~PAGE_MASK)) + PAGE_SIZE - 1) >> PAGE_SHIFT)
 
+#define	DEFDMODE	(S_IRUSR|S_IWUSR|S_IXUSR|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH)
+#define	DEFFMODE	(S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH)

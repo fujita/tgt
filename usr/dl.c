@@ -33,6 +33,7 @@
 
 #include "log.h"
 #include "dl.h"
+#include "util.h"
 #include "tgt_sysfs.h"
 
 /*
@@ -46,69 +47,53 @@ struct driver_info dlinfo[] = {
 	{"istgt", }, {"ibmvstgt",},
 };
 
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+/* Bah, any better way? */
+static char *dl_fn_table[] = {
+	"poll_init",
+	"poll_event",
+	"ipc_mgmt",
+	"scsi_inquiry",
+	"scsi_report_lun",
+	"scsi_lun_to_int",
+};
 
 int dl_init(struct driver_info *dinfo)
 {
-	int i, fd, err;
+	int i, j, fd, err;
 	char path[PATH_MAX];
-	mode_t fmode = S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH;
-	mode_t dmode = S_IRUSR|S_IWUSR|S_IXUSR|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH;
 
 	system("rm -rf " TGT_LLD_SYSFSDIR);
-	err = mkdir(TGT_LLD_SYSFSDIR, dmode);
+	err = mkdir(TGT_LLD_SYSFSDIR, DEFDMODE);
 	if (err < 0) {
 		perror("Cannot create " TGT_LLD_SYSFSDIR);
 		return err;
 	}
 
 	for (i = 0; i < ARRAY_SIZE(dlinfo); i++) {
-		snprintf(path, sizeof(path), "%s.so", dlinfo[i].name);
+		snprintf(path, sizeof(path), "lib%s.so", dlinfo[i].name);
 		dlinfo[i].dl = dlopen(path, RTLD_LAZY);
-		if (dlinfo[i].dl)
+		if (dlinfo[i].dl) {
 			eprintf("%s library was loaded.\n", dlinfo[i].name);
-		else
+			for (j = 0; j < ARRAY_SIZE(dl_fn_table); j++)
+				dlinfo[i].fn[j] =
+					dlsym(dlinfo[i].dl, dl_fn_table[j]);
+		} else
 			eprintf("%s library is not loaded.\n", dlinfo[i].name);
 
 		snprintf(path, sizeof(path), TGT_LLD_SYSFSDIR "/%d-%s",
 			 i, dlinfo[i].name);
 
-		fd = open(path, O_RDWR|O_CREAT|O_EXCL, fmode);
+		fd = open(path, O_RDWR|O_CREAT|O_EXCL, DEFFMODE);
 		if (fd < 0) {
 			eprintf("Cannot create %s.\n", path);
-			exit(-1);
+			exit(1);
 		}
 	}
 
 	return ARRAY_SIZE(dlinfo);
 }
 
-void *dl_poll_init_fn(struct driver_info *dinfo, int idx)
+void *dl_fn(struct driver_info *dinfo, int idx, int function)
 {
-	if (dinfo[idx].dl)
-		return dlsym(dinfo[idx].dl, "poll_init");
-	return NULL;
-}
-
-void *dl_poll_fn(struct driver_info *dinfo, int idx)
-{
-	if (dinfo[idx].dl)
-		return dlsym(dinfo[idx].dl, "poll_event");
-	return NULL;
-}
-
-void *dl_ipc_fn(struct driver_info *dinfo, int typeid)
-{
-	if (dinfo[typeid].dl)
-		return dlsym(dinfo[typeid].dl, "ipc_mgmt");
-
-	return NULL;
-}
-
-void *dl_event_fn(struct driver_info *dinfo, int tid, int typeid)
-{
-	if (dinfo[typeid].dl)
-		return dlsym(dinfo[typeid].dl, "async_event");
-
-	return NULL;
+	return dinfo[idx].fn[function];
 }

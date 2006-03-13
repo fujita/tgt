@@ -39,8 +39,6 @@ enum tgt_fs_op {
 	DELETE,
 };
 
-static mode_t dmode = S_IRUSR|S_IWUSR|S_IXUSR|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH;
-
 static int tgt_set_string(char *buf, int size, const char *fmt, va_list ap)
 {
 	int err;
@@ -67,7 +65,7 @@ static int tgt_dir(int op, const char *fmt, ...)
 	if (op)
 		err = unlink(path);
 	else
-		err = mkdir(path, dmode);
+		err = mkdir(path, DEFDMODE);
 
 	if (err < 0)
 		eprintf("fail to create %s %s\n",
@@ -81,7 +79,6 @@ static int tgt_file(int op, const char *fmt, ...)
 {
 	int err;
 	char path[PATH_MAX];
-	mode_t fmode = S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH;
 
 	va_list ap;
 	va_start(ap, fmt);
@@ -93,7 +90,7 @@ static int tgt_file(int op, const char *fmt, ...)
 	if (op)
 		err = unlink(path);
 	else
-		err = open(path, O_RDWR|O_CREAT|O_EXCL, fmode);
+		err = open(path, O_RDWR|O_CREAT|O_EXCL, DEFFMODE);
 
 	if (err < 0)
 		eprintf("fail to %s %s\n", op ? "delete" : "create", path);
@@ -130,7 +127,7 @@ int tgt_sysfs_init(void)
 
 	system("rm -rf " TGT_TARGET_SYSFSDIR);
 
-	err = mkdir(TGT_TARGET_SYSFSDIR, dmode);
+	err = mkdir(TGT_TARGET_SYSFSDIR, DEFDMODE);
 	if (err < 0)
 		perror("Cannot create " TGT_TARGET_SYSFSDIR);
 
