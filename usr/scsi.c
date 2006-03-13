@@ -274,15 +274,12 @@ static int ibmvstgt_inquiry(int host_no, uint64_t lun, uint8_t *data)
 static int inquiry(struct tgt_device *dev, int host_no, uint8_t *lun_buf,
 		   uint8_t *scb, uint8_t *data, int *len)
 {
-	uint64_t lun;
 	int result = SAM_STAT_CHECK_CONDITION;
-
-	lun = scsi_get_devid(lun_buf);
 
 	if (((scb[1] & 0x3) == 0x3) || (!(scb[1] & 0x3) && scb[2]))
 		goto err;
 
-	dprintf("%" PRIx64 " %x %x\n", lun, scb[1], scb[2]);
+	dprintf("%x %x\n", scb[1], scb[2]);
 
 	if (!(scb[1] & 0x3)) {
 		*len = ibmvstgt_inquiry(host_no, *((uint64_t *) lun_buf), data);
@@ -350,10 +347,8 @@ static int inquiry(struct tgt_device *dev, int host_no, uint8_t *lun_buf,
 
 	*len = min_t(int, *len, scb[4]);
 
-	if (!dev) {
-		dprintf("%" PRIu64 "\n", lun);
+	if (!dev)
 		data[0] = TYPE_NO_LUN;
-	}
 
 	return SAM_STAT_GOOD;
 
@@ -611,11 +606,8 @@ int scsi_cmd_perform(int host_no, uint8_t *pdu, int *len,
 {
 	int result = SAM_STAT_GOOD;
 	uint8_t *data = NULL, *scb = pdu;
-	uint64_t lun;
 
-	lun = scsi_get_devid(lun_buf);
-
-	dprintf("%" PRIu64 " %x %u\n", lun, scb[0], datalen);
+	dprintf("%x %u\n", scb[0], datalen);
 
 	*offset = 0;
 	if (!mmap_cmd_init(scb, rw))
@@ -689,7 +681,7 @@ int scsi_cmd_perform(int host_no, uint8_t *pdu, int *len,
 	case RESERVE_10:
 	case RELEASE_10:
 	default:
-		eprintf("BUG? %u %" PRIu64 "\n", scb[0], lun);
+		eprintf("unknown command %x %u\n", scb[0], datalen);
 		*len = 0;
 		break;
 	}
