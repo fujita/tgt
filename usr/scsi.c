@@ -27,11 +27,6 @@
 
 #include "tgtd.h"
 
-#define cpu_to_be32 __cpu_to_be32
-#define be32_to_cpu __be32_to_cpu
-#define cpu_to_be64 __cpu_to_be64
-#define be64_to_cpu __be64_to_cpu
-
 #define BLK_SHIFT	9
 
 #define GETTARGET(x) ((int)((((uint64_t)(x)) >> 56) & 0x003f))
@@ -109,7 +104,7 @@ static int insert_geo_m_pg(uint8_t *ptr, uint64_t sec)
 	memcpy(ptr, geo_m_pg, sizeof(geo_m_pg));
 	ncyl = sec >> 14; /* 256 * 64 */
 	p = (uint32_t *)(ptr + 1);
-	*p = *p | cpu_to_be32(ncyl);
+	*p = *p | __cpu_to_be32(ncyl);
 	return sizeof(geo_m_pg);
 }
 
@@ -128,8 +123,8 @@ static int mode_sense(struct tgt_device *dev, uint8_t *scb, uint8_t *data, int *
 		data[3] = 8;
 		*len += 8;
 		*(uint32_t *)(data + 4) = (size >> 32) ?
-			cpu_to_be32(0xffffffff) : cpu_to_be32(size);
-		*(uint32_t *)(data + 8) = cpu_to_be32(1 << BLK_SHIFT);
+			__cpu_to_be32(0xffffffff) : __cpu_to_be32(size);
+		*(uint32_t *)(data + 8) = __cpu_to_be32(1 << BLK_SHIFT);
 	}
 
 	switch (pcode) {
@@ -360,7 +355,7 @@ static int report_luns(struct list_head *dev_list, uint8_t *lun_buf, uint8_t *sc
 
 	memset(data, 0, rbuflen);
 
-	alen = be32_to_cpu(*(uint32_t *)&scb[6]);
+	alen = __be32_to_cpu(*(uint32_t *)&scb[6]);
 	if (alen < 16) {
 		*len = sense_data_build(p, 0x70, ILLEGAL_REQUEST,
 					0x24, 0);
@@ -392,8 +387,8 @@ static int report_luns(struct list_head *dev_list, uint8_t *lun_buf, uint8_t *sc
 /* 		lun = ((lun > 0xff) ? (0x1 << 30) : 0) | ((0x3ff & lun) << 16); */
 		lun = make_lun(0, lun & 0x003f, 0);
 		dprintf("%" PRIx64 "\n", lun);
-/* 		data[idx++] = cpu_to_be64(lun << 32); */
-		data[idx++] = cpu_to_be64(lun);
+/* 		data[idx++] = __cpu_to_be64(lun << 32); */
+		data[idx++] = __cpu_to_be64(lun);
 		if (!(alen -= 8))
 			break;
 		if (!(rbuflen -= 8)) {
@@ -404,7 +399,7 @@ static int report_luns(struct list_head *dev_list, uint8_t *lun_buf, uint8_t *sc
 	}
 
 done:
-	*((uint32_t *) data) = cpu_to_be32(nr_luns * 8);
+	*((uint32_t *) data) = __cpu_to_be32(nr_luns * 8);
 	*len = min(oalen, nr_luns * 8 + 8);
 
 	return result;
@@ -424,8 +419,8 @@ static int read_capacity(struct tgt_device *dev, uint8_t *scb, uint8_t *p, int *
 	size = dev->size >> BLK_SHIFT;
 
 	data[0] = (size >> 32) ?
-		cpu_to_be32(0xffffffff) : cpu_to_be32(size - 1);
-	data[1] = cpu_to_be32(1U << BLK_SHIFT);
+		__cpu_to_be32(0xffffffff) : __cpu_to_be32(size - 1);
+	data[1] = __cpu_to_be32(1U << BLK_SHIFT);
 	*len = 8;
 
 	return SAM_STAT_GOOD;
@@ -472,8 +467,8 @@ static int sevice_action(struct tgt_device *dev, uint8_t *scb, uint8_t *p, int *
 	size = dev->size >> BLK_SHIFT;
 
 	data64 = (uint64_t *) data;
-	data64[0] = cpu_to_be64(size - 1);
-	data[2] = cpu_to_be32(1UL << BLK_SHIFT);
+	data64[0] = __cpu_to_be64(size - 1);
+	data[2] = __cpu_to_be32(1UL << BLK_SHIFT);
 
 	*len = 32;
 
@@ -496,11 +491,11 @@ static int mmap_device(uint8_t *scb, int *len, int fd, uint32_t datalen, unsigne
 	case READ_10:
 	case WRITE_10:
 	case WRITE_VERIFY:
-		off = be32_to_cpu(*(uint32_t *) &scb[2]);
+		off = __be32_to_cpu(*(uint32_t *) &scb[2]);
 		break;
 	case READ_16:
 	case WRITE_16:
-		off = be64_to_cpu(*(uint64_t *) &scb[2]);
+		off = __be64_to_cpu(*(uint64_t *) &scb[2]);
 		break;
 	default:
 		off = 0;
