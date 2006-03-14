@@ -62,7 +62,12 @@ enum {
 enum {
 	TGT_CMD_QUEUED,
 	TGT_CMD_PROCESSED,
-	TGT_CMD_MGMT,
+};
+
+struct mgmt_req {
+	uint64_t mid;
+	int busy;
+	int function;
 };
 
 struct cmd {
@@ -75,7 +80,6 @@ struct cmd {
 	int mmapped;
 	struct tgt_device *dev;
 	unsigned long state;
-	uint64_t mid;
 
 	/* Kill the followings when we use shared memory instead of netlink. */
 	int hostno;
@@ -84,6 +88,7 @@ struct cmd {
 	uint8_t lun[8];
 	int attribute;
 	uint64_t tag;
+	struct mgmt_req *mreq;
 };
 
 struct target {
@@ -140,7 +145,6 @@ static inline int cmd_##name(const struct cmd *c)			\
 
 CMD_FNS(QUEUED, queued)
 CMD_FNS(PROCESSED, processed)
-CMD_FNS(MGMT, mgmt)
 
 
 static struct target *target_get(int tid)
@@ -575,6 +579,7 @@ static void cmd_done(struct tgt_event *ev, int nl_fd)
 {
 	struct target *target;
 	struct cmd *cmd;
+	struct mgmt_req *mreq;
 	int host_no = ev->k.cmd_done.host_no;
 	uint32_t cid = ev->k.cmd_done.cid;
 
@@ -590,76 +595,116 @@ static void cmd_done(struct tgt_event *ev, int nl_fd)
 		return;
 	}
 
-	if (cmd_mgmt(cmd))
-		tgt_kspace_send_tsk_mgmt(nl_fd, cmd->hostno, cmd->mid, -EEXIST);
+	mreq = cmd->mreq;
+	if (mreq && !--mreq->busy) {
+		int err = mreq->function == ABORT_TASK ? -EEXIST : 0;
+		tgt_kspace_send_tsk_mgmt(nl_fd, cmd->hostno, mreq->mid, err);
+		free(mreq);
+	}
+
 	__cmd_done(target, cmd, nl_fd);
 }
 
-static int abort_task_by_tag(struct target* target, uint64_t tag, uint64_t mid,
-			     int nl_fd)
+static int abort_cmd(struct target* target, struct mgmt_req *mreq,
+		     struct cmd *cmd, int nl_fd)
 {
-	struct cmd *cmd, *tmp;
+	int err = 0;
 
-	eprintf("found %" PRIx64 " %" PRIx64 "\n", tag, mid);
-
-	list_for_each_entry_safe(cmd, tmp, &target->cmd_list, clist) {
-		if (cmd->tag == tag)
-			goto found;
-	}
-	return -EEXIST;
-
-found:
 	eprintf("found %" PRIx64 " %lx\n", cmd->tag, cmd->state);
+
 	if (cmd_processed(cmd)) {
 		/*
 		 * We've already sent this command to kernel space.
 		 * We'll send the tsk mgmt response when we get the
 		 * completion of this command.
 		 */
-		set_cmd_mgmt(cmd);
-		cmd->mid = mid;
-		return -EBUSY;
+		cmd->mreq = mreq;
+		err = -EBUSY;
 	} else {
 		__cmd_done(target, cmd, nl_fd);
 		tgt_kspace_send_cmd(nl_fd, cmd, TASK_ABORTED, 0);
 	}
+	return err;
+}
 
-	return 0;
+static int abort_task_set(struct mgmt_req *mreq, struct target* target, int host_no,
+			  uint64_t tag, uint8_t *lun, int all, int nl_fd)
+{
+	struct cmd *cmd, *tmp;
+	int err, count = 0;
+
+	eprintf("found %" PRIx64 " %d\n", tag, all);
+
+	list_for_each_entry_safe(cmd, tmp, &target->cmd_list, clist) {
+		if ((all && cmd->hostno == host_no)||
+		    (cmd->tag == tag && cmd->hostno == host_no) ||
+		    (lun && !memcmp(cmd->lun, lun, sizeof(cmd->lun)))) {
+			err = abort_cmd(target, mreq, cmd, nl_fd);
+			if (err)
+				mreq->busy++;
+			count++;
+		}
+	}
+
+	return count;
 }
 
 static void tsk_mgmt_req(struct tgt_event *ev_req, int nl_fd)
 {
 	struct target *target;
-	int err = 0, send = 1;
+	struct mgmt_req *mreq;
+	int err = 0, count, send = 1;
+	int host_no = ev_req->k.cmd_req.host_no;
 
-	target = host_to_target(ev_req->k.cmd_req.host_no);
+	target = host_to_target(host_no);
 	if (!target) {
 		eprintf("%d is not bind to any target\n",
 			ev_req->k.cmd_req.host_no);
 		return;
 	}
 
-	switch (ev_req->k.tsk_mgmt_req.function) {
+	mreq = calloc(1, sizeof(*mreq));
+	mreq->mid = ev_req->k.tsk_mgmt_req.mid;
+	mreq->function = ev_req->k.tsk_mgmt_req.function;
+
+	switch (mreq->function) {
 	case ABORT_TASK:
-		err = abort_task_by_tag(target, ev_req->k.tsk_mgmt_req.tag,
-					ev_req->k.tsk_mgmt_req.mid, nl_fd);
-		if (err == -EBUSY)
+		count = abort_task_set(mreq, target, host_no,
+				       ev_req->k.tsk_mgmt_req.tag,
+				       NULL, 0, nl_fd);
+		if (mreq->busy)
 			send = 0;
+		if (!count)
+			err = -EEXIST;
 		break;
 	case ABORT_TASK_SET:
+		count = abort_task_set(mreq, target, host_no, 0, NULL, 1, nl_fd);
+		if (mreq->busy)
+			send = 0;
+		break;
 	case CLEAR_ACA:
 	case CLEAR_TASK_SET:
-	case LOGICAL_UNIT_RESET:
 		eprintf("Not supported yet %x\n",
 			ev_req->k.tsk_mgmt_req.function);
+		err = -EINVAL;
+		break;
+	case LOGICAL_UNIT_RESET:
+		count = abort_task_set(mreq, target, host_no, 0,
+				       ev_req->k.tsk_mgmt_req.lun, 0, nl_fd);
+		if (mreq->busy)
+			send = 0;
 		break;
 	default:
+		err = -EINVAL;
 		eprintf("Unknown task management %x\n",
 			ev_req->k.tsk_mgmt_req.function);
 	}
 
-	tgt_kspace_send_tsk_mgmt(nl_fd, ev_req->k.cmd_req.host_no,
-				 ev_req->k.tsk_mgmt_req.mid, err);
+	if (send) {
+		tgt_kspace_send_tsk_mgmt(nl_fd, ev_req->k.cmd_req.host_no,
+					 ev_req->k.tsk_mgmt_req.mid, err);
+		free(mreq);
+	}
 }
 
 void nl_event_handle(int nl_fd)
