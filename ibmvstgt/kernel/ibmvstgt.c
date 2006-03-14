@@ -75,6 +75,15 @@ do {								\
 #define dprintk eprintk
 /* #define dprintk(fmt, args...) */
 
+/* TODO: use include/scsi/srp.h instead of drivers/scsi/ibmvscsi/srp.h */
+enum {
+	SRP_TSK_ABORT_TASK	= 0x01,
+	SRP_TSK_ABORT_TASK_SET	= 0x02,
+	SRP_TSK_CLEAR_TASK_SET	= 0x04,
+	SRP_TSK_LUN_RESET	= 0x08,
+	SRP_TSK_CLEAR_ACA	= 0x40
+};
+
 /*
  * an RPA command/response transport queue.  This is our structure
  * that points to the actual queue (not architected by firmware)
@@ -376,7 +385,8 @@ static int process_cmd(struct iu_entry *iue)
 	scmd->request_bufflen = len;
 	scmd->tag= tag;
 	iue->scmd = scmd;
-	scsi_tgt_queue_command(scmd, (struct scsi_lun *) &iu->srp.cmd.lun, 0);
+	scsi_tgt_queue_command(scmd, (struct scsi_lun *) &iu->srp.cmd.lun,
+			       iu->srp.cmd.tag);
 
 	dprintk("%p %p %x %lx %d %d %d\n",
 		iue, scmd, iu->srp.cmd.cdb[0], iu->srp.cmd.lun, data_dir, len, tag);
@@ -755,63 +765,41 @@ static inline void queue_cmd(struct iu_entry *iue)
 	handle_cmd_queue(adapter);
 }
 
-/* TODO */
-static void process_device_reset(struct iu_entry *iue)
-{
-	send_rsp(iue, NO_SENSE, 0x00);
-}
-
-static void process_abort(struct iu_entry *iue)
-{
-	union viosrp_iu *iu = vio_iu(iue), *tmp_iu = NULL;
-	struct iu_entry *tmp_iue;
-	unsigned char status = ABORTED_COMMAND;
-	uint64_t tag = iu->srp.tsk_mgmt.managed_task_tag;
-	unsigned long flags;
-
-	eprintk("Not supported yet %p %llx\n", iue, (unsigned long long) tag);
-
-	spin_lock_irqsave(&iue->adapter->lock, flags);
-
-	list_for_each_entry(tmp_iue, &iue->adapter->cmd_queue, ilist) {
-		tmp_iu = vio_iu(tmp_iue);
-		if (tmp_iu->srp.cmd.tag != tag)
-			continue;
-
-		__set_bit(V_ABORTED, &tmp_iue->req.flags);
-		status = NO_SENSE;
-		break;
-	}
-
-	spin_unlock_irqrestore(&iue->adapter->lock, flags);
-
-	if (status == NO_SENSE) {
-		int len;
-		len = vscsis_data_length(&tmp_iu->srp.cmd,
-					 tmp_iu->srp.cmd.data_out_format);
-		dprintk("abort cmd: %p %p %lx %x %lx %d\n",
-			tmp_iue, tmp_iue->scmd,
-			tmp_iue->scmd->request->flags,
-			tmp_iu->srp.cmd.cdb[0],
-			tmp_iu->srp.cmd.lun, len);
-		BUG();
-	} else
-		dprintk("unable to abort cmd\n");
-
-	send_rsp(iue, status, 0x14);
-}
-
-static void process_tsk_mgmt(struct iu_entry *iue)
+static int process_tsk_mgmt(struct iu_entry *iue)
 {
 	union viosrp_iu *iu = vio_iu(iue);
-	uint8_t flags = iu->srp.tsk_mgmt.task_mgmt_flags;
+	int fn;
 
-	if (flags == 0x01)
-		process_abort(iue);
-	else if (flags == 0x08)
-		process_device_reset(iue);
+	eprintk("%p %d\n", iue, iu->srp.tsk_mgmt.task_mgmt_flags);
+
+	switch (iu->srp.tsk_mgmt.task_mgmt_flags) {
+	case SRP_TSK_ABORT_TASK:
+		fn = ABORT_TASK;
+		break;
+	case SRP_TSK_ABORT_TASK_SET:
+		fn = ABORT_TASK_SET;
+		break;
+	case SRP_TSK_CLEAR_TASK_SET:
+		fn = CLEAR_TASK_SET;
+		break;
+	case SRP_TSK_LUN_RESET:
+		fn = LOGICAL_UNIT_RESET;
+		break;
+	case SRP_TSK_CLEAR_ACA:
+		fn = CLEAR_ACA;
+		break;
+	default:
+		fn = 0;
+	}
+	if (fn)
+		scsi_tgt_tsk_mgmt_request(iue->adapter->shost, fn,
+					  iu->srp.tsk_mgmt.managed_task_tag,
+					  (struct scsi_lun *) &iu->srp.tsk_mgmt.lun,
+					  iue);
 	else
 		send_rsp(iue, ILLEGAL_REQUEST, 0x20);
+
+	return !fn;
 }
 
 static int process_mad_iu(struct iu_entry *iue)
@@ -863,7 +851,7 @@ static int process_srp_iu(struct iu_entry *iue)
 		process_login(iue);
 		break;
 	case SRP_TSK_MGMT_TYPE:
-		process_tsk_mgmt(iue);
+		done = process_tsk_mgmt(iue);
 		break;
 	case SRP_CMD_TYPE:
 		queue_cmd(iue);
@@ -1097,12 +1085,46 @@ static void handle_crq(void *data)
 	handle_cmd_queue(adapter);
 }
 
-/*
- * TODO: just for cheating scsi_host_alloc now.
- */
-static int ibmvstgt_eh_abort_handler(struct scsi_cmnd *cmd)
+static int ibmvstgt_eh_abort_handler(struct scsi_cmnd *scmd)
 {
-	BUG();
+	unsigned long flags;
+	struct iu_entry *iue = (struct iu_entry *) scmd->SCp.ptr;
+	struct server_adapter *adapter = iue->adapter;
+
+	dprintk("%p %p %x\n", iue, adapter, vio_iu(iue)->srp.cmd.cdb[0]);
+
+	spin_lock_irqsave(&adapter->lock, flags);
+	list_del(&iue->ilist);
+	spin_unlock_irqrestore(&adapter->lock, flags);
+
+	put_iu(iue);
+
+	return 0;
+}
+
+static int ibmvstgt_tsk_mgmt_response(u64 mid, int result)
+{
+	struct iu_entry *iue = (struct iu_entry *) ((void *) mid);
+	union viosrp_iu *iu = vio_iu(iue);
+	unsigned char status, asc;
+
+	eprintk("%p %d\n", iue, result);
+	status = NO_SENSE;
+	asc = 0;
+
+	switch (iu->srp.tsk_mgmt.task_mgmt_flags) {
+	case SRP_TSK_ABORT_TASK:
+		asc = 0x14;
+		if (result)
+			status = ABORTED_COMMAND;
+		break;
+	default:
+		break;
+	}
+
+	send_rsp(iue, status, asc);
+	put_iu(iue);
+
 	return 0;
 }
 
@@ -1149,6 +1171,7 @@ static struct scsi_host_template ibmvstgt_sht = {
 	.transfer_response	= ibmvstgt_cmd_done,
 	.transfer_data		= recv_cmd_data,
 	.eh_abort_handler	= ibmvstgt_eh_abort_handler,
+	.tsk_mgmt_response	= ibmvstgt_tsk_mgmt_response,
 	.shost_attrs		= ibmvstgt_attrs,
 	.proc_name		= TGT_NAME,
 };
