@@ -34,6 +34,7 @@
 #define BITS_PER_LONG (ULONG_MAX == 0xFFFFFFFFUL ? 32 : 64)
 #include <linux/hash.h>
 #include <linux/netlink.h>
+#include <scsi/scsi.h>
 #include <scsi/scsi_tgt_if.h>
 
 #include "tgtd.h"
@@ -58,14 +59,23 @@ enum {
 	TGT_QUEUE_DELETED,
 };
 
+enum {
+	TGT_CMD_QUEUED,
+	TGT_CMD_PROCESSED,
+	TGT_CMD_MGMT,
+};
+
 struct cmd {
 	struct list_head hlist;
 	struct list_head qlist;
+	struct list_head clist;
 	uint32_t cid;
 	uint64_t uaddr;
 	uint32_t len;
 	int mmapped;
 	struct tgt_device *dev;
+	unsigned long state;
+	uint64_t mid;
 
 	/* Kill the followings when we use shared memory instead of netlink. */
 	int hostno;
@@ -73,6 +83,7 @@ struct cmd {
 	uint8_t scb[16];
 	uint8_t lun[8];
 	int attribute;
+	uint64_t tag;
 };
 
 struct target {
@@ -84,6 +95,7 @@ struct target {
 	struct list_head device_list;
 
 	struct list_head cmd_hash_list[1 << HASH_ORDER];
+	struct list_head cmd_list;
 	struct tgt_cmd_queue cmd_queue;
 };
 
@@ -111,6 +123,25 @@ static inline int queue_active(const struct tgt_cmd_queue *q)		\
 
 QUEUE_FNS(BLOCKED, blocked)
 QUEUE_FNS(DELETED, deleted)
+
+#define CMD_FNS(bit, name)						\
+static inline void set_cmd_##name(struct cmd *c)			\
+{									\
+	(c)->state |= (1UL << TGT_CMD_##bit);				\
+}									\
+static inline void clear_cmd_##name(struct cmd *c)			\
+{									\
+	(c)->state &= ~(1UL << TGT_CMD_##bit);				\
+}									\
+static inline int cmd_##name(const struct cmd *c)			\
+{									\
+	return ((c)->state & (1UL << TGT_CMD_##bit));			\
+}
+
+CMD_FNS(QUEUED, queued)
+CMD_FNS(PROCESSED, processed)
+CMD_FNS(MGMT, mgmt)
+
 
 static struct target *target_get(int tid)
 {
@@ -367,10 +398,12 @@ static void cmd_queue(struct tgt_event *ev_req, int nl_fd)
 	}
 
 	/* TODO: preallocate cmd */
-	cmd = malloc(sizeof(*cmd));
+	cmd = calloc(1, sizeof(*cmd));
 	cmd->hostno = ev_req->k.cmd_req.host_no;
  	cmd->cid = ev_req->k.cmd_req.cid;
 	cmd->attribute = ev_req->k.cmd_req.attribute;
+	cmd->tag = ev_req->k.cmd_req.tag;
+	list_add(&cmd->clist, &target->cmd_list);
 	list_add(&cmd->hlist, &target->cmd_hash_list[cmd_hashfn(cmd->cid)]);
 
 	dev_id = scsi_get_devid(target->lid, ev_req->k.cmd_req.lun);
@@ -400,8 +433,10 @@ static void cmd_queue(struct tgt_event *ev_req, int nl_fd)
 			cmd->cid, ev_req->k.cmd_req.scb[0], uaddr,
 			offset, result);
 
+		set_cmd_processed(cmd);
 		tgt_kspace_send_cmd(nl_fd, cmd, result, rw);
 	} else {
+		set_cmd_queued(cmd);
 		dprintf("blocked %u %x %" PRIu64 " %d\n",
 			cmd->cid, ev_req->k.cmd_req.scb[0],
 			cmd->dev ? cmd->dev->lun : ~0ULL,
@@ -445,6 +480,7 @@ static void post_cmd_done(int nl_fd, struct tgt_cmd_queue *q)
 						  cmd->dev,
 						  &target->device_list);
 			cmd_post_perform(q, cmd, uaddr, len, mmapped);
+			set_cmd_processed(cmd);
 			tgt_kspace_send_cmd(nl_fd, cmd, result, rw);
 		} else
 			break;
@@ -481,25 +517,12 @@ static int scsi_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
 	return err;
 }
 
-static void cmd_done(struct tgt_event *ev, int nl_fd)
+static void __cmd_done(struct target *target, struct cmd *cmd, int nl_fd)
 {
-	struct target *target;
 	struct tgt_cmd_queue *q;
-	struct cmd *cmd;
-	int err, do_munmap, host_no = ev->k.cmd_done.host_no;
-	uint32_t cid = ev->k.cmd_done.cid;
+	int err, do_munmap;
 
-	target = host_to_target(host_no);
-	if (!target) {
-		eprintf("%d is not bind to any target\n", host_no);
-		return;
-	}
-
-	cmd = find_cmd(target, cid);
-	if (!cmd) {
-		eprintf("Cannot find cmd %d %u\n", host_no, cid);
-		return;
-	}
+	list_del(&cmd->clist);
 	list_del(&cmd->hlist);
 
 	do_munmap = cmd->mmapped;
@@ -534,6 +557,111 @@ static void cmd_done(struct tgt_event *ev, int nl_fd)
 	post_cmd_done(nl_fd, q);
 }
 
+static int tgt_kspace_send_tsk_mgmt(int nl_fd, int host_no, uint64_t mid,
+				    int result)
+{
+	char resbuf[NLMSG_SPACE(sizeof(struct tgt_event))];
+	struct tgt_event *ev_res = NLMSG_DATA(resbuf);
+
+	ev_res->u.tsk_mgmt_rsp.host_no = host_no;
+	ev_res->u.tsk_mgmt_rsp.mid = mid;
+	ev_res->u.tsk_mgmt_rsp.result = result;
+
+	return __nl_write(nl_fd, TGT_UEVENT_TSK_MGMT_RSP, resbuf,
+			  NLMSG_SPACE(sizeof(*ev_res)));
+}
+
+static void cmd_done(struct tgt_event *ev, int nl_fd)
+{
+	struct target *target;
+	struct cmd *cmd;
+	int host_no = ev->k.cmd_done.host_no;
+	uint32_t cid = ev->k.cmd_done.cid;
+
+	target = host_to_target(host_no);
+	if (!target) {
+		eprintf("%d is not bind to any target\n", host_no);
+		return;
+	}
+
+	cmd = find_cmd(target, cid);
+	if (!cmd) {
+		eprintf("Cannot find cmd %d %u\n", host_no, cid);
+		return;
+	}
+
+	if (cmd_mgmt(cmd))
+		tgt_kspace_send_tsk_mgmt(nl_fd, cmd->hostno, cmd->mid, -EEXIST);
+	__cmd_done(target, cmd, nl_fd);
+}
+
+static int abort_task_by_tag(struct target* target, uint64_t tag, uint64_t mid,
+			     int nl_fd)
+{
+	struct cmd *cmd, *tmp;
+
+	eprintf("found %" PRIx64 " %" PRIx64 "\n", tag, mid);
+
+	list_for_each_entry_safe(cmd, tmp, &target->cmd_list, clist) {
+		if (cmd->tag == tag)
+			goto found;
+	}
+	return -EEXIST;
+
+found:
+	eprintf("found %" PRIx64 " %lx\n", cmd->tag, cmd->state);
+	if (cmd_processed(cmd)) {
+		/*
+		 * We've already sent this command to kernel space.
+		 * We'll send the tsk mgmt response when we get the
+		 * completion of this command.
+		 */
+		set_cmd_mgmt(cmd);
+		cmd->mid = mid;
+		return -EBUSY;
+	} else {
+		__cmd_done(target, cmd, nl_fd);
+		tgt_kspace_send_cmd(nl_fd, cmd, TASK_ABORTED, 0);
+	}
+
+	return 0;
+}
+
+static void tsk_mgmt_req(struct tgt_event *ev_req, int nl_fd)
+{
+	struct target *target;
+	int err = 0, send = 1;
+
+	target = host_to_target(ev_req->k.cmd_req.host_no);
+	if (!target) {
+		eprintf("%d is not bind to any target\n",
+			ev_req->k.cmd_req.host_no);
+		return;
+	}
+
+	switch (ev_req->k.tsk_mgmt_req.function) {
+	case ABORT_TASK:
+		err = abort_task_by_tag(target, ev_req->k.tsk_mgmt_req.tag,
+					ev_req->k.tsk_mgmt_req.mid, nl_fd);
+		if (err == -EBUSY)
+			send = 0;
+		break;
+	case ABORT_TASK_SET:
+	case CLEAR_ACA:
+	case CLEAR_TASK_SET:
+	case LOGICAL_UNIT_RESET:
+		eprintf("Not supported yet %x\n",
+			ev_req->k.tsk_mgmt_req.function);
+		break;
+	default:
+		eprintf("Unknown task management %x\n",
+			ev_req->k.tsk_mgmt_req.function);
+	}
+
+	tgt_kspace_send_tsk_mgmt(nl_fd, ev_req->k.cmd_req.host_no,
+				 ev_req->k.tsk_mgmt_req.mid, err);
+}
+
 void nl_event_handle(int nl_fd)
 {
 	struct nlmsghdr *nlh;
@@ -558,6 +686,9 @@ void nl_event_handle(int nl_fd)
 		break;
 	case TGT_KEVENT_CMD_DONE:
 		cmd_done(ev, nl_fd);
+		break;
+	case TGT_KEVENT_TSK_MGMT_REQ:
+		tsk_mgmt_req(ev, nl_fd);
 		break;
 	default:
 		eprintf("unknown event %u\n", nlh->nlmsg_type);
@@ -612,6 +743,7 @@ int tgt_target_create(int tid)
 	}
 
 	target->tid = tid;
+	INIT_LIST_HEAD(&target->cmd_list);
 	for (i = 0; i < ARRAY_SIZE(target->cmd_hash_list); i++)
 		INIT_LIST_HEAD(&target->cmd_hash_list[i]);
 
