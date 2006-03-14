@@ -19,4 +19,6 @@ extern int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun, gfp
 extern int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd, gfp_t flags);
 extern int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len,
 				unsigned long uaddr, u8 rw);
-
+extern int scsi_tgt_uspace_send_tsk_mgmt(int host_no, int function, u64 tag,
+					 struct scsi_lun *scsilun, void *data);
+extern int scsi_tgt_kspace_tsk_mgmt(int host_no, u64 mid, int result);

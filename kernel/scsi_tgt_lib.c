@@ -107,7 +107,6 @@ static void scsi_tgt_cmd_destroy(void *data)
 		cmd->request->flags &= ~1UL;
 
 	scsi_unmap_user_pages(tcmd);
-	scsi_tgt_uspace_send_status(cmd, GFP_ATOMIC);
 	kmem_cache_free(scsi_tgt_cmd_cache, tcmd);
 	scsi_host_put_command(scsi_tgt_cmd_to_host(cmd), cmd);
 }
@@ -270,13 +269,15 @@ EXPORT_SYMBOL_GPL(scsi_tgt_cmd_to_host);
  * @noblock:	set to nonzero if the command should be queued
  **/
 void scsi_tgt_queue_command(struct scsi_cmnd *cmd, struct scsi_lun *scsilun,
-			    int noblock)
+			    u64 tag)
 {
 	struct request_queue *q = cmd->request->q;
 	struct scsi_tgt_queuedata *qdata = q->queuedata;
 	unsigned long flags;
 
 	cmd->request->end_io_data = scsilun;
+	/* FIXME */
+	*((u64 *) (cmd->sense_buffer)) = tag;
 
 	spin_lock_irqsave(&qdata->cmd_req_lock, flags);
 	list_add_tail(&cmd->request->queuelist, &qdata->cmd_req);
@@ -296,12 +297,7 @@ static void scsi_tgt_cmd_done(struct scsi_cmnd *cmd)
 
 	dprintk("cmd %p %lu\n", cmd, rq_data_dir(cmd->request));
 
-	/* don't we have to call this if result is set or not */
-	if (cmd->result) {
-		scsi_tgt_uspace_send_status(cmd, GFP_ATOMIC);
-		return;
-	}
-
+	scsi_tgt_uspace_send_status(cmd, GFP_ATOMIC);
 	INIT_WORK(&tcmd->work, scsi_tgt_cmd_destroy, cmd);
 	queue_work(scsi_tgtd, &tcmd->work);
 }
@@ -498,6 +494,18 @@ static int scsi_tgt_copy_sense(struct scsi_cmnd *cmd, unsigned long uaddr,
 	return 0;
 }
 
+static int scsi_tgt_abort_cmd(struct Scsi_Host *host, struct scsi_cmnd *cmd)
+{
+	int err;
+
+	err = host->hostt->eh_abort_handler(cmd);
+	if (err)
+		eprintk("fail to abort %p\n", cmd);
+
+	scsi_tgt_cmd_destroy(cmd);
+	return err;
+}
+
 static struct request *tgt_cmd_hash_lookup(struct request_queue *q, u32 cid)
 {
 	struct scsi_tgt_queuedata *qdata = q->queuedata;
@@ -549,6 +557,10 @@ int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len,
 	dprintk("cmd %p result %d len %d bufflen %u %lu %x\n", cmd,
 		result, len, cmd->request_bufflen, rq_data_dir(rq), cmd->cmnd[0]);
 
+	if (result == TASK_ABORTED) {
+		scsi_tgt_abort_cmd(shost, cmd);
+		goto done;
+	}
 	/*
 	 * store the userspace values here, the working values are
 	 * in the request_* values
@@ -585,6 +597,38 @@ int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len,
 	err = scsi_tgt_transfer_data(cmd);
 
 done:
+	return err;
+}
+
+int scsi_tgt_tsk_mgmt_request(struct Scsi_Host *shost, int function, u64 tag,
+			      struct scsi_lun *scsilun, void *data)
+{
+	int err;
+
+	/* TODO: need to retry if this fails. */
+	err = scsi_tgt_uspace_send_tsk_mgmt(shost->host_no, function,
+					    tag, scsilun, data);
+	if (err < 0)
+		eprintk("The task management request lost!\n");
+	return err;
+}
+EXPORT_SYMBOL_GPL(scsi_tgt_tsk_mgmt_request);
+
+int scsi_tgt_kspace_tsk_mgmt(int host_no, u64 mid, int result)
+{
+	struct Scsi_Host *shost;
+	int err;
+
+	dprintk("%d %d %llx\n", host_no, result, (unsigned long long) mid);
+
+	shost = scsi_host_lookup(host_no);
+	if (IS_ERR(shost)) {
+		printk(KERN_ERR "Could not find host no %d\n", host_no);
+		return -EINVAL;
+	}
+	err = shost->hostt->tsk_mgmt_response(mid, result);
+	scsi_host_put(shost);
+
 	return err;
 }
 

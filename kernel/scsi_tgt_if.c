@@ -86,9 +86,11 @@ int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun,
 	memcpy(ev->k.cmd_req.scb, cmd->cmnd, sizeof(ev->k.cmd_req.scb));
 	memcpy(ev->k.cmd_req.lun, lun, sizeof(ev->k.cmd_req.lun));
 	ev->k.cmd_req.attribute = cmd->tag;
+	ev->k.cmd_req.tag = *((u64 *) (cmd->sense_buffer));
 
-	dprintk("%p %d %u %u %x\n", cmd, shost->host_no, ev->k.cmd_req.cid,
-		ev->k.cmd_req.data_len, cmd->tag);
+	dprintk("%p %d %u %u %x %llx\n", cmd, shost->host_no, ev->k.cmd_req.cid,
+		ev->k.cmd_req.data_len, cmd->tag,
+		(unsigned long long) ev->k.cmd_req.tag);
 
 	err = netlink_unicast(nl_sk, skb, tgtd_pid, gfp_mask & GFP_ATOMIC);
 	if (err < 0)
@@ -107,6 +109,24 @@ int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd, gfp_t gfp_mask)
 	ev.k.cmd_done.result = cmd->result;
 
 	return send_event_rsp(TGT_KEVENT_CMD_DONE, &ev, gfp_mask, tgtd_pid);
+}
+
+int scsi_tgt_uspace_send_tsk_mgmt(int host_no, int function, u64 tag,
+				  struct scsi_lun *scsilun, void *data)
+{
+	struct tgt_event ev;
+
+	memset(&ev, 0, sizeof(ev));
+	ev.k.tsk_mgmt_req.host_no = host_no;
+	ev.k.tsk_mgmt_req.function = function;
+	ev.k.tsk_mgmt_req.tag = tag;
+	memcpy(ev.k.tsk_mgmt_req.lun, scsilun, sizeof(ev.k.tsk_mgmt_req.lun));
+	ev.k.tsk_mgmt_req.mid = (u64) data;
+
+	dprintk("%d %x %llx %llx\n", host_no, function, (unsigned long long) tag,
+		(unsigned long long) ev.k.tsk_mgmt_req.mid);
+
+	return send_event_rsp(TGT_KEVENT_TSK_MGMT_REQ, &ev, GFP_KERNEL, tgtd_pid);
 }
 
 static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
@@ -130,6 +150,11 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 					   ev->u.cmd_rsp.uaddr,
 					   ev->u.cmd_rsp.rw);
 		break;
+	case TGT_UEVENT_TSK_MGMT_RSP:
+		err = scsi_tgt_kspace_tsk_mgmt(ev->u.tsk_mgmt_rsp.host_no,
+					       ev->u.tsk_mgmt_rsp.mid,
+					       ev->u.tsk_mgmt_rsp.result);
+		break;
 	default:
 		eprintk("unknown type %d\n", nlh->nlmsg_type);
 		err = -EINVAL;
@@ -143,6 +168,7 @@ static int event_recv_skb(struct sk_buff *skb)
 	int err;
 	uint32_t rlen;
 	struct nlmsghdr	*nlh;
+	struct tgt_event ev;
 
 	while (skb->len >= NLMSG_SPACE(0)) {
 		nlh = (struct nlmsghdr *) skb->data;
@@ -158,9 +184,11 @@ static int event_recv_skb(struct sk_buff *skb)
 		 * TODO for passthru commands the lower level should
 		 * probably handle the result or we should modify this
 		 */
-		if (nlh->nlmsg_type != TGT_UEVENT_CMD_RSP) {
-			struct tgt_event ev;
-
+		switch (nlh->nlmsg_type) {
+		case TGT_UEVENT_CMD_RSP:
+		case TGT_UEVENT_TSK_MGMT_RSP:
+			break;
+		default:
 			memset(&ev, 0, sizeof(ev));
 			ev.k.event_rsp.err = err;
 			send_event_rsp(TGT_KEVENT_RSP, &ev,
