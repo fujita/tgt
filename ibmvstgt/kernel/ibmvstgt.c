@@ -118,9 +118,7 @@ enum iue_flags {
 	V_DIOVER,
 	V_WRITE,
 	V_LINKED,
-	V_ABORTED,
 	V_FLYING,
-	V_DONE,
 };
 
 enum srp_task_attributes {
