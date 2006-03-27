@@ -75,15 +75,6 @@ do {								\
 #define dprintk eprintk
 /* #define dprintk(fmt, args...) */
 
-/* TODO: use include/scsi/srp.h instead of drivers/scsi/ibmvscsi/srp.h */
-enum {
-	SRP_TSK_ABORT_TASK	= 0x01,
-	SRP_TSK_ABORT_TASK_SET	= 0x02,
-	SRP_TSK_CLEAR_TASK_SET	= 0x04,
-	SRP_TSK_LUN_RESET	= 0x08,
-	SRP_TSK_CLEAR_ACA	= 0x40
-};
-
 /*
  * an RPA command/response transport queue.  This is our structure
  * that points to the actual queue (not architected by firmware)
@@ -181,7 +172,7 @@ static int send_iu(struct iu_entry *iue, uint64_t length, uint8_t format)
 	crq.cooked.reserved = 0x00;
 	crq.cooked.timeout = 0x00;
 	crq.cooked.IU_length = length;
-	crq.cooked.IU_data_ptr = vio_iu(iue)->srp.generic.tag;
+	crq.cooked.IU_data_ptr = vio_iu(iue)->srp.rsp.tag;
 
 	if (rc == 0)
 		crq.cooked.status = 0x99;	/* Just needs to be non-zero */
@@ -199,12 +190,14 @@ static int send_iu(struct iu_entry *iue, uint64_t length, uint8_t format)
 	return rc;
 }
 
+#define SRP_RSP_SENSE_DATA_LEN	18
+
 static int send_rsp(struct iu_entry *iue, unsigned char status,
 		    unsigned char asc)
 {
 	union viosrp_iu *iu = vio_iu(iue);
-	uint8_t *sense = iu->srp.rsp.sense_and_response_data;
-	uint64_t tag = iu->srp.generic.tag;
+	uint8_t *sense = iu->srp.rsp.data;
+	uint64_t tag = iu->srp.rsp.tag;
 	unsigned long flags;
 
 	/* If the linked bit is on and status is good */
@@ -212,26 +205,27 @@ static int send_rsp(struct iu_entry *iue, unsigned char status,
 		status = 0x10;
 
 	memset(iu, 0, sizeof(struct srp_rsp));
-	iu->srp.rsp.type = SRP_RSP_TYPE;
+	iu->srp.rsp.opcode = SRP_RSP;
 	spin_lock_irqsave(&iue->adapter->lock, flags);
-	iu->srp.rsp.request_limit_delta = 1 + iue->adapter->next_rsp_delta;
+	iu->srp.rsp.req_lim_delta = 1 + iue->adapter->next_rsp_delta;
 	iue->adapter->next_rsp_delta = 0;
 	spin_unlock_irqrestore(&iue->adapter->lock, flags);
 	iu->srp.rsp.tag = tag;
 
-	iu->srp.rsp.diover = test_bit(V_DIOVER, &iue->req.flags) ? 1 : 0;
+	if (test_bit(V_DIOVER, &iue->req.flags))
+		iu->srp.rsp.flags |= SRP_RSP_FLAG_DIOVER;
 
-	iu->srp.rsp.data_in_residual_count = iue->req.data_in_residual_count;
-	iu->srp.rsp.data_out_residual_count = iue->req.data_out_residual_count;
+	iu->srp.rsp.data_in_res_cnt = iue->req.data_in_residual_count;
+	iu->srp.rsp.data_out_res_cnt = iue->req.data_out_residual_count;
 
-	iu->srp.rsp.rspvalid = 0;
+	iu->srp.rsp.flags &= ~SRP_RSP_FLAG_RSPVALID;
 
-	iu->srp.rsp.response_data_list_length = 0;
+	iu->srp.rsp.resp_data_len = 0;
 
 	if (status && !iue->req.sense) {
 		iu->srp.rsp.status = SAM_STAT_CHECK_CONDITION;
-		iu->srp.rsp.snsvalid = 1;
-		iu->srp.rsp.sense_data_list_length = 18;
+		iu->srp.rsp.flags |= SRP_RSP_FLAG_SNSVALID;
+		iu->srp.rsp.sense_data_len = SRP_RSP_SENSE_DATA_LEN;
 
 		/* Valid bit and 'current errors' */
 		sense[0] = (0x1 << 7 | 0x70);
@@ -246,15 +240,15 @@ static int send_rsp(struct iu_entry *iue, unsigned char status,
 		sense[12] = asc;
 	} else {
 		if (iue->req.sense) {
-			iu->srp.rsp.snsvalid = 1;
-			iu->srp.rsp.sense_data_list_length =
-							SCSI_SENSE_BUFFERSIZE;
+			iu->srp.rsp.flags |= SRP_RSP_FLAG_SNSVALID;
+			iu->srp.rsp.sense_data_len = SCSI_SENSE_BUFFERSIZE;
 			memcpy(sense, iue->req.sense, SCSI_SENSE_BUFFERSIZE);
 		}
 		iu->srp.rsp.status = status;
 	}
 
-	send_iu(iue, sizeof(iu->srp.rsp), VIOSRP_SRP_FORMAT);
+	send_iu(iue, sizeof(iu->srp.rsp) + SRP_RSP_SENSE_DATA_LEN,
+		VIOSRP_SRP_FORMAT);
 
 	return 0;
 }
@@ -262,52 +256,52 @@ static int send_rsp(struct iu_entry *iue, unsigned char status,
 static int data_out_desc_size(struct srp_cmd *cmd)
 {
 	int size = 0;
-	switch (cmd->data_out_format) {
-	case SRP_NO_BUFFER:
+	u8 fmt = cmd->buf_fmt >> 4;
+
+	switch (fmt) {
+	case SRP_NO_DATA_DESC:
 		break;
-	case SRP_DIRECT_BUFFER:
-		size = sizeof(struct memory_descriptor);
+	case SRP_DATA_DESC_DIRECT:
+		size = sizeof(struct srp_direct_buf);
 		break;
-	case SRP_INDIRECT_BUFFER:
-		size = sizeof(struct indirect_descriptor) +
-			sizeof(struct memory_descriptor) * (cmd->data_out_count - 1);
+	case SRP_DATA_DESC_INDIRECT:
+		size = sizeof(struct srp_indirect_buf) +
+			sizeof(struct srp_direct_buf) * (cmd->data_out_desc_cnt - 1);
 		break;
 	default:
-		eprintk("client error. Invalid data_out_format %d\n",
-			cmd->data_out_format);
+		eprintk("client error. Invalid data_out_format %x\n", fmt);
 		break;
 	}
 	return size;
 }
 
-static int vscsis_data_length(struct srp_cmd *cmd, int out)
+static int vscsis_data_length(struct srp_cmd *cmd, enum dma_data_direction dir)
 {
-	struct memory_descriptor *md;
-	struct indirect_descriptor *id;
-	int format, len = 0, offset = cmd->additional_cdb_len * 4;
+	struct srp_direct_buf *md;
+	struct srp_indirect_buf *id;
+	int len = 0, offset = cmd->add_cdb_len * 4;
+	u8 fmt;
 
-	if (out)
-		format = cmd->data_out_format;
+	if (dir == DMA_TO_DEVICE)
+		fmt = cmd->buf_fmt >> 4;
 	else {
-		format = cmd->data_in_format;
+		fmt = cmd->buf_fmt & ((1U << 4) - 1);
 		offset += data_out_desc_size(cmd);
 	}
 
-	switch (format) {
-	case SRP_NO_BUFFER:
+	switch (fmt) {
+	case SRP_NO_DATA_DESC:
 		break;
-	case SRP_DIRECT_BUFFER:
-		md = (struct memory_descriptor *)
-			(cmd->additional_data + offset);
-		len = md->length;
+	case SRP_DATA_DESC_DIRECT:
+		md = (struct srp_direct_buf *) (cmd->add_data + offset);
+		len = md->len;
 		break;
-	case SRP_INDIRECT_BUFFER:
-		id = (struct indirect_descriptor *)
-			(cmd->additional_data + offset);
-		len = id->total_length;
+	case SRP_DATA_DESC_INDIRECT:
+		id = (struct srp_indirect_buf *) (cmd->add_data + offset);
+		len = id->len;
 		break;
 	default:
-		eprintk("invalid data format %d\n", format);
+		eprintk("invalid data format %x\n", fmt);
 		break;
 	}
 	return len;
@@ -338,7 +332,7 @@ static int process_cmd(struct iu_entry *iue)
 
 	tag = MSG_SIMPLE_TAG;
 
-	switch (iu->srp.cmd.task_attribute) {
+	switch (iu->srp.cmd.task_attr) {
 	case SRP_SIMPLE_TASK:
 		tag = MSG_SIMPLE_TAG;
 		break;
@@ -350,7 +344,7 @@ static int process_cmd(struct iu_entry *iue)
 		break;
 	default:
 		eprintk("Task attribute %d not supported, assuming barrier\n",
-			iu->srp.cmd.task_attribute);
+			iu->srp.cmd.task_attr);
 		tag = MSG_ORDERED_TAG;
 	}
 
@@ -363,13 +357,11 @@ static int process_cmd(struct iu_entry *iue)
 		__set_bit(V_WRITE, &iue->req.flags);
 	}
 
-	if (iu->srp.cmd.data_out_format) {
+	if (iu->srp.cmd.buf_fmt >> 4)
 		data_dir = DMA_TO_DEVICE;
-		len = vscsis_data_length(&iu->srp.cmd, 1);
-	} else {
+	else
 		data_dir = DMA_FROM_DEVICE;
-		len = vscsis_data_length(&iu->srp.cmd, 0);
-	}
+	len = vscsis_data_length(&iu->srp.cmd, data_dir);
 
 	dprintk("%p %x %lx %d %d %d %llx\n",
 		iue, iu->srp.cmd.cdb[0], iu->srp.cmd.lun, data_dir, len, tag,
@@ -411,11 +403,8 @@ retry:
 	spin_unlock_irqrestore(&adapter->lock, flags);
 }
 
-#define SEND	0
-#define RECV	1
-
-static int direct_data(struct scsi_cmnd *scmd, struct memory_descriptor *md,
-		       int op)
+static int direct_data(struct scsi_cmnd *scmd, struct srp_direct_buf *md,
+		       enum dma_data_direction dir)
 {
 	struct iu_entry *iue = (struct iu_entry *) scmd->SCp.ptr;
 	struct server_adapter *adapter = iue->adapter;
@@ -426,7 +415,7 @@ static int direct_data(struct scsi_cmnd *scmd, struct memory_descriptor *md,
 	dma_addr_t token;
 
 	dprintk("%p %u %u %u %d\n", iue, scmd->request_bufflen, scmd->bufflen,
-		md->length, scmd->use_sg);
+		md->len, scmd->use_sg);
 
 	nsg = dma_map_sg(adapter->dev, sg, scmd->use_sg, DMA_BIDIRECTIONAL);
 	if (!nsg) {
@@ -434,25 +423,25 @@ static int direct_data(struct scsi_cmnd *scmd, struct memory_descriptor *md,
 		return 0;
 	}
 
-	rest = min(scmd->request_bufflen, md->length);
+	rest = min(scmd->request_bufflen, md->len);
 
 	for (i = 0, done = 0; i < nsg && rest; i++) {
 		token = sg_dma_address(sg + i);
 		len = min(sg_dma_len(sg + i), rest);
 
-		if (op == SEND)
+		if (dir == DMA_TO_DEVICE)
+			err = h_copy_rdma(len, adapter->riobn,
+					  md->va + done,
+					  adapter->liobn,
+					  token);
+		else
 			err = h_copy_rdma(len, adapter->liobn,
 					  token,
 					  adapter->riobn,
-					  md->virtual_address + done);
-		else
-			err = h_copy_rdma(len, adapter->riobn,
-					  md->virtual_address + done,
-					  adapter->liobn,
-					  token);
+					  md->va + done);
 
 		if (err != H_Success) {
-			eprintk("rdma error %d %d %ld\n", op, i, err);
+			eprintk("rdma error %d %d %ld\n", dir, i, err);
 			break;
 		}
 
@@ -465,41 +454,41 @@ static int direct_data(struct scsi_cmnd *scmd, struct memory_descriptor *md,
 	return done;
 }
 
-static int indirect_data(struct scsi_cmnd *scmd, struct indirect_descriptor *id,
-			 int op)
+static int indirect_data(struct scsi_cmnd *scmd, struct srp_indirect_buf *id,
+			 enum dma_data_direction dir)
 {
 	struct iu_entry *iue = (struct iu_entry *) scmd->SCp.ptr;
 	struct server_adapter *adapter = iue->adapter;
 	struct srp_cmd *cmd = &vio_iu(iue)->srp.cmd;
-	struct memory_descriptor *mds;
+	struct srp_direct_buf *mds;
 	struct scatterlist *sg = scmd->request_buffer;
 	dma_addr_t token, itoken = 0;
 	long err;
 	unsigned int rest, done = 0;
 	int i, nmd, nsg, sidx, soff;
 
-	nmd = id->head.length / sizeof(struct memory_descriptor);
+	nmd = id->table_desc.len / sizeof(struct srp_direct_buf);
 
 	dprintk("%p %u %u %u %u %d %d %d\n",
 		iue, scmd->request_bufflen, scmd->bufflen,
-		id->total_length, scmd->offset, nmd,
-		cmd->data_in_count, cmd->data_out_count);
+		id->len, scmd->offset, nmd,
+		cmd->data_in_desc_cnt, cmd->data_out_desc_cnt);
 
-	if ((op == SEND && nmd == cmd->data_in_count) ||
-	    (op == RECV && nmd == cmd->data_out_count)) {
-		mds = &id->list[0];
+	if ((dir == DMA_FROM_DEVICE && nmd == cmd->data_in_desc_cnt) ||
+	    (dir == DMA_TO_DEVICE && nmd == cmd->data_out_desc_cnt)) {
+		mds = &id->desc_list[0];
 		goto rdma;
 	}
 
-	mds = dma_alloc_coherent(adapter->dev, id->head.length,
+	mds = dma_alloc_coherent(adapter->dev, id->table_desc.len,
 				 &itoken, GFP_KERNEL);
 	if (!mds) {
-		eprintk("Can't get dma memory %d\n", id->head.length);
+		eprintk("Can't get dma memory %u\n", id->table_desc.len);
 		return 0;
 	}
 
-	err = h_copy_rdma(id->head.length, adapter->riobn,
-			  id->head.virtual_address, adapter->liobn, itoken);
+	err = h_copy_rdma(id->table_desc.len, adapter->riobn,
+			  id->table_desc.va, adapter->liobn, itoken);
 	if (err != H_Success) {
 		eprintk("Error copying indirect table %ld\n", err);
 		goto free_mem;
@@ -514,29 +503,29 @@ rdma:
 
 	sidx = soff = 0;
 	token = sg_dma_address(sg + sidx);
-	rest = min(scmd->request_bufflen, id->total_length);
+	rest = min(scmd->request_bufflen, id->len);
 	for (i = 0; i < nmd && rest; i++) {
 		unsigned int mdone, mlen;
 
-		mlen = min(rest, mds[i].length);
+		mlen = min(rest, mds[i].len);
 		for (mdone = 0; mlen;) {
 			int slen = min(sg_dma_len(sg + sidx) - soff, mlen);
 
-			if (op == SEND)
+			if (dir == DMA_TO_DEVICE)
+				err = h_copy_rdma(slen,
+						  adapter->riobn,
+						  mds[i].va + mdone,
+						  adapter->liobn,
+						  token + soff);
+			else
 				err = h_copy_rdma(slen,
 						  adapter->liobn,
 						  token + soff,
 						  adapter->riobn,
-						  mds[i].virtual_address + mdone);
-			else
-				err = h_copy_rdma(slen,
-						  adapter->riobn,
-						  mds[i].virtual_address + mdone,
-						  adapter->liobn,
-						  token + soff);
+						  mds[i].va + mdone);
 
 			if (err != H_Success) {
-				eprintk("rdma error %d %d\n", op, slen);
+				eprintk("rdma error %d %d\n", dir, slen);
 				goto unmap_sg;
 			}
 
@@ -566,41 +555,44 @@ unmap_sg:
 
 free_mem:
 	if (itoken)
-		dma_free_coherent(adapter->dev, id->head.length, mds, itoken);
+		dma_free_coherent(adapter->dev, id->table_desc.len, mds, itoken);
 
 	return done;
 }
 
-static int handle_cmd_data(struct scsi_cmnd *scmd, int op)
+static int handle_cmd_data(struct scsi_cmnd *scmd, enum dma_data_direction dir)
 {
 	struct iu_entry *iue = (struct iu_entry *) scmd->SCp.ptr;
 	struct srp_cmd *cmd = &vio_iu(iue)->srp.cmd;
-	struct memory_descriptor *md;
-	struct indirect_descriptor *id;
+	struct srp_direct_buf *md;
+	struct srp_indirect_buf *id;
 	int offset, err = 0;
-	uint8_t format;
+	u8 format;
 
-	offset = cmd->additional_cdb_len * 4;
-	if (op == SEND)
+	offset = cmd->add_cdb_len * 4;
+	if (dir == DMA_FROM_DEVICE)
 		offset += data_out_desc_size(cmd);
 
-	format = (op == SEND) ? cmd->data_in_format : cmd->data_out_format;
+	if (dir == DMA_TO_DEVICE)
+		format = cmd->buf_fmt >> 4;
+	else
+		format = cmd->buf_fmt & ((1U << 4) - 1);
 
 	switch (format) {
-	case SRP_NO_BUFFER:
+	case SRP_NO_DATA_DESC:
 		break;
-	case SRP_DIRECT_BUFFER:
-		md = (struct memory_descriptor *)
-			(cmd->additional_data + offset);
-		err = direct_data(scmd, md, op);
+	case SRP_DATA_DESC_DIRECT:
+		md = (struct srp_direct_buf *)
+			(cmd->add_data + offset);
+		err = direct_data(scmd, md, dir);
 		break;
-	case SRP_INDIRECT_BUFFER:
-		id = (struct indirect_descriptor *)
-			(cmd->additional_data + offset);
-		err = indirect_data(scmd, id, op);
+	case SRP_DATA_DESC_INDIRECT:
+		id = (struct srp_indirect_buf *)
+			(cmd->add_data + offset);
+		err = indirect_data(scmd, id, dir);
 		break;
 	default:
-		eprintk("Unknown format %d %d\n", op, format);
+		eprintk("Unknown format %d %x\n", dir, format);
 		break;
 	}
 
@@ -612,10 +604,13 @@ static int recv_cmd_data(struct scsi_cmnd *scmd,
 			 void (*done)(struct scsi_cmnd *))
 {
 	struct iu_entry	*iue = (struct iu_entry *) scmd->SCp.ptr;
-	int rw;
+	enum dma_data_direction dir;
 
-	rw = test_bit(V_WRITE, &iue->req.flags) ? RECV : SEND;
-	handle_cmd_data(scmd, rw);
+	if (test_bit(V_WRITE, &iue->req.flags))
+		dir = DMA_TO_DEVICE;
+	else
+		dir = DMA_FROM_DEVICE;
+	handle_cmd_data(scmd, dir);
 	done(scmd);
 	return 0;
 }
@@ -734,20 +729,19 @@ static void process_login(struct iu_entry *iue)
 	union viosrp_iu *iu = vio_iu(iue);
 	struct srp_login_rsp *rsp = &iu->srp.login_rsp;
 
-	uint64_t tag = iu->srp.generic.tag;
+	uint64_t tag = iu->srp.rsp.tag;
 
 	/* TODO handle case that requested size is wrong and
 	 * buffer format is wrong
 	 */
 	memset(iu, 0, sizeof(struct srp_login_rsp));
-	rsp->type = SRP_LOGIN_RSP_TYPE;
-	rsp->request_limit_delta = INITIAL_SRP_LIMIT;
+	rsp->opcode = SRP_LOGIN_RSP;
+	rsp->req_lim_delta = INITIAL_SRP_LIMIT;
 	rsp->tag = tag;
-	rsp->max_initiator_to_target_iulen = sizeof(union srp_iu);
-	rsp->max_target_to_initiator_iulen = sizeof(union srp_iu);
+	rsp->max_it_iu_len = sizeof(union srp_iu);
+	rsp->max_ti_iu_len = sizeof(union srp_iu);
 	/* direct and indirect */
-	rsp->supported_buffer_formats = 0x0006;
-	rsp->multi_channel_result = 0x00;
+	rsp->buf_fmt = SRP_BUF_FORMAT_DIRECT | SRP_BUF_FORMAT_INDIRECT;
 
 	send_iu(iue, sizeof(*rsp), VIOSRP_SRP_FORMAT);
 }
@@ -768,9 +762,9 @@ static int process_tsk_mgmt(struct iu_entry *iue)
 	union viosrp_iu *iu = vio_iu(iue);
 	int fn;
 
-	eprintk("%p %d\n", iue, iu->srp.tsk_mgmt.task_mgmt_flags);
+	eprintk("%p %u\n", iue, iu->srp.tsk_mgmt.tsk_mgmt_func);
 
-	switch (iu->srp.tsk_mgmt.task_mgmt_flags) {
+	switch (iu->srp.tsk_mgmt.tsk_mgmt_func) {
 	case SRP_TSK_ABORT_TASK:
 		fn = ABORT_TASK;
 		break;
@@ -791,7 +785,7 @@ static int process_tsk_mgmt(struct iu_entry *iue)
 	}
 	if (fn)
 		scsi_tgt_tsk_mgmt_request(iue->adapter->shost, fn,
-					  iu->srp.tsk_mgmt.managed_task_tag,
+					  iu->srp.tsk_mgmt.task_tag,
 					  (struct scsi_lun *) &iu->srp.tsk_mgmt.lun,
 					  iue);
 	else
@@ -831,7 +825,7 @@ static int process_mad_iu(struct iu_entry *iue)
 		send_iu(iue, sizeof(*conf), VIOSRP_MAD_FORMAT);
 		break;
 	default:
-		eprintk("Unknown type %d\n", iu->srp.generic.type);
+		eprintk("Unknown type %u\n", iu->srp.rsp.opcode);
 	}
 
 	return 1;
@@ -841,32 +835,33 @@ static int process_srp_iu(struct iu_entry *iue)
 {
 	union viosrp_iu *iu = vio_iu(iue);
 	int done = 1;
+	u8 opcode = iu->srp.rsp.opcode;
 
-	dprintk("%p %d\n", iue, iu->srp.generic.type);
+	dprintk("%p %u\n", iue, opcode);
 
-	switch (iu->srp.generic.type) {
-	case SRP_LOGIN_REQ_TYPE:
+	switch (opcode) {
+	case SRP_LOGIN_REQ:
 		process_login(iue);
 		break;
-	case SRP_TSK_MGMT_TYPE:
+	case SRP_TSK_MGMT:
 		done = process_tsk_mgmt(iue);
 		break;
-	case SRP_CMD_TYPE:
+	case SRP_CMD:
 		queue_cmd(iue);
 		done = 0;
 		break;
-	case SRP_LOGIN_RSP_TYPE:
-	case SRP_I_LOGOUT_TYPE:
-	case SRP_T_LOGOUT_TYPE:
-	case SRP_RSP_TYPE:
-	case SRP_CRED_REQ_TYPE:
-	case SRP_CRED_RSP_TYPE:
-	case SRP_AER_REQ_TYPE:
-	case SRP_AER_RSP_TYPE:
-		eprintk("Unsupported type %d\n", iu->srp.generic.type);
+	case SRP_LOGIN_RSP:
+	case SRP_I_LOGOUT:
+	case SRP_T_LOGOUT:
+	case SRP_RSP:
+	case SRP_CRED_REQ:
+	case SRP_CRED_RSP:
+	case SRP_AER_REQ:
+	case SRP_AER_RSP:
+		eprintk("Unsupported type %u\n", opcode);
 		break;
 	default:
-		eprintk("Unknown type %d\n", iu->srp.generic.type);
+		eprintk("Unknown type %u\n", opcode);
 	}
 
 	return done;
@@ -1110,7 +1105,7 @@ static int ibmvstgt_tsk_mgmt_response(u64 mid, int result)
 	status = NO_SENSE;
 	asc = 0;
 
-	switch (iu->srp.tsk_mgmt.task_mgmt_flags) {
+	switch (iu->srp.tsk_mgmt.tsk_mgmt_func) {
 	case SRP_TSK_ABORT_TASK:
 		asc = 0x14;
 		if (result)
