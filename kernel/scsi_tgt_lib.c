@@ -20,7 +20,6 @@
  * 02110-1301 USA
  */
 #include <linux/blkdev.h>
-#include <linux/elevator.h>
 #include <linux/hash.h>
 #include <linux/module.h>
 #include <linux/pagemap.h>
@@ -52,8 +51,8 @@ struct scsi_tgt_cmd {
 	struct request *rq;
 };
 
-#define	TGT_HASH_ORDER	4
-#define	cmd_hashfn(cid)	hash_long((cid), TGT_HASH_ORDER)
+#define TGT_HASH_ORDER	4
+#define cmd_hashfn(cid)	hash_long((cid), TGT_HASH_ORDER)
 
 struct scsi_tgt_queuedata {
 	struct Scsi_Host *shost;
@@ -114,8 +113,8 @@ static void scsi_tgt_cmd_destroy(void *data)
 static void init_scsi_tgt_cmd(struct request *rq, struct scsi_tgt_cmd *tcmd)
 {
 	struct scsi_tgt_queuedata *qdata = rq->q->queuedata;
-	struct list_head *head;
 	unsigned long flags;
+	struct list_head *head;
 	static u32 tag = 0;
 
 	tcmd->lun = rq->end_io_data;
@@ -174,7 +173,6 @@ retry:
 		init_scsi_tgt_cmd(rq, tcmd);
 
 	cmd = rq->special;
-
 	err = scsi_tgt_uspace_send(cmd, tcmd->lun, GFP_ATOMIC);
 	if (err < 0) {
 		eprintk("failed to send: %p %d\n", cmd, err);
@@ -185,7 +183,6 @@ retry:
 	}
 
 	mutex_unlock(&qdata->cmd_req_mutex);
-
 out:
 	/* TODO: proper error handling */
 	if (err < 0)
@@ -544,7 +541,6 @@ int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len,
 		printk(KERN_ERR "Could not find host no %d\n", host_no);
 		return -EINVAL;
 	}
-	scsi_host_put(shost);
 
 	rq = tgt_cmd_hash_lookup(shost->uspace_req_q, cid);
 	if (!rq) {
@@ -597,6 +593,7 @@ int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len,
 	err = scsi_tgt_transfer_data(cmd);
 
 done:
+	scsi_host_put(shost);
 	return err;
 }
 
