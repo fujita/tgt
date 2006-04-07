@@ -12,11 +12,12 @@ Starting
 The software consists of kernel modules and user-space tools (daemon,
 management tool, dynamic libraries).
 
-First, get kernel sources from James's scsi-rc-fixes-2.6 git tree.
+First, get kernel sources from James's scsi-rc-fixes-2.6 git tree:
 
-The kernel itself requires the patches in the patchset
-directory. Apply all the patches except the 6th patch, rebuild the
-kernel, and reboot with the new kernel.
+master.kernel.org:/pub/scm/linux/kernel/git/jejb/scsi-target-2.6.git
+
+Next, apply scsi-target-2.6-tree.diff in the patchset directory,
+rebuild the kernel, and reboot with the new kernel.
 
 The compilation of the kernel modules require the path to above kernel
 source:
