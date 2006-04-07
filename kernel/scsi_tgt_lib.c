@@ -155,7 +155,7 @@ retry:
 	tcmd = rq->end_io_data;
 	init_scsi_tgt_cmd(rq, tcmd);
 	cmd = rq->special;
-	err = scsi_tgt_uspace_send(cmd, tcmd->lun, GFP_ATOMIC);
+	err = scsi_tgt_uspace_send(cmd, tcmd->lun, tcmd->tag, GFP_ATOMIC);
 	if (err < 0) {
 		eprintk("failed to send: %p %d\n", cmd, err);
 

@@ -15,7 +15,8 @@ do {								\
 extern void scsi_tgt_if_exit(void);
 extern int scsi_tgt_if_init(void);
 
-extern int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun, gfp_t flags);
+extern int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun,
+				u64 tag, gfp_t flags);
 extern int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd, gfp_t flags);
 extern int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len,
 				unsigned long uaddr, u8 rw);

@@ -56,7 +56,8 @@ static int send_event_rsp(uint16_t type, struct tgt_event *p, gfp_t flags,
 	return netlink_unicast(nl_sk, skb, pid, 0);
 }
 
-int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun, gfp_t gfp_mask)
+int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun, u64 tag,
+			 gfp_t flags)
 {
 	struct Scsi_Host *shost = scsi_tgt_cmd_to_host(cmd);
 	struct sk_buff *skb;
@@ -71,7 +72,7 @@ int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun, gfp_t gfp_
 	/*
 	 * TODO: add MAX_COMMAND_SIZE to ev and add mempool
 	 */
-	skb = alloc_skb(NLMSG_SPACE(len), gfp_mask);
+	skb = alloc_skb(NLMSG_SPACE(len), flags);
 	if (!skb)
 		return -ENOMEM;
 
@@ -85,7 +86,7 @@ int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun, gfp_t gfp_
 	memcpy(ev->k.cmd_req.scb, cmd->cmnd, sizeof(ev->k.cmd_req.scb));
 	memcpy(ev->k.cmd_req.lun, lun, sizeof(ev->k.cmd_req.lun));
 	ev->k.cmd_req.attribute = cmd->tag;
-	ev->k.cmd_req.tag = *((u64 *) (cmd->sense_buffer));
+	ev->k.cmd_req.tag = tag;
 
 	dprintk("%p %d %u %u %x %llx\n", cmd, shost->host_no, ev->k.cmd_req.cid,
 		ev->k.cmd_req.data_len, cmd->tag,
