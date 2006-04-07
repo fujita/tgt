@@ -1,22 +1,23 @@
 Subject: [PATCH] block layer: add partial mappings support to bio_map_user
+From: fujita <fujita@albi.localdomain>
+Date: 1142409163 +0900
 
-For target mode we could end up with the case where we get very large
-request from the initiator. The request could be so large that we
-cannot transfer all the data in one operation. For example the
-HBA's segment or max_sector limits might limit us to a 1 MB transfer.
-To send a 5 MB command then we need to transfer the command chunk by chunk.
+This is the updated patch for partial mappings support.
 
-To do this, tgt core will map in as much data as possible into a bio,
-send this off, then when that transfer is completed we send off another
-request/bio. To be able to pack as much data into a bio as possible
-we need bio_map_user to support partially mapped bios.
+- bio_map_user_iov always allows partial mappings.
 
-The attached patch allows bio_map_user to map bios partially. The two
-users (blk_rq_map_user and blk_rq_map_user_iov) will fail if the bio
-is partially mapped.
+- The two users (blk_rq_map_user and blk_rq_map_user_iov) will fails
+if the bio is partially mapped.
 
-Signed-off-by: Mike Christie <michaelc@cs.wisc.edu>
+- Added a length argument to blk_rq_map_user_iov in order to avoid
+including sg.h in ll_rw_blk.c for struct sg_iovec.
+
+This is a resend:
+
+http://marc.theaimsgroup.com/?l=linux-scsi&m=114086655400806&w=2
+
 Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
+Signed-off-by: Mike Christie <michaelc@cs.wisc.edu>
 
 ---
 
@@ -26,7 +27,7 @@ Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
  include/linux/blkdev.h |    3 ++-
  4 files changed, 23 insertions(+), 26 deletions(-)
 
-95e0133e03f75a5edc7ca4eb7ce0c0347cf841bf
+d43dcc5c747b5896c795e1fe1f8a6d5df525daa6
 diff --git a/block/ll_rw_blk.c b/block/ll_rw_blk.c
 index 03d9c82..6849859 100644
 --- a/block/ll_rw_blk.c
@@ -99,10 +100,10 @@ index 24f7af9..ef9900d 100644
  	} else if (hdr->dxfer_len)
  		ret = blk_rq_map_user(q, rq, hdr->dxferp, hdr->dxfer_len);
 diff --git a/fs/bio.c b/fs/bio.c
-index 1f3bb50..f75c2f4 100644
+index d8259d9..f51a873 100644
 --- a/fs/bio.c
 +++ b/fs/bio.c
-@@ -750,7 +750,6 @@ struct bio *bio_map_user_iov(request_que
+@@ -749,7 +749,6 @@ struct bio *bio_map_user_iov(request_que
  			     int write_to_vm)
  {
  	struct bio *bio;
@@ -110,7 +111,7 @@ index 1f3bb50..f75c2f4 100644
  
  	bio = __bio_map_user_iov(q, bdev, iov, iov_count, write_to_vm);
  
-@@ -765,18 +764,7 @@ struct bio *bio_map_user_iov(request_que
+@@ -764,18 +763,7 @@ struct bio *bio_map_user_iov(request_que
  	 */
  	bio_get(bio);
  
@@ -145,4 +146,4 @@ index 860e7a4..619ef1d 100644
  			  struct request *, int);
  extern void blk_execute_rq_nowait(request_queue_t *, struct gendisk *,
 -- 
-1.1.5
+1.1.3
