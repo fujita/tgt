@@ -4,7 +4,7 @@ ifeq ($(KERNELSRC),)
 	KERNELSRC ?= /lib/modules/$(shell uname -r)/build
 endif
 
-all: mods usr
+all: mods libs
 
 mods:
 	$(MAKE) -C $(KERNELSRC) SUBDIRS=$(shell pwd)/kernel modules
