@@ -5,6 +5,10 @@ Date: 1142422083 +0900
 Remove blk_queue_end_tag() in scsi_host_put_command() because tgt
 doesn't use the elevator code.
 
+
+Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
+Signed-off-by: Mike Christie <michaelc@cs.wisc.edu>
+
 ---
 
  drivers/scsi/scsi.c |    2 --
