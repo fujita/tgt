@@ -266,7 +266,7 @@ static int data_out_desc_size(struct srp_cmd *cmd)
 		break;
 	case SRP_DATA_DESC_INDIRECT:
 		size = sizeof(struct srp_indirect_buf) +
-			sizeof(struct srp_direct_buf) * (cmd->data_out_desc_cnt - 1);
+			sizeof(struct srp_direct_buf) * cmd->data_out_desc_cnt;
 		break;
 	default:
 		eprintk("client error. Invalid data_out_format %x\n", fmt);
