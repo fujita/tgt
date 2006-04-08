@@ -1,5 +1,5 @@
-Subject: [PATCH] block layer: use blk_rq_bio_prep in init_request_from_bio
-From: fujita <fujita@albi.localdomain>
+Subject: [PATCH 04/10] block layer: use blk_rq_bio_prep in init_request_from_bio
+From: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
 Date: 1142409371 +0900
 
 Patch to use blk_rq_bio_prep in init_request_from_bio. And remove
@@ -51,4 +51,4 @@ index 13c40a0..da2c57d 100644
  	rq->nr_hw_segments = bio_hw_segments(q, bio);
  	rq->current_nr_sectors = bio_cur_sectors(bio);
 -- 
-1.1.3
+1.1.5

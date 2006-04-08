@@ -1,5 +1,5 @@
-Subject: [PATCH] block layer: add partial mappings support to bio_map_user
-From: fujita <fujita@albi.localdomain>
+Subject: [PATCH 02/10] block layer: add partial mappings support to bio_map_user
+From: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
 Date: 1142409163 +0900
 
 This is the updated patch for partial mappings support.
@@ -146,4 +146,4 @@ index 860e7a4..619ef1d 100644
  			  struct request *, int);
  extern void blk_execute_rq_nowait(request_queue_t *, struct gendisk *,
 -- 
-1.1.3
+1.1.5

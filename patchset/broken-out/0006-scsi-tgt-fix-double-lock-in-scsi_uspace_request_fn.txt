@@ -1,5 +1,5 @@
-Subject: [PATCH] scsi tgt: fix double lock in scsi_uspace_request_fn
-From: fujita <fujita@albi.localdomain>
+Subject: [PATCH 06/10] scsi tgt: fix double lock in scsi_uspace_request_fn
+From: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
 Date: 1142409678 +0900
 
 Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
@@ -25,4 +25,4 @@ index 8746236..5d76078 100644
  
  /**
 -- 
-1.1.3
+1.1.5

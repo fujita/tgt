@@ -1,4 +1,6 @@
-Subject: [PATCH] scsi tgt: add task management function support
+Subject: [PATCH 09/10] scsi tgt: add task management function support
+From: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
+Date: 1144370959 +0900
 
 This patch addes task management function support to tgt. This
 assumes that all the previous patchsets are applied.
@@ -458,4 +460,4 @@ index ebca452..63b2e3a 100644
  	} k;
  
 -- 
-1.1.3
+1.1.5

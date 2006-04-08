@@ -1,4 +1,6 @@
-Subject: [PATCH] scsi tgt: replace the elevator code
+Subject: [PATCH 08/10] scsi tgt: replace the elevator code
+From: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
+Date: 1142464394 +0900
 
 tgt uses the elevator code to send SCSI commands to the user-space
 daemon (q->request_fn sends netlink packets including commands).
@@ -335,4 +337,4 @@ index fcf2ec6..6fedcec 100644
  extern int scsi_tgt_if_init(void);
  
 -- 
-1.1.3
+1.1.5

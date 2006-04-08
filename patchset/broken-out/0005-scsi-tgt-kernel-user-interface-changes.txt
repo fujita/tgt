@@ -1,5 +1,5 @@
-Subject: [PATCH] scsi tgt: kernel/user interface changes
-From: fujita <fujita@albi.localdomain>
+Subject: [PATCH 05/10] scsi tgt: kernel/user interface changes
+From: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
 Date: 1142409611 +0900
 
 - merge the tgt command structure with the the event structure for simplicity.
@@ -290,4 +290,4 @@ index da3a808..ebca452 100644
 -
  #endif
 -- 
-1.1.3
+1.1.5
