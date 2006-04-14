@@ -46,10 +46,6 @@
 #define	vio_iu(iue)\
 	((union viosrp_iu *) ((char *) (iue) + sizeof(struct iu_entry)))
 
-#define GETBUS(x) ((int)((((uint64_t)(x)) >> 53) & 0x0007))
-#define GETTARGET(x) ((int)((((uint64_t)(x)) >> 56) & 0x003f))
-#define GETLUN(x) ((int)((((uint64_t)(x)) >> 48) & 0x001f))
-
 /*
  * Hypervisor calls.
  */
