@@ -84,9 +84,8 @@ struct server_adapter {
 	struct work_struct crq_work;
 	mempool_t *iu_pool;
 
-	spinlock_t lock; /* cmd_queue and next_rsp_delta */
+	spinlock_t lock; /* cmd_queue */
 	struct list_head cmd_queue;
-	int next_rsp_delta;
 
 	unsigned long liobn;
 	unsigned long riobn;
@@ -196,8 +195,7 @@ static int send_rsp(struct iu_entry *iue, unsigned char status,
 	memset(iu, 0, sizeof(struct srp_rsp));
 	iu->srp.rsp.opcode = SRP_RSP;
 	spin_lock_irqsave(&iue->adapter->lock, flags);
-	iu->srp.rsp.req_lim_delta = 1 + iue->adapter->next_rsp_delta;
-	iue->adapter->next_rsp_delta = 0;
+	iu->srp.rsp.req_lim_delta = 1;
 	spin_unlock_irqrestore(&iue->adapter->lock, flags);
 	iu->srp.rsp.tag = tag;
 
@@ -1179,7 +1177,6 @@ static int ibmvstgt_probe(struct vio_dev *dev, const struct vio_device_id *id)
 	adapter->dma_dev = dev;
 	adapter->dev = &dev->dev;
 	adapter->dev->driver_data = adapter;
-	adapter->next_rsp_delta = 0;
 	spin_lock_init(&adapter->lock);
 
 	dma = (unsigned int *)
