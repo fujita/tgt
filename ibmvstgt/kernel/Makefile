@@ -1,5 +1,4 @@
-EXTRA_CFLAGS += -I$(obj) -I$(obj)/../include -I$(obj)/../../kernel \
-		-I$(KERNELSRC)/drivers/scsi/ibmvscsi/
+EXTRA_CFLAGS += -I$(KERNELSRC)/drivers/scsi/ibmvscsi/
 
 ifneq ($(KERNELRELEASE),)
 obj-m		+= ibmvstgt.o
