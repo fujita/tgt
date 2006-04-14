@@ -116,8 +116,6 @@ struct iu_entry {
 	struct {
 		dma_addr_t remote_token;
 		unsigned long flags;
-		int data_out_residual_count;
-		int data_in_residual_count;
 	} req;
 };
 
@@ -194,8 +192,8 @@ static int send_rsp(struct iu_entry *iue, unsigned char status,
 	if (test_bit(V_DIOVER, &iue->req.flags))
 		iu->srp.rsp.flags |= SRP_RSP_FLAG_DIOVER;
 
-	iu->srp.rsp.data_in_res_cnt = iue->req.data_in_residual_count;
-	iu->srp.rsp.data_out_res_cnt = iue->req.data_out_residual_count;
+	iu->srp.rsp.data_in_res_cnt = 0;
+	iu->srp.rsp.data_out_res_cnt = 0;
 
 	iu->srp.rsp.flags &= ~SRP_RSP_FLAG_RSPVALID;
 
