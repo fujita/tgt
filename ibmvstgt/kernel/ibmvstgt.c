@@ -116,7 +116,6 @@ struct iu_entry {
 
 	struct {
 		dma_addr_t remote_token;
-		char *sense;
 		unsigned long flags;
 		int data_out_residual_count;
 		int data_in_residual_count;
@@ -180,7 +179,6 @@ static int send_rsp(struct iu_entry *iue, unsigned char status,
 		    unsigned char asc)
 {
 	union viosrp_iu *iu = vio_iu(iue);
-	uint8_t *sense = iu->srp.rsp.data;
 	uint64_t tag = iu->srp.rsp.tag;
 	unsigned long flags;
 
@@ -204,30 +202,29 @@ static int send_rsp(struct iu_entry *iue, unsigned char status,
 	iu->srp.rsp.flags &= ~SRP_RSP_FLAG_RSPVALID;
 
 	iu->srp.rsp.resp_data_len = 0;
+	iu->srp.rsp.status = status;
+	if (status) {
+		uint8_t *sense = iu->srp.rsp.data;
 
-	if (status && !iue->req.sense) {
-		iu->srp.rsp.status = SAM_STAT_CHECK_CONDITION;
-		iu->srp.rsp.flags |= SRP_RSP_FLAG_SNSVALID;
-		iu->srp.rsp.sense_data_len = SRP_RSP_SENSE_DATA_LEN;
-
-		/* Valid bit and 'current errors' */
-		sense[0] = (0x1 << 7 | 0x70);
-
-		/* Sense key */
-		sense[2] = status;
-
-		/* Additional sense length */
-		sense[7] = 0xa;	/* 10 bytes */
-
-		/* Additional sense code */
-		sense[12] = asc;
-	} else {
-		if (iue->req.sense) {
+		if (iue->scmd) {
 			iu->srp.rsp.flags |= SRP_RSP_FLAG_SNSVALID;
 			iu->srp.rsp.sense_data_len = SCSI_SENSE_BUFFERSIZE;
-			memcpy(sense, iue->req.sense, SCSI_SENSE_BUFFERSIZE);
+			memcpy(sense, iue->scmd->sense_buffer,
+			       SCSI_SENSE_BUFFERSIZE);
+		} else {
+			iu->srp.rsp.status = SAM_STAT_CHECK_CONDITION;
+			iu->srp.rsp.flags |= SRP_RSP_FLAG_SNSVALID;
+			iu->srp.rsp.sense_data_len = SRP_RSP_SENSE_DATA_LEN;
+
+			/* Valid bit and 'current errors' */
+			sense[0] = (0x1 << 7 | 0x70);
+			/* Sense key */
+			sense[2] = status;
+			/* Additional sense length */
+			sense[7] = 0xa;	/* 10 bytes */
+			/* Additional sense code */
+			sense[12] = asc;
 		}
-		iu->srp.rsp.status = status;
 	}
 
 	send_iu(iue, sizeof(iu->srp.rsp) + SRP_RSP_SENSE_DATA_LEN,
@@ -608,6 +605,7 @@ static struct iu_entry *get_iu(struct server_adapter *adapter)
 
 	memset(&iue->req, 0, sizeof(iue->req));
 	iue->adapter = adapter;
+	iue->scmd = NULL;
 	INIT_LIST_HEAD(&iue->ilist);
 
 	iue->iu_token = dma_map_single(adapter->dev, vio_iu(iue),
