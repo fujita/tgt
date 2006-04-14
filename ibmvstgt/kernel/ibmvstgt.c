@@ -35,7 +35,7 @@
 #include <asm/prom.h>
 #include <asm/vio.h>
 
-#include "viosrp.h"
+#include "ibmvscsi.h"
 
 #define DEFAULT_TIMEOUT		30*HZ
 #define	INITIAL_SRP_LIMIT	16
@@ -74,17 +74,6 @@ do {								\
 
 #define dprintk eprintk
 /* #define dprintk(fmt, args...) */
-
-/*
- * an RPA command/response transport queue.  This is our structure
- * that points to the actual queue (not architected by firmware)
- */
-struct crq_queue {
-	struct viosrp_crq *msgs;
-	int size, cur;
-	dma_addr_t msg_token;
-	spinlock_t lock;
-};
 
 /* all driver data associated with a host adapter */
 struct server_adapter {
