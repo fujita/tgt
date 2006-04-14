@@ -16,8 +16,10 @@ First, get kernel sources from James's scsi-rc-fixes-2.6 git tree:
 
 master.kernel.org:/pub/scm/linux/kernel/git/jejb/scsi-target-2.6.git
 
-Next, apply scsi-target-2.6-tree.diff in the patchset directory,
-rebuild the kernel, and reboot with the new kernel.
+Second, if you use ibmvstgt, apply scsi-target-2.6-tree.diff in the
+patchset directory. If not, you can skip this.
+
+Third, rebuild the kernel, and reboot with the new kernel.
 
 The compilation of the kernel modules require the path to above kernel
 source:
