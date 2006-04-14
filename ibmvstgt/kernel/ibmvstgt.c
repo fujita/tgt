@@ -109,16 +109,13 @@ enum srp_task_attributes {
  */
 struct iu_entry {
 	struct server_adapter *adapter;
-	struct list_head ilist;
-	dma_addr_t iu_token;
 	struct scsi_cmnd *scmd;
 
-	struct {
-		dma_addr_t remote_token;
-		unsigned long flags;
-	} req;
+	struct list_head ilist;
+	dma_addr_t iu_token;
+	dma_addr_t remote_token;
+	unsigned long flags;
 };
-
 
 static struct workqueue_struct *vtgtd;
 static kmem_cache_t *iu_cache;
@@ -141,7 +138,7 @@ static int send_iu(struct iu_entry *iue, uint64_t length, uint8_t format)
 
 	/* First copy the SRP */
 	rc = h_copy_rdma(length, iue->adapter->liobn, iue->iu_token,
-			 iue->adapter->riobn, iue->req.remote_token);
+			 iue->adapter->riobn, iue->remote_token);
 
 	if (rc)
 		eprintk("Error %ld transferring data\n", rc);
@@ -179,7 +176,7 @@ static int send_rsp(struct iu_entry *iue, unsigned char status,
 	unsigned long flags;
 
 	/* If the linked bit is on and status is good */
-	if (test_bit(V_LINKED, &iue->req.flags) && (status == NO_SENSE))
+	if (test_bit(V_LINKED, &iue->flags) && (status == NO_SENSE))
 		status = 0x10;
 
 	memset(iu, 0, sizeof(struct srp_rsp));
@@ -189,7 +186,7 @@ static int send_rsp(struct iu_entry *iue, unsigned char status,
 	spin_unlock_irqrestore(&iue->adapter->lock, flags);
 	iu->srp.rsp.tag = tag;
 
-	if (test_bit(V_DIOVER, &iue->req.flags))
+	if (test_bit(V_DIOVER, &iue->flags))
 		iu->srp.rsp.flags |= SRP_RSP_FLAG_DIOVER;
 
 	iu->srp.rsp.data_in_res_cnt = 0;
@@ -304,7 +301,7 @@ static int process_cmd(struct iu_entry *iue)
 	dprintk("%p %p\n", iue->adapter, iue);
 
 	if (getlink(iue))
-		__set_bit(V_LINKED, &iue->req.flags);
+		__set_bit(V_LINKED, &iue->flags);
 
 	tag = MSG_SIMPLE_TAG;
 
@@ -330,7 +327,7 @@ static int process_cmd(struct iu_entry *iue)
 	case WRITE_VERIFY:
 	case WRITE_12:
 	case WRITE_VERIFY_12:
-		__set_bit(V_WRITE, &iue->req.flags);
+		__set_bit(V_WRITE, &iue->flags);
 	}
 
 	if (iu->srp.cmd.buf_fmt >> 4)
@@ -369,7 +366,7 @@ retry:
 	spin_lock_irqsave(&adapter->lock, flags);
 
 	list_for_each_entry(iue, &adapter->cmd_queue, ilist) {
-		if (!test_and_set_bit(V_FLYING, &iue->req.flags)) {
+		if (!test_and_set_bit(V_FLYING, &iue->flags)) {
 			spin_unlock_irqrestore(&adapter->lock, flags);
 			process_cmd(iue);
 			goto retry;
@@ -582,7 +579,7 @@ static int recv_cmd_data(struct scsi_cmnd *scmd,
 	struct iu_entry	*iue = (struct iu_entry *) scmd->SCp.ptr;
 	enum dma_data_direction dir;
 
-	if (test_bit(V_WRITE, &iue->req.flags))
+	if (test_bit(V_WRITE, &iue->flags))
 		dir = DMA_TO_DEVICE;
 	else
 		dir = DMA_FROM_DEVICE;
@@ -599,9 +596,8 @@ static struct iu_entry *get_iu(struct server_adapter *adapter)
 	if (!iue)
 		return NULL;
 
-	memset(&iue->req, 0, sizeof(iue->req));
+	memset(iue, 0, sizeof(struct iu_entry));
 	iue->adapter = adapter;
-	iue->scmd = NULL;
 	INIT_LIST_HEAD(&iue->ilist);
 
 	iue->iu_token = dma_map_single(adapter->dev, vio_iu(iue),
@@ -857,10 +853,10 @@ static void process_iu(struct viosrp_crq *crq, struct server_adapter *adapter)
 
 	dprintk("%p %p\n", adapter, iue);
 
-	iue->req.remote_token = crq->IU_data_ptr;
+	iue->remote_token = crq->IU_data_ptr;
 
 	err = h_copy_rdma(crq->IU_length, iue->adapter->riobn,
-			  iue->req.remote_token, adapter->liobn, iue->iu_token);
+			  iue->remote_token, adapter->liobn, iue->iu_token);
 
 	if (err != H_Success)
 		eprintk("%ld transferring data error %p\n", err, iue);
