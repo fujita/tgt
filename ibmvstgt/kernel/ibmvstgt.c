@@ -37,7 +37,6 @@
 
 #include "ibmvscsi.h"
 
-#define DEFAULT_TIMEOUT		30*HZ
 #define	INITIAL_SRP_LIMIT	16
 #define	DEFAULT_MAX_SECTORS	512
 
@@ -119,7 +118,6 @@ struct iu_entry {
 		unsigned long flags;
 		int data_out_residual_count;
 		int data_in_residual_count;
-		int timeout;
 	} req;
 };
 
@@ -862,7 +860,6 @@ static void process_iu(struct viosrp_crq *crq, struct server_adapter *adapter)
 	dprintk("%p %p\n", adapter, iue);
 
 	iue->req.remote_token = crq->IU_data_ptr;
-	iue->req.timeout= crq->timeout ? crq->timeout * HZ : DEFAULT_TIMEOUT;
 
 	err = h_copy_rdma(crq->IU_length, iue->adapter->riobn,
 			  iue->req.remote_token, adapter->liobn, iue->iu_token);
