@@ -24,7 +24,7 @@
 
 #include <linux/interrupt.h>
 #include <linux/module.h>
-#include <linux/mempool.h>
+#include <linux/kfifo.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_tcq.h>
@@ -41,9 +41,6 @@
 #define	DEFAULT_MAX_SECTORS	512
 
 #define	TGT_NAME	"ibmvstgt"
-
-#define	vio_iu(iue)\
-	((union viosrp_iu *) ((char *) (iue) + sizeof(struct iu_entry)))
 
 /*
  * Hypervisor calls.
@@ -70,24 +67,6 @@ do {								\
 #define dprintk eprintk
 /* #define dprintk(fmt, args...) */
 
-/* all driver data associated with a host adapter */
-struct server_adapter {
-	struct device *dev;
-	struct vio_dev *dma_dev;
-
-	struct crq_queue crq_queue;
-	struct work_struct crq_work;
-	mempool_t *iu_pool;
-
-	spinlock_t lock; /* cmd_queue */
-	struct list_head cmd_queue;
-
-	unsigned long liobn;
-	unsigned long riobn;
-
-	struct Scsi_Host *shost;
-};
-
 enum iue_flags {
 	V_DIOVER,
 	V_WRITE,
@@ -102,23 +81,49 @@ enum srp_task_attributes {
 	SRP_ACA_TASK = 4
 };
 
-/*
- * This structure tracks our fundamental unit of work.  Whenever
- * an SRP Information Unit (IU) arrives, we track all the good stuff
- * here
- */
+struct srp_buf {
+	dma_addr_t dma;
+	void *buf;
+};
+
+struct srp_queue {
+	void *pool;
+	void *items;
+	struct kfifo *queue;
+	spinlock_t lock;
+};
+
+struct server_adapter {
+	struct device *dev;
+	struct vio_dev *dma_dev;
+
+	struct crq_queue crq_queue;
+	struct work_struct crq_work;
+
+	spinlock_t lock; /* cmd_queue */
+	struct list_head cmd_queue;
+
+	struct srp_queue iu_queue;
+	struct srp_buf *rx_ring[INITIAL_SRP_LIMIT];
+
+	unsigned long liobn;
+	unsigned long riobn;
+
+	struct Scsi_Host *shost;
+};
+
 struct iu_entry {
 	struct server_adapter *adapter;
 	struct scsi_cmnd *scmd;
 
 	struct list_head ilist;
-	dma_addr_t iu_token;
 	dma_addr_t remote_token;
 	unsigned long flags;
+
+	struct srp_buf *sbuf;
 };
 
 static struct workqueue_struct *vtgtd;
-static kmem_cache_t *iu_cache;
 
 /*
  * These are fixed for the system and come from the Open Firmware device tree.
@@ -127,6 +132,85 @@ static kmem_cache_t *iu_cache;
 static char system_id[64] = "";
 static char partition_name[97] = "UNKNOWN";
 static unsigned int partition_number = -1;
+
+static union viosrp_iu *vio_iu(struct iu_entry *iue)
+{
+	return (union viosrp_iu *) (iue->sbuf->buf);
+}
+
+static int iu_pool_alloc(struct srp_queue *q, size_t max, struct srp_buf **ring)
+{
+	int i;
+	struct iu_entry *iue;
+
+	q->pool = kcalloc(max, sizeof(struct iu_entry *), GFP_KERNEL);
+	if (!q->pool)
+		return -ENOMEM;
+	q->items = kcalloc(max, sizeof(struct iu_entry), GFP_KERNEL);
+	if (!q->items)
+		goto free_pool;
+
+	spin_lock_init(&q->lock);
+	q->queue = kfifo_init((void *) q->pool, max * sizeof(void *),
+			      GFP_KERNEL, &q->lock);
+	if (IS_ERR(q->queue))
+		goto free_item;
+
+	for (i = 0, iue = q->items; i < max; i++) {
+		__kfifo_put(q->queue, (void *) &iue, sizeof(void *));
+		iue->sbuf = ring[i];
+		iue++;
+	}
+	return 0;
+
+free_item:
+	kfree(q->items);
+free_pool:
+	kfree(q->pool);
+	return -ENOMEM;
+}
+
+static void iu_pool_free(struct srp_queue *q)
+{
+	kfree(q->items);
+	kfree(q->pool);
+}
+
+static int srp_ring_alloc(struct device *dev, struct srp_buf **ring,
+			  size_t max, size_t size)
+{
+	int i;
+
+	for (i = 0; i < max; i++) {
+		ring[i] = kzalloc(sizeof(struct srp_buf), GFP_KERNEL);
+		if (!ring[i])
+			goto out;
+		ring[i]->buf = dma_alloc_coherent(dev, size, &ring[i]->dma,
+						  GFP_KERNEL);
+		if (!ring[i]->buf)
+			goto out;
+	}
+	return 0;
+
+out:
+	for (i = 0; i < max && ring[i]; i++) {
+		if (ring[i]->buf)
+			dma_free_coherent(dev, size, ring[i]->buf, ring[i]->dma);
+		kfree(ring[i]);
+	}
+	return -ENOMEM;
+}
+
+static void srp_ring_free(struct device *dev, struct srp_buf **ring, size_t max,
+			  size_t size)
+{
+	int i;
+
+	for (i = 0; i < max; i++) {
+		dma_free_coherent(dev, size, ring[i]->buf, ring[i]->dma);
+		kfree(ring[i]);
+	}
+}
 
 static int send_iu(struct iu_entry *iue, uint64_t length, uint8_t format)
 {
@@ -137,7 +221,7 @@ static int send_iu(struct iu_entry *iue, uint64_t length, uint8_t format)
 	} crq;
 
 	/* First copy the SRP */
-	rc = h_copy_rdma(length, iue->adapter->liobn, iue->iu_token,
+	rc = h_copy_rdma(length, iue->adapter->liobn, iue->sbuf->dma,
 			 iue->adapter->riobn, iue->remote_token);
 
 	if (rc)
@@ -590,36 +674,22 @@ static int recv_cmd_data(struct scsi_cmnd *scmd,
 
 static struct iu_entry *get_iu(struct server_adapter *adapter)
 {
-	struct iu_entry *iue;
+	struct iu_entry *iue = NULL;
 
-	iue = mempool_alloc(adapter->iu_pool, GFP_ATOMIC);
-	if (!iue)
-		return NULL;
+	kfifo_get(adapter->iu_queue.queue, (void *) &iue, sizeof(void *));
+	BUG_ON(!iue);
 
-	memset(iue, 0, sizeof(struct iu_entry));
 	iue->adapter = adapter;
+	iue->scmd = NULL;
 	INIT_LIST_HEAD(&iue->ilist);
-
-	iue->iu_token = dma_map_single(adapter->dev, vio_iu(iue),
-				       sizeof(union viosrp_iu),
-				       DMA_BIDIRECTIONAL);
-	if (dma_mapping_error(iue->iu_token)) {
-		mempool_free(iue, adapter->iu_pool);
-		iue = NULL;
-	}
+	iue->flags = 0;
 
 	return iue;
 }
 
 static void put_iu(struct iu_entry *iue)
 {
-	struct server_adapter *adapter = iue->adapter;
-
-	dprintk("%p %p\n", adapter, iue);
-
-	dma_unmap_single(adapter->dev, iue->iu_token,
-			 sizeof(union viosrp_iu), DMA_BIDIRECTIONAL);
-	mempool_free(iue, adapter->iu_pool);
+	kfifo_put(iue->adapter->iu_queue.queue, (void *) &iue, sizeof(void *));
 }
 
 static int ibmvstgt_cmd_done(struct scsi_cmnd *scmd,
@@ -856,7 +926,7 @@ static void process_iu(struct viosrp_crq *crq, struct server_adapter *adapter)
 	iue->remote_token = crq->IU_data_ptr;
 
 	err = h_copy_rdma(crq->IU_length, iue->adapter->riobn,
-			  iue->remote_token, adapter->liobn, iue->iu_token);
+			  iue->remote_token, adapter->liobn, iue->sbuf->dma);
 
 	if (err != H_Success)
 		eprintk("%ld transferring data error %p\n", err, iue);
@@ -1178,11 +1248,14 @@ static int ibmvstgt_probe(struct vio_dev *dev, const struct vio_device_id *id)
 	INIT_WORK(&adapter->crq_work, handle_crq, adapter);
 	INIT_LIST_HEAD(&adapter->cmd_queue);
 
-	adapter->iu_pool = mempool_create(INITIAL_SRP_LIMIT,
-					  mempool_alloc_slab,
-					  mempool_free_slab, iu_cache);
-	if (!adapter->iu_pool)
+	err = srp_ring_alloc(adapter->dev, adapter->rx_ring, INITIAL_SRP_LIMIT,
+			     SRP_MAX_IU_LEN);
+	if (err)
 		goto put_host;
+	err = iu_pool_alloc(&adapter->iu_queue, INITIAL_SRP_LIMIT,
+			    adapter->rx_ring);
+	if (err)
+		goto free_ring;
 
 	err = crq_queue_create(&adapter->crq_queue, adapter);
 	if (err)
@@ -1195,7 +1268,10 @@ static int ibmvstgt_probe(struct vio_dev *dev, const struct vio_device_id *id)
 destroy_queue:
 	crq_queue_destroy(adapter);
 free_pool:
-	mempool_destroy(adapter->iu_pool);
+	iu_pool_free(&adapter->iu_queue);
+free_ring:
+	srp_ring_free(adapter->dev, adapter->rx_ring, INITIAL_SRP_LIMIT,
+		      SRP_MAX_IU_LEN);
 put_host:
 	scsi_host_put(shost);
 
@@ -1209,7 +1285,9 @@ static int ibmvstgt_remove(struct vio_dev *dev)
 	struct Scsi_Host *shost = adapter->shost;
 
 	crq_queue_destroy(adapter);
-	mempool_destroy(adapter->iu_pool);
+	srp_ring_free(adapter->dev, adapter->rx_ring, INITIAL_SRP_LIMIT,
+		      SRP_MAX_IU_LEN);
+	iu_pool_free(&adapter->iu_queue);
 	scsi_remove_host(shost);
 	scsi_host_put(shost);
 	return 0;
@@ -1261,20 +1339,12 @@ static int get_system_info(void)
 static int ibmvstgt_init(void)
 {
 	int err = -ENOMEM;
-	size_t size = sizeof(struct iu_entry) + sizeof(union viosrp_iu);
 
 	printk("IBM eServer i/pSeries Virtual SCSI Target Driver\n");
 
-	iu_cache = kmem_cache_create("ibmvstgt_iu",
-				     size, 0,
-				     SLAB_HWCACHE_ALIGN | SLAB_NO_REAP,
-				     NULL, NULL);
-	if (!iu_cache)
-		return err;
-
 	vtgtd = create_workqueue("ibmvtgtd");
 	if (!vtgtd)
-		goto free_iu_cache;
+		return err;
 
 	err = get_system_info();
 	if (err < 0)
@@ -1288,9 +1358,6 @@ static int ibmvstgt_init(void)
 
 destroy_wq:
 	destroy_workqueue(vtgtd);
-free_iu_cache:
-	kmem_cache_destroy(iu_cache);
-
 	return err;
 }
 
@@ -1300,7 +1367,6 @@ static void ibmvstgt_exit(void)
 
 	destroy_workqueue(vtgtd);
 	vio_unregister_driver(&ibmvstgt_driver);
-	kmem_cache_destroy(iu_cache);
 }
 
 module_init(ibmvstgt_init);
