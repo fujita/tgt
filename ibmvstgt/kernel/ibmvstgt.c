@@ -93,12 +93,9 @@ struct srp_queue {
 	spinlock_t lock;
 };
 
-struct server_adapter {
+struct srp_target {
+	struct Scsi_Host *shost;
 	struct device *dev;
-	struct vio_dev *dma_dev;
-
-	struct crq_queue crq_queue;
-	struct work_struct crq_work;
 
 	spinlock_t lock; /* cmd_queue */
 	struct list_head cmd_queue;
@@ -106,14 +103,21 @@ struct server_adapter {
 	struct srp_queue iu_queue;
 	struct srp_buf **rx_ring;
 
+	void *ldata;
+};
+
+struct vio_port {
+	struct vio_dev *dma_dev;
+
+	struct crq_queue crq_queue;
+	struct work_struct crq_work;
+
 	unsigned long liobn;
 	unsigned long riobn;
-
-	struct Scsi_Host *shost;
 };
 
 struct iu_entry {
-	struct server_adapter *adapter;
+	struct srp_target *target;
 	struct scsi_cmnd *scmd;
 
 	struct list_head ilist;
@@ -132,6 +136,16 @@ static struct workqueue_struct *vtgtd;
 static char system_id[64] = "";
 static char partition_name[97] = "UNKNOWN";
 static unsigned int partition_number = -1;
+
+static struct srp_target *host_to_target(struct Scsi_Host *host)
+{
+	return (struct srp_target *) host->hostdata;
+}
+
+static struct vio_port *target_to_port(struct srp_target *target)
+{
+	return (struct vio_port *) target->ldata;
+}
 
 static union viosrp_iu *vio_iu(struct iu_entry *iue)
 {
@@ -195,7 +209,7 @@ static struct srp_buf ** srp_ring_alloc(struct device *dev,
 		if (!ring[i]->buf)
 			goto out;
 	}
-	return 0;
+	return ring;
 
 out:
 	for (i = 0; i < max && ring[i]; i++) {
@@ -221,6 +235,8 @@ static void srp_ring_free(struct device *dev, struct srp_buf **ring, size_t max,
 
 static int send_iu(struct iu_entry *iue, uint64_t length, uint8_t format)
 {
+	struct srp_target *target = iue->target;
+	struct vio_port *vport = target_to_port(target);
 	long rc, rc1;
 	union {
 		struct viosrp_crq cooked;
@@ -228,8 +244,8 @@ static int send_iu(struct iu_entry *iue, uint64_t length, uint8_t format)
 	} crq;
 
 	/* First copy the SRP */
-	rc = h_copy_rdma(length, iue->adapter->liobn, iue->sbuf->dma,
-			 iue->adapter->riobn, iue->remote_token);
+	rc = h_copy_rdma(length, vport->liobn, iue->sbuf->dma,
+			 vport->riobn, iue->remote_token);
 
 	if (rc)
 		eprintk("Error %ld transferring data\n", rc);
@@ -246,8 +262,7 @@ static int send_iu(struct iu_entry *iue, uint64_t length, uint8_t format)
 	else
 		crq.cooked.status = 0x00;
 
-	rc1 = h_send_crq(iue->adapter->dma_dev->unit_address,
-			 crq.raw[0], crq.raw[1]);
+	rc1 = h_send_crq(vport->dma_dev->unit_address, crq.raw[0], crq.raw[1]);
 
 	if (rc1) {
 		eprintk("%ld sending response\n", rc1);
@@ -262,6 +277,7 @@ static int send_iu(struct iu_entry *iue, uint64_t length, uint8_t format)
 static int send_rsp(struct iu_entry *iue, unsigned char status,
 		    unsigned char asc)
 {
+	struct srp_target *target = iue->target;
 	union viosrp_iu *iu = vio_iu(iue);
 	uint64_t tag = iu->srp.rsp.tag;
 	unsigned long flags;
@@ -272,9 +288,9 @@ static int send_rsp(struct iu_entry *iue, unsigned char status,
 
 	memset(iu, 0, sizeof(struct srp_rsp));
 	iu->srp.rsp.opcode = SRP_RSP;
-	spin_lock_irqsave(&iue->adapter->lock, flags);
+	spin_lock_irqsave(&target->lock, flags);
 	iu->srp.rsp.req_lim_delta = 1;
-	spin_unlock_irqrestore(&iue->adapter->lock, flags);
+	spin_unlock_irqrestore(&target->lock, flags);
 	iu->srp.rsp.tag = tag;
 
 	if (test_bit(V_DIOVER, &iue->flags))
@@ -383,13 +399,13 @@ static inline uint8_t getlink(struct iu_entry *iue)
 
 static int process_cmd(struct iu_entry *iue)
 {
-	struct Scsi_host *shost = iue->adapter->shost;
+	struct Scsi_host *shost = iue->target->shost;
 	union viosrp_iu *iu = vio_iu(iue);
 	enum dma_data_direction data_dir;
 	struct scsi_cmnd *scmd;
 	int tag, len;
 
-	dprintk("%p %p\n", iue->adapter, iue);
+	dprintk("%p %p\n", iue->target, iue);
 
 	if (getlink(iue))
 		__set_bit(V_LINKED, &iue->flags);
@@ -448,30 +464,31 @@ static int process_cmd(struct iu_entry *iue)
 	return 0;
 }
 
-static void handle_cmd_queue(struct server_adapter *adapter)
+static void handle_cmd_queue(struct srp_target *target)
 {
 	struct iu_entry *iue;
 	unsigned long flags;
 
 retry:
-	spin_lock_irqsave(&adapter->lock, flags);
+	spin_lock_irqsave(&target->lock, flags);
 
-	list_for_each_entry(iue, &adapter->cmd_queue, ilist) {
+	list_for_each_entry(iue, &target->cmd_queue, ilist) {
 		if (!test_and_set_bit(V_FLYING, &iue->flags)) {
-			spin_unlock_irqrestore(&adapter->lock, flags);
+			spin_unlock_irqrestore(&target->lock, flags);
 			process_cmd(iue);
 			goto retry;
 		}
 	}
 
-	spin_unlock_irqrestore(&adapter->lock, flags);
+	spin_unlock_irqrestore(&target->lock, flags);
 }
 
 static int direct_data(struct scsi_cmnd *scmd, struct srp_direct_buf *md,
 		       enum dma_data_direction dir)
 {
 	struct iu_entry *iue = (struct iu_entry *) scmd->SCp.ptr;
-	struct server_adapter *adapter = iue->adapter;
+	struct srp_target *target = iue->target;
+	struct vio_port *vport = target_to_port(target);
 	struct scatterlist *sg = scmd->request_buffer;
 	unsigned int rest, len;
 	int i, done, nsg;
@@ -481,7 +498,7 @@ static int direct_data(struct scsi_cmnd *scmd, struct srp_direct_buf *md,
 	dprintk("%p %u %u %u %d\n", iue, scmd->request_bufflen, scmd->bufflen,
 		md->len, scmd->use_sg);
 
-	nsg = dma_map_sg(adapter->dev, sg, scmd->use_sg, DMA_BIDIRECTIONAL);
+	nsg = dma_map_sg(target->dev, sg, scmd->use_sg, DMA_BIDIRECTIONAL);
 	if (!nsg) {
 		eprintk("fail to map %p %d\n", iue, scmd->use_sg);
 		return 0;
@@ -494,15 +511,11 @@ static int direct_data(struct scsi_cmnd *scmd, struct srp_direct_buf *md,
 		len = min(sg_dma_len(sg + i), rest);
 
 		if (dir == DMA_TO_DEVICE)
-			err = h_copy_rdma(len, adapter->riobn,
-					  md->va + done,
-					  adapter->liobn,
-					  token);
+			err = h_copy_rdma(len, vport->riobn, md->va + done,
+					  vport->liobn, token);
 		else
-			err = h_copy_rdma(len, adapter->liobn,
-					  token,
-					  adapter->riobn,
-					  md->va + done);
+			err = h_copy_rdma(len, vport->liobn, token,
+					  vport->riobn, md->va + done);
 
 		if (err != H_Success) {
 			eprintk("rdma error %d %d %ld\n", dir, i, err);
@@ -513,7 +526,7 @@ static int direct_data(struct scsi_cmnd *scmd, struct srp_direct_buf *md,
 		done += len;
 	}
 
-	dma_unmap_sg(adapter->dev, sg, nsg, DMA_BIDIRECTIONAL);
+	dma_unmap_sg(target->dev, sg, nsg, DMA_BIDIRECTIONAL);
 
 	return done;
 }
@@ -522,7 +535,8 @@ static int indirect_data(struct scsi_cmnd *scmd, struct srp_indirect_buf *id,
 			 enum dma_data_direction dir)
 {
 	struct iu_entry *iue = (struct iu_entry *) scmd->SCp.ptr;
-	struct server_adapter *adapter = iue->adapter;
+	struct srp_target *target = iue->target;
+	struct vio_port *vport = target_to_port(target);
 	struct srp_cmd *cmd = &vio_iu(iue)->srp.cmd;
 	struct srp_direct_buf *mds;
 	struct scatterlist *sg = scmd->request_buffer;
@@ -544,22 +558,22 @@ static int indirect_data(struct scsi_cmnd *scmd, struct srp_indirect_buf *id,
 		goto rdma;
 	}
 
-	mds = dma_alloc_coherent(adapter->dev, id->table_desc.len,
+	mds = dma_alloc_coherent(target->dev, id->table_desc.len,
 				 &itoken, GFP_KERNEL);
 	if (!mds) {
 		eprintk("Can't get dma memory %u\n", id->table_desc.len);
 		return 0;
 	}
 
-	err = h_copy_rdma(id->table_desc.len, adapter->riobn,
-			  id->table_desc.va, adapter->liobn, itoken);
+	err = h_copy_rdma(id->table_desc.len, vport->riobn,
+			  id->table_desc.va, vport->liobn, itoken);
 	if (err != H_Success) {
 		eprintk("Error copying indirect table %ld\n", err);
 		goto free_mem;
 	}
 
 rdma:
-	nsg = dma_map_sg(adapter->dev, sg, scmd->use_sg, DMA_BIDIRECTIONAL);
+	nsg = dma_map_sg(target->dev, sg, scmd->use_sg, DMA_BIDIRECTIONAL);
 	if (!nsg) {
 		eprintk("fail to map %p %d\n", iue, scmd->use_sg);
 		goto free_mem;
@@ -577,15 +591,15 @@ rdma:
 
 			if (dir == DMA_TO_DEVICE)
 				err = h_copy_rdma(slen,
-						  adapter->riobn,
+						  vport->riobn,
 						  mds[i].va + mdone,
-						  adapter->liobn,
+						  vport->liobn,
 						  token + soff);
 			else
 				err = h_copy_rdma(slen,
-						  adapter->liobn,
+						  vport->liobn,
 						  token + soff,
-						  adapter->riobn,
+						  vport->riobn,
 						  mds[i].va + mdone);
 
 			if (err != H_Success) {
@@ -615,11 +629,11 @@ rdma:
 	}
 
 unmap_sg:
-	dma_unmap_sg(adapter->dev, sg, nsg, DMA_BIDIRECTIONAL);
+	dma_unmap_sg(target->dev, sg, nsg, DMA_BIDIRECTIONAL);
 
 free_mem:
 	if (itoken)
-		dma_free_coherent(adapter->dev, id->table_desc.len, mds, itoken);
+		dma_free_coherent(target->dev, id->table_desc.len, mds, itoken);
 
 	return done;
 }
@@ -679,14 +693,14 @@ static int recv_cmd_data(struct scsi_cmnd *scmd,
 	return 0;
 }
 
-static struct iu_entry *get_iu(struct server_adapter *adapter)
+static struct iu_entry *get_iu(struct srp_target *target)
 {
 	struct iu_entry *iue = NULL;
 
-	kfifo_get(adapter->iu_queue.queue, (void *) &iue, sizeof(void *));
+	kfifo_get(target->iu_queue.queue, (void *) &iue, sizeof(void *));
 	BUG_ON(!iue);
 
-	iue->adapter = adapter;
+	iue->target = target;
 	iue->scmd = NULL;
 	INIT_LIST_HEAD(&iue->ilist);
 	iue->flags = 0;
@@ -696,7 +710,7 @@ static struct iu_entry *get_iu(struct server_adapter *adapter)
 
 static void put_iu(struct iu_entry *iue)
 {
-	kfifo_put(iue->adapter->iu_queue.queue, (void *) &iue, sizeof(void *));
+	kfifo_put(iue->target->iu_queue.queue, (void *) &iue, sizeof(void *));
 }
 
 static int ibmvstgt_cmd_done(struct scsi_cmnd *scmd,
@@ -704,13 +718,13 @@ static int ibmvstgt_cmd_done(struct scsi_cmnd *scmd,
 {
 	unsigned long flags;
 	struct iu_entry *iue = (struct iu_entry *) scmd->SCp.ptr;
-	struct server_adapter *adapter = iue->adapter;
+	struct srp_target *target = iue->target;
 
-	dprintk("%p %p %x\n", iue, adapter, vio_iu(iue)->srp.cmd.cdb[0]);
+	dprintk("%p %p %x\n", iue, target, vio_iu(iue)->srp.cmd.cdb[0]);
 
-	spin_lock_irqsave(&adapter->lock, flags);
+	spin_lock_irqsave(&target->lock, flags);
 	list_del(&iue->ilist);
-	spin_unlock_irqrestore(&adapter->lock, flags);
+	spin_unlock_irqrestore(&target->lock, flags);
 
 	if (scmd->result != SAM_STAT_GOOD) {
 		eprintk("operation failed %p %d %x\n",
@@ -727,23 +741,23 @@ static int ibmvstgt_cmd_done(struct scsi_cmnd *scmd,
 int send_adapter_info(struct iu_entry *iue,
 		      dma_addr_t remote_buffer, uint16_t length)
 {
-	struct server_adapter *adapter = iue->adapter;
-	struct Scsi_Host *shost = adapter->shost;
+	struct srp_target *target = iue->target;
+	struct vio_port *vport = target_to_port(target);
+	struct Scsi_Host *shost = target->shost;
 	dma_addr_t data_token;
 	struct mad_adapter_info_data *info;
 	int err;
 
-	info = dma_alloc_coherent(adapter->dev, sizeof(*info),
-				  &data_token, GFP_KERNEL);
-
+	info = dma_alloc_coherent(target->dev, sizeof(*info), &data_token,
+				  GFP_KERNEL);
 	if (!info) {
-		eprintk("bad dma_alloc_coherent %p\n", adapter);
+		eprintk("bad dma_alloc_coherent %p\n", target);
 		return 1;
 	}
 
 	/* Get remote info */
-	err = h_copy_rdma(sizeof(*info), adapter->riobn, remote_buffer,
-			  adapter->liobn, data_token);
+	err = h_copy_rdma(sizeof(*info), vport->riobn, remote_buffer,
+			  vport->liobn, data_token);
 	if (err == H_Success) {
 		eprintk("Client connect: %s (%d)\n",
 			info->partition_name, info->partition_number);
@@ -760,11 +774,10 @@ int send_adapter_info(struct iu_entry *iue,
 	info->port_max_txu[0] = shost->hostt->max_sectors << 9;
 
 	/* Send our info to remote */
-	err = h_copy_rdma(sizeof(*info), adapter->liobn, data_token,
-			  adapter->riobn, remote_buffer);
+	err = h_copy_rdma(sizeof(*info), vport->liobn, data_token,
+			  vport->riobn, remote_buffer);
 
-	dma_free_coherent(adapter->dev, sizeof(*info), info,
-			  data_token);
+	dma_free_coherent(target->dev, sizeof(*info), info, data_token);
 
 	if (err != H_Success) {
 		eprintk("Error sending adapter info %d\n", err);
@@ -798,13 +811,13 @@ static void process_login(struct iu_entry *iue)
 
 static inline void queue_cmd(struct iu_entry *iue)
 {
-	struct server_adapter *adapter = iue->adapter;
+	struct srp_target *target = iue->target;
 	unsigned long flags;
 
-	spin_lock_irqsave(&adapter->lock, flags);
-	list_add_tail(&iue->ilist, &iue->adapter->cmd_queue);
-	spin_unlock_irqrestore(&adapter->lock, flags);
-	handle_cmd_queue(adapter);
+	spin_lock_irqsave(&target->lock, flags);
+	list_add_tail(&iue->ilist, &target->cmd_queue);
+	spin_unlock_irqrestore(&target->lock, flags);
+	handle_cmd_queue(target);
 }
 
 static int process_tsk_mgmt(struct iu_entry *iue)
@@ -834,7 +847,7 @@ static int process_tsk_mgmt(struct iu_entry *iue)
 		fn = 0;
 	}
 	if (fn)
-		scsi_tgt_tsk_mgmt_request(iue->adapter->shost, fn,
+		scsi_tgt_tsk_mgmt_request(iue->target->shost, fn,
 					  iu->srp.tsk_mgmt.task_tag,
 					  (struct scsi_lun *) &iu->srp.tsk_mgmt.lun,
 					  iue);
@@ -917,23 +930,24 @@ static int process_srp_iu(struct iu_entry *iue)
 	return done;
 }
 
-static void process_iu(struct viosrp_crq *crq, struct server_adapter *adapter)
+static void process_iu(struct viosrp_crq *crq, struct srp_target *target)
 {
+	struct vio_port *vport = target_to_port(target);
 	struct iu_entry *iue;
 	long err, done;
 
-	iue = get_iu(adapter);
+	iue = get_iu(target);
 	if (!iue) {
-		eprintk("Error getting IU from pool, %p\n", adapter);
+		eprintk("Error getting IU from pool, %p\n", target);
 		return;
 	}
 
-	dprintk("%p %p\n", adapter, iue);
+	dprintk("%p %p\n", target, iue);
 
 	iue->remote_token = crq->IU_data_ptr;
 
-	err = h_copy_rdma(crq->IU_length, iue->adapter->riobn,
-			  iue->remote_token, adapter->liobn, iue->sbuf->dma);
+	err = h_copy_rdma(crq->IU_length, vport->riobn,
+			  iue->remote_token, vport->liobn, iue->sbuf->dma);
 
 	if (err != H_Success)
 		eprintk("%ld transferring data error %p\n", err, iue);
@@ -947,35 +961,35 @@ static void process_iu(struct viosrp_crq *crq, struct server_adapter *adapter)
 		put_iu(iue);
 }
 
-static irqreturn_t ibmvstgt_interrupt(int irq, void *dev_instance,
-				      struct pt_regs *regs)
+static irqreturn_t ibmvstgt_interrupt(int irq, void *data, struct pt_regs *regs)
 {
-	struct server_adapter *adapter = (struct server_adapter *)dev_instance;
+	struct srp_target *target = (struct srp_target *) data;
+	struct vio_port *vport = target_to_port(target);
 
-	vio_disable_interrupts(adapter->dma_dev);
-	queue_work(vtgtd, &adapter->crq_work);
+	vio_disable_interrupts(vport->dma_dev);
+	queue_work(vtgtd, &vport->crq_work);
 
 	return IRQ_HANDLED;
 }
 
-static int crq_queue_create(struct crq_queue *queue,
-			    struct server_adapter *adapter)
+static int crq_queue_create(struct crq_queue *queue, struct srp_target *target)
 {
 	int err;
+	struct vio_port *vport = target_to_port(target);
 
 	queue->msgs = (struct viosrp_crq *) get_zeroed_page(GFP_KERNEL);
 	if (!queue->msgs)
 		goto malloc_failed;
 	queue->size = PAGE_SIZE / sizeof(*queue->msgs);
 
-	queue->msg_token = dma_map_single(adapter->dev, queue->msgs,
+	queue->msg_token = dma_map_single(target->dev, queue->msgs,
 					  queue->size * sizeof(*queue->msgs),
 					  DMA_BIDIRECTIONAL);
 
 	if (dma_mapping_error(queue->msg_token))
 		goto map_failed;
 
-	err = h_reg_crq(adapter->dma_dev->unit_address, queue->msg_token,
+	err = h_reg_crq(vport->dma_dev->unit_address, queue->msg_token,
 			PAGE_SIZE);
 
 	/* If the adapter was left active for some reason (like kexec)
@@ -983,10 +997,10 @@ static int crq_queue_create(struct crq_queue *queue,
 	 */
 	if (err == H_Resource) {
 	    do {
-		err = h_free_crq(adapter->dma_dev->unit_address);
+		err = h_free_crq(vport->dma_dev->unit_address);
 	    } while (err == H_Busy || H_isLongBusy(err));
 
-	    err = h_reg_crq(adapter->dma_dev->unit_address, queue->msg_token,
+	    err = h_reg_crq(vport->dma_dev->unit_address, queue->msg_token,
 			    PAGE_SIZE);
 	}
 
@@ -995,14 +1009,14 @@ static int crq_queue_create(struct crq_queue *queue,
 		goto reg_crq_failed;
 	}
 
-	err = request_irq(adapter->dma_dev->irq, &ibmvstgt_interrupt,
-			  SA_INTERRUPT, "ibmvstgt", adapter);
+	err = request_irq(vport->dma_dev->irq, &ibmvstgt_interrupt,
+			  SA_INTERRUPT, "ibmvstgt", target);
 	if (err)
 		goto req_irq_failed;
 
-	vio_enable_interrupts(adapter->dma_dev);
+	vio_enable_interrupts(vport->dma_dev);
 
-	h_send_crq(adapter->dma_dev->unit_address, 0xC001000000000000, 0);
+	h_send_crq(vport->dma_dev->unit_address, 0xC001000000000000, 0);
 
 	queue->cur = 0;
 	spin_lock_init(&queue->lock);
@@ -1011,11 +1025,11 @@ static int crq_queue_create(struct crq_queue *queue,
 
 req_irq_failed:
 	do {
-		err = h_free_crq(adapter->dma_dev->unit_address);
+		err = h_free_crq(vport->dma_dev->unit_address);
 	} while (err == H_Busy || H_isLongBusy(err));
 
 reg_crq_failed:
-	dma_unmap_single(adapter->dev, queue->msg_token,
+	dma_unmap_single(target->dev, queue->msg_token,
 			 queue->size * sizeof(*queue->msgs), DMA_BIDIRECTIONAL);
 map_failed:
 	free_page((unsigned long) queue->msgs);
@@ -1024,25 +1038,26 @@ malloc_failed:
 	return -ENOMEM;
 }
 
-static void crq_queue_destroy(struct server_adapter *adapter)
+static void crq_queue_destroy(struct srp_target *target)
 {
-	struct crq_queue *queue = &adapter->crq_queue;
+	struct vio_port *vport = target_to_port(target);
+	struct crq_queue *queue = &vport->crq_queue;
 	int err;
 
-	free_irq(adapter->dma_dev->irq, adapter);
+	free_irq(vport->dma_dev->irq, target);
 	do {
-		err = h_free_crq(adapter->dma_dev->unit_address);
+		err = h_free_crq(vport->dma_dev->unit_address);
 	} while (err == H_Busy || H_isLongBusy(err));
 
-	dma_unmap_single(adapter->dev, queue->msg_token,
+	dma_unmap_single(target->dev, queue->msg_token,
 			 queue->size * sizeof(*queue->msgs), DMA_BIDIRECTIONAL);
 
 	free_page((unsigned long) queue->msgs);
 }
 
-static void process_crq(struct viosrp_crq *crq,
-			struct server_adapter *adapter)
+static void process_crq(struct viosrp_crq *crq,	struct srp_target *target)
 {
+	struct vio_port *vport = target_to_port(target);
 	dprintk("%x %x\n", crq->valid, crq->format);
 
 	switch (crq->valid) {
@@ -1050,7 +1065,7 @@ static void process_crq(struct viosrp_crq *crq,
 		/* initialization */
 		switch (crq->format) {
 		case 0x01:
-			h_send_crq(adapter->dma_dev->unit_address,
+			h_send_crq(vport->dma_dev->unit_address,
 				   0xC002000000000000, 0);
 			break;
 		case 0x02:
@@ -1067,7 +1082,7 @@ static void process_crq(struct viosrp_crq *crq,
 		switch (crq->format) {
 		case VIOSRP_SRP_FORMAT:
 		case VIOSRP_MAD_FORMAT:
-			process_iu(crq, adapter);
+			process_iu(crq, target);
 			break;
 		case VIOSRP_OS400_FORMAT:
 		case VIOSRP_AIX_FORMAT:
@@ -1103,41 +1118,42 @@ static inline struct viosrp_crq *next_crq(struct crq_queue *queue)
 
 static void handle_crq(void *data)
 {
-	struct server_adapter *adapter = (struct server_adapter *) data;
+	struct srp_target *target = (struct srp_target *) data;
+	struct vio_port *vport = target_to_port(target);
 	struct viosrp_crq *crq;
 	int done = 0;
 
 	while (!done) {
-		while ((crq = next_crq(&adapter->crq_queue)) != NULL) {
-			process_crq(crq, adapter);
+		while ((crq = next_crq(&vport->crq_queue)) != NULL) {
+			process_crq(crq, target);
 			crq->valid = 0x00;
 		}
 
-		vio_enable_interrupts(adapter->dma_dev);
+		vio_enable_interrupts(vport->dma_dev);
 
-		crq = next_crq(&adapter->crq_queue);
+		crq = next_crq(&vport->crq_queue);
 		if (crq) {
-			vio_disable_interrupts(adapter->dma_dev);
-			process_crq(crq, adapter);
+			vio_disable_interrupts(vport->dma_dev);
+			process_crq(crq, target);
 			crq->valid = 0x00;
 		} else
 			done = 1;
 	}
 
-	handle_cmd_queue(adapter);
+	handle_cmd_queue(target);
 }
 
 static int ibmvstgt_eh_abort_handler(struct scsi_cmnd *scmd)
 {
 	unsigned long flags;
 	struct iu_entry *iue = (struct iu_entry *) scmd->SCp.ptr;
-	struct server_adapter *adapter = iue->adapter;
+	struct srp_target *target = iue->target;
 
-	dprintk("%p %p %x\n", iue, adapter, vio_iu(iue)->srp.cmd.cdb[0]);
+	dprintk("%p %p %x\n", iue, target, vio_iu(iue)->srp.cmd.cdb[0]);
 
-	spin_lock_irqsave(&adapter->lock, flags);
+	spin_lock_irqsave(&target->lock, flags);
 	list_del(&iue->ilist);
-	spin_unlock_irqrestore(&adapter->lock, flags);
+	spin_unlock_irqrestore(&target->lock, flags);
 
 	put_iu(iue);
 
@@ -1170,8 +1186,6 @@ static int ibmvstgt_tsk_mgmt_response(u64 mid, int result)
 	return 0;
 }
 
-#define	host_to_adapter(x)	(((struct server_adapter *) x->hostdata))
-
 static ssize_t
 system_id_show(struct class_device *cdev, char *buf)
 {
@@ -1188,8 +1202,9 @@ static ssize_t
 unit_address_show(struct class_device *cdev, char *buf)
 {
 	struct Scsi_Host *shost = class_to_shost(cdev);
-	struct server_adapter *adapter = host_to_adapter(shost);
-	return snprintf(buf, PAGE_SIZE, "%x\n", adapter->dma_dev->unit_address);
+	struct srp_target *target = host_to_target(shost);
+	struct vio_port *vport = target_to_port(target);
+	return snprintf(buf, PAGE_SIZE, "%x\n", vport->dma_dev->unit_address);
 }
 
 static CLASS_DEVICE_ATTR(system_id, S_IRUGO, system_id_show, NULL);
@@ -1221,25 +1236,31 @@ static struct scsi_host_template ibmvstgt_sht = {
 static int ibmvstgt_probe(struct vio_dev *dev, const struct vio_device_id *id)
 {
 	struct Scsi_Host *shost;
-	struct server_adapter *adapter;
+	struct srp_target *target;
+	struct vio_port *vport;
 	unsigned int *dma, dma_size;
 	int err = -ENOMEM;
 
 	dprintk("%s %s %x %u\n", dev->name, dev->type,
 		dev->unit_address, dev->irq);
 
-	shost = scsi_host_alloc(&ibmvstgt_sht, sizeof(struct server_adapter));
-	if (!shost)
+	vport = kzalloc(sizeof(struct vio_port), GFP_KERNEL);
+	if (!vport)
 		return err;
+	shost = scsi_host_alloc(&ibmvstgt_sht, sizeof(struct srp_target));
+	if (!shost)
+		goto free_vport;
 	if (scsi_tgt_alloc_queue(shost))
 		goto put_host;
 
-	adapter = (struct server_adapter *) shost->hostdata;
-	adapter->shost = shost;
-	adapter->dma_dev = dev;
-	adapter->dev = &dev->dev;
-	adapter->dev->driver_data = adapter;
-	spin_lock_init(&adapter->lock);
+	target = host_to_target(shost);
+	target->shost = shost;
+	vport->dma_dev = dev;
+	target->dev = &dev->dev;
+	target->dev->driver_data = target;
+	spin_lock_init(&target->lock);
+	INIT_LIST_HEAD(&target->cmd_queue);
+	target->ldata = vport;
 
 	dma = (unsigned int *)
 		vio_get_attribute(dev, "ibm,my-dma-window", &dma_size);
@@ -1248,53 +1269,51 @@ static int ibmvstgt_probe(struct vio_dev *dev, const struct vio_device_id *id)
 		err = -EIO;
 		goto put_host;
 	}
+	vport->liobn = dma[0];
+	vport->riobn = dma[5];
 
-	adapter->liobn = dma[0];
-	adapter->riobn = dma[5];
+	INIT_WORK(&vport->crq_work, handle_crq, target);
 
-	INIT_WORK(&adapter->crq_work, handle_crq, adapter);
-	INIT_LIST_HEAD(&adapter->cmd_queue);
-
-	adapter->rx_ring = srp_ring_alloc(adapter->dev, INITIAL_SRP_LIMIT,
+	target->rx_ring = srp_ring_alloc(target->dev, INITIAL_SRP_LIMIT,
 					  SRP_MAX_IU_LEN);
-	if (!adapter->rx_ring)
+	if (!target->rx_ring)
 		goto put_host;
-	err = iu_pool_alloc(&adapter->iu_queue, INITIAL_SRP_LIMIT,
-			    adapter->rx_ring);
+	err = iu_pool_alloc(&target->iu_queue, INITIAL_SRP_LIMIT,
+			    target->rx_ring);
 	if (err)
 		goto free_ring;
 
-	err = crq_queue_create(&adapter->crq_queue, adapter);
+	err = crq_queue_create(&vport->crq_queue, target);
 	if (err)
 		goto free_pool;
 
-	if (scsi_add_host(shost, adapter->dev))
+	if (scsi_add_host(shost, target->dev))
 		goto destroy_queue;
 	return 0;
 
 destroy_queue:
-	crq_queue_destroy(adapter);
+	crq_queue_destroy(target);
 free_pool:
-	iu_pool_free(&adapter->iu_queue);
+	iu_pool_free(&target->iu_queue);
 free_ring:
-	srp_ring_free(adapter->dev, adapter->rx_ring, INITIAL_SRP_LIMIT,
+	srp_ring_free(target->dev, target->rx_ring, INITIAL_SRP_LIMIT,
 		      SRP_MAX_IU_LEN);
 put_host:
 	scsi_host_put(shost);
-
+free_vport:
+	kfree(vport);
 	return err;
 }
 
 static int ibmvstgt_remove(struct vio_dev *dev)
 {
-	struct server_adapter *adapter =
-		(struct server_adapter *) dev->dev.driver_data;
-	struct Scsi_Host *shost = adapter->shost;
+	struct srp_target *target = (struct srp_target *) dev->dev.driver_data;
+	struct Scsi_Host *shost = target->shost;
 
-	crq_queue_destroy(adapter);
-	srp_ring_free(adapter->dev, adapter->rx_ring, INITIAL_SRP_LIMIT,
+	crq_queue_destroy(target);
+	srp_ring_free(target->dev, target->rx_ring, INITIAL_SRP_LIMIT,
 		      SRP_MAX_IU_LEN);
-	iu_pool_free(&adapter->iu_queue);
+	iu_pool_free(&target->iu_queue);
 	scsi_remove_host(shost);
 	scsi_host_put(shost);
 	return 0;
