@@ -104,7 +104,7 @@ struct server_adapter {
 	struct list_head cmd_queue;
 
 	struct srp_queue iu_queue;
-	struct srp_buf *rx_ring[INITIAL_SRP_LIMIT];
+	struct srp_buf **rx_ring;
 
 	unsigned long liobn;
 	unsigned long riobn;
@@ -176,10 +176,15 @@ static void iu_pool_free(struct srp_queue *q)
 	kfree(q->pool);
 }
 
-static int srp_ring_alloc(struct device *dev, struct srp_buf **ring,
-			  size_t max, size_t size)
+static struct srp_buf ** srp_ring_alloc(struct device *dev,
+					size_t max, size_t size)
 {
 	int i;
+	struct srp_buf **ring;
+
+	ring = kcalloc(max, sizeof(struct srp_buf *), GFP_KERNEL);
+	if (!ring)
+		return NULL;
 
 	for (i = 0; i < max; i++) {
 		ring[i] = kzalloc(sizeof(struct srp_buf), GFP_KERNEL);
@@ -198,7 +203,9 @@ out:
 			dma_free_coherent(dev, size, ring[i]->buf, ring[i]->dma);
 		kfree(ring[i]);
 	}
-	return -ENOMEM;
+	kfree(ring);
+
+	return NULL;
 }
 
 static void srp_ring_free(struct device *dev, struct srp_buf **ring, size_t max,
@@ -1248,9 +1255,9 @@ static int ibmvstgt_probe(struct vio_dev *dev, const struct vio_device_id *id)
 	INIT_WORK(&adapter->crq_work, handle_crq, adapter);
 	INIT_LIST_HEAD(&adapter->cmd_queue);
 
-	err = srp_ring_alloc(adapter->dev, adapter->rx_ring, INITIAL_SRP_LIMIT,
-			     SRP_MAX_IU_LEN);
-	if (err)
+	adapter->rx_ring = srp_ring_alloc(adapter->dev, INITIAL_SRP_LIMIT,
+					  SRP_MAX_IU_LEN);
+	if (!adapter->rx_ring)
 		goto put_host;
 	err = iu_pool_alloc(&adapter->iu_queue, INITIAL_SRP_LIMIT,
 			    adapter->rx_ring);
