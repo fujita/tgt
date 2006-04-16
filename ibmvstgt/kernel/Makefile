@@ -1,8 +1,7 @@
-EXTRA_CFLAGS += -I$(KERNELSRC)/drivers/scsi/ibmvscsi/
+EXTRA_CFLAGS += -I$(obj) -I$(KERNELSRC)/drivers/scsi/ibmvscsi/
 
 ifneq ($(KERNELRELEASE),)
-obj-m		+= ibmvstgt.o
-
+obj-m		+= ibmvstgt.o libsrp.o
 else
 
 ifeq ($(KERNELSRC),)

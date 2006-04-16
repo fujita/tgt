@@ -24,7 +24,6 @@
 
 #include <linux/interrupt.h>
 #include <linux/module.h>
-#include <linux/kfifo.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_tcq.h>
@@ -35,6 +34,7 @@
 #include <asm/prom.h>
 #include <asm/vio.h>
 
+#include "libsrp.h"
 #include "ibmvscsi.h"
 
 #define	INITIAL_SRP_LIMIT	16
@@ -81,31 +81,6 @@ enum srp_task_attributes {
 	SRP_ACA_TASK = 4
 };
 
-struct srp_buf {
-	dma_addr_t dma;
-	void *buf;
-};
-
-struct srp_queue {
-	void *pool;
-	void *items;
-	struct kfifo *queue;
-	spinlock_t lock;
-};
-
-struct srp_target {
-	struct Scsi_Host *shost;
-	struct device *dev;
-
-	spinlock_t lock; /* cmd_queue */
-	struct list_head cmd_queue;
-
-	struct srp_queue iu_queue;
-	struct srp_buf **rx_ring;
-
-	void *ldata;
-};
-
 struct vio_port {
 	struct vio_dev *dma_dev;
 
@@ -114,17 +89,6 @@ struct vio_port {
 
 	unsigned long liobn;
 	unsigned long riobn;
-};
-
-struct iu_entry {
-	struct srp_target *target;
-	struct scsi_cmnd *scmd;
-
-	struct list_head ilist;
-	dma_addr_t remote_token;
-	unsigned long flags;
-
-	struct srp_buf *sbuf;
 };
 
 static struct workqueue_struct *vtgtd;
@@ -137,100 +101,9 @@ static char system_id[64] = "";
 static char partition_name[97] = "UNKNOWN";
 static unsigned int partition_number = -1;
 
-static struct srp_target *host_to_target(struct Scsi_Host *host)
-{
-	return (struct srp_target *) host->hostdata;
-}
-
 static struct vio_port *target_to_port(struct srp_target *target)
 {
 	return (struct vio_port *) target->ldata;
-}
-
-static union viosrp_iu *vio_iu(struct iu_entry *iue)
-{
-	return (union viosrp_iu *) (iue->sbuf->buf);
-}
-
-static int iu_pool_alloc(struct srp_queue *q, size_t max, struct srp_buf **ring)
-{
-	int i;
-	struct iu_entry *iue;
-
-	q->pool = kcalloc(max, sizeof(struct iu_entry *), GFP_KERNEL);
-	if (!q->pool)
-		return -ENOMEM;
-	q->items = kcalloc(max, sizeof(struct iu_entry), GFP_KERNEL);
-	if (!q->items)
-		goto free_pool;
-
-	spin_lock_init(&q->lock);
-	q->queue = kfifo_init((void *) q->pool, max * sizeof(void *),
-			      GFP_KERNEL, &q->lock);
-	if (IS_ERR(q->queue))
-		goto free_item;
-
-	for (i = 0, iue = q->items; i < max; i++) {
-		__kfifo_put(q->queue, (void *) &iue, sizeof(void *));
-		iue->sbuf = ring[i];
-		iue++;
-	}
-	return 0;
-
-free_item:
-	kfree(q->items);
-free_pool:
-	kfree(q->pool);
-	return -ENOMEM;
-}
-
-static void iu_pool_free(struct srp_queue *q)
-{
-	kfree(q->items);
-	kfree(q->pool);
-}
-
-static struct srp_buf ** srp_ring_alloc(struct device *dev,
-					size_t max, size_t size)
-{
-	int i;
-	struct srp_buf **ring;
-
-	ring = kcalloc(max, sizeof(struct srp_buf *), GFP_KERNEL);
-	if (!ring)
-		return NULL;
-
-	for (i = 0; i < max; i++) {
-		ring[i] = kzalloc(sizeof(struct srp_buf), GFP_KERNEL);
-		if (!ring[i])
-			goto out;
-		ring[i]->buf = dma_alloc_coherent(dev, size, &ring[i]->dma,
-						  GFP_KERNEL);
-		if (!ring[i]->buf)
-			goto out;
-	}
-	return ring;
-
-out:
-	for (i = 0; i < max && ring[i]; i++) {
-		if (ring[i]->buf)
-			dma_free_coherent(dev, size, ring[i]->buf, ring[i]->dma);
-		kfree(ring[i]);
-	}
-	kfree(ring);
-
-	return NULL;
-}
-
-static void srp_ring_free(struct device *dev, struct srp_buf **ring, size_t max,
-			  size_t size)
-{
-	int i;
-
-	for (i = 0; i < max; i++) {
-		dma_free_coherent(dev, size, ring[i]->buf, ring[i]->dma);
-		kfree(ring[i]);
-	}
 }
 
 static int send_iu(struct iu_entry *iue, uint64_t length, uint8_t format)
@@ -692,25 +565,6 @@ static int recv_cmd_data(struct scsi_cmnd *scmd,
 	return 0;
 }
 
-static struct iu_entry *get_iu(struct srp_target *target)
-{
-	struct iu_entry *iue = NULL;
-
-	kfifo_get(target->iu_queue.queue, (void *) &iue, sizeof(void *));
-	BUG_ON(!iue);
-
-	iue->target = target;
-	iue->scmd = NULL;
-	INIT_LIST_HEAD(&iue->ilist);
-	iue->flags = 0;
-	return iue;
-}
-
-static void put_iu(struct iu_entry *iue)
-{
-	kfifo_put(iue->target->iu_queue.queue, (void *) &iue, sizeof(void *));
-}
-
 static int ibmvstgt_cmd_done(struct scsi_cmnd *scmd,
 			     void (*done)(struct scsi_cmnd *))
 {
@@ -732,7 +586,7 @@ static int ibmvstgt_cmd_done(struct scsi_cmnd *scmd,
 		send_rsp(iue, NO_SENSE, 0x00);
 
 	done(scmd);
-	put_iu(iue);
+	srp_iu_put(iue);
 	return 0;
 }
 
@@ -930,7 +784,7 @@ static void process_iu(struct viosrp_crq *crq, struct srp_target *target)
 	struct iu_entry *iue;
 	long err, done;
 
-	iue = get_iu(target);
+	iue = srp_iu_get(target);
 	if (!iue) {
 		eprintk("Error getting IU from pool, %p\n", target);
 		return;
@@ -952,7 +806,7 @@ static void process_iu(struct viosrp_crq *crq, struct srp_target *target)
 		done = process_srp_iu(iue);
 
 	if (done)
-		put_iu(iue);
+		srp_iu_put(iue);
 }
 
 static irqreturn_t ibmvstgt_interrupt(int irq, void *data, struct pt_regs *regs)
@@ -1149,7 +1003,7 @@ static int ibmvstgt_eh_abort_handler(struct scsi_cmnd *scmd)
 	list_del(&iue->ilist);
 	spin_unlock_irqrestore(&target->lock, flags);
 
-	put_iu(iue);
+	srp_iu_put(iue);
 
 	return 0;
 }
@@ -1175,7 +1029,7 @@ static int ibmvstgt_tsk_mgmt_response(u64 mid, int result)
 	}
 
 	send_rsp(iue, status, asc);
-	put_iu(iue);
+	srp_iu_put(iue);
 
 	return 0;
 }
@@ -1248,36 +1102,27 @@ static int ibmvstgt_probe(struct vio_dev *dev, const struct vio_device_id *id)
 	target = host_to_target(shost);
 	target->shost = shost;
 	vport->dma_dev = dev;
-	target->dev = &dev->dev;
-	target->dev->driver_data = target;
-	spin_lock_init(&target->lock);
-	INIT_LIST_HEAD(&target->cmd_queue);
 	target->ldata = vport;
+	err = srp_target_alloc(target, &dev->dev, INITIAL_SRP_LIMIT,
+			       SRP_MAX_IU_LEN);
+	if (err)
+		goto put_host;
 
 	dma = (unsigned int *) vio_get_attribute(dev, "ibm,my-dma-window",
 						 &dma_size);
 	if (!dma || dma_size != 40) {
 		eprintk("Couldn't get window property %d\n", dma_size);
 		err = -EIO;
-		goto put_host;
+		goto free_srp_target;
 	}
 	vport->liobn = dma[0];
 	vport->riobn = dma[5];
 
 	INIT_WORK(&vport->crq_work, handle_crq, target);
 
-	target->rx_ring = srp_ring_alloc(target->dev, INITIAL_SRP_LIMIT,
-					  SRP_MAX_IU_LEN);
-	if (!target->rx_ring)
-		goto put_host;
-	err = iu_pool_alloc(&target->iu_queue, INITIAL_SRP_LIMIT,
-			    target->rx_ring);
-	if (err)
-		goto free_ring;
-
 	err = crq_queue_create(&vport->crq_queue, target);
 	if (err)
-		goto free_pool;
+		goto free_srp_target;
 
 	err = scsi_add_host(shost, target->dev);
 	if (err)
@@ -1286,11 +1131,8 @@ static int ibmvstgt_probe(struct vio_dev *dev, const struct vio_device_id *id)
 
 destroy_queue:
 	crq_queue_destroy(target);
-free_pool:
-	iu_pool_free(&target->iu_queue);
-free_ring:
-	srp_ring_free(target->dev, target->rx_ring, INITIAL_SRP_LIMIT,
-		      SRP_MAX_IU_LEN);
+free_srp_target:
+	srp_target_free(target);
 put_host:
 	scsi_host_put(shost);
 free_vport:
@@ -1303,10 +1145,8 @@ static int ibmvstgt_remove(struct vio_dev *dev)
 	struct srp_target *target = (struct srp_target *) dev->dev.driver_data;
 	struct Scsi_Host *shost = target->shost;
 
+	srp_target_free(target);
 	crq_queue_destroy(target);
-	srp_ring_free(target->dev, target->rx_ring, INITIAL_SRP_LIMIT,
-		      SRP_MAX_IU_LEN);
-	iu_pool_free(&target->iu_queue);
 	scsi_remove_host(shost);
 	scsi_host_put(shost);
 	return 0;
