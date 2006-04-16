@@ -41,9 +41,8 @@ enum srp_task_attributes {
 do {								\
 	printk("%s(%d) " fmt, __FUNCTION__, __LINE__, ##args);	\
 } while (0)
-
-#define dprintk eprintk
-/* #define dprintk(fmt, args...) */
+/* #define dprintk eprintk */
+#define dprintk(fmt, args...)
 
 static int srp_iu_pool_alloc(struct srp_queue *q, size_t max,
 			     struct srp_buf **ring)
@@ -197,7 +196,7 @@ static int direct_data(struct scsi_cmnd *scmd, struct srp_direct_buf *md,
 
 	nsg = dma_map_sg(target->dev, sg, scmd->use_sg, DMA_BIDIRECTIONAL);
 	if (!nsg) {
-		eprintk("fail to map %p %d\n", iue, scmd->use_sg);
+		printk("fail to map %p %d\n", iue, scmd->use_sg);
 		return 0;
 	}
 	err = rdma_io(iue, sg, nsg, md, 1, dir,
@@ -393,8 +392,6 @@ int srp_cmd_perform(struct iu_entry *iue, struct srp_cmd *cmd)
 	struct scsi_cmnd *scmd;
 	int tag, len;
 
-	dprintk("%p %p\n", iue->target, iue);
-
 	if (getlink(cmd))
 		__set_bit(V_LINKED, &iue->flags);
 
@@ -441,9 +438,6 @@ int srp_cmd_perform(struct iu_entry *iue, struct srp_cmd *cmd)
 	scmd->tag = tag;
 	iue->scmd = scmd;
 	scsi_tgt_queue_command(scmd, (struct scsi_lun *) &cmd->lun, cmd->tag);
-
-	dprintk("%p %p %x %lx %d %d %d\n", iue, scmd, cmd->cdb[0],
-		cmd->lun, data_dir, len, tag);
 
 	return 0;
 }

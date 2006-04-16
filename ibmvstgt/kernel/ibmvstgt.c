@@ -21,7 +21,6 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
  * USA
  */
-
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <scsi/scsi.h>
@@ -52,18 +51,13 @@
 #define h_free_crq(ua) \
 			plpar_hcall_norets(H_FREE_CRQ, ua);
 
-MODULE_DESCRIPTION("IBM Virtual SCSI Target");
-MODULE_AUTHOR("Dave Boutcher");
-MODULE_LICENSE("GPL");
-
 /* tmp - will replace with SCSI logging stuff */
 #define eprintk(fmt, args...)					\
 do {								\
 	printk("%s(%d) " fmt, __FUNCTION__, __LINE__, ##args);	\
 } while (0)
-
-#define dprintk eprintk
-/* #define dprintk(fmt, args...) */
+/* #define dprintk eprintk */
+#define dprintk(fmt, args...)
 
 struct vio_port {
 	struct vio_dev *dma_dev;
@@ -210,9 +204,9 @@ retry:
 	spin_unlock_irqrestore(&target->lock, flags);
 }
 
-int ibmvstgt_rdma(struct iu_entry *iue, struct scatterlist *sg, int nsg,
-		  struct srp_direct_buf *md, int nmd,
-		  enum dma_data_direction dir, unsigned int rest)
+static int ibmvstgt_rdma(struct iu_entry *iue, struct scatterlist *sg, int nsg,
+			 struct srp_direct_buf *md, int nmd,
+			 enum dma_data_direction dir, unsigned int rest)
 {
 	struct srp_target *target = iue->target;
 	struct vio_port *vport = target_to_port(target);
@@ -332,7 +326,7 @@ int send_adapter_info(struct iu_entry *iue,
 	err = h_copy_rdma(sizeof(*info), vport->riobn, remote_buffer,
 			  vport->liobn, data_token);
 	if (err == H_Success) {
-		eprintk("Client connect: %s (%d)\n",
+		dprintk("Client connect: %s (%d)\n",
 			info->partition_name, info->partition_number);
 	}
 
@@ -396,7 +390,7 @@ static int process_tsk_mgmt(struct iu_entry *iue)
 	union viosrp_iu *iu = vio_iu(iue);
 	int fn;
 
-	eprintk("%p %u\n", iue, iu->srp.tsk_mgmt.tsk_mgmt_func);
+	dprintk("%p %u\n", iue, iu->srp.tsk_mgmt.tsk_mgmt_func);
 
 	switch (iu->srp.tsk_mgmt.tsk_mgmt_func) {
 	case SRP_TSK_ABORT_TASK:
@@ -434,8 +428,6 @@ static int process_mad_iu(struct iu_entry *iue)
 	struct viosrp_adapter_info *info;
 	struct viosrp_host_config *conf;
 
-	dprintk("%p %d\n", iue, iu->mad.empty_iu.common.type);
-
 	switch (iu->mad.empty_iu.common.type) {
 	case VIOSRP_EMPTY_IU_TYPE:
 		eprintk("%s\n", "Unsupported EMPTY MAD IU");
@@ -468,8 +460,6 @@ static int process_srp_iu(struct iu_entry *iue)
 	union viosrp_iu *iu = vio_iu(iue);
 	int done = 1;
 	u8 opcode = iu->srp.rsp.opcode;
-
-	dprintk("%p %u\n", iue, opcode);
 
 	switch (opcode) {
 	case SRP_LOGIN_REQ:
@@ -510,8 +500,6 @@ static void process_iu(struct viosrp_crq *crq, struct srp_target *target)
 		eprintk("Error getting IU from pool, %p\n", target);
 		return;
 	}
-
-	dprintk("%p %p\n", target, iue);
 
 	iue->remote_token = crq->IU_data_ptr;
 
@@ -808,9 +796,6 @@ static int ibmvstgt_probe(struct vio_dev *dev, const struct vio_device_id *id)
 	unsigned int *dma, dma_size;
 	int err = -ENOMEM;
 
-	dprintk("%s %s %x %u\n", dev->name, dev->type,
-		dev->unit_address, dev->irq);
-
 	vport = kzalloc(sizeof(struct vio_port), GFP_KERNEL);
 	if (!vport)
 		return err;
@@ -949,6 +934,10 @@ static void ibmvstgt_exit(void)
 	destroy_workqueue(vtgtd);
 	vio_unregister_driver(&ibmvstgt_driver);
 }
+
+MODULE_DESCRIPTION("IBM Virtual SCSI Target");
+MODULE_AUTHOR("Dave Boutcher");
+MODULE_LICENSE("GPL");
 
 module_init(ibmvstgt_init);
 module_exit(ibmvstgt_exit);
