@@ -26,9 +26,7 @@
 #include <linux/module.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_host.h>
-#include <scsi/scsi_tcq.h>
 #include <scsi/scsi_tgt.h>
-
 #include <asm/hvcall.h>
 #include <asm/iommu.h>
 #include <asm/prom.h>
@@ -66,13 +64,6 @@ do {								\
 
 #define dprintk eprintk
 /* #define dprintk(fmt, args...) */
-
-enum srp_task_attributes {
-	SRP_SIMPLE_TASK = 0,
-	SRP_HEAD_TASK = 1,
-	SRP_ORDERED_TASK = 2,
-	SRP_ACA_TASK = 4
-};
 
 struct vio_port {
 	struct vio_dev *dma_dev;
@@ -148,10 +139,8 @@ static int send_iu(struct iu_entry *iue, uint64_t length, uint8_t format)
 static int send_rsp(struct iu_entry *iue, unsigned char status,
 		    unsigned char asc)
 {
-	struct srp_target *target = iue->target;
 	union viosrp_iu *iu = vio_iu(iue);
 	uint64_t tag = iu->srp.rsp.tag;
-	unsigned long flags;
 
 	/* If the linked bit is on and status is good */
 	if (test_bit(V_LINKED, &iue->flags) && (status == NO_SENSE))
@@ -202,136 +191,6 @@ static int send_rsp(struct iu_entry *iue, unsigned char status,
 	return 0;
 }
 
-static int data_out_desc_size(struct srp_cmd *cmd)
-{
-	int size = 0;
-	u8 fmt = cmd->buf_fmt >> 4;
-
-	switch (fmt) {
-	case SRP_NO_DATA_DESC:
-		break;
-	case SRP_DATA_DESC_DIRECT:
-		size = sizeof(struct srp_direct_buf);
-		break;
-	case SRP_DATA_DESC_INDIRECT:
-		size = sizeof(struct srp_indirect_buf) +
-			sizeof(struct srp_direct_buf) * cmd->data_out_desc_cnt;
-		break;
-	default:
-		eprintk("client error. Invalid data_out_format %x\n", fmt);
-		break;
-	}
-	return size;
-}
-
-static int vscsis_data_length(struct srp_cmd *cmd, enum dma_data_direction dir)
-{
-	struct srp_direct_buf *md;
-	struct srp_indirect_buf *id;
-	int len = 0, offset = cmd->add_cdb_len * 4;
-	u8 fmt;
-
-	if (dir == DMA_TO_DEVICE)
-		fmt = cmd->buf_fmt >> 4;
-	else {
-		fmt = cmd->buf_fmt & ((1U << 4) - 1);
-		offset += data_out_desc_size(cmd);
-	}
-
-	switch (fmt) {
-	case SRP_NO_DATA_DESC:
-		break;
-	case SRP_DATA_DESC_DIRECT:
-		md = (struct srp_direct_buf *) (cmd->add_data + offset);
-		len = md->len;
-		break;
-	case SRP_DATA_DESC_INDIRECT:
-		id = (struct srp_indirect_buf *) (cmd->add_data + offset);
-		len = id->len;
-		break;
-	default:
-		eprintk("invalid data format %x\n", fmt);
-		break;
-	}
-	return len;
-}
-
-static uint8_t getcontrolbyte(uint8_t *cdb)
-{
-	return cdb[COMMAND_SIZE(cdb[0]) - 1];
-}
-
-static inline uint8_t getlink(struct iu_entry *iue)
-{
-	return (getcontrolbyte(vio_iu(iue)->srp.cmd.cdb) & 0x01);
-}
-
-static int process_cmd(struct iu_entry *iue)
-{
-	struct Scsi_host *shost = iue->target->shost;
-	union viosrp_iu *iu = vio_iu(iue);
-	enum dma_data_direction data_dir;
-	struct scsi_cmnd *scmd;
-	int tag, len;
-
-	dprintk("%p %p\n", iue->target, iue);
-
-	if (getlink(iue))
-		__set_bit(V_LINKED, &iue->flags);
-
-	tag = MSG_SIMPLE_TAG;
-
-	switch (iu->srp.cmd.task_attr) {
-	case SRP_SIMPLE_TASK:
-		tag = MSG_SIMPLE_TAG;
-		break;
-	case SRP_ORDERED_TASK:
-		tag = MSG_ORDERED_TAG;
-		break;
-	case SRP_HEAD_TASK:
-		tag = MSG_HEAD_TAG;
-		break;
-	default:
-		eprintk("Task attribute %d not supported, assuming barrier\n",
-			iu->srp.cmd.task_attr);
-		tag = MSG_ORDERED_TAG;
-	}
-
-	switch (iu->srp.cmd.cdb[0]) {
-	case WRITE_6:
-	case WRITE_10:
-	case WRITE_VERIFY:
-	case WRITE_12:
-	case WRITE_VERIFY_12:
-		__set_bit(V_WRITE, &iue->flags);
-	}
-
-	if (iu->srp.cmd.buf_fmt >> 4)
-		data_dir = DMA_TO_DEVICE;
-	else
-		data_dir = DMA_FROM_DEVICE;
-	len = vscsis_data_length(&iu->srp.cmd, data_dir);
-
-	dprintk("%p %x %lx %d %d %d %llx\n", iue, iu->srp.cmd.cdb[0],
-		iu->srp.cmd.lun, data_dir, len, tag,
-		(unsigned long long) iu->srp.cmd.tag);
-
-	scmd = scsi_host_get_command(shost, data_dir, GFP_KERNEL);
-	BUG_ON(!scmd);
-	scmd->SCp.ptr = (char *) iue;
-	memcpy(scmd->data_cmnd, iu->srp.cmd.cdb, MAX_COMMAND_SIZE);
-	scmd->request_bufflen = len;
-	scmd->tag= tag;
-	iue->scmd = scmd;
-	scsi_tgt_queue_command(scmd, (struct scsi_lun *) &iu->srp.cmd.lun,
-			       iu->srp.cmd.tag);
-
-	dprintk("%p %p %x %lx %d %d %d\n", iue, scmd, iu->srp.cmd.cdb[0],
-		iu->srp.cmd.lun, data_dir, len, tag);
-
-	return 0;
-}
-
 static void handle_cmd_queue(struct srp_target *target)
 {
 	struct iu_entry *iue;
@@ -343,7 +202,7 @@ retry:
 	list_for_each_entry(iue, &target->cmd_queue, ilist) {
 		if (!test_and_set_bit(V_FLYING, &iue->flags)) {
 			spin_unlock_irqrestore(&target->lock, flags);
-			process_cmd(iue);
+			srp_cmd_perform(iue, (struct srp_cmd *) iue->sbuf->buf);
 			goto retry;
 		}
 	}
@@ -852,6 +711,7 @@ static void handle_crq(void *data)
 
 	handle_cmd_queue(target);
 }
+
 
 static int ibmvstgt_eh_abort_handler(struct scsi_cmnd *scmd)
 {

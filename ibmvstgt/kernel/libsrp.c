@@ -22,9 +22,19 @@
 #include <linux/kfifo.h>
 #include <linux/scatterlist.h>
 #include <linux/dma-mapping.h>
+#include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
+#include <scsi/scsi_tcq.h>
+#include <scsi/scsi_tgt.h>
 #include <scsi/srp.h>
 #include <libsrp.h>
+
+enum srp_task_attributes {
+	SRP_SIMPLE_TASK = 0,
+	SRP_HEAD_TASK = 1,
+	SRP_ORDERED_TASK = 2,
+	SRP_ACA_TASK = 4
+};
 
 /* tmp - will replace with SCSI logging stuff */
 #define eprintk(fmt, args...)					\
@@ -333,3 +343,112 @@ int srp_transfer_data(struct scsi_cmnd *scmd, struct srp_cmd *cmd,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(srp_transfer_data);
+
+static int vscsis_data_length(struct srp_cmd *cmd, enum dma_data_direction dir)
+{
+	struct srp_direct_buf *md;
+	struct srp_indirect_buf *id;
+	int len = 0, offset = cmd->add_cdb_len * 4;
+	u8 fmt;
+
+	if (dir == DMA_TO_DEVICE)
+		fmt = cmd->buf_fmt >> 4;
+	else {
+		fmt = cmd->buf_fmt & ((1U << 4) - 1);
+		offset += data_out_desc_size(cmd);
+	}
+
+	switch (fmt) {
+	case SRP_NO_DATA_DESC:
+		break;
+	case SRP_DATA_DESC_DIRECT:
+		md = (struct srp_direct_buf *) (cmd->add_data + offset);
+		len = md->len;
+		break;
+	case SRP_DATA_DESC_INDIRECT:
+		id = (struct srp_indirect_buf *) (cmd->add_data + offset);
+		len = id->len;
+		break;
+	default:
+		eprintk("invalid data format %x\n", fmt);
+		break;
+	}
+	return len;
+}
+
+static uint8_t getcontrolbyte(u8 *cdb)
+{
+	return cdb[COMMAND_SIZE(cdb[0]) - 1];
+}
+
+static inline uint8_t getlink(struct srp_cmd *cmd)
+{
+	return (getcontrolbyte(cmd->cdb) & 0x01);
+}
+
+int srp_cmd_perform(struct iu_entry *iue, struct srp_cmd *cmd)
+{
+	struct Scsi_host *shost = iue->target->shost;
+	enum dma_data_direction data_dir;
+	struct scsi_cmnd *scmd;
+	int tag, len;
+
+	dprintk("%p %p\n", iue->target, iue);
+
+	if (getlink(cmd))
+		__set_bit(V_LINKED, &iue->flags);
+
+	tag = MSG_SIMPLE_TAG;
+
+	switch (cmd->task_attr) {
+	case SRP_SIMPLE_TASK:
+		tag = MSG_SIMPLE_TAG;
+		break;
+	case SRP_ORDERED_TASK:
+		tag = MSG_ORDERED_TAG;
+		break;
+	case SRP_HEAD_TASK:
+		tag = MSG_HEAD_TAG;
+		break;
+	default:
+		eprintk("Task attribute %d not supported\n", cmd->task_attr);
+		tag = MSG_ORDERED_TAG;
+	}
+
+	switch (cmd->cdb[0]) {
+	case WRITE_6:
+	case WRITE_10:
+	case WRITE_VERIFY:
+	case WRITE_12:
+	case WRITE_VERIFY_12:
+		__set_bit(V_WRITE, &iue->flags);
+	}
+
+	if (cmd->buf_fmt >> 4)
+		data_dir = DMA_TO_DEVICE;
+	else
+		data_dir = DMA_FROM_DEVICE;
+	len = vscsis_data_length(cmd, data_dir);
+
+	dprintk("%p %x %lx %d %d %d %llx\n", iue, cmd->cdb[0],
+		cmd->lun, data_dir, len, tag, (unsigned long long) cmd->tag);
+
+	scmd = scsi_host_get_command(shost, data_dir, GFP_KERNEL);
+	BUG_ON(!scmd);
+	scmd->SCp.ptr = (char *) iue;
+	memcpy(scmd->data_cmnd, cmd->cdb, MAX_COMMAND_SIZE);
+	scmd->request_bufflen = len;
+	scmd->tag = tag;
+	iue->scmd = scmd;
+	scsi_tgt_queue_command(scmd, (struct scsi_lun *) &cmd->lun, cmd->tag);
+
+	dprintk("%p %p %x %lx %d %d %d\n", iue, scmd, cmd->cdb[0],
+		cmd->lun, data_dir, len, tag);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(srp_cmd_perform);
+
+MODULE_DESCRIPTION("SCSI RDAM Protocol lib functions");
+MODULE_AUTHOR("FUJITA Tomonori");
+MODULE_LICENSE("GPL");
