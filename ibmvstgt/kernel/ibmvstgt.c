@@ -814,7 +814,6 @@ static inline void queue_cmd(struct iu_entry *iue)
 	spin_lock_irqsave(&target->lock, flags);
 	list_add_tail(&iue->ilist, &target->cmd_queue);
 	spin_unlock_irqrestore(&target->lock, flags);
-	handle_cmd_queue(target);
 }
 
 static int process_tsk_mgmt(struct iu_entry *iue)
