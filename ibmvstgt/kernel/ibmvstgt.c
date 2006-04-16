@@ -443,13 +443,12 @@ static int process_cmd(struct iu_entry *iue)
 		data_dir = DMA_FROM_DEVICE;
 	len = vscsis_data_length(&iu->srp.cmd, data_dir);
 
-	dprintk("%p %x %lx %d %d %d %llx\n",
-		iue, iu->srp.cmd.cdb[0], iu->srp.cmd.lun, data_dir, len, tag,
+	dprintk("%p %x %lx %d %d %d %llx\n", iue, iu->srp.cmd.cdb[0],
+		iu->srp.cmd.lun, data_dir, len, tag,
 		(unsigned long long) iu->srp.cmd.tag);
 
 	scmd = scsi_host_get_command(shost, data_dir, GFP_KERNEL);
 	BUG_ON(!scmd);
-
 	scmd->SCp.ptr = (char *) iue;
 	memcpy(scmd->data_cmnd, iu->srp.cmd.cdb, MAX_COMMAND_SIZE);
 	scmd->request_bufflen = len;
@@ -458,8 +457,8 @@ static int process_cmd(struct iu_entry *iue)
 	scsi_tgt_queue_command(scmd, (struct scsi_lun *) &iu->srp.cmd.lun,
 			       iu->srp.cmd.tag);
 
-	dprintk("%p %p %x %lx %d %d %d\n",
-		iue, scmd, iu->srp.cmd.cdb[0], iu->srp.cmd.lun, data_dir, len, tag);
+	dprintk("%p %p %x %lx %d %d %d\n", iue, scmd, iu->srp.cmd.cdb[0],
+		iu->srp.cmd.lun, data_dir, len, tag);
 
 	return 0;
 }
@@ -704,7 +703,6 @@ static struct iu_entry *get_iu(struct srp_target *target)
 	iue->scmd = NULL;
 	INIT_LIST_HEAD(&iue->ilist);
 	iue->flags = 0;
-
 	return iue;
 }
 
@@ -791,7 +789,6 @@ static void process_login(struct iu_entry *iue)
 {
 	union viosrp_iu *iu = vio_iu(iue);
 	struct srp_login_rsp *rsp = &iu->srp.login_rsp;
-
 	uint64_t tag = iu->srp.rsp.tag;
 
 	/* TODO handle case that requested size is wrong and
@@ -876,14 +873,12 @@ static int process_mad_iu(struct iu_entry *iue)
 		break;
 	case VIOSRP_ADAPTER_INFO_TYPE:
 		info = &iu->mad.adapter_info;
-
 		info->common.status = send_adapter_info(iue, info->buffer,
 							info->common.length);
 		send_iu(iue, sizeof(*info), VIOSRP_MAD_FORMAT);
 		break;
 	case VIOSRP_HOST_CONFIG_TYPE:
 		conf = &iu->mad.host_config;
-
 		conf->common.status = 1;
 		send_iu(iue, sizeof(*conf), VIOSRP_MAD_FORMAT);
 		break;
@@ -1186,20 +1181,17 @@ static int ibmvstgt_tsk_mgmt_response(u64 mid, int result)
 	return 0;
 }
 
-static ssize_t
-system_id_show(struct class_device *cdev, char *buf)
+static ssize_t system_id_show(struct class_device *cdev, char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%s\n", system_id);
 }
 
-static ssize_t
-partition_number_show(struct class_device *cdev, char *buf)
+static ssize_t partition_number_show(struct class_device *cdev, char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%x\n", partition_number);
 }
 
-static ssize_t
-unit_address_show(struct class_device *cdev, char *buf)
+static ssize_t unit_address_show(struct class_device *cdev, char *buf)
 {
 	struct Scsi_Host *shost = class_to_shost(cdev);
 	struct srp_target *target = host_to_target(shost);
@@ -1250,7 +1242,8 @@ static int ibmvstgt_probe(struct vio_dev *dev, const struct vio_device_id *id)
 	shost = scsi_host_alloc(&ibmvstgt_sht, sizeof(struct srp_target));
 	if (!shost)
 		goto free_vport;
-	if (scsi_tgt_alloc_queue(shost))
+	err = scsi_tgt_alloc_queue(shost);
+	if (err)
 		goto put_host;
 
 	target = host_to_target(shost);
@@ -1262,8 +1255,8 @@ static int ibmvstgt_probe(struct vio_dev *dev, const struct vio_device_id *id)
 	INIT_LIST_HEAD(&target->cmd_queue);
 	target->ldata = vport;
 
-	dma = (unsigned int *)
-		vio_get_attribute(dev, "ibm,my-dma-window", &dma_size);
+	dma = (unsigned int *) vio_get_attribute(dev, "ibm,my-dma-window",
+						 &dma_size);
 	if (!dma || dma_size != 40) {
 		eprintk("Couldn't get window property %d\n", dma_size);
 		err = -EIO;
@@ -1287,7 +1280,8 @@ static int ibmvstgt_probe(struct vio_dev *dev, const struct vio_device_id *id)
 	if (err)
 		goto free_pool;
 
-	if (scsi_add_host(shost, target->dev))
+	err = scsi_add_host(shost, target->dev);
+	if (err)
 		goto destroy_queue;
 	return 0;
 
@@ -1373,7 +1367,7 @@ static int ibmvstgt_init(void)
 		return err;
 
 	err = get_system_info();
-	if (err < 0)
+	if (err)
 		goto destroy_wq;
 
 	err = vio_register_driver(&ibmvstgt_driver);
