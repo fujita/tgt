@@ -19,6 +19,7 @@ start_server()
 		modprobe -q crc32c
 		insmod ${PWD}/istgt/kernel/istgt.ko
 	else
+		insmod ${PWD}/ibmvstgt/kernel/libsrp.ko
 		insmod ${PWD}/ibmvstgt/kernel/ibmvstgt.ko
 	fi
 
@@ -49,6 +50,7 @@ stop_server()
 	if [ "$TARGET" = "istgt" ] ; then
 		rmmod istgt
 	else
+		rmmod libsrp
 		rmmod ibmvstgt
 	fi
 
