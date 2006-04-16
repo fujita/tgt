@@ -67,13 +67,6 @@ do {								\
 #define dprintk eprintk
 /* #define dprintk(fmt, args...) */
 
-enum iue_flags {
-	V_DIOVER,
-	V_WRITE,
-	V_LINKED,
-	V_FLYING,
-};
-
 enum srp_task_attributes {
 	SRP_SIMPLE_TASK = 0,
 	SRP_HEAD_TASK = 1,
@@ -360,116 +353,31 @@ retry:
 	spin_unlock_irqrestore(&target->lock, flags);
 }
 
-static int direct_data(struct scsi_cmnd *scmd, struct srp_direct_buf *md,
-		       enum dma_data_direction dir)
+int ibmvstgt_rdma(struct iu_entry *iue, struct scatterlist *sg, int nsg,
+		  struct srp_direct_buf *md, int nmd,
+		  enum dma_data_direction dir, unsigned int rest)
 {
-	struct iu_entry *iue = (struct iu_entry *) scmd->SCp.ptr;
 	struct srp_target *target = iue->target;
 	struct vio_port *vport = target_to_port(target);
-	struct scatterlist *sg = scmd->request_buffer;
-	unsigned int rest, len;
-	int i, done, nsg;
-	long err;
 	dma_addr_t token;
-
-	dprintk("%p %u %u %u %d\n", iue, scmd->request_bufflen, scmd->bufflen,
-		md->len, scmd->use_sg);
-
-	nsg = dma_map_sg(target->dev, sg, scmd->use_sg, DMA_BIDIRECTIONAL);
-	if (!nsg) {
-		eprintk("fail to map %p %d\n", iue, scmd->use_sg);
-		return 0;
-	}
-
-	rest = min(scmd->request_bufflen, md->len);
-
-	for (i = 0, done = 0; i < nsg && rest; i++) {
-		token = sg_dma_address(sg + i);
-		len = min(sg_dma_len(sg + i), rest);
-
-		if (dir == DMA_TO_DEVICE)
-			err = h_copy_rdma(len, vport->riobn, md->va + done,
-					  vport->liobn, token);
-		else
-			err = h_copy_rdma(len, vport->liobn, token,
-					  vport->riobn, md->va + done);
-
-		if (err != H_Success) {
-			eprintk("rdma error %d %d %ld\n", dir, i, err);
-			break;
-		}
-
-		rest -= len;
-		done += len;
-	}
-
-	dma_unmap_sg(target->dev, sg, nsg, DMA_BIDIRECTIONAL);
-
-	return done;
-}
-
-static int indirect_data(struct scsi_cmnd *scmd, struct srp_indirect_buf *id,
-			 enum dma_data_direction dir)
-{
-	struct iu_entry *iue = (struct iu_entry *) scmd->SCp.ptr;
-	struct srp_target *target = iue->target;
-	struct vio_port *vport = target_to_port(target);
-	struct srp_cmd *cmd = &vio_iu(iue)->srp.cmd;
-	struct srp_direct_buf *mds;
-	struct scatterlist *sg = scmd->request_buffer;
-	dma_addr_t token, itoken = 0;
 	long err;
-	unsigned int rest, done = 0;
-	int i, nmd, nsg, sidx, soff;
-
-	nmd = id->table_desc.len / sizeof(struct srp_direct_buf);
-
-	dprintk("%p %u %u %u %u %d %d %d\n",
-		iue, scmd->request_bufflen, scmd->bufflen,
-		id->len, scmd->offset, nmd,
-		cmd->data_in_desc_cnt, cmd->data_out_desc_cnt);
-
-	if ((dir == DMA_FROM_DEVICE && nmd == cmd->data_in_desc_cnt) ||
-	    (dir == DMA_TO_DEVICE && nmd == cmd->data_out_desc_cnt)) {
-		mds = &id->desc_list[0];
-		goto rdma;
-	}
-
-	mds = dma_alloc_coherent(target->dev, id->table_desc.len,
-				 &itoken, GFP_KERNEL);
-	if (!mds) {
-		eprintk("Can't get dma memory %u\n", id->table_desc.len);
-		return 0;
-	}
-
-	err = h_copy_rdma(id->table_desc.len, vport->riobn,
-			  id->table_desc.va, vport->liobn, itoken);
-	if (err != H_Success) {
-		eprintk("Error copying indirect table %ld\n", err);
-		goto free_mem;
-	}
-
-rdma:
-	nsg = dma_map_sg(target->dev, sg, scmd->use_sg, DMA_BIDIRECTIONAL);
-	if (!nsg) {
-		eprintk("fail to map %p %d\n", iue, scmd->use_sg);
-		goto free_mem;
-	}
+	unsigned int done = 0;
+	int i, sidx, soff;
 
 	sidx = soff = 0;
 	token = sg_dma_address(sg + sidx);
-	rest = min(scmd->request_bufflen, id->len);
+
 	for (i = 0; i < nmd && rest; i++) {
 		unsigned int mdone, mlen;
 
-		mlen = min(rest, mds[i].len);
+		mlen = min(rest, md[i].len);
 		for (mdone = 0; mlen;) {
 			int slen = min(sg_dma_len(sg + sidx) - soff, mlen);
 
 			if (dir == DMA_TO_DEVICE)
 				err = h_copy_rdma(slen,
 						  vport->riobn,
-						  mds[i].va + mdone,
+						  md[i].va + mdone,
 						  vport->liobn,
 						  token + soff);
 			else
@@ -477,11 +385,11 @@ rdma:
 						  vport->liobn,
 						  token + soff,
 						  vport->riobn,
-						  mds[i].va + mdone);
+						  md[i].va + mdone);
 
 			if (err != H_Success) {
 				eprintk("rdma error %d %d\n", dir, slen);
-				goto unmap_sg;
+				goto out;
 			}
 
 			mlen -= slen;
@@ -495,79 +403,30 @@ rdma:
 				token = sg_dma_address(sg + sidx);
 
 				if (sidx > nsg) {
-					eprintk("out of sg %p %d %d %d\n",
-						iue, sidx, nsg, scmd->use_sg);
-					goto unmap_sg;
+					eprintk("out of sg %p %d %d\n",
+						iue, sidx, nsg);
+					goto out;
 				}
 			}
 		};
 
 		rest -= mlen;
 	}
+out:
 
-unmap_sg:
-	dma_unmap_sg(target->dev, sg, nsg, DMA_BIDIRECTIONAL);
-
-free_mem:
-	if (itoken)
-		dma_free_coherent(target->dev, id->table_desc.len, mds, itoken);
-
-	return done;
+	return 0;
 }
 
-static int handle_cmd_data(struct scsi_cmnd *scmd, enum dma_data_direction dir)
-{
-	struct iu_entry *iue = (struct iu_entry *) scmd->SCp.ptr;
-	struct srp_cmd *cmd = &vio_iu(iue)->srp.cmd;
-	struct srp_direct_buf *md;
-	struct srp_indirect_buf *id;
-	int offset, err = 0;
-	u8 format;
-
-	offset = cmd->add_cdb_len * 4;
-	if (dir == DMA_FROM_DEVICE)
-		offset += data_out_desc_size(cmd);
-
-	if (dir == DMA_TO_DEVICE)
-		format = cmd->buf_fmt >> 4;
-	else
-		format = cmd->buf_fmt & ((1U << 4) - 1);
-
-	switch (format) {
-	case SRP_NO_DATA_DESC:
-		break;
-	case SRP_DATA_DESC_DIRECT:
-		md = (struct srp_direct_buf *)
-			(cmd->add_data + offset);
-		err = direct_data(scmd, md, dir);
-		break;
-	case SRP_DATA_DESC_INDIRECT:
-		id = (struct srp_indirect_buf *)
-			(cmd->add_data + offset);
-		err = indirect_data(scmd, id, dir);
-		break;
-	default:
-		eprintk("Unknown format %d %x\n", dir, format);
-		break;
-	}
-
-	return err;
-}
-
-/* TODO: this can be called multiple times for a single command. */
-static int recv_cmd_data(struct scsi_cmnd *scmd,
-			 void (*done)(struct scsi_cmnd *))
+static int ibmvstgt_transfer_data(struct scsi_cmnd *scmd,
+				  void (*done)(struct scsi_cmnd *))
 {
 	struct iu_entry	*iue = (struct iu_entry *) scmd->SCp.ptr;
-	enum dma_data_direction dir;
+	int err;
 
-	if (test_bit(V_WRITE, &iue->flags))
-		dir = DMA_TO_DEVICE;
-	else
-		dir = DMA_FROM_DEVICE;
-	handle_cmd_data(scmd, dir);
+	err = srp_transfer_data(scmd, &vio_iu(iue)->srp.cmd, ibmvstgt_rdma);
 	done(scmd);
-	return 0;
+
+	return err;
 }
 
 static int ibmvstgt_cmd_done(struct scsi_cmnd *scmd,
@@ -1076,7 +935,7 @@ static struct scsi_host_template ibmvstgt_sht = {
 	.use_clustering		= DISABLE_CLUSTERING,
 	.max_sectors		= DEFAULT_MAX_SECTORS,
 	.transfer_response	= ibmvstgt_cmd_done,
-	.transfer_data		= recv_cmd_data,
+	.transfer_data		= ibmvstgt_transfer_data,
 	.eh_abort_handler	= ibmvstgt_eh_abort_handler,
 	.tsk_mgmt_response	= ibmvstgt_tsk_mgmt_response,
 	.shost_attrs		= ibmvstgt_attrs,

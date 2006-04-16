@@ -2,7 +2,16 @@
 #define __LIBSRP_H__
 
 #include <linux/list.h>
+#include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_host.h>
+#include <scsi/srp.h>
+
+enum iue_flags {
+	V_DIOVER,
+	V_WRITE,
+	V_LINKED,
+	V_FLYING,
+};
 
 struct srp_buf {
 	dma_addr_t dma;
@@ -44,6 +53,10 @@ struct iu_entry {
 	struct srp_buf *sbuf;
 };
 
+typedef int (rdma_io_t) (struct iu_entry *, struct scatterlist *, int,
+			 struct srp_direct_buf *, int,
+			 enum dma_data_direction, unsigned int);
+
 static inline struct srp_target *host_to_target(struct Scsi_Host *host)
 {
 	return (struct srp_target *) host->hostdata;
@@ -54,5 +67,8 @@ extern void srp_target_free(struct srp_target *);
 
 extern struct iu_entry *srp_iu_get(struct srp_target *);
 extern void srp_iu_put(struct iu_entry *);
+
+extern int srp_transfer_data(struct scsi_cmnd *scmd, struct srp_cmd *cmd,
+			     rdma_io_t rdma_io);
 
 #endif
