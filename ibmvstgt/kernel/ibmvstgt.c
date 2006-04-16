@@ -159,9 +159,7 @@ static int send_rsp(struct iu_entry *iue, unsigned char status,
 
 	memset(iu, 0, sizeof(struct srp_rsp));
 	iu->srp.rsp.opcode = SRP_RSP;
-	spin_lock_irqsave(&target->lock, flags);
 	iu->srp.rsp.req_lim_delta = 1;
-	spin_unlock_irqrestore(&target->lock, flags);
 	iu->srp.rsp.tag = tag;
 
 	if (test_bit(V_DIOVER, &iue->flags))
