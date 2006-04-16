@@ -106,6 +106,11 @@ static struct vio_port *target_to_port(struct srp_target *target)
 	return (struct vio_port *) target->ldata;
 }
 
+static inline union viosrp_iu *vio_iu(struct iu_entry *iue)
+{
+	return (union viosrp_iu *) (iue->sbuf->buf);
+}
+
 static int send_iu(struct iu_entry *iue, uint64_t length, uint8_t format)
 {
 	struct srp_target *target = iue->target;

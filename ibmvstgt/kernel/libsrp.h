@@ -49,11 +49,6 @@ static inline struct srp_target *host_to_target(struct Scsi_Host *host)
 	return (struct srp_target *) host->hostdata;
 }
 
-static inline union viosrp_iu *vio_iu(struct iu_entry *iue)
-{
-	return (union viosrp_iu *) (iue->sbuf->buf);
-}
-
 extern int srp_target_alloc(struct srp_target *, struct device *, size_t, size_t);
 extern void srp_target_free(struct srp_target *);
 
