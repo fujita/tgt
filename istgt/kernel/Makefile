@@ -7,12 +7,11 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile.
 
-EXTRA_CFLAGS += -I$(obj) -I$(obj)/../include -I$(obj)/../../kernel
+EXTRA_CFLAGS += -I$(obj) -I$(KERNELSRC)/drivers/scsi/
 
 ifneq ($(KERNELRELEASE),)
-obj-m		+= istgt.o
-istgt-objs	:= iscsi_tcp_tgt.o nthread.o digest.o \
-			conn.o
+obj-m		+= istgt_tcp.o
+#obj-m		+= libistgt.o
 else
 
 ifeq ($(KERNELSRC),)
