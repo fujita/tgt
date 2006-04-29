@@ -39,9 +39,9 @@
 #include <scsi/scsi.h>
 #include <iscsi_tcp.h>
 #include <scsi/libiscsi.h>
-#include <scsi/scsi_transport_iscsi.h>
 #include <scsi/scsi_tgt.h>
 #include <scsi/scsi_tcq.h>
+#include "scsi_transport_iscsi.h"
 
 /* tmp - will replace with SCSI logging stuff */
 #define eprintk(fmt, args...)					\
