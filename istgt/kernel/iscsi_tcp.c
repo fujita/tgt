@@ -2588,8 +2588,7 @@ static struct iscsi_transport iscsi_tcp_transport = {
 	.session_recovery_timedout = iscsi_session_recovery_timedout,
 };
 
-static int __init
-iscsi_tcp_init(void)
+int iscsi_tcp_init(void)
 {
 	if (iscsi_max_lun < 1) {
 		printk(KERN_ERR "iscsi_tcp: Invalid max_lun value of %u\n", iscsi_max_lun);
@@ -2609,12 +2608,8 @@ iscsi_tcp_init(void)
 	return 0;
 }
 
-static void __exit
-iscsi_tcp_exit(void)
+void iscsi_tcp_exit(void)
 {
 	iscsi_unregister_transport(&iscsi_tcp_transport);
 	kmem_cache_destroy(taskcache);
 }
-
-module_init(iscsi_tcp_init);
-module_exit(iscsi_tcp_exit);
