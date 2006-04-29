@@ -911,6 +911,9 @@ more:
 		}
 	}
 
+	if (conn->suspend_rx)
+		goto nomore;
+
 	if (tcp_conn->in_progress == IN_PROGRESS_DDIGEST_RECV) {
 		uint32_t recv_digest;
 
