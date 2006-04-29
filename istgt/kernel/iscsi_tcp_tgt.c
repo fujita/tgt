@@ -1,7 +1,8 @@
 /*
  * iSCSI Target over TCP/IP
  *
- * Copyright (C) 2006 FUJITA Tomonori <tomof@acm.org>
+ * Copyright (C) 2004 - 2006 FUJITA Tomonori <tomof@acm.org>
+ * Copyright (C) 2005 - 2006 Mike Christie
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published
@@ -302,10 +303,6 @@ static void istgt_unsolicited_data(struct iscsi_cmd_task *ctask)
 /* 	tcp_ctask->r2t_data_count; */
 /* 	ctask->r2t_data_count; */
 }
-
-/*
- * the followings are taken from iscsi_tcp.
- */
 
 static int istgt_tcp_hdr_recv(struct iscsi_conn *conn)
 {
