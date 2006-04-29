@@ -124,7 +124,7 @@ iscsi_hdr_digest(struct iscsi_conn *conn, struct iscsi_buf *buf,
 	buf->sg.length += sizeof(uint32_t);
 }
 
-static inline int
+inline int
 iscsi_hdr_extract(struct iscsi_tcp_conn *tcp_conn)
 {
 	struct sk_buff *skb = tcp_conn->in.skb;
@@ -640,7 +640,7 @@ iscsi_ctask_copy(struct iscsi_tcp_conn *tcp_conn, struct iscsi_cmd_task *ctask,
  *	The function calls skb_copy_bits() and updates per-connection
  *	byte counters.
  **/
-static inline int
+inline int
 iscsi_tcp_copy(struct iscsi_tcp_conn *tcp_conn)
 {
 	void *buf = tcp_conn->data;
@@ -689,7 +689,7 @@ iscsi_recv_digest_update(struct iscsi_tcp_conn *tcp_conn, char* buf, int len)
 	crypto_digest_update(tcp_conn->data_rx_tfm, &tmp, 1);
 }
 
-static int iscsi_scsi_data_in(struct iscsi_conn *conn)
+int iscsi_scsi_data_in(struct iscsi_conn *conn)
 {
 	struct iscsi_tcp_conn *tcp_conn = conn->dd_data;
 	struct iscsi_cmd_task *ctask = tcp_conn->in.ctask;
@@ -1894,7 +1894,7 @@ done:
 	return rc;
 }
 
-static struct iscsi_cls_conn *
+struct iscsi_cls_conn *
 iscsi_tcp_conn_create(struct iscsi_cls_session *cls_session, uint32_t conn_idx)
 {
 	struct iscsi_conn *conn;
@@ -1940,7 +1940,7 @@ tcp_conn_alloc_fail:
 	return NULL;
 }
 
-static void
+void
 iscsi_tcp_conn_destroy(struct iscsi_cls_conn *cls_conn)
 {
 	struct iscsi_conn *conn = cls_conn->dd_data;
@@ -1973,7 +1973,7 @@ iscsi_tcp_conn_destroy(struct iscsi_cls_conn *cls_conn)
 	kfree(tcp_conn);
 }
 
-static int
+int
 iscsi_tcp_conn_bind(struct iscsi_cls_session *cls_session,
 		    struct iscsi_cls_conn *cls_conn, uint64_t transport_eph,
 		    int is_leading)
@@ -2052,7 +2052,7 @@ iscsi_tcp_suspend_conn_rx(struct iscsi_conn *conn)
 	write_unlock_bh(&sk->sk_callback_lock);
 }
 
-static void
+void
 iscsi_tcp_terminate_conn(struct iscsi_conn *conn)
 {
 	struct iscsi_tcp_conn *tcp_conn = conn->dd_data;
@@ -2457,7 +2457,7 @@ iscsi_conn_get_stats(struct iscsi_cls_conn *cls_conn, struct iscsi_stats *stats)
 	stats->custom[2].value = conn->eh_abort_cnt;
 }
 
-static struct iscsi_cls_session *
+struct iscsi_cls_session *
 iscsi_tcp_session_create(struct iscsi_transport *iscsit,
 			 struct scsi_transport_template *scsit,
 			 uint32_t initial_cmdsn, uint32_t *hostno)
@@ -2500,7 +2500,7 @@ r2tpool_alloc_fail:
 	return NULL;
 }
 
-static void iscsi_tcp_session_destroy(struct iscsi_cls_session *cls_session)
+void iscsi_tcp_session_destroy(struct iscsi_cls_session *cls_session)
 {
 	struct iscsi_session *session = class_to_transport_session(cls_session);
 	struct iscsi_data_task *dtask, *n;
