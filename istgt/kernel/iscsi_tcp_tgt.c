@@ -1,10 +1,6 @@
 /*
  * iSCSI Target over TCP/IP
  *
- * Copyright (C) 2004 Dmitry Yusupov
- * Copyright (C) 2004 Alex Aizman
- * Copyright (C) 2005 - 2006 Mike Christie
- * Copyright (C) 2006 Red Hat, Inc.  All rights reserved.
  * Copyright (C) 2006 FUJITA Tomonori <tomof@acm.org>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,18 +17,11 @@
  */
 
 /*
- * Most part is taken from iscsi_tcp. Integrating with iscsi_tcp would
- * be nice...
+ * This needs to be integrated with iscsi_tcp.
  */
-#include <linux/types.h>
 #include <linux/list.h>
 #include <linux/inet.h>
-#include <linux/blkdev.h>
-#include <linux/crypto.h>
-#include <linux/delay.h>
 #include <linux/kfifo.h>
-#include <linux/scatterlist.h>
-#include <linux/mutex.h>
 #include <net/tcp.h>
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_host.h>
