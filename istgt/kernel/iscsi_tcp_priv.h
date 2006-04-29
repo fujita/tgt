@@ -21,5 +21,7 @@ extern inline int iscsi_hdr_extract(struct iscsi_tcp_conn *tcp_conn);
 extern int iscsi_scsi_data_in(struct iscsi_conn *conn);
 extern inline int iscsi_tcp_copy(struct iscsi_tcp_conn *tcp_conn);
 
+extern int iscsi_tcp_hdr_recv_pre(struct iscsi_conn *conn);
+
 extern int iscsi_tcp_init(void);
 extern void iscsi_tcp_exit(void);

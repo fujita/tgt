@@ -435,57 +435,13 @@ iscsi_r2t_rsp(struct iscsi_conn *conn, struct iscsi_cmd_task *ctask)
 	return 0;
 }
 
-static int
-iscsi_tcp_hdr_recv(struct iscsi_conn *conn)
+static int iscsi_tcp_hdr_recv_post(struct iscsi_conn *conn)
 {
-	int rc = 0, opcode, ahslen;
-	struct iscsi_hdr *hdr;
 	struct iscsi_session *session = conn->session;
 	struct iscsi_tcp_conn *tcp_conn = conn->dd_data;
-	uint32_t cdgst, rdgst = 0, itt;
-
-	hdr = tcp_conn->in.hdr;
-
-	/* verify PDU length */
-	tcp_conn->in.datalen = ntoh24(hdr->dlength);
-	if (tcp_conn->in.datalen > conn->max_recv_dlength) {
-		printk(KERN_ERR "iscsi_tcp: datalen %d > %d\n",
-		       tcp_conn->in.datalen, conn->max_recv_dlength);
-		return ISCSI_ERR_DATALEN;
-	}
-	tcp_conn->data_copied = 0;
-
-	/* read AHS */
-	ahslen = hdr->hlength << 2;
-	tcp_conn->in.offset += ahslen;
-	tcp_conn->in.copy -= ahslen;
-	if (tcp_conn->in.copy < 0) {
-		printk(KERN_ERR "iscsi_tcp: can't handle AHS with length "
-		       "%d bytes\n", ahslen);
-		return ISCSI_ERR_AHSLEN;
-	}
-
-	/* calculate read padding */
-	tcp_conn->in.padding = tcp_conn->in.datalen & (ISCSI_PAD_LEN-1);
-	if (tcp_conn->in.padding) {
-		tcp_conn->in.padding = ISCSI_PAD_LEN - tcp_conn->in.padding;
-		debug_scsi("read padding %d bytes\n", tcp_conn->in.padding);
-	}
-
-	if (conn->hdrdgst_en) {
-		struct scatterlist sg;
-
-		sg_init_one(&sg, (u8 *)hdr,
-			    sizeof(struct iscsi_hdr) + ahslen);
-		crypto_digest_digest(tcp_conn->rx_tfm, &sg, 1, (u8 *)&cdgst);
-		rdgst = *(uint32_t*)((char*)hdr + sizeof(struct iscsi_hdr) +
-				     ahslen);
-		if (cdgst != rdgst) {
-			printk(KERN_ERR "iscsi_tcp: hdrdgst error "
-			       "recv 0x%x calc 0x%x\n", rdgst, cdgst);
-			return ISCSI_ERR_HDR_DGST;
-		}
-	}
+	struct iscsi_hdr *hdr = tcp_conn->in.hdr;
+	int rc, opcode, ahslen = hdr->hlength << 2;
+	uint32_t itt;
 
 	opcode = hdr->opcode & ISCSI_OPCODE_MASK;
 	/* verify itt (itt encoding: age+cid+itt) */
@@ -561,6 +517,69 @@ copy_hdr:
 		tcp_conn->in.zero_copy_hdr = 0;
 	}
 	return 0;
+}
+
+int iscsi_tcp_hdr_recv_pre(struct iscsi_conn *conn)
+{
+	int ahslen;
+	struct iscsi_hdr *hdr;
+	struct iscsi_tcp_conn *tcp_conn = conn->dd_data;
+	uint32_t cdgst, rdgst = 0;
+
+	hdr = tcp_conn->in.hdr;
+
+	/* verify PDU length */
+	tcp_conn->in.datalen = ntoh24(hdr->dlength);
+	if (tcp_conn->in.datalen > conn->max_recv_dlength) {
+		printk(KERN_ERR "iscsi_tcp: datalen %d > %d\n",
+		       tcp_conn->in.datalen, conn->max_recv_dlength);
+		return ISCSI_ERR_DATALEN;
+	}
+	tcp_conn->data_copied = 0;
+
+	/* read AHS */
+	ahslen = hdr->hlength << 2;
+	tcp_conn->in.offset += ahslen;
+	tcp_conn->in.copy -= ahslen;
+	if (tcp_conn->in.copy < 0) {
+		printk(KERN_ERR "iscsi_tcp: can't handle AHS with length "
+		       "%d bytes\n", ahslen);
+		return ISCSI_ERR_AHSLEN;
+	}
+
+	/* calculate read padding */
+	tcp_conn->in.padding = tcp_conn->in.datalen & (ISCSI_PAD_LEN-1);
+	if (tcp_conn->in.padding) {
+		tcp_conn->in.padding = ISCSI_PAD_LEN - tcp_conn->in.padding;
+		debug_scsi("read padding %d bytes\n", tcp_conn->in.padding);
+	}
+
+	if (conn->hdrdgst_en) {
+		struct scatterlist sg;
+
+		sg_init_one(&sg, (u8 *)hdr,
+			    sizeof(struct iscsi_hdr) + ahslen);
+		crypto_digest_digest(tcp_conn->rx_tfm, &sg, 1, (u8 *)&cdgst);
+		rdgst = *(uint32_t*)((char*)hdr + sizeof(struct iscsi_hdr) +
+				     ahslen);
+		if (cdgst != rdgst) {
+			printk(KERN_ERR "iscsi_tcp: hdrdgst error "
+			       "recv 0x%x calc 0x%x\n", rdgst, cdgst);
+			return ISCSI_ERR_HDR_DGST;
+		}
+	}
+
+	return 0;
+}
+
+static int iscsi_tcp_hdr_recv(struct iscsi_conn *conn)
+{
+	int rc;
+
+	rc = iscsi_tcp_hdr_recv_pre(conn);
+	if (rc)
+		return rc;
+	return iscsi_tcp_hdr_recv_post(conn);
 }
 
 /**
