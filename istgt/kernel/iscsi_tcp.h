@@ -177,4 +177,10 @@ struct iscsi_tcp_cmd_task {
 	int			digest_offset;		/* for partial buff digest */
 };
 
+struct data_ready_desc {
+	struct iscsi_conn *conn;
+	int (* hdr_recv)(struct iscsi_conn *conn);
+	int (* data_recv)(struct iscsi_conn *conn);
+};
+
 #endif /* ISCSI_H */

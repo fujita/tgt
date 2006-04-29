@@ -853,10 +853,11 @@ exit:
  **/
 static int
 iscsi_tcp_data_recv(read_descriptor_t *rd_desc, struct sk_buff *skb,
-		unsigned int offset, size_t len)
+		    unsigned int offset, size_t len)
 {
 	int rc;
-	struct iscsi_conn *conn = rd_desc->arg.data;
+	struct data_ready_desc *d = rd_desc->arg.data;
+	struct iscsi_conn *conn = d->conn;
 	struct iscsi_tcp_conn *tcp_conn = conn->dd_data;
 	int processed;
 	char pad[ISCSI_PAD_LEN];
@@ -897,7 +898,7 @@ more:
 		/*
 		 * Verify and process incoming PDU header.
 		 */
-		rc = iscsi_tcp_hdr_recv(conn);
+		rc = d->hdr_recv(conn);
 		if (!rc && tcp_conn->in.datalen) {
 			if (conn->datadgst_en) {
 				BUG_ON(!tcp_conn->data_rx_tfm);
@@ -939,7 +940,7 @@ more:
 		debug_tcp("data_recv offset %d copy %d\n",
 		       tcp_conn->in.offset, tcp_conn->in.copy);
 
-		rc = iscsi_data_recv(conn);
+		rc = d->data_recv(conn);
 		if (rc) {
 			if (rc == -EAGAIN) {
 				rd_desc->count = tcp_conn->in.datalen -
@@ -999,11 +1000,16 @@ iscsi_tcp_data_ready(struct sock *sk, int flag)
 {
 	struct iscsi_conn *conn = sk->sk_user_data;
 	read_descriptor_t rd_desc;
+	struct data_ready_desc d;
+
+	d.conn = conn;
+	d.hdr_recv = iscsi_tcp_hdr_recv;
+	d.data_recv = iscsi_data_recv;
 
 	read_lock(&sk->sk_callback_lock);
 
 	/* use rd_desc to pass 'conn' to iscsi_tcp_data_recv */
-	rd_desc.arg.data = conn;
+	rd_desc.arg.data = &d;
 	rd_desc.count = 0;
 	tcp_read_sock(sk, &rd_desc, iscsi_tcp_data_recv);
 
