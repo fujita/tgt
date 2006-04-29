@@ -10,7 +10,7 @@
 EXTRA_CFLAGS += -I$(obj) -I$(KERNELSRC)/drivers/scsi/
 
 ifneq ($(KERNELRELEASE),)
-obj-m		+= istgt_tcp.o
+obj-m		+= iscsi_tcp_tgt.o
 #obj-m		+= libistgt.o
 else
 
