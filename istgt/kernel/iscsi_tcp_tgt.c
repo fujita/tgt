@@ -318,60 +318,19 @@ static void istgt_unsolicited_data(struct iscsi_cmd_task *ctask)
  * the followings are taken from iscsi_tcp.
  */
 
-int iscsi_tcp_hdr_recv(struct iscsi_conn *conn)
+static int istgt_tcp_hdr_recv(struct iscsi_conn *conn)
 {
-	int rc = 0, opcode, ahslen;
+	int rc, opcode, ahslen;
 	struct iscsi_hdr *hdr;
 	struct iscsi_session *session = conn->session;
 	struct iscsi_cls_session *cls_session = session_to_cls(session);
 	struct iscsi_tcp_conn *tcp_conn = conn->dd_data;
-	struct Scsi_Host *shost;
 	uint32_t cdgst, rdgst = 0;
 	struct iscsi_cmd_task *ctask = NULL;
 
-	shost = iscsi_session_to_shost(cls_session);
-	hdr = tcp_conn->in.hdr;
-
-	/* verify PDU length */
-	tcp_conn->in.datalen = ntoh24(hdr->dlength);
-	if (tcp_conn->in.datalen > conn->max_recv_dlength) {
-		printk(KERN_ERR "iscsi_tcp: datalen %d > %d\n",
-		       tcp_conn->in.datalen, conn->max_recv_dlength);
-		return ISCSI_ERR_DATALEN;
-	}
-	tcp_conn->data_copied = 0;
-
-	/* read AHS */
-	ahslen = hdr->hlength << 2;
-	tcp_conn->in.offset += ahslen;
-	tcp_conn->in.copy -= ahslen;
-	if (tcp_conn->in.copy < 0) {
-		printk(KERN_ERR "iscsi_tcp: can't handle AHS with length "
-		       "%d bytes\n", ahslen);
-		return ISCSI_ERR_AHSLEN;
-	}
-
-	/* calculate read padding */
-	tcp_conn->in.padding = tcp_conn->in.datalen & (ISCSI_PAD_LEN-1);
-	if (tcp_conn->in.padding) {
-		tcp_conn->in.padding = ISCSI_PAD_LEN - tcp_conn->in.padding;
-		dprintk("read padding %d bytes\n", tcp_conn->in.padding);
-	}
-
-	if (conn->hdrdgst_en) {
-		struct scatterlist sg;
-
-		sg_init_one(&sg, (u8 *)hdr,
-			    sizeof(struct iscsi_hdr) + ahslen);
-		crypto_digest_digest(tcp_conn->rx_tfm, &sg, 1, (u8 *)&cdgst);
-		rdgst = *(uint32_t*)((char*)hdr + sizeof(struct iscsi_hdr) +
-				     ahslen);
-		if (cdgst != rdgst) {
-			printk(KERN_ERR "iscsi_tcp: hdrdgst error "
-			       "recv 0x%x calc 0x%x\n", rdgst, cdgst);
-			return ISCSI_ERR_HDR_DGST;
-		}
-	}
+	rc = iscsi_tcp_hdr_recv_pre(conn);
+	if (rc)
+		return rc;
 
 	opcode = hdr->opcode & ISCSI_OPCODE_MASK;
 	dprintk("opcode 0x%x offset %d copy %d ahslen %d datalen %d\n",
@@ -412,7 +371,7 @@ int iscsi_tcp_hdr_recv(struct iscsi_conn *conn)
 }
 
 static int
-iscsi_data_recv(struct iscsi_conn *conn)
+istgt_data_recv(struct iscsi_conn *conn)
 {
 	struct iscsi_tcp_conn *tcp_conn = conn->dd_data;
 	int rc = 0, opcode;
@@ -449,126 +408,9 @@ exit:
 	return rc;
 }
 
-static int
-iscsi_tcp_data_recv(read_descriptor_t *rd_desc, struct sk_buff *skb,
-		unsigned int offset, size_t len)
+static int stgt_pdu_recv_finish(struct iscsi_conn *conn)
 {
-	int rc;
-	struct iscsi_conn *conn = rd_desc->arg.data;
 	struct iscsi_tcp_conn *tcp_conn = conn->dd_data;
-	int processed;
-	char pad[ISCSI_PAD_LEN];
-	struct scatterlist sg;
-
-	/*
-	 * Save current SKB and its offset in the corresponding
-	 * connection context.
-	 */
-	tcp_conn->in.copy = skb->len - offset;
-	tcp_conn->in.offset = offset;
-	tcp_conn->in.skb = skb;
-	tcp_conn->in.len = tcp_conn->in.copy;
-	BUG_ON(tcp_conn->in.copy <= 0);
-	dprintk("in %d bytes\n", tcp_conn->in.copy);
-
-more:
-	tcp_conn->in.copied = 0;
-	rc = 0;
-
-	if (unlikely(conn->suspend_rx)) {
-		dprintk("conn %d Rx suspended!\n", conn->id);
-		return 0;
-	}
-
-	if (tcp_conn->in_progress == IN_PROGRESS_WAIT_HEADER ||
-	    tcp_conn->in_progress == IN_PROGRESS_HEADER_GATHER) {
-		rc = iscsi_hdr_extract(tcp_conn);
-		if (rc) {
-		       if (rc == -EAGAIN)
-				goto nomore;
-		       else {
-				iscsi_conn_failure(conn, rc);
-				return 0;
-		       }
-		}
-
-		/*
-		 * Verify and process incoming PDU header.
-		 */
-		rc = iscsi_tcp_hdr_recv(conn);
-		if (!rc && tcp_conn->in.datalen) {
-			if (conn->datadgst_en) {
-				BUG_ON(!tcp_conn->data_rx_tfm);
-				crypto_digest_init(tcp_conn->data_rx_tfm);
-			}
-			tcp_conn->in_progress = IN_PROGRESS_DATA_RECV;
-		} else if (rc) {
-			iscsi_conn_failure(conn, rc);
-			return 0;
-		}
-	}
-
-	if (unlikely(conn->suspend_rx))
-		goto nomore;
-
-	if (tcp_conn->in_progress == IN_PROGRESS_DDIGEST_RECV) {
-		uint32_t recv_digest;
-
-		dprintk("extra data_recv offset %d copy %d\n",
-			  tcp_conn->in.offset, tcp_conn->in.copy);
-		skb_copy_bits(tcp_conn->in.skb, tcp_conn->in.offset,
-				&recv_digest, 4);
-		tcp_conn->in.offset += 4;
-		tcp_conn->in.copy -= 4;
-		if (recv_digest != tcp_conn->in.datadgst) {
-			dprintk("iscsi_tcp: data digest error!"
-				  "0x%x != 0x%x\n", recv_digest,
-				  tcp_conn->in.datadgst);
-			iscsi_conn_failure(conn, ISCSI_ERR_DATA_DGST);
-			return 0;
-		} else {
-			dprintk("iscsi_tcp: data digest match!"
-				  "0x%x == 0x%x\n", recv_digest,
-				  tcp_conn->in.datadgst);
-			tcp_conn->in_progress = IN_PROGRESS_WAIT_HEADER;
-		}
-	}
-
-	if (tcp_conn->in_progress == IN_PROGRESS_DATA_RECV &&
-	   tcp_conn->in.copy) {
-
-		dprintk("data_recv offset %d copy %d\n",
-		       tcp_conn->in.offset, tcp_conn->in.copy);
-
-		rc = iscsi_data_recv(conn);
-		if (rc) {
-			if (rc == -EAGAIN)
-				goto again;
-			iscsi_conn_failure(conn, rc);
-			return 0;
-		}
-		tcp_conn->in.copy -= tcp_conn->in.padding;
-		tcp_conn->in.offset += tcp_conn->in.padding;
-		if (conn->datadgst_en) {
-			if (tcp_conn->in.padding) {
-				dprintk("padding -> %d\n",
-					  tcp_conn->in.padding);
-				memset(pad, 0, tcp_conn->in.padding);
-				sg_init_one(&sg, pad, tcp_conn->in.padding);
-				crypto_digest_update(tcp_conn->data_rx_tfm,
-						     &sg, 1);
-			}
-			crypto_digest_final(tcp_conn->data_rx_tfm,
-					    (u8 *) & tcp_conn->in.datadgst);
-			dprintk("rx digest 0x%x\n", tcp_conn->in.datadgst);
-			tcp_conn->in_progress = IN_PROGRESS_DDIGEST_RECV;
-		} else
-			tcp_conn->in_progress = IN_PROGRESS_WAIT_HEADER;
-	}
-
-	dprintk("f, processed %d from out of %d padding %d\n",
-	       tcp_conn->in.offset - offset, (int)len, tcp_conn->in.padding);
-	BUG_ON(tcp_conn->in.offset - offset > len);
 
 	if (tcp_conn->in_progress == IN_PROGRESS_WAIT_HEADER)
 		if (tcp_conn->in.ctask) {
@@ -582,26 +424,7 @@ more:
 			schedule_work(&istgt_session->recvwork);
 		}
 
-	if (tcp_conn->in.offset - offset != len) {
-		dprintk("continue to process %d bytes\n",
-		       (int)len - (tcp_conn->in.offset - offset));
-		goto more;
-	}
-
-nomore:
-	processed = tcp_conn->in.offset - offset;
-	BUG_ON(processed == 0);
-	return processed;
-
-again:
-	processed = tcp_conn->in.offset - offset;
-	dprintk("c, processed %d from out of %d rd_desc_cnt %d\n",
-	          processed, (int)len, (int)rd_desc->count);
-	BUG_ON(processed == 0);
-	BUG_ON(processed > len);
-
-	conn->rxdata_octets += processed;
-	return processed;
+	return 0;
 }
 
 static void
@@ -609,11 +432,17 @@ istgt_tcp_data_ready(struct sock *sk, int flag)
 {
 	struct iscsi_conn *conn = sk->sk_user_data;
 	read_descriptor_t rd_desc;
+	struct data_ready_desc d;
+
+	d.conn = conn;
+	d.hdr_recv = istgt_tcp_hdr_recv;
+	d.data_recv = istgt_data_recv;
+	d.finish = istgt_pdu_recv_finish;
 
 	read_lock(&sk->sk_callback_lock);
 
 	/* use rd_desc to pass 'conn' to iscsi_tcp_data_recv */
-	rd_desc.arg.data = conn;
+	rd_desc.arg.data = &d;
 	rd_desc.count = 1;
 	tcp_read_sock(sk, &rd_desc, iscsi_tcp_data_recv);
 
