@@ -65,8 +65,6 @@ struct istgt_task {
 	struct list_head tlist;
 };
 
-static kmem_cache_t *taskcache;
-
 static inline struct istgt_task *ctask_to_ttask(struct iscsi_cmd_task *ctask)
 {
 	return (struct istgt_task *) ((void *) ctask->dd_data +
@@ -770,26 +768,26 @@ static struct iscsi_transport istgt_tcp_transport = {
 
 static int __init istgt_tcp_init(void)
 {
+	int err;
 	printk("iSCSI Target over TCP\n");
 
-	taskcache = kmem_cache_create("istgt_taskcache",
-				      sizeof(struct iscsi_data_task), 0,
-				      SLAB_HWCACHE_ALIGN, NULL, NULL);
-	if (!taskcache)
-		return -ENOMEM;
+	err = iscsi_tcp_init();
+	if (err)
+		return err;
 
 	if (!iscsi_register_transport(&istgt_tcp_transport))
-		goto free_taskcache;
+		goto call_iscsi_tcp_exit;
 	return 0;
-free_taskcache:
-	kmem_cache_destroy(taskcache);
+
+call_iscsi_tcp_exit:
+	iscsi_tcp_exit();
 	return -ENOMEM;
 }
 
 static void __exit istgt_tcp_exit(void)
 {
+	iscsi_tcp_exit();
 	iscsi_unregister_transport(&istgt_tcp_transport);
-	kmem_cache_destroy(taskcache);
 }
 
 module_init(istgt_tcp_init);
