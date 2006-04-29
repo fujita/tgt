@@ -973,6 +973,8 @@ more:
 	       tcp_conn->in.offset - offset, (int)len, tcp_conn->in.padding);
 	BUG_ON(tcp_conn->in.offset - offset > len);
 
+	d->finish(conn);
+
 	if (tcp_conn->in.offset - offset != len) {
 		debug_tcp("continue to process %d bytes\n",
 		       (int)len - (tcp_conn->in.offset - offset));
