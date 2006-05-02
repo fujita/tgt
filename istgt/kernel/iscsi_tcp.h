@@ -181,7 +181,6 @@ struct data_ready_desc {
 	struct iscsi_conn *conn;
 	int (* hdr_recv)(struct iscsi_conn *conn);
 	int (* data_recv)(struct iscsi_conn *conn);
-	int (* finish)(struct iscsi_conn *conn);
 };
 
 #endif /* ISCSI_H */

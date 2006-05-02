@@ -10,8 +10,8 @@
 EXTRA_CFLAGS += -I$(obj) -I$(obj)/../include
 
 ifneq ($(KERNELRELEASE),)
-obj-m			+= iscsi_tcp_tgt.o
-iscsi_tcp_tgt-objs	:= iscsi_tcp.o
+obj-m			+= istgt_tcp.o
+istgt_tcp-objs		:= iscsi_tcp_tgt.o iscsi_tcp.o
 obj-m			+= scsi_transport_iscsi.o
 obj-m			+= libiscsi.o
 else

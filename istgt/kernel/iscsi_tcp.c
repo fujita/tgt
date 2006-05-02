@@ -70,7 +70,7 @@ module_param_named(max_lun, iscsi_max_lun, uint, S_IRUGO);
 /* global data */
 static kmem_cache_t *taskcache;
 
-static inline void
+inline void
 iscsi_buf_init_virt(struct iscsi_buf *ibuf, char *vbuf, int size)
 {
 	sg_init_one(&ibuf->sg, (u8 *)vbuf, size);
@@ -88,7 +88,7 @@ iscsi_buf_init_iov(struct iscsi_buf *ibuf, char *vbuf, int size)
 	ibuf->use_sendmsg = 1;
 }
 
-static inline void
+inline void
 iscsi_buf_init_sg(struct iscsi_buf *ibuf, struct scatterlist *sg)
 {
 	ibuf->sg.page = sg->page;
@@ -659,7 +659,7 @@ iscsi_ctask_copy(struct iscsi_tcp_conn *tcp_conn, struct iscsi_cmd_task *ctask,
  *	The function calls skb_copy_bits() and updates per-connection
  *	byte counters.
  **/
-inline int
+static inline int
 iscsi_tcp_copy(struct iscsi_tcp_conn *tcp_conn)
 {
 	void *buf = tcp_conn->data;
@@ -911,9 +911,6 @@ more:
 		}
 	}
 
-	if (conn->suspend_rx)
-		goto nomore;
-
 	if (tcp_conn->in_progress == IN_PROGRESS_DDIGEST_RECV) {
 		uint32_t recv_digest;
 
@@ -975,9 +972,6 @@ more:
 	debug_tcp("f, processed %d from out of %d padding %d\n",
 	       tcp_conn->in.offset - offset, (int)len, tcp_conn->in.padding);
 	BUG_ON(tcp_conn->in.offset - offset > len);
-
-	if (d->finish)
-		d->finish(conn);
 
 	if (tcp_conn->in.offset - offset != len) {
 		debug_tcp("continue to process %d bytes\n",
@@ -1138,7 +1132,7 @@ iscsi_send(struct iscsi_conn *conn, struct iscsi_buf *buf, int size, int flags)
  * Notes:
  *	(Tx, Fast Path)
  **/
-static inline int
+inline int
 iscsi_sendhdr(struct iscsi_conn *conn, struct iscsi_buf *buf, int datalen)
 {
 	struct iscsi_tcp_conn *tcp_conn;
@@ -1178,7 +1172,7 @@ iscsi_sendhdr(struct iscsi_conn *conn, struct iscsi_buf *buf, int datalen)
  * Notes:
  *	(Tx, Fast Path)
  **/
-static inline int
+inline int
 iscsi_sendpage(struct iscsi_conn *conn, struct iscsi_buf *buf,
 	       int *count, int *sent)
 {
