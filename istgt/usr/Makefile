@@ -4,7 +4,7 @@ OBJS = param.o iscsid.o session.o target.o chap.o ctldev.o
 SHAREDLIB = istgt.so
 DAEMON = istgtd
 
-$(DAEMON): log.o istgt.o conn.o param.o session.o iscsid.o target.o chap.o ctldev.o
+$(DAEMON): log.o istgt.o conn.o param.o session.o iscsid.o target.o chap.o netlink.o
 	$(CC) $^ -o $@ $(LIBS)
 
 $(SHAREDLIB): $(OBJS)
