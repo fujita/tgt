@@ -32,7 +32,6 @@
 #include <netinet/ip.h>
 #include <arpa/inet.h>
 
-#include "log.h"
 #include "iscsid.h"
 
 #define ISCSI_LISTEN_PORT	3260
@@ -50,6 +49,7 @@ enum {
 static struct pollfd pfd[POLL_MAX];
 static struct connection *incoming[INCOMING_MAX];
 static char program_name[] = "istgt";
+uint64_t thandle;
 
 static void set_non_blocking(int fd)
 {

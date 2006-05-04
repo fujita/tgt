@@ -12,13 +12,20 @@
 #include <linux/types.h>
 
 #include "types.h"
-#include "param.h"
+#include "iscsi_if.h"
 #include "misc.h"
+#include "param.h"
 #include "log.h"
 
 #include <scsi/iscsi_proto.h>
 
 #define ISCSI_NAME_LEN 255
+
+#define DIGEST_ALL	(DIGEST_NONE | DIGEST_CRC32C)
+#define DIGEST_NONE		(1 << 0)
+#define DIGEST_CRC32C           (1 << 1)
+
+extern uint64_t thandle;
 
 #define sid64(isid, tsih)					\
 ({								\
@@ -48,6 +55,10 @@ struct session {
 	uint8_t isid[6];
 	uint16_t tsih;
 
+	/* workaroud */
+	uint32_t ksid;
+	uint32_t hostno;
+
 	struct qelem conn_list;
 	int conn_cnt;
 };
@@ -61,7 +72,7 @@ struct connection {
 	struct session *session;
 
 	int tid;
-/* 	struct iscsi_param session_param[session_key_last]; */
+	struct param session_param[ISCSI_PARAM_MAX];
 
 	char *initiator;
 	uint8_t isid[6];
@@ -181,15 +192,23 @@ extern void target_list_build(struct connection *, char *, char *);
 
 /* ctldev.c */
 struct iscsi_kernel_interface {
-	int (*param_get) (int tid, uint64_t sid, struct iscsi_param *);
-	int (*param_set) (int tid, uint64_t sid, int type, uint32_t flags,
-			  struct iscsi_param *);
-	int (*session_create) (int tid, uint64_t sid, uint32_t exp,
-			       uint32_t max);
-	int (*session_destroy) (int tid, uint64_t sid);
-	int (*conn_create) (int tid, uint64_t sid, uint32_t cid, uint32_t sn,
-			    uint32_t exp_sn, int fd, uint32_t hd, uint32_t dd);
-	int (*conn_destroy) (int tid, uint64_t sid, uint32_t cid);
+	int (*set_param) (uint64_t transport_handle, uint32_t sid,
+			  uint32_t cid, enum iscsi_param param,
+			  void *value, int len, int *retcode);
+
+	int (*create_session) (uint64_t transport_handle,
+			       uint32_t initial_cmdsn,
+			       uint32_t *out_sid, uint32_t *out_hostno);
+
+	int (*destroy_session) (uint64_t transport_handle, uint32_t sid);
+
+	int (*create_conn) (uint64_t transport_handle,
+			    uint32_t sid, uint32_t cid, uint32_t *out_cid);
+	int (*destroy_conn) (uint64_t transport_handle, uint32_t sid,
+			     uint32_t cid);
+	int (*bind_conn) (uint64_t transport_handle, uint32_t sid,
+			  uint32_t cid, uint64_t transport_eph,
+			  int is_leading, int *retcode);
 };
 
 extern struct iscsi_kernel_interface *ki;

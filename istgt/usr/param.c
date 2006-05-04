@@ -26,7 +26,7 @@ int param_index_by_name(char *name, struct iscsi_key *keys)
 	return err;
 }
 
-void param_set_defaults(struct iscsi_param *params, struct iscsi_key *keys)
+void param_set_defaults(struct param *params, struct iscsi_key *keys)
 {
 	int i;
 
@@ -78,7 +78,7 @@ static int bool_str_to_val(char *str, unsigned int *val)
 	return err;
 }
 
-static int or_set_val(struct iscsi_param *param, int idx, unsigned int *val)
+static int or_set_val(struct param *param, int idx, unsigned int *val)
 {
 	*val |= param[idx].val;
 	param[idx].val = *val;
@@ -86,7 +86,7 @@ static int or_set_val(struct iscsi_param *param, int idx, unsigned int *val)
 	return 0;
 }
 
-static int and_set_val(struct iscsi_param *param, int idx, unsigned int *val)
+static int and_set_val(struct param *param, int idx, unsigned int *val)
 {
 	*val &= param[idx].val;
 	param[idx].val = *val;
@@ -118,7 +118,7 @@ static int maximum_check_val(struct iscsi_key *key, unsigned int *val)
 	return 0;
 }
 
-static int minimum_set_val(struct iscsi_param *param, int idx, unsigned int *val)
+static int minimum_set_val(struct param *param, int idx, unsigned int *val)
 {
 	if (*val > param[idx].val)
 		*val = param[idx].val;
@@ -128,7 +128,7 @@ static int minimum_set_val(struct iscsi_param *param, int idx, unsigned int *val
 	return 0;
 }
 
-static int maximum_set_val(struct iscsi_param *param, int idx, unsigned int *val)
+static int maximum_set_val(struct param *param, int idx, unsigned int *val)
 {
 	if (param[idx].val > *val)
 		*val = param[idx].val;
@@ -176,7 +176,7 @@ static int digest_str_to_val(char *str, unsigned int *val)
 	return err;
 }
 
-static int digest_set_val(struct iscsi_param *param, int idx, unsigned int *val)
+static int digest_set_val(struct param *param, int idx, unsigned int *val)
 {
 	if (*val & DIGEST_CRC32C && param[idx].val & DIGEST_CRC32C)
 		*val = DIGEST_CRC32C;
@@ -198,10 +198,12 @@ static int marker_val_to_str(unsigned int val, char *str)
 	return 0;
 }
 
-static int marker_set_val(struct iscsi_param *param, int idx, unsigned int *val)
+static int marker_set_val(struct param *param, int idx, unsigned int *val)
 {
-	if ((idx == key_ofmarkint && param[key_ofmarker].state == KEY_STATE_DONE) ||
-	    (idx == key_ifmarkint && param[key_ifmarker].state == KEY_STATE_DONE))
+	if ((idx == ISCSI_OFMARKER_EN &&
+	     param[ISCSI_OFMARKER_EN].state == KEY_STATE_DONE) ||
+	    (idx == ISCSI_IFMARKER_EN &&
+	     param[ISCSI_IFMARKER_EN].state == KEY_STATE_DONE))
 		*val = 0;
 	else
 		*val = 1;
@@ -235,7 +237,7 @@ int param_check_val(struct iscsi_key *keys, int idx, unsigned int *val)
 		return 0;
 }
 
-int param_set_val(struct iscsi_key *keys, struct iscsi_param *param,
+int param_set_val(struct iscsi_key *keys, struct param *param,
 		  int idx, unsigned int *val2)
 {
 	if (keys[idx].ops->set_val)
@@ -283,30 +285,25 @@ static struct iscsi_key_ops marker_ops = {
 
 #define	SET_KEY_VALUES(x)	DEFAULT_NR_##x,MIN_NR_##x, MAX_NR_##x
 
-struct iscsi_key target_keys[] = {
-	{"QueuedCommands", SET_KEY_VALUES(QUEUED_CMNDS), &minimum_ops},
-	{NULL,},
-};
-
 struct iscsi_key session_keys[] = {
-	{"InitialR2T", 1, 0, 1, &or_ops},
-	{"ImmediateData", 1, 0, 1, &and_ops},
-	{"MaxConnections", 1, 1, 65535, &minimum_ops},
 	{"MaxRecvDataSegmentLength", 8192, 512, 16777215, &minimum_ops},
 	{"MaxXmitDataSegmentLength", 8192, 512, 16777215, &minimum_ops},
-	{"MaxBurstLength", 262144, 512, 16777215, &minimum_ops},
-	{"FirstBurstLength", 65536, 512, 16777215, &minimum_ops},
-	{"DefaultTime2Wait", 2, 0, 3600, &maximum_ops},
-	{"DefaultTime2Retain", 20, 0, 3600, &minimum_ops},
+	{"HeaderDigest", DIGEST_NONE, DIGEST_NONE, DIGEST_ALL, &digest_ops},
+	{"DataDigest", DIGEST_NONE, DIGEST_NONE, DIGEST_ALL, &digest_ops},
+	{"InitialR2T", 1, 0, 1, &or_ops},
 	{"MaxOutstandingR2T", 1, 1, 65535, &minimum_ops},
+	{"ImmediateData", 1, 0, 1, &and_ops},
+	{"FirstBurstLength", 65536, 512, 16777215, &minimum_ops},
+	{"MaxBurstLength", 262144, 512, 16777215, &minimum_ops},
 	{"DataPDUInOrder", 1, 0, 1, &or_ops},
 	{"DataSequenceInOrder", 1, 0, 1, &or_ops},
 	{"ErrorRecoveryLevel", 0, 0, 2, &minimum_ops},
-	{"HeaderDigest", DIGEST_NONE, DIGEST_NONE, DIGEST_ALL, &digest_ops},
-	{"DataDigest", DIGEST_NONE, DIGEST_NONE, DIGEST_ALL, &digest_ops},
-	{"OFMarker", 0, 0, 1, &and_ops},
 	{"IFMarker", 0, 0, 1, &and_ops},
+	{"OFMarker", 0, 0, 1, &and_ops},
+	{"DefaultTime2Wait", 2, 0, 3600, &maximum_ops},
+	{"DefaultTime2Retain", 20, 0, 3600, &minimum_ops},
 	{"OFMarkInt", 2048, 1, 65535, &marker_ops},
 	{"IFMarkInt", 2048, 1, 65535, &marker_ops},
+	{"MaxConnections", 1, 1, 65535, &minimum_ops},
 	{NULL,},
 };

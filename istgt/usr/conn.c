@@ -68,17 +68,38 @@ void conn_take_fd(struct connection *conn, int fd)
 {
 	int err;
 	uint64_t sid = sid64(conn->isid, conn->tsih);
+	uint32_t cid = conn->cid;
 
 	log_debug("conn_take_fd: %d %u %u %u %" PRIx64,
 		  fd, conn->cid, conn->stat_sn, conn->exp_stat_sn, sid);
 
 	conn->session->conn_cnt++;
 
-	err = ki->conn_create(conn->tid, sid, conn->cid,
-			      conn->stat_sn, conn->exp_stat_sn, fd,
-			      conn->session_param[key_header_digest].val,
-			      conn->session_param[key_data_digest].val);
+	err = ki->create_conn(thandle, sid, cid, &cid);
+	if (err) {
+		eprintf("%d %d %u %u %u %" PRIx64,
+			fd, err, conn->cid, conn->stat_sn, conn->exp_stat_sn, sid);
+		goto out;
+	}
+	conn->cid = cid;
 
+	if (ki->bind_conn(thandle, sid, conn->cid, fd, 1, &err) || err) {
+		eprintf("%d %d %u %u %u %" PRIx64,
+			fd, err, conn->cid, conn->stat_sn, conn->exp_stat_sn, sid);
+		goto out;
+	}
+
+/* 	if (ki->set_param(thandle, sid, conn->cid, ISCSI_PARAM_EXP_STATSN, */
+/* 			  conn->exp_stat_sn, &err, || err) { */
+/* 			fd, err, conn->cid, conn->stat_sn, conn->exp_stat_sn, sid); */
+/* 		goto out; */
+/* 	} */
+
+/* 	conn->stat_sn */
+/* 		conn->session_param[key_header_digest].val, */
+/* 		conn->session_param[key_data_digest].val); */
+
+out:
 	return;
 }
 

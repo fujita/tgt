@@ -228,8 +228,8 @@ static void text_scan_login(struct connection *conn)
 			unsigned int val;
 			char buf[32];
 
-			if (idx == key_max_recv_data_length)
-				idx = key_max_xmit_data_length;
+			if (idx == ISCSI_PARAM_MAX_RECV_DLENGTH)
+				idx = ISCSI_PARAM_MAX_XMIT_DLENGTH;
 
 			if (param_str_to_val(session_keys, idx, value, &val) < 0) {
 				if (conn->session_param[idx].state
@@ -251,7 +251,7 @@ static void text_scan_login(struct connection *conn)
 
 			switch (conn->session_param[idx].state) {
 			case KEY_STATE_START:
-				if (idx == key_max_xmit_data_length)
+				if (idx == ISCSI_PARAM_MAX_XMIT_DLENGTH)
 					break;
 				memset(buf, 0, sizeof(buf));
 				param_val_to_str(session_keys, idx, val, buf);
@@ -283,14 +283,14 @@ out:
 
 static int text_check_param(struct connection *conn)
 {
-	struct iscsi_param *p = conn->session_param;
+	struct param *p = conn->session_param;
 	char buf[32];
 	int i, cnt;
 
 	for (i = 0, cnt = 0; session_keys[i].name; i++) {
 		if (p[i].state == KEY_STATE_START && p[i].val != session_keys[i].def) {
 			if (conn->state == STATE_LOGIN) {
-				if (i == key_max_xmit_data_length) {
+				if (i == ISCSI_PARAM_MAX_XMIT_DLENGTH) {
 					if (p[i].val > session_keys[i].def)
 						p[i].val = session_keys[i].def;
 					p[i].state = KEY_STATE_DONE;
@@ -378,7 +378,7 @@ static void login_start(struct connection *conn)
 /* 			return; */
 /* 		} */
 
-		ki->param_get(conn->tid, 0, conn->session_param);
+/* 		ki->param_get(conn->tid, 0, conn->session_param); */
 		conn->exp_cmd_sn = be32_to_cpu(req->cmdsn);
 		log_debug("exp_cmd_sn: %d,%d", conn->exp_cmd_sn, req->cmdsn);
 		conn->max_cmd_sn = conn->exp_cmd_sn;

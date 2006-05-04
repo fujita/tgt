@@ -98,9 +98,10 @@ void session_create(struct connection *conn)
 
 	log_debug("session_create: %#" PRIx64, sid);
 
-	ki->session_create(conn->tid, sid, conn->exp_cmd_sn,
-			   conn->max_cmd_sn);
-	ki->param_set(conn->tid, sid, key_session, 0, conn->session_param);
+	ki->create_session(thandle, conn->exp_cmd_sn, &session->ksid,
+			   &session->hostno);
+
+	/* FIXME: we need to bind host to target here */
 }
 
 void session_remove(struct session *session)
@@ -113,7 +114,7 @@ void session_remove(struct session *session)
 		eprintf("%" PRIx64 " conn_list is not null\n", sid);
 
 	if (!session->tsih)
-		ki->session_destroy(session->target->tid, sid);
+		ki->destroy_session(thandle, session->ksid);
 
 	if (session->target) {
 		remque(&session->slist);

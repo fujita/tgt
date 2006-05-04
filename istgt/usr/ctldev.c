@@ -22,11 +22,8 @@
 #include <linux/netlink.h>
 
 #include "iscsid.h"
-#include "tgtd.h"
-#include "tgt_if.h"
-#include "tgtadm.h"
-#include "tgt_sysfs.h"
 
+#if 0
 extern struct qelem targets_list;
 static int typeid;
 
@@ -485,145 +482,15 @@ int ipc_mgmt(char *sbuf, char *rbuf)
 	return err;
 }
 
-/* This is temporary. */
+#endif
 
-#define CONFIG_FILE	"/etc/ietd.conf"
-#define BUFSIZE	8192
-
-/* this is the orignal Ardis code. */
-static char *target_sep_string(char **pp)
-{
-	char *p = *pp;
-	char *q;
-
-	for (p = *pp; isspace(*p); p++)
-		;
-	for (q = p; *q && !isspace(*q); q++)
-		;
-	if (*q)
-		*q++ = 0;
-	else
-		p = NULL;
-	*pp = q;
-	return p;
-}
-
-static int filter(const struct dirent *dir)
-{
-	return strcmp(dir->d_name, ".") && strcmp(dir->d_name, "..");
-}
-
-static int driver_to_typeid(char *name)
-{
-	int i, nr, err, fd, id = -ENOENT;
-	char *p, path[PATH_MAX], buf[PATH_MAX];
-	struct dirent **namelist;
-
-	nr = scandir(TGT_TYPE_SYSFSDIR, &namelist, filter, alphasort);
-	for (i = 0; i < nr; i++) {
-		snprintf(path, sizeof(path), TGT_TYPE_SYSFSDIR "/%s/name",
-			 namelist[i]->d_name);
-
-		fd = open(path, O_RDONLY);
-		if (fd < 0) {
-			eprintf("%s %d\n", path, errno);
-			continue;
-		}
-
-		err = read(fd, buf, sizeof(buf));
-		close(fd);
-		if (err < 0) {
-			eprintf("%s %d\n", path, err);
-			continue;
-		}
-
-		if (strncmp(name, buf, strlen(name)))
-			continue;
-
-		for (p = namelist[i]->d_name; !isdigit((int) *p); p++)
-			;
-		id = atoi(p);
-		break;
-	}
-
-	for (i = 0; i < nr; i++)
-		free(namelist[i]);
-	free(namelist);
-
-	return id;
-}
-
-void initial_device_create(int tid, int64_t lun, char *params)
-{
-	char *path, *devtype;
-	char d[] = "tgt_vsd";
-
-	path = devtype = NULL;
-	kdevice_create_parser(params, &path, &devtype);
-	kdevice_create(tid, lun, path, devtype ? : d);
-}
-
-void initial_config_load(void)
-{
-	FILE *config;
-	char buf[BUFSIZE];
-	char *p, *q;
-	int idx, tid;
-	uint32_t val;
-
-	typeid = driver_to_typeid(THIS_NAME);
-
-	dprintf("%d\n", typeid);
-
-	if (!(config = fopen(CONFIG_FILE, "r")))
-		return;
-
-	tid = -1;
-	while (fgets(buf, BUFSIZE, config)) {
-		q = buf;
-		p = target_sep_string(&q);
-		if (!p || *p == '#')
-			continue;
-		if (!strcasecmp(p, "Target")) {
-			tid = 0;
-			if (!(p = target_sep_string(&q)))
-				continue;
-			dprintf("creaing target %s\n", p);
-			tid = istgt_ktarget_create(typeid, p);
-		} else if (!strcasecmp(p, "Alias") && tid >= 0) {
-			;
-		} else if (!strcasecmp(p, "MaxSessions") && tid >= 0) {
-			/* target->max_sessions = strtol(q, &q, 0); */
-		} else if (!strcasecmp(p, "Lun") && tid >= 0) {
-			uint64_t lun = strtoull(q, &q, 10);
-			initial_device_create(tid, lun, q);
-		} else if (!((idx = param_index_by_name(p, target_keys)) < 0) && tid >= 0) {
-			val = strtol(q, &q, 0);
-			if (param_check_val(target_keys, idx, &val) < 0)
-				log_warning("%s, %u\n", target_keys[idx].name, val);
-			iscsi_param_partial_set(tid, 0, key_target, idx, val);
-		} else if (!((idx = param_index_by_name(p, session_keys)) < 0) && tid >= 0) {
-			char *str = target_sep_string(&q);
-			if (param_str_to_val(session_keys, idx, str, &val) < 0)
-				continue;
-			if (param_check_val(session_keys, idx, &val) < 0)
-				log_warning("%s, %u\n", session_keys[idx].name, val);
-			iscsi_param_partial_set(tid, 0, key_session, idx, val);
-		}
-	}
-
-	fclose(config);
-
-	return;
-}
-
-struct iscsi_kernel_interface ioctl_ki = {
-	.param_get = iscsi_param_get,
-	.param_set = iscsi_param_set,
-	.session_create = iscsi_session_create,
-	.session_destroy = iscsi_session_destroy,
-	.conn_create = iscsi_conn_create,
-	.conn_destroy = iscsi_conn_destroy,
+struct iscsi_kernel_interface nl_ki = {
+/* 	.param_get = iscsi_param_get, */
+/* 	.param_set = iscsi_param_set, */
+/* 	.session_create = iscsi_session_create, */
+/* 	.session_destroy = iscsi_session_destroy, */
+/* 	.conn_create = iscsi_conn_create, */
+/* 	.conn_destroy = iscsi_conn_destroy, */
 };
 
-struct iscsi_kernel_interface *ki = &ioctl_ki;
+struct iscsi_kernel_interface *ki = &nl_ki;
