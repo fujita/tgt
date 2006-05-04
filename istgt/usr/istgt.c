@@ -32,6 +32,7 @@
 #include <netinet/ip.h>
 #include <arpa/inet.h>
 
+#include "log.h"
 #include "iscsid.h"
 
 #define ISCSI_LISTEN_PORT	3260
@@ -41,11 +42,14 @@
 
 enum {
 	POLL_LISTEN,
-	POLL_INCOMING = POLL_LISTEN + LISTEN_MAX,
+	POLL_NL = POLL_LISTEN + LISTEN_MAX,
+	POLL_INCOMING,
 	POLL_MAX = POLL_INCOMING + INCOMING_MAX,
 };
 
+static struct pollfd pfd[POLL_MAX];
 static struct connection *incoming[INCOMING_MAX];
+static char program_name[] = "istgt";
 
 static void set_non_blocking(int fd)
 {
@@ -54,9 +58,9 @@ static void set_non_blocking(int fd)
 	if (res != -1) {
 		res = fcntl(fd, F_SETFL, res | O_NONBLOCK);
 		if (res)
-			log_warning("unable to set fd flags (%s)!", strerror(errno));
+			dprintf("unable to set fd flags (%s)!", strerror(errno));
 	} else
-		log_warning("unable to get fd flags (%s)!", strerror(errno));
+		dprintf("unable to get fd flags (%s)!", strerror(errno));
 }
 
 static void listen_socket_create(struct pollfd *pfds)
@@ -73,14 +77,14 @@ static void listen_socket_create(struct pollfd *pfds)
 	hints.ai_flags = AI_PASSIVE;
 
 	if (getaddrinfo(NULL, servname, &hints, &res0)) {
-		log_error("unable to get address info (%s)!", strerror(errno));
+		eprintf("unable to get address info (%s)!", strerror(errno));
 		exit(1);
 	}
 
 	for (i = 0, res = res0; res && i < LISTEN_MAX; i++, res = res->ai_next) {
 		sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
 		if (sock < 0) {
-			log_error("unable to create server socket (%s) %d %d %d!",
+			eprintf("unable to create server socket (%s) %d %d %d!",
 				  strerror(errno), res->ai_family,
 				  res->ai_socktype, res->ai_protocol);
 			continue;
@@ -88,7 +92,7 @@ static void listen_socket_create(struct pollfd *pfds)
 
 		opt = 1;
 		if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)))
-			log_warning("unable to set SO_REUSEADDR on server socket (%s)!",
+			dprintf("unable to set SO_REUSEADDR on server socket (%s)!",
 				    strerror(errno));
 		opt = 1;
 		if (res->ai_family == AF_INET6 &&
@@ -96,12 +100,12 @@ static void listen_socket_create(struct pollfd *pfds)
 			continue;
 
 		if (bind(sock, res->ai_addr, res->ai_addrlen)) {
-			log_error("unable to bind server socket (%s)!", strerror(errno));
+			eprintf("unable to bind server socket (%s)!", strerror(errno));
 			continue;
 		}
 
 		if (listen(sock, INCOMING_MAX)) {
-			log_error("unable to listen to server socket (%s)!", strerror(errno));
+			eprintf("unable to listen to server socket (%s)!", strerror(errno));
 			continue;
 		}
 
@@ -112,11 +116,6 @@ static void listen_socket_create(struct pollfd *pfds)
 	}
 
 	freeaddrinfo(res0);
-}
-
-void poll_init(struct pollfd *pfds)
-{
-	listen_socket_create(pfds + POLL_LISTEN);
 }
 
 static void accept_connection(struct pollfd *pfds, int afd)
@@ -132,7 +131,7 @@ static void accept_connection(struct pollfd *pfds, int afd)
 	namesize = sizeof(from);
 	if ((fd = accept(afd, (struct sockaddr *) &from, &namesize)) < 0) {
 		if (errno != EINTR && errno != EAGAIN) {
-			log_error("accept(incoming_socket)");
+			eprintf("accept(incoming_socket)");
 			exit(1);
 		}
 		return;
@@ -143,13 +142,13 @@ static void accept_connection(struct pollfd *pfds, int afd)
 			break;
 	}
 	if (i >= INCOMING_MAX) {
-		log_error("unable to find incoming slot? %d\n", i);
+		eprintf("unable to find incoming slot? %d\n", i);
 		goto out;
 	}
 
 	conn = conn_alloc();
 	if (!conn) {
-		log_error("fail to allocate %s", "conn\n");
+		eprintf("fail to allocate %s", "conn\n");
 		goto out;
 	}
 	conn->fd = fd;
@@ -168,7 +167,7 @@ out:
 	return;
 }
 
-void poll_event(struct pollfd *pfds, int nr)
+static void poll_event(struct pollfd *pfds)
 {
 	struct connection *conn;
 	struct pollfd *pfd;
@@ -296,7 +295,7 @@ void poll_event(struct pollfd *pfds, int nr)
 
 			break;
 		default:
-			log_error("illegal iostate %d for port %d!\n", conn->iostate, i);
+			eprintf("illegal iostate %d for port %d!\n", conn->iostate, i);
 			exit(1);
 		}
 
@@ -309,4 +308,67 @@ void poll_event(struct pollfd *pfds, int nr)
 			incoming[i] = NULL;
 		}
 	}
+}
+
+static void event_loop(void)
+{
+	int i, err;
+
+	listen_socket_create(pfd + POLL_LISTEN);
+
+	for (i = 0; i < INCOMING_MAX; i++) {
+		pfd[POLL_INCOMING + i].fd = -1;
+		pfd[POLL_INCOMING + i].events = 0;
+		incoming[i] = NULL;
+	}
+
+retry:
+	err = poll(pfd, POLL_MAX, -1);
+	if (err < 0) {
+		if (errno != EINTR) {
+			eprintf("%d %d\n", err, errno);
+			exit(1);
+		} else
+			goto retry;
+	}
+
+	poll_event(pfd);
+	goto retry;
+}
+
+static int daemon_init(void)
+{
+	pid_t pid;
+
+	pid = fork();
+	if (pid < 0)
+		return -ENOMEM;
+	else if (pid)
+		exit(0);
+
+	setsid();
+	chdir("/");
+	close(0);
+	open("/dev/null", O_RDWR);
+	dup2(0, 1);
+	dup2(0, 2);
+
+	return 0;
+}
+
+int main(int argc, char **argv)
+{
+	int is_daemon = 1, is_debug = 1;
+
+	if (is_daemon && daemon_init())
+		exit(1);
+
+	if (log_init(program_name, LOG_SPACE_SIZE, is_daemon, is_debug))
+		exit(1);
+
+	/* init nl socket here. */
+
+	event_loop();
+
+	return 0;
 }

@@ -12,12 +12,13 @@
 #include <linux/types.h>
 
 #include "types.h"
-#include "istgt_u.h"
 #include "param.h"
 #include "misc.h"
 #include "log.h"
 
 #include <scsi/iscsi_proto.h>
+
+#define ISCSI_NAME_LEN 255
 
 #define sid64(isid, tsih)					\
 ({								\
@@ -60,7 +61,7 @@ struct connection {
 	struct session *session;
 
 	int tid;
-	struct iscsi_param session_param[session_key_last];
+/* 	struct iscsi_param session_param[session_key_last]; */
 
 	char *initiator;
 	uint8_t isid[6];
