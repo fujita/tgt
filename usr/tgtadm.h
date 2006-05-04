@@ -38,8 +38,6 @@ struct tgtadm_res {
 	unsigned long addr;
 };
 
-extern int ktarget_destroy(int tid);
-extern int ktarget_create(int typeid);
 extern int tgt_mgmt(char *sbuf, char *rbuf);
 
 #endif
