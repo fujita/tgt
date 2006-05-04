@@ -26,6 +26,7 @@
 #define DIGEST_CRC32C           (1 << 1)
 
 extern uint64_t thandle;
+extern int nl_fd;
 
 #define sid64(isid, tsih)					\
 ({								\
@@ -190,7 +191,7 @@ extern int target_find_by_name(const char *name, int *tid);
 struct target * target_find_by_id(int tid);
 extern void target_list_build(struct connection *, char *, char *);
 
-/* ctldev.c */
+/* netlink.c */
 struct iscsi_kernel_interface {
 	int (*set_param) (uint64_t transport_handle, uint32_t sid,
 			  uint32_t cid, enum iscsi_param param,
@@ -209,7 +210,14 @@ struct iscsi_kernel_interface {
 	int (*bind_conn) (uint64_t transport_handle, uint32_t sid,
 			  uint32_t cid, uint64_t transport_eph,
 			  int is_leading, int *retcode);
+	int (*start_conn) (uint64_t transport_handle, uint32_t sid,
+			   uint32_t cid, int *retcode);
+
+	int (*stop_conn) (uint64_t transport_handle, uint32_t sid,
+			  uint32_t cid, int flag);
 };
+
+extern int nl_init(void);
 
 extern struct iscsi_kernel_interface *ki;
 

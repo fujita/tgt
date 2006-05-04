@@ -50,6 +50,7 @@ static struct pollfd pfd[POLL_MAX];
 static struct connection *incoming[INCOMING_MAX];
 static char program_name[] = "istgt";
 uint64_t thandle;
+int nl_fd;
 
 static void set_non_blocking(int fd)
 {
@@ -358,7 +359,7 @@ static int daemon_init(void)
 
 int main(int argc, char **argv)
 {
-	int is_daemon = 1, is_debug = 1;
+	int err, is_daemon = 1, is_debug = 1;
 
 	if (is_daemon && daemon_init())
 		exit(1);
@@ -366,7 +367,9 @@ int main(int argc, char **argv)
 	if (log_init(program_name, LOG_SPACE_SIZE, is_daemon, is_debug))
 		exit(1);
 
-	/* init nl socket here. */
+	err = nl_init();
+	if (err)
+		exit(1);
 
 	event_loop();
 
