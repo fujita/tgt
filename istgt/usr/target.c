@@ -18,6 +18,7 @@
 
 #include "iscsid.h"
 #include "tgtadm.h"
+#include "tgt_sysfs.h"
 
 struct qelem targets_list = LIST_HEAD_INIT(targets_list);
 
@@ -236,5 +237,93 @@ int ipc_init(void)
 
 	ipc_fd = fd;
 
+	return 0;
+}
+
+static int filter(const struct dirent *dir)
+{
+	return strcmp(dir->d_name, ".") && strcmp(dir->d_name, "..");
+}
+
+static int lldname_to_id(char *name)
+{
+	struct dirent **namelist;
+	int i, nr, id = -EINVAL;
+	char *p;
+
+	nr = scandir(TGT_LLD_SYSFSDIR, &namelist, filter, alphasort);
+	if (!nr)
+		return -EINVAL;
+
+	for (i = 0; i < nr; i++) {
+		p = strchr(namelist[i]->d_name, '-');
+		if (p && !strcmp(name, p + 1)) {
+			*p='\0';
+			id = atoi(namelist[i]->d_name);
+			break;
+		}
+	}
+
+	for (i = 0; i < nr; i++)
+		free(namelist[i]);
+	free(namelist);
+
+	return id;
+}
+
+static int ipc_mgmt_connect(void)
+{
+	int fd, err;
+	struct sockaddr_un addr;
+
+	fd = socket(AF_LOCAL, SOCK_STREAM, 0);
+	if (fd < 0)
+		return fd;
+
+	memset(&addr, 0, sizeof(addr));
+	addr.sun_family = AF_LOCAL;
+	memcpy((char *) &addr.sun_path + 1, TGT_IPC_NAMESPACE, strlen(TGT_IPC_NAMESPACE));
+
+	err = connect(fd, (struct sockaddr *) &addr, sizeof(addr));
+	if (err < 0)
+		return err;
+
+	return fd;
+}
+
+int target_bind(int tid, int hostno)
+{
+	struct tgtadm_req *req;
+	struct nlmsghdr *nlh;
+	char buf[1024];
+	int fd, err;
+
+	nlh = (struct nlmsghdr *) buf;
+	req = NLMSG_DATA(nlh);
+
+	req->mode = MODE_TARGET;
+	req->op = OP_BIND;
+	req->tid = tid;
+	req->host_no = hostno;
+	req->typeid = lldname_to_id("istgt");
+
+	nlh->nlmsg_len = NLMSG_LENGTH(sizeof(*req));
+	nlh->nlmsg_type = 0;
+	nlh->nlmsg_flags = 0;
+	nlh->nlmsg_pid = getpid();
+
+	fd = ipc_mgmt_connect();
+	if (fd < 0) {
+		eprintf("Cannot connect tgtd\n");
+		return fd;
+	}
+
+	err = write(fd, buf, nlh->nlmsg_len);
+	if (err < 0)
+		eprintf("Cannot send to tgtd %d\n", err);
+
+	err = read(fd, buf, sizeof(buf));
+
+	close(fd);
 	return 0;
 }

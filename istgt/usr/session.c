@@ -101,7 +101,7 @@ void session_create(struct connection *conn)
 	ki->create_session(thandle, conn->exp_cmd_sn, &session->ksid,
 			   &session->hostno);
 
-	/* FIXME: we need to bind host to target here */
+	target_bind(session->target->tid, session->hostno);
 }
 
 void session_remove(struct session *session)

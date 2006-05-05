@@ -194,6 +194,7 @@ extern void session_remove(struct session *session);
 extern int target_find_by_name(const char *name, int *tid);
 struct target * target_find_by_id(int tid);
 extern void target_list_build(struct connection *, char *, char *);
+extern int target_bind(int tid, int hostno);
 
 extern void ipc_event(void);
 extern int ipc_init(void);
