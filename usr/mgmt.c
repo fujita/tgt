@@ -224,11 +224,13 @@ void ipc_event_handle(struct driver_info *dinfo, int accept_fd)
 	req = NLMSG_DATA(nlh);
 	dprintf("%d %d %d %d %d\n", req->mode, req->typeid, err, nlh->nlmsg_len, fd);
 
+	err = tgt_mgmt((char *) nlh, rbuf);
+	if (err)
+		eprintf("%d %d %d %d %d\n",
+			req->mode, req->typeid, err, nlh->nlmsg_len, fd);
 	fn = dl_fn(dinfo, req->typeid, DL_FN_IPC_MGMT);
 	if (fn)
 		err = fn((char *) nlh, rbuf);
-	else
-		err = tgt_mgmt((char *) nlh, rbuf);
 
 send:
 	err = write(fd, nlh, nlh->nlmsg_len);

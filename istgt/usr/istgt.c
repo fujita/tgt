@@ -41,7 +41,8 @@
 
 enum {
 	POLL_LISTEN,
-	POLL_NL = POLL_LISTEN + LISTEN_MAX,
+	POLL_IPC = POLL_LISTEN + LISTEN_MAX,
+	POLL_NL,
 	POLL_INCOMING,
 	POLL_MAX = POLL_INCOMING + INCOMING_MAX,
 };
@@ -50,7 +51,7 @@ static struct pollfd pfd[POLL_MAX];
 static struct connection *incoming[INCOMING_MAX];
 static char program_name[] = "istgt";
 uint64_t thandle;
-int nl_fd;
+int nl_fd, ipc_fd;
 
 static void set_non_blocking(int fd)
 {
@@ -59,9 +60,9 @@ static void set_non_blocking(int fd)
 	if (res != -1) {
 		res = fcntl(fd, F_SETFL, res | O_NONBLOCK);
 		if (res)
-			dprintf("unable to set fd flags (%s)!", strerror(errno));
+			dprintf("unable to set fd flags (%s)!\n", strerror(errno));
 	} else
-		dprintf("unable to get fd flags (%s)!", strerror(errno));
+		dprintf("unable to get fd flags (%s)!\n", strerror(errno));
 }
 
 static void listen_socket_create(struct pollfd *pfds)
@@ -78,14 +79,14 @@ static void listen_socket_create(struct pollfd *pfds)
 	hints.ai_flags = AI_PASSIVE;
 
 	if (getaddrinfo(NULL, servname, &hints, &res0)) {
-		eprintf("unable to get address info (%s)!", strerror(errno));
+		eprintf("unable to get address info (%s)!\n", strerror(errno));
 		exit(1);
 	}
 
 	for (i = 0, res = res0; res && i < LISTEN_MAX; i++, res = res->ai_next) {
 		sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
 		if (sock < 0) {
-			eprintf("unable to create server socket (%s) %d %d %d!",
+			eprintf("unable to create server socket (%s) %d %d %d!\n",
 				  strerror(errno), res->ai_family,
 				  res->ai_socktype, res->ai_protocol);
 			continue;
@@ -93,7 +94,7 @@ static void listen_socket_create(struct pollfd *pfds)
 
 		opt = 1;
 		if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)))
-			dprintf("unable to set SO_REUSEADDR on server socket (%s)!",
+			dprintf("unable to set SO_REUSEADDR on server socket (%s)!\n",
 				    strerror(errno));
 		opt = 1;
 		if (res->ai_family == AF_INET6 &&
@@ -101,12 +102,12 @@ static void listen_socket_create(struct pollfd *pfds)
 			continue;
 
 		if (bind(sock, res->ai_addr, res->ai_addrlen)) {
-			eprintf("unable to bind server socket (%s)!", strerror(errno));
+			eprintf("unable to bind server socket (%s)!\n", strerror(errno));
 			continue;
 		}
 
 		if (listen(sock, INCOMING_MAX)) {
-			eprintf("unable to listen to server socket (%s)!", strerror(errno));
+			eprintf("unable to listen to server socket (%s)!\n", strerror(errno));
 			continue;
 		}
 
@@ -132,7 +133,7 @@ static void accept_connection(struct pollfd *pfds, int afd)
 	namesize = sizeof(from);
 	if ((fd = accept(afd, (struct sockaddr *) &from, &namesize)) < 0) {
 		if (errno != EINTR && errno != EAGAIN) {
-			eprintf("accept(incoming_socket)");
+			eprintf("accept(incoming_socket)\n");
 			exit(1);
 		}
 		return;
@@ -149,7 +150,7 @@ static void accept_connection(struct pollfd *pfds, int afd)
 
 	conn = conn_alloc();
 	if (!conn) {
-		eprintf("fail to allocate %s", "conn\n");
+		eprintf("fail to allocate conn\n");
 		goto out;
 	}
 	conn->fd = fd;
@@ -178,6 +179,12 @@ static void poll_event(struct pollfd *pfds)
 		if (pfds[POLL_LISTEN + i].revents)
 			accept_connection(pfds, pfds[POLL_LISTEN + i].fd);
 	}
+
+/* 	if (pfd[POLL_NL].revents) */
+/* 		handle_iscsi_events(nl_fd); */
+
+	if (pfds[POLL_IPC].revents)
+		ipc_event();
 
 	for (i = 0; i < INCOMING_MAX; i++) {
 		conn = incoming[i];
@@ -301,7 +308,7 @@ static void poll_event(struct pollfd *pfds)
 		}
 
 		if (conn->state == STATE_CLOSE) {
-			log_debug("connection closed");
+			dprintf("connection closed\n");
 			conn_free_pdu(conn);
 			conn_free(conn);
 			close(pfd->fd);
@@ -314,6 +321,11 @@ static void poll_event(struct pollfd *pfds)
 static void event_loop(void)
 {
 	int i, err;
+
+	pfd[POLL_NL].fd = nl_fd;
+	pfd[POLL_NL].events = POLLIN;
+	pfd[POLL_IPC].fd = ipc_fd;
+	pfd[POLL_IPC].events = POLLIN;
 
 	listen_socket_create(pfd + POLL_LISTEN);
 
@@ -368,6 +380,10 @@ int main(int argc, char **argv)
 		exit(1);
 
 	err = nl_init();
+	if (err)
+		exit(1);
+
+	err = ipc_init();
 	if (err)
 		exit(1);
 

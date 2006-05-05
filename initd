@@ -7,7 +7,7 @@ PATH=/sbin:/bin:/usr/sbin:/usr/bin
 MEM_SIZE=1048576
 export LD_LIBRARY_PATH=${PWD}/usr:${PWD}/istgt/usr:${PWD}/ibmvstgt/usr:${LD_LIBRARY_PATH}
 
-if [ -f ${PWD}/istgt/kernel/istgt.ko ] ; then
+if [ -f ${PWD}/istgt/kernel/istgt_tcp.ko ] ; then
 	TARGET=istgt
 fi
 
@@ -17,7 +17,10 @@ start_server()
 
 	if [ "$TARGET" = "istgt" ] ; then
 		modprobe -q crc32c
-		insmod ${PWD}/istgt/kernel/istgt.ko
+		insmod ${PWD}/istgt/kernel/scsi_transport_iscsi.ko
+		insmod ${PWD}/istgt/kernel/libiscsi.ko
+		insmod ${PWD}/istgt/kernel/istgt_tcp.ko
+		${PWD}/istgt/usr/istgtd
 	else
 		insmod ${PWD}/ibmvstgt/kernel/libsrp.ko
 		insmod ${PWD}/ibmvstgt/kernel/ibmvstgt.ko
@@ -26,19 +29,13 @@ start_server()
 	${PWD}/usr/tgtd -d0
 
 	sleep 1
-
-	if [ "$TARGET" = "istgt" ] ; then
-		echo "Start istgt"    
-#		${PWD}/usr/tgtadm --driver istgt --op new --tid 0 --params iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
-#		${PWD}/usr/tgtadm --driver istgt --op bind --tid 1 --hostno 1
-#		${PWD}/usr/tgtadm --driver istgt --op new --tid 0 --lun 0 --params Path=/dev/sdb1
-	fi
 }
 	
 stop_server()
 {
 	if [ "$TARGET" = "istgt" ] ; then
 		${PWD}/usr/tgtadm --driver istgt --op delete
+		killall -9 istgtd
 	else
 		${PWD}/usr/tgtadm --driver ibmvstgt --op delete
 	fi
@@ -48,7 +45,9 @@ stop_server()
 	sleep 1
 
 	if [ "$TARGET" = "istgt" ] ; then
-		rmmod istgt
+		rmmod istgt_tcp
+		rmmod libiscsi
+		rmmod scsi_transport_iscsi
 	else
 		rmmod libsrp
 		rmmod ibmvstgt

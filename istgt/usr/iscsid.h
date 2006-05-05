@@ -20,13 +20,14 @@
 #include <scsi/iscsi_proto.h>
 
 #define ISCSI_NAME_LEN 255
+#define ISTGT_NAMESPACE "ISTGT_ABSTRACT_NAMESPACE"
 
 #define DIGEST_ALL	(DIGEST_NONE | DIGEST_CRC32C)
 #define DIGEST_NONE		(1 << 0)
 #define DIGEST_CRC32C           (1 << 1)
 
 extern uint64_t thandle;
-extern int nl_fd;
+extern int nl_fd, ipc_fd;
 
 #define sid64(isid, tsih)					\
 ({								\
@@ -190,6 +191,9 @@ extern void session_remove(struct session *session);
 extern int target_find_by_name(const char *name, int *tid);
 struct target * target_find_by_id(int tid);
 extern void target_list_build(struct connection *, char *, char *);
+
+extern void ipc_event(void);
+extern int ipc_init(void);
 
 /* netlink.c */
 struct iscsi_kernel_interface {
