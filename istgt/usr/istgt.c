@@ -311,7 +311,7 @@ static void poll_event(struct pollfd *pfds)
 			dprintf("connection closed\n");
 			conn_free_pdu(conn);
 			conn_free(conn);
-			close(pfd->fd);
+/* 			close(pfd->fd); */
 			pfd->fd = -1;
 			incoming[i] = NULL;
 		}

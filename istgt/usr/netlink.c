@@ -97,8 +97,7 @@ peek_again:
 
 	nlh = (struct nlmsghdr *) buf;
 
-	dprintf("%d %d %d\n", nlh->nlmsg_type, nlh->nlmsg_len, getpid());
-
+/* 	dprintf("%d %d %d\n", nlh->nlmsg_type, nlh->nlmsg_len, getpid()); */
 read_again:
 	err = __nl_read(nl_fd, buf, nlh->nlmsg_len, 0);
 	if (err < 0) {
@@ -111,28 +110,22 @@ read_again:
 	return err;
 }
 
-static void nlmsg_init(struct nlmsghdr *nlh, uint32_t pid, uint16_t type,
-		       uint32_t len)
-{
-	nlh->nlmsg_pid = pid;
-	nlh->nlmsg_len = len;
-	nlh->nlmsg_type = type;
-}
-
 static int __kipc_call(struct iscsi_uevent *ev, int len)
 {
 	struct nlmsghdr *nlh;
 	char sbuf[NL_BUFSIZE];
 	int err;
 
-	len = NLMSG_SPACE(len);
-	memset(sbuf, 0, NL_BUFSIZE);
 	nlh = (struct nlmsghdr *) sbuf;
-	nlmsg_init(nlh, getpid(), ev->type, len);
-	memcpy(NLMSG_DATA(sbuf), ev, len);
+	memset(sbuf, 0, NL_BUFSIZE);
+	memcpy(NLMSG_DATA(nlh), ev, len);
 
-	err = sendto(nl_fd, ev, len, 0, (struct sockaddr *) &daddr,
-		     sizeof(daddr));
+	len = NLMSG_SPACE(len);
+	nlh->nlmsg_pid = getpid();
+	nlh->nlmsg_len = len;
+	nlh->nlmsg_type = ev->type;
+
+	err = sendto(nl_fd, nlh, len, 0, (struct sockaddr *) &daddr, sizeof(daddr));
 	if (err < 0) {
 		eprintf("%d\n", err);
 		return err;
@@ -155,6 +148,9 @@ static int kcreate_session(uint64_t transport_handle, uint32_t initial_cmdsn,
 {
 	int rc;
 	struct iscsi_uevent ev;
+
+	dprintf("%"PRIx64 " %u %u %u\n",
+		transport_handle, initial_cmdsn, *out_sid, *out_hostno);
 
 	memset(&ev, 0, sizeof(struct iscsi_uevent));
 
@@ -195,6 +191,8 @@ static int kcreate_conn(uint64_t transport_handle, uint32_t sid,
 {
 	int rc;
 	struct iscsi_uevent ev;
+
+	dprintf("%"PRIx64 " %u %u\n", transport_handle, sid, cid);
 
 	memset(&ev, 0, sizeof(struct iscsi_uevent));
 
@@ -327,9 +325,32 @@ kset_param(uint64_t transport_handle, uint32_t sid, uint32_t cid,
 	return 0;
 }
 
+static int transport_handle_init(void)
+{
+	int fd, err;
+	char buf[64];
+
+	fd = open("/sys/class/iscsi_transport/iscsi_tgt_tcp/handle", O_RDONLY);
+	if (fd < 0)
+		return fd;
+	err = read(fd, buf, sizeof(buf));
+	if (err < 0)
+		goto out;
+	thandle = strtoull(buf, NULL, 10);
+	dprintf("%" PRIx64 "\n", thandle);
+	err = 0;
+out:
+	close(fd);
+	return err;
+}
+
 int nl_init(void)
 {
-	int err = 0, rsize = 256 * 1024;
+	int err, rsize = 256 * 1024;
+
+	err = transport_handle_init();
+	if (err)
+		return err;
 
 	nl_fd = socket(PF_NETLINK, SOCK_RAW, NETLINK_ISCSI);
 	if (nl_fd < 0) {

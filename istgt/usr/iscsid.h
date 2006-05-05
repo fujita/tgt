@@ -84,6 +84,9 @@ struct connection {
 	int session_type;
 	int auth_method;
 
+	/* workaroud */
+	uint32_t kcid;
+
 	uint32_t stat_sn;
 	uint32_t exp_stat_sn;
 
