@@ -48,11 +48,14 @@ MODULE_AUTHOR("Dmitry Yusupov <dmitry_yus@yahoo.com>, "
 MODULE_DESCRIPTION("iSCSI/TCP data-path");
 MODULE_LICENSE("GPL");
 MODULE_VERSION("0:4.445");
-/* #define DEBUG_TCP */
+#define DEBUG_TCP
 #define DEBUG_ASSERT
 
 #ifdef DEBUG_TCP
-#define debug_tcp(fmt...) printk(KERN_INFO "tcp: " fmt)
+#define debug_tcp(fmt, args...)					\
+do {								\
+	printk("%s(%d) " fmt, __FUNCTION__, __LINE__, ##args);	\
+} while (0)
 #else
 #define debug_tcp(fmt...)
 #endif

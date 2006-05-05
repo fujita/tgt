@@ -433,28 +433,25 @@ istgt_tcp_conn_bind(struct iscsi_cls_session *cls_session,
 		    int is_leading)
 {
 	struct socket *sock;
+	struct iscsi_conn *conn = cls_conn->dd_data;
+	struct iscsi_tcp_conn *tcp_conn = conn->dd_data;
 	int err;
 
 	dprintk("%llu %u\n", (unsigned long long) transport_eph, is_leading);
 
-	sock = sockfd_lookup((int)transport_eph, &err);
-	if (!sock) {
-		printk(KERN_ERR "iscsi_tcp: sockfd_lookup failed %d\n", err);
-		return -EEXIST;
+	err = iscsi_tcp_conn_bind(cls_session, cls_conn, transport_eph, is_leading);
+	if (err) {
+		eprintk("fail to bind %d\n", err);
+		return err;
 	}
 
-	err = iscsi_tcp_conn_bind(cls_session, cls_conn, transport_eph, is_leading);
-	if (err)
-		goto out;
+	sock = tcp_conn->sock;
 
 	write_lock_bh(&sock->sk->sk_callback_lock);
-
 	sock->sk->sk_data_ready = istgt_tcp_data_ready;
-
 	write_unlock_bh(&sock->sk->sk_callback_lock);
-out:
-	sock_release(sock);
-	return err;
+
+	return 0;
 }
 
 static struct iscsi_cls_session *
@@ -667,7 +664,6 @@ static int istgt_tcp_eh_abort_handler(struct scsi_cmnd *scmd)
 	BUG();
 	return 0;
 }
-
 
 #define	DEFAULT_NR_QUEUED_CMNDS	32
 #define TGT_NAME "iscsi_tgt_tcp"
