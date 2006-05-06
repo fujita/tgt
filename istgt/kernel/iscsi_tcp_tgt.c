@@ -621,11 +621,13 @@ static void istgt_response_build(struct iscsi_cmd_task *ctask)
 	switch (ctask->hdr->opcode & ISCSI_OPCODE_MASK) {
 	case ISCSI_OP_SCSI_CMD:
 	{
+		/* FIXME: multiple data rsp (conn->max_xmit_dlength) */
 		if (ctask->data_count) {
-			char *buf = page_address(tcp_ctask->headbuf.sg.page) +
-				tcp_ctask->headbuf.sg.offset;
 			struct iscsi_data_rsp *hdr =
 				(struct iscsi_data_rsp *) &dtask->hdr;
+			char *buf = page_address(tcp_ctask->headbuf.sg.page) +
+				tcp_ctask->headbuf.sg.offset;
+			u32 residual, exp_datalen = be32_to_cpu(ctask->hdr->data_length);
 
 			memset(hdr, 0, sizeof(*hdr));
 			hdr->opcode = ISCSI_OP_SCSI_DATA_IN;
@@ -637,11 +639,20 @@ static void istgt_response_build(struct iscsi_cmd_task *ctask)
 			hdr->max_cmdsn =
 				cpu_to_be32(session->exp_cmdsn + session->cmds_max / 2);
 			hdr->datasn = cpu_to_be32(ctask->datasn++);
-
-			/* FIXME: multiple data rsp (conn->max_xmit_dlength) */
-			hton24(hdr->dlength, ctask->data_count);
-			hdr->residual_count = 0;
 			hdr->flags = ISCSI_FLAG_CMD_FINAL | ISCSI_FLAG_DATA_STATUS;
+
+			if (ctask->data_count < exp_datalen) {
+				hdr->flags |= ISCSI_FLAG_CMD_UNDERFLOW;
+				residual = exp_datalen - ctask->data_count;
+			} else if (ctask->data_count > exp_datalen) {
+				hdr->flags |= ISCSI_FLAG_CMD_OVERFLOW;
+				residual =  ctask->data_count - exp_datalen;
+				ctask->data_count = exp_datalen;
+			} else
+				residual = 0;
+
+			hdr->residual_count = cpu_to_be32(residual);
+			hton24(hdr->dlength, ctask->data_count);
 
 			dprintk("%p %p %x %x %x %x\n",
 				buf, hdr, buf[0], buf[1], buf[2], buf[3]);
