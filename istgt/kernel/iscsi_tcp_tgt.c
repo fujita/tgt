@@ -531,10 +531,18 @@ static int istgt_transfer_response(struct scsi_cmnd *scmd,
 	dprintk("%p %x %x %u %u\n", ctask, ctask->hdr->opcode & ISCSI_OPCODE_MASK,
 		ctask->hdr->cdb[0], scmd->request_bufflen, scmd->sc_data_direction);
 
-	scmd->done = done;
-
-	__kfifo_put(conn->xmitqueue, (void*)&ctask, sizeof(void*));
-	scsi_queue_work(shost, &conn->xmitwork);
+	if (scmd->sc_data_direction == DMA_TO_DEVICE) {
+		scmd->done = done;
+		__kfifo_put(conn->xmitqueue, (void*)&ctask, sizeof(void*));
+		scsi_queue_work(shost, &conn->xmitwork);
+	} else {
+		done(scmd);
+		spin_lock_bh(&conn->session->lock);
+		__kfifo_put(conn->session->cmdpool.queue, (void*)&ctask, sizeof(void*));
+		scmd->sc_data_direction = DMA_TO_DEVICE;
+		iscsi_tcp_cleanup_ctask(ctask->conn, ctask);
+		spin_unlock_bh(&conn->session->lock);
+	}
 	return 0;
 }
 
@@ -543,6 +551,8 @@ static int istgt_transfer_data(struct scsi_cmnd *scmd,
 {
 	struct iscsi_cmd_task *ctask = (struct iscsi_cmd_task *) scmd->SCp.ptr;
 	struct iscsi_tcp_cmd_task *tcp_ctask = ctask->dd_data;
+	struct iscsi_cls_session *cls_session = session_to_cls(ctask->conn->session);
+	struct Scsi_Host *shost = iscsi_session_to_shost(cls_session);
 
 	dprintk("%p %x %x %u %u\n", ctask, ctask->hdr->opcode & ISCSI_OPCODE_MASK,
 		ctask->hdr->cdb[0], scmd->request_bufflen, scmd->sc_data_direction);
@@ -564,9 +574,12 @@ static int istgt_transfer_data(struct scsi_cmnd *scmd,
 		}
 
 		bh_unlock_sock(sk);
+	} else {
+		scmd->done = done;
+		__kfifo_put(ctask->conn->xmitqueue, (void*)&ctask, sizeof(void*));
+		scsi_queue_work(shost, &ctask->conn->xmitwork);
 	}
 
-	done(scmd);
 	return 0;
 }
 
@@ -577,7 +590,7 @@ static void istgt_response_build(struct iscsi_cmd_task *ctask)
 	struct scsi_cmnd *sc = ctask->sc;
 	struct scatterlist *sg = sc->request_buffer;
 
-	tcp_ctask->xmstate = XMSTATE_UNS_HDR;
+	tcp_ctask->xmstate |= XMSTATE_UNS_HDR;
 
 	dtask = mempool_alloc(tcp_ctask->datapool, GFP_ATOMIC);
 	BUG_ON(!dtask);
@@ -589,9 +602,13 @@ static void istgt_response_build(struct iscsi_cmd_task *ctask)
 			   sizeof(struct iscsi_hdr));
 
 	if (ctask->data_count) {
+		struct iscsi_buf *ibuf = &tcp_ctask->sendbuf;
 		iscsi_buf_init_sg(&tcp_ctask->sendbuf,
 				  &sg[tcp_ctask->sg_count++]);
-		tcp_ctask->xmstate = XMSTATE_UNS_DATA;
+		tcp_ctask->sg = sg;
+		dprintk("%p %u %u %u\n", ibuf->sg.page, ibuf->sg.offset,
+			ibuf->sg.length, ibuf->use_sendmsg);
+		tcp_ctask->xmstate |= XMSTATE_UNS_DATA;
 	}
 
 	switch (ctask->hdr->opcode & ISCSI_OPCODE_MASK) {
@@ -643,10 +660,17 @@ istgt_tcp_ctask_data_xmit(struct iscsi_conn *conn, struct iscsi_cmd_task *ctask)
 	int err;
 
 	while (1) {
+		struct iscsi_buf *ibuf = &tcp_ctask->sendbuf;
+		dprintk("%p %u %u %u\n", ibuf->sg.page, ibuf->sg.offset,
+			ibuf->sg.length, ibuf->use_sendmsg);
+
 		err = iscsi_sendpage(conn, &tcp_ctask->sendbuf,
 				     &ctask->data_count, &tcp_ctask->sent);
-		if (err)
+		if (err) {
+			dprintk("%u %u\n", ctask->data_count, tcp_ctask->sent);
+			BUG_ON(1);
 			return -EAGAIN;
+		}
 
 		if (!ctask->data_count)
 			break;
@@ -671,15 +695,15 @@ istgt_tcp_ctask_xmit(struct iscsi_conn *conn, struct iscsi_cmd_task *ctask)
 
 	if (tcp_ctask->xmstate & XMSTATE_UNS_INIT) {
 		istgt_response_build(ctask);
-		tcp_ctask->xmstate &= ~XMSTATE_UNS_INIT;
 	}
 
 	if (tcp_ctask->xmstate & XMSTATE_UNS_HDR) {
-		err = iscsi_sendhdr(conn, &tcp_ctask->headbuf,
-				    ctask->sc->request_bufflen);
-		if (err)
+		err = iscsi_sendhdr(conn, &tcp_ctask->headbuf, ctask->data_count);
+		if (err) {
+			BUG_ON(1);
+			eprintk("%d\n", err);
 			return -EAGAIN;
-		else
+		} else
 			tcp_ctask->xmstate &= ~XMSTATE_UNS_HDR;
 	}
 
@@ -693,13 +717,15 @@ istgt_tcp_ctask_xmit(struct iscsi_conn *conn, struct iscsi_cmd_task *ctask)
 
 	sc->done(sc);
 
-	spin_lock_bh(&conn->session->lock);
-	__kfifo_put(conn->session->cmdpool.queue, (void*)&ctask, sizeof(void*));
-	/* fool iscsi_tcp_cleanup_ctask */
-	if (sc)
-		sc->sc_data_direction = DMA_TO_DEVICE;
-	iscsi_tcp_cleanup_ctask(ctask->conn, ctask);
-	spin_unlock_bh(&conn->session->lock);
+	if (sc->sc_data_direction == DMA_TO_DEVICE) {
+		spin_lock_bh(&conn->session->lock);
+		__kfifo_put(conn->session->cmdpool.queue, (void*)&ctask, sizeof(void*));
+		/* fool iscsi_tcp_cleanup_ctask */
+		if (sc)
+			sc->sc_data_direction = DMA_TO_DEVICE;
+		iscsi_tcp_cleanup_ctask(ctask->conn, ctask);
+		spin_unlock_bh(&conn->session->lock);
+	}
 
 	return 0;
 }
