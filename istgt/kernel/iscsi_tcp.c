@@ -2051,7 +2051,7 @@ iscsi_tcp_conn_bind(struct iscsi_cls_session *cls_session,
 	return 0;
 }
 
-static void
+void
 iscsi_tcp_cleanup_ctask(struct iscsi_conn *conn, struct iscsi_cmd_task *ctask)
 {
 	struct iscsi_tcp_cmd_task *tcp_ctask = ctask->dd_data;

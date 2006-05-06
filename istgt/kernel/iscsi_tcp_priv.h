@@ -34,5 +34,7 @@ extern int
 iscsi_sendpage(struct iscsi_conn *conn, struct iscsi_buf *buf,
 	       int *count, int *sent);
 
+extern void iscsi_tcp_cleanup_ctask(struct iscsi_conn *conn, struct iscsi_cmd_task *ctask);
+
 extern int iscsi_tcp_init(void);
 extern void iscsi_tcp_exit(void);
