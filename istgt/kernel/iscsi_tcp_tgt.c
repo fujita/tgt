@@ -536,12 +536,18 @@ static int istgt_transfer_response(struct scsi_cmnd *scmd,
 		__kfifo_put(conn->xmitqueue, (void*)&ctask, sizeof(void*));
 		scsi_queue_work(shost, &conn->xmitwork);
 	} else {
-		done(scmd);
-		spin_lock_bh(&conn->session->lock);
-		__kfifo_put(conn->session->cmdpool.queue, (void*)&ctask, sizeof(void*));
-		scmd->sc_data_direction = DMA_TO_DEVICE;
-		iscsi_tcp_cleanup_ctask(ctask->conn, ctask);
-		spin_unlock_bh(&conn->session->lock);
+		if (scmd->request_bufflen) {
+			done(scmd);
+			spin_lock_bh(&conn->session->lock);
+			__kfifo_put(conn->session->cmdpool.queue, (void*)&ctask, sizeof(void*));
+			scmd->sc_data_direction = DMA_TO_DEVICE;
+			iscsi_tcp_cleanup_ctask(ctask->conn, ctask);
+			spin_unlock_bh(&conn->session->lock);
+		} else {
+			scmd->done = done;
+			__kfifo_put(ctask->conn->xmitqueue, (void*)&ctask, sizeof(void*));
+			scsi_queue_work(shost, &ctask->conn->xmitwork);
+		}
 	}
 	return 0;
 }
@@ -629,7 +635,7 @@ static void istgt_response_build(struct iscsi_cmd_task *ctask)
 			hdr->statsn = cpu_to_be32(ctask->conn->exp_statsn++);
 			hdr->exp_cmdsn = cpu_to_be32(session->exp_cmdsn);
 			hdr->max_cmdsn =
-				cpu_to_be32(session->exp_cmdsn + session->max_cmdsn / 2);
+				cpu_to_be32(session->exp_cmdsn + session->cmds_max / 2);
 			hdr->datasn = cpu_to_be32(ctask->datasn++);
 
 			/* FIXME: multiple data rsp (conn->max_xmit_dlength) */
@@ -652,7 +658,7 @@ static void istgt_response_build(struct iscsi_cmd_task *ctask)
 			hdr->statsn = cpu_to_be32(ctask->conn->exp_statsn++);
 			hdr->exp_cmdsn = cpu_to_be32(session->exp_cmdsn);
 			hdr->max_cmdsn =
-				cpu_to_be32(session->exp_cmdsn + session->max_cmdsn / 2);
+				cpu_to_be32(session->exp_cmdsn + session->cmds_max / 2);
 		}
 		break;
 	}
@@ -738,7 +744,7 @@ istgt_tcp_ctask_xmit(struct iscsi_conn *conn, struct iscsi_cmd_task *ctask)
 
 	sc->done(sc);
 
-	if (sc->sc_data_direction == DMA_TO_DEVICE) {
+	if (sc->sc_data_direction == DMA_TO_DEVICE || !sc->request_bufflen) {
 		spin_lock_bh(&conn->session->lock);
 		__kfifo_put(conn->session->cmdpool.queue, (void*)&ctask, sizeof(void*));
 		/* fool iscsi_tcp_cleanup_ctask */
