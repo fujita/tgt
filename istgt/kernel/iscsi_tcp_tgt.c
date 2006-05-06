@@ -233,7 +233,7 @@ retry:
 
 		dprintk("%p %x %x\n", ctask, ctask->hdr->cmdsn, session->exp_cmdsn);
 
-		if (ctask->hdr->cmdsn != session->exp_cmdsn)
+		if (be32_to_cpu(ctask->hdr->cmdsn) != session->exp_cmdsn)
 			break;
 
 		list_del(&ctask->tgtlist);
