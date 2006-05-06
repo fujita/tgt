@@ -73,7 +73,7 @@ module_param_named(max_lun, iscsi_max_lun, uint, S_IRUGO);
 /* global data */
 static kmem_cache_t *taskcache;
 
-inline void
+static inline void
 iscsi_buf_init_virt(struct iscsi_buf *ibuf, char *vbuf, int size)
 {
 	sg_init_one(&ibuf->sg, (u8 *)vbuf, size);
@@ -81,7 +81,7 @@ iscsi_buf_init_virt(struct iscsi_buf *ibuf, char *vbuf, int size)
 	ibuf->use_sendmsg = 0;
 }
 
-static inline void
+inline void
 iscsi_buf_init_iov(struct iscsi_buf *ibuf, char *vbuf, int size)
 {
 	ibuf->sg.page = virt_to_page(vbuf);

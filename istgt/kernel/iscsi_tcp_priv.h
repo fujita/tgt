@@ -24,7 +24,7 @@ extern int iscsi_tcp_data_recv(read_descriptor_t *rd_desc, struct sk_buff *skb,
 			       unsigned int offset, size_t len);
 
 extern void
-iscsi_buf_init_virt(struct iscsi_buf *ibuf, char *vbuf, int size);
+iscsi_buf_init_iov(struct iscsi_buf *ibuf, char *vbuf, int size);
 extern void
 iscsi_buf_init_sg(struct iscsi_buf *ibuf, struct scatterlist *sg);
 
