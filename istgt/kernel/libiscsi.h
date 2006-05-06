@@ -103,6 +103,9 @@ struct iscsi_cmd_task {
 
 	struct list_head	running;	/* running cmd list */
 	void			*dd_data;	/* driver/transport data */
+
+	struct list_head	hash;
+	struct list_head	tgtlist;
 };
 
 struct iscsi_conn {

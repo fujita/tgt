@@ -50,23 +50,6 @@ struct istgt_session {
 	struct work_struct recvwork;
 };
 
-struct istgt_task {
-	struct list_head hash;
-	struct list_head tlist;
-};
-
-static inline struct istgt_task *ctask_to_ttask(struct iscsi_cmd_task *ctask)
-{
-	return (struct istgt_task *) ((void *) ctask->dd_data +
-				      sizeof(struct iscsi_tcp_cmd_task));
-}
-
-static inline struct iscsi_cmd_task *ttask_to_ctask(struct istgt_task *ttask)
-{
-	return (struct iscsi_cmd_task *)
-		((void *) ttask - sizeof(struct iscsi_tcp_cmd_task));
-}
-
 static void build_r2t(struct iscsi_cmd_task *ctask)
 {
 	struct iscsi_r2t_rsp *hdr;
@@ -231,22 +214,19 @@ static void istgt_recvworker(void *data)
 	struct iscsi_cls_session *cls_session = data;
 	struct iscsi_session *session =
 		class_to_transport_session(cls_session);
-	struct istgt_session *istgt_session =
-		(struct istgt_session *) cls_session->dd_data;
+	struct istgt_session *istgt_session = cls_session->dd_data;
 	struct iscsi_cmd_task *ctask;
-	struct istgt_task *pos;
 
 retry:
 	spin_lock_bh(&istgt_session->slock);
 
 	while (istgt_session->recvlist.next) {
-		pos = list_entry(istgt_session->recvlist.next,
-				 struct istgt_task, tlist);
-		ctask = ttask_to_ctask(pos);
+		ctask = list_entry(istgt_session->recvlist.next,
+				   struct iscsi_cmd_task, tgtlist);
 		if (ctask->hdr->cmdsn != session->exp_cmdsn)
 			break;
 
-		list_del(&pos->tlist);
+		list_del(&ctask->tgtlist);
 		session->exp_cmdsn++;
 
 		spin_unlock_bh(&istgt_session->slock);
@@ -261,24 +241,21 @@ static void istgt_ctask_recvlist_add(struct iscsi_cmd_task *ctask)
 {
 	struct iscsi_session *session = ctask->conn->session;
 	struct iscsi_cls_session *cls_session = session_to_cls(session);
-	struct istgt_session *istgt_session;
-	struct istgt_task *pos;
-
-	istgt_session = (struct istgt_session *) cls_session->dd_data;
+	struct istgt_session *istgt_session = cls_session->dd_data;
+	struct iscsi_cmd_task *pos;
 
 	spin_lock_bh(&istgt_session->slock);
 
 	if (ctask->hdr->opcode & ISCSI_OP_IMMEDIATE) {
-		list_add(&ctask_to_ttask(ctask)->tlist,
-			 &istgt_session->recvlist);
+		list_add(&ctask->tgtlist, &istgt_session->recvlist);
 		goto out;
 	}
 
-	list_for_each_entry(pos, &istgt_session->recvlist, tlist)
-		if (before(ctask->hdr->cmdsn, ttask_to_ctask(pos)->hdr->cmdsn))
+	list_for_each_entry(pos, &istgt_session->recvlist, tgtlist)
+		if (before(ctask->hdr->cmdsn, pos->hdr->cmdsn))
 			break;
 
-	list_add_tail(&ctask_to_ttask(ctask)->tlist, &pos->tlist);
+	list_add_tail(&ctask->tgtlist, &pos->tgtlist);
 out:
 	spin_unlock_bh(&istgt_session->slock);
 }
@@ -342,7 +319,7 @@ static int istgt_tcp_hdr_recv(struct iscsi_conn *conn)
 		tcp_ctask->xmstate = XMSTATE_UNS_INIT;
 
 		if (!tcp_conn->in.datalen) {
-/* 			istgt_ctask_recvlist_add(tcp_conn->in.ctask); */
+/* 			istgt_ctask_recvlist_add(ctask); */
 			ctask = NULL;
 /* 			schedule_work(&istgt_session->recvwork); */
 		}
@@ -506,8 +483,8 @@ istgt_tcp_session_create(struct iscsi_transport *iscsit,
 	session = class_to_transport_session(cls_session);
 	for (i = 0; i < initial_cmdsn; i++) {
 		struct iscsi_cmd_task *ctask = session->cmds[i];
-		INIT_LIST_HEAD(&ctask_to_ttask(ctask)->hash);
-		INIT_LIST_HEAD(&ctask_to_ttask(ctask)->tlist);
+		INIT_LIST_HEAD(&ctask->hash);
+		INIT_LIST_HEAD(&ctask->tgtlist);
 	}
 
 	istgt_session =	(struct istgt_session *) cls_session->dd_data;
