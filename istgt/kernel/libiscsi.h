@@ -171,6 +171,7 @@ struct iscsi_conn {
 
 	/* custom statistics */
 	uint32_t		eh_abort_cnt;
+	struct work_struct	tcpwork;
 };
 
 struct iscsi_queue {

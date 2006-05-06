@@ -315,7 +315,11 @@ static int istgt_tcp_hdr_recv(struct iscsi_conn *conn)
 		hdr->hlength << 2, tcp_conn->in.datalen);
 
 	/* FIXME */
-	BUG_ON(tcp_conn->in.datalen);
+	if (tcp_conn->in.datalen) {
+		iscsi_conn_failure(conn, rc);
+		eprintk("Cannot handle this now\n");
+		return 1;
+	}
 
 	switch (opcode) {
 	case ISCSI_OP_NOOP_OUT:
@@ -323,30 +327,36 @@ static int istgt_tcp_hdr_recv(struct iscsi_conn *conn)
 	case ISCSI_OP_SCSI_TMFUNC:
 	case ISCSI_OP_LOGOUT:
 		__kfifo_get(session->cmdpool.queue, (void*)&ctask, sizeof(void*));
+		BUG_ON(!ctask);
+
 		ctask->conn = conn;
 		ctask->data_count = 0;
+		BUG_ON(!ctask->hdr);
 		memcpy(ctask->hdr, hdr, sizeof(*hdr));
 
 		tcp_ctask = ctask->dd_data;
+		BUG_ON(!tcp_ctask);
+
 		tcp_ctask->sg = NULL;
 		tcp_ctask->sent = 0;
 		tcp_ctask->xmstate = XMSTATE_UNS_INIT;
 
 		if (!tcp_conn->in.datalen) {
-			istgt_ctask_recvlist_add(tcp_conn->in.ctask);
-			tcp_conn->in.ctask = NULL;
-			schedule_work(&istgt_session->recvwork);
+/* 			istgt_ctask_recvlist_add(tcp_conn->in.ctask); */
+			ctask = NULL;
+/* 			schedule_work(&istgt_session->recvwork); */
 		}
 
-		if (opcode == ISCSI_OP_SCSI_CMD)
-			switch (ctask->hdr->cdb[0]) {
-			case WRITE_6:
-			case WRITE_10:
-			case WRITE_16:
-			case WRITE_VERIFY:
-				istgt_unsolicited_data(ctask);
-				set_bit(ISCSI_SUSPEND_BIT, &conn->suspend_rx);
-			}
+/* 		if (opcode == ISCSI_OP_SCSI_CMD) */
+/* 			switch (ctask->hdr->cdb[0]) { */
+/* 			case WRITE_6: */
+/* 			case WRITE_10: */
+/* 			case WRITE_16: */
+/* 			case WRITE_VERIFY: */
+/* 				istgt_unsolicited_data(ctask); */
+/* 				set_bit(ISCSI_SUSPEND_BIT, &conn->suspend_rx); */
+/* 			} */
+
 		break;
 	case ISCSI_OP_SCSI_DATA_OUT:
 		BUG_ON(1);
@@ -361,6 +371,7 @@ static int istgt_tcp_hdr_recv(struct iscsi_conn *conn)
 
 	if (ctask)
 		tcp_conn->in.ctask = ctask;
+
 	return rc;
 }
 
@@ -372,9 +383,13 @@ istgt_data_recv(struct iscsi_conn *conn)
 
 	/* We need to return -EAGAIN if the buffer is not ready. */
 
-	BUG_ON(1);
-
 	opcode = tcp_conn->in.hdr->opcode & ISCSI_OPCODE_MASK;
+
+	dprintk("opcode 0x%x offset %d copy %d datalen %d\n",
+		opcode, tcp_conn->in.offset, tcp_conn->in.copy,
+		tcp_conn->in.datalen);
+	return 1;
+
 	switch (opcode) {
 	case ISCSI_OP_SCSI_CMD:
 	case ISCSI_OP_SCSI_DATA_OUT:
@@ -410,6 +425,16 @@ static void
 istgt_tcp_data_ready(struct sock *sk, int flag)
 {
 	struct iscsi_conn *conn = sk->sk_user_data;
+
+	schedule_work(&conn->tcpwork);
+}
+
+static void __istgt_tcp_data_ready(void *data)
+{
+	struct iscsi_cls_conn *cls_conn = data;
+	struct iscsi_conn *conn = cls_conn->dd_data;
+	struct iscsi_tcp_conn *tcp_conn = conn->dd_data;
+	struct sock *sk = tcp_conn->sock->sk;
 	read_descriptor_t rd_desc;
 	struct data_ready_desc d;
 
@@ -450,6 +475,8 @@ istgt_tcp_conn_bind(struct iscsi_cls_session *cls_session,
 	write_lock_bh(&sock->sk->sk_callback_lock);
 	sock->sk->sk_data_ready = istgt_tcp_data_ready;
 	write_unlock_bh(&sock->sk->sk_callback_lock);
+
+	INIT_WORK(&conn->tcpwork, __istgt_tcp_data_ready, cls_conn);
 
 	return 0;
 }
