@@ -114,9 +114,7 @@ static void istgt_scsi_tgt_queue_command(struct iscsi_cmd_task *ctask)
 	struct Scsi_Host *shost = iscsi_session_to_shost(cls_session);
 	struct iscsi_cmd *hdr = ctask->hdr;
 	struct scsi_cmnd *scmd;
-	enum dma_data_direction dir;
-
-	dir = (hdr->flags & ISCSI_FLAG_CMD_WRITE) ?
+	enum dma_data_direction dir = (hdr->flags & ISCSI_FLAG_CMD_WRITE) ?
 		DMA_TO_DEVICE : DMA_FROM_DEVICE;
 
 	scmd = scsi_host_get_command(shost, dir, GFP_KERNEL);
