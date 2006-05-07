@@ -456,6 +456,7 @@ istgt_tcp_conn_bind(struct iscsi_cls_session *cls_session,
 	struct iscsi_conn *conn = cls_conn->dd_data;
 	struct iscsi_tcp_conn *tcp_conn = conn->dd_data;
 	int err;
+	struct iscsi_session *session = class_to_transport_session(cls_session);
 
 	dprintk("%llu %u\n", (unsigned long long) transport_eph, is_leading);
 
@@ -472,6 +473,13 @@ istgt_tcp_conn_bind(struct iscsi_cls_session *cls_session,
 	write_unlock_bh(&sock->sk->sk_callback_lock);
 
 	INIT_WORK(&conn->tcpwork, __istgt_tcp_data_ready, cls_conn);
+
+	dprintk("%u %u %u %u %u %u %u %u %u %u %u %u\n",
+		conn->max_recv_dlength, conn->max_xmit_dlength,
+		conn->hdrdgst_en, conn->datadgst_en, session->initial_r2t_en,
+		session->max_r2t, session->imm_data_en,
+		session->first_burst, session->max_burst,
+		session->pdu_inorder_en, session->dataseq_inorder_en, session->erl);
 
 	return 0;
 }
@@ -803,6 +811,7 @@ static struct iscsi_transport istgt_tcp_transport = {
 	.destroy_conn		= iscsi_tcp_conn_destroy,
 	.bind_conn		= istgt_tcp_conn_bind,
 	.start_conn		= iscsi_conn_start,
+	.set_param		= iscsi_conn_set_param,
 	.terminate_conn		= iscsi_tcp_terminate_conn,
 	.xmit_cmd_task		= istgt_tcp_ctask_xmit,
 };

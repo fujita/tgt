@@ -2195,7 +2195,7 @@ iscsi_r2tpool_free(struct iscsi_session *session)
 	}
 }
 
-static int
+int
 iscsi_conn_set_param(struct iscsi_cls_conn *cls_conn, enum iscsi_param param,
 		     uint32_t value)
 {

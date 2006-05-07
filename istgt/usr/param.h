@@ -30,7 +30,6 @@ struct iscsi_key {
 };
 
 extern struct iscsi_key session_keys[];
-extern struct iscsi_key target_keys[];
 
 extern void param_set_defaults(struct param *, struct iscsi_key *);
 extern int param_index_by_name(char *, struct iscsi_key *);
