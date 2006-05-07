@@ -46,7 +46,6 @@ struct istgt_session {
 	struct list_head recvlist;
 	/* replace with array later on */
 	struct list_head cmd_hash;
-	spinlock_t slock;
 	struct work_struct recvwork;
 };
 
@@ -199,7 +198,7 @@ static void istgt_recvworker(void *data)
 
 	dprintk("%x\n", session->exp_cmdsn);
 retry:
-	spin_lock_bh(&istgt_session->slock);
+	spin_lock_bh(&session->lock);
 
 	while (!list_empty(&istgt_session->recvlist)) {
 		ctask = list_entry(istgt_session->recvlist.next,
@@ -213,12 +212,12 @@ retry:
 		list_del(&ctask->tgtlist);
 		session->exp_cmdsn++;
 
-		spin_unlock_bh(&istgt_session->slock);
+		spin_unlock_bh(&session->lock);
 		istgt_cmd_exec(ctask);
 		goto retry;
 	}
 
-	spin_unlock_bh(&istgt_session->slock);
+	spin_unlock_bh(&session->lock);
 }
 
 static void istgt_ctask_add(struct iscsi_cmd_task *ctask)
@@ -231,7 +230,7 @@ static void istgt_ctask_add(struct iscsi_cmd_task *ctask)
 	dprintk("%p %x %x %x\n", ctask, ctask->hdr->opcode & ISCSI_OPCODE_MASK,
 		ctask->hdr->cdb[0], ctask->hdr->cmdsn);
 
-	spin_lock_bh(&istgt_session->slock);
+	spin_lock_bh(&session->lock);
 
 	if (ctask->hdr->opcode & ISCSI_OP_IMMEDIATE) {
 		list_add(&ctask->tgtlist, &istgt_session->recvlist);
@@ -244,7 +243,7 @@ static void istgt_ctask_add(struct iscsi_cmd_task *ctask)
 
 	list_add_tail(&ctask->tgtlist, &pos->tgtlist);
 out:
-	spin_unlock_bh(&istgt_session->slock);
+	spin_unlock_bh(&session->lock);
 }
 
 #if 0
@@ -287,13 +286,11 @@ static int istgt_tcp_hdr_recv(struct iscsi_conn *conn)
 	}
 
 	switch (opcode) {
-	case ISCSI_OP_NOOP_OUT:
 	case ISCSI_OP_SCSI_CMD:
-	case ISCSI_OP_SCSI_TMFUNC:
 	case ISCSI_OP_LOGOUT:
-		spin_lock(&session->lock);
+		spin_lock_bh(&session->lock);
 		__kfifo_get(session->cmdpool.queue, (void*)&ctask, sizeof(void*));
-		spin_unlock(&session->lock);
+		spin_unlock_bh(&session->lock);
 		BUG_ON(!ctask);
 
 		ctask->conn = conn;
@@ -325,7 +322,9 @@ static int istgt_tcp_hdr_recv(struct iscsi_conn *conn)
 /* 			} */
 
 		break;
+	case ISCSI_OP_NOOP_OUT:
 	case ISCSI_OP_SCSI_DATA_OUT:
+	case ISCSI_OP_SCSI_TMFUNC:
 		BUG_ON(1);
 		/* Find a command in the hash list */
 		/* data_out_start(conn, cmnd); */
@@ -490,7 +489,6 @@ istgt_tcp_session_create(struct iscsi_transport *iscsit,
 
 	INIT_LIST_HEAD(&istgt_session->recvlist);
 	INIT_LIST_HEAD(&istgt_session->cmd_hash);
-	spin_lock_init(&istgt_session->slock);
 
 	INIT_WORK(&istgt_session->recvwork, istgt_recvworker, cls_session);
 
@@ -533,7 +531,7 @@ static int istgt_transfer_response(struct scsi_cmnd *scmd,
 }
 
 static int istgt_transfer_data(struct scsi_cmnd *scmd,
-				  void (*done)(struct scsi_cmnd *))
+			       void (*done)(struct scsi_cmnd *))
 {
 	struct iscsi_cmd_task *ctask = (struct iscsi_cmd_task *) scmd->SCp.ptr;
 	struct iscsi_tcp_cmd_task *tcp_ctask = ctask->dd_data;
