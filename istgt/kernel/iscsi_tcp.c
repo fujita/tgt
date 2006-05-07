@@ -937,6 +937,11 @@ more:
 		}
 	}
 
+	if (unlikely(conn->suspend_rx)) {
+		debug_tcp("conn %d Rx suspended!\n", conn->id);
+		return 0;
+	}
+
 	if (tcp_conn->in_progress == IN_PROGRESS_DATA_RECV &&
 	   tcp_conn->in.copy) {
 
