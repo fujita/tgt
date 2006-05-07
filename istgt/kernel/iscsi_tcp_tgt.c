@@ -748,9 +748,6 @@ again:
 	if (sc->sc_data_direction == DMA_TO_DEVICE || !sc->bufflen) {
 		spin_lock_bh(&conn->session->lock);
 		__kfifo_put(conn->session->cmdpool.queue, (void*)&ctask, sizeof(void*));
-		/* fool iscsi_tcp_cleanup_ctask */
-		if (sc)
-			sc->sc_data_direction = DMA_TO_DEVICE;
 		iscsi_tcp_cleanup_ctask(ctask->conn, ctask);
 		spin_unlock_bh(&conn->session->lock);
 	}
