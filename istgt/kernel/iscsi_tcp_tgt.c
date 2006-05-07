@@ -116,17 +116,12 @@ static void istgt_scsi_tgt_queue_command(struct iscsi_cmd_task *ctask)
 	struct scsi_cmnd *scmd;
 	enum dma_data_direction dir;
 
-	if (hdr->flags & ISCSI_FLAG_CMD_WRITE)
-		dir = DMA_TO_DEVICE;
-	else if (hdr->flags & ISCSI_FLAG_CMD_READ)
-		dir = DMA_FROM_DEVICE;
-	else
-		dir = DMA_NONE;
+	dir = (hdr->flags & ISCSI_FLAG_CMD_WRITE) ?
+		DMA_TO_DEVICE : DMA_FROM_DEVICE;
 
 	scmd = scsi_host_get_command(shost, dir, GFP_KERNEL);
 	BUG_ON(!scmd);
 	ctask->sc = scmd;
-
 	memcpy(scmd->data_cmnd, hdr->cdb, MAX_COMMAND_SIZE);
 	scmd->request_bufflen = be32_to_cpu(hdr->data_length);
 	scmd->SCp.ptr = (void *) ctask;
@@ -136,31 +131,12 @@ static void istgt_scsi_tgt_queue_command(struct iscsi_cmd_task *ctask)
 	case ISCSI_ATTR_SIMPLE:
 		scmd->tag = MSG_SIMPLE_TAG;
 		break;
-	case ISCSI_ATTR_ORDERED:
-		scmd->tag = MSG_ORDERED_TAG;
-		break;
 	case ISCSI_ATTR_HEAD_OF_QUEUE:
 		scmd->tag = MSG_HEAD_TAG;
 		break;
-	case ISCSI_ATTR_ACA:
-		scmd->tag = MSG_SIMPLE_TAG;
-		break;
+	case ISCSI_ATTR_ORDERED:
 	default:
-		scmd->tag = MSG_SIMPLE_TAG;
-	}
-
-	if (scmd->sc_data_direction == DMA_TO_DEVICE &&
-	    be32_to_cpu(hdr->data_length)) {
-		switch (hdr->cdb[0]) {
-		case WRITE_6:
-		case WRITE_10:
-		case WRITE_16:
-		case WRITE_VERIFY:
-			break;
-		default:
-			eprintk("%x\n", hdr->cdb[0]);
-			break;
-		}
+		scmd->tag = MSG_ORDERED_TAG;
 	}
 
 	scsi_tgt_queue_command(scmd, (struct scsi_lun *) hdr->lun, hdr->itt);
