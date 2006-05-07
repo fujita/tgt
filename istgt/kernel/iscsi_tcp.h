@@ -175,6 +175,7 @@ struct iscsi_tcp_cmd_task {
 	struct iscsi_buf	immbuf;			/* for imm data digest */
 	struct iscsi_data_task   *dtask;		/* data task in progress*/
 	int			digest_offset;		/* for partial buff digest */
+	struct iscsi_cmd	rhdr;
 };
 
 struct data_ready_desc {
