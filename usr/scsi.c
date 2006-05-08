@@ -493,8 +493,10 @@ int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu, int *len,
 	dprintf("%x %u\n", scb[0], datalen);
 
 	*offset = 0;
-	if (!mmap_cmd_init(scb, rw))
+	if (!mmap_cmd_init(scb, rw)) {
 		data = valloc(PAGE_SIZE);
+		memset(data, 0, PAGE_SIZE);
+	}
 
 	if (!dev)
 		switch (scb[0]) {
@@ -504,8 +506,10 @@ int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu, int *len,
 			break;
 		default:
 			*offset = 0;
-			if (!data)
+			if (!data) {
 				data = valloc(PAGE_SIZE);
+				memset(data, 0, PAGE_SIZE);
+			}
 			*len = sense_data_build(data, 0x70, ILLEGAL_REQUEST,
 						0x25, 0);
 			result = SAM_STAT_CHECK_CONDITION;
