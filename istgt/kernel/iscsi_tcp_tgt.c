@@ -44,6 +44,7 @@ do {								\
 
 struct istgt_session {
 	struct list_head recvlist;
+	struct list_head wtasklist;
 	/* replace with array later on */
 	struct list_head cmd_hash;
 	struct work_struct recvwork;
@@ -106,6 +107,32 @@ static void build_r2t(struct iscsi_cmd_task *ctask)
 }
 #endif
 
+static void hashlist_add(struct iscsi_cls_session *cls_session,
+			 struct iscsi_cmd_task *ctask)
+{
+	struct istgt_session *istgt_session = cls_session->dd_data;
+
+	spin_lock_bh(&ctask->conn->session->lock);
+	list_add(&ctask->hash, &istgt_session->cmd_hash);
+	spin_unlock_bh(&ctask->conn->session->lock);
+}
+
+static struct iscsi_cmd_task *hashlist_find(struct iscsi_cls_session *cls_session, u32 itt)
+{
+	struct iscsi_cmd_task *ctask = NULL;
+	struct istgt_session *istgt_session = cls_session->dd_data;
+
+	spin_lock_bh(&ctask->conn->session->lock);
+	list_for_each_entry(ctask, &istgt_session->cmd_hash, hash) {
+		if (ctask->hdr->itt == itt)
+			goto found;
+	}
+	ctask = NULL;
+found:
+	spin_unlock_bh(&ctask->conn->session->lock);
+	return ctask;
+}
+
 static void istgt_scsi_tgt_queue_command(struct iscsi_cmd_task *ctask)
 {
 	struct iscsi_session *session = ctask->conn->session;
@@ -137,6 +164,7 @@ static void istgt_scsi_tgt_queue_command(struct iscsi_cmd_task *ctask)
 	}
 
 	scsi_tgt_queue_command(scmd, (struct scsi_lun *) hdr->lun, hdr->itt);
+	dprintk("%p %x\n", scmd, scmd->data_cmnd[0]);
 }
 
 static void istgt_scsi_cmd_exec(struct iscsi_cmd_task *ctask)
@@ -200,6 +228,16 @@ static void istgt_recvworker(void *data)
 retry:
 	spin_lock_bh(&session->lock);
 
+	while (!list_empty(&istgt_session->wtasklist)) {
+		ctask = list_entry(istgt_session->wtasklist.next,
+				   struct iscsi_cmd_task, tgtlist);
+		list_del(&ctask->tgtlist);
+		spin_unlock_bh(&session->lock);
+		dprintk("found wtask %p\n", ctask);
+		istgt_scsi_tgt_queue_command(ctask);
+		goto retry;
+	}
+
 	while (!list_empty(&istgt_session->recvlist)) {
 		ctask = list_entry(istgt_session->recvlist.next,
 				   struct iscsi_cmd_task, tgtlist);
@@ -246,17 +284,6 @@ out:
 	spin_unlock_bh(&session->lock);
 }
 
-#if 0
-static void istgt_unsolicited_data(struct iscsi_cmd_task *ctask)
-{
-/* 	struct iscsi_tcp_cmd_task *tcp_ctask = ctask->dd_data; */
-
-	istgt_scsi_tgt_queue_command(ctask);
-/* 	tcp_ctask->r2t_data_count; */
-/* 	ctask->r2t_data_count; */
-}
-#endif
-
 static int istgt_tcp_hdr_recv(struct iscsi_conn *conn)
 {
 	int rc, opcode;
@@ -278,13 +305,6 @@ static int istgt_tcp_hdr_recv(struct iscsi_conn *conn)
 		opcode, tcp_conn->in.offset, tcp_conn->in.copy,
 		hdr->hlength << 2, tcp_conn->in.datalen);
 
-	/* FIXME */
-	if (tcp_conn->in.datalen) {
-		iscsi_conn_failure(conn, rc);
-		eprintk("Cannot handle this now\n");
-		return 1;
-	}
-
 	switch (opcode) {
 	case ISCSI_OP_SCSI_CMD:
 	case ISCSI_OP_LOGOUT:
@@ -304,26 +324,52 @@ static int istgt_tcp_hdr_recv(struct iscsi_conn *conn)
 		tcp_ctask->sg = NULL;
 		tcp_ctask->sent = 0;
 		tcp_ctask->xmstate = XMSTATE_UNS_INIT;
+		tcp_ctask->data_offset = 0;
+		if (hdr->flags & ISCSI_FLAG_CMD_WRITE) {
+			tcp_ctask->r2t_data_count = be32_to_cpu(ctask->hdr->data_length)
+				- tcp_conn->in.datalen;
+			if (hdr->flags & ISCSI_FLAG_CMD_FINAL)
+				ctask->unsol_count = 0;
+			else
+				ctask->unsol_count = 1;
+			ctask->total_length = be32_to_cpu(ctask->hdr->data_length);
+			ctask->data_count = ctask->imm_count = tcp_conn->in.datalen;
 
-		if (!tcp_conn->in.datalen) {
+			dprintk("%p %x %u %u %u %u\n", ctask, hdr->flags,
+				tcp_ctask->r2t_data_count,
+				ctask->unsol_count,
+				ctask->total_length,
+				ctask->imm_count);
+			BUG_ON(ctask->total_length != ctask->imm_count);
+
+			hashlist_add(cls_session, ctask);
+			spin_lock_bh(&session->lock);
+			list_add(&ctask->tgtlist, &istgt_session->wtasklist);
+			spin_unlock_bh(&session->lock);
+			schedule_work(&istgt_session->recvwork);
+
+			/* we stop reading here. */
+			set_bit(ISCSI_SUSPEND_BIT, &conn->suspend_rx);
+			if (!tcp_conn->in.datalen)
+				ctask = NULL;
+		} else {
 			istgt_ctask_add(ctask);
 			ctask = NULL;
 			schedule_work(&istgt_session->recvwork);
 		}
-
-/* 		if (opcode == ISCSI_OP_SCSI_CMD) */
-/* 			switch (ctask->hdr->cdb[0]) { */
-/* 			case WRITE_6: */
-/* 			case WRITE_10: */
-/* 			case WRITE_16: */
-/* 			case WRITE_VERIFY: */
-/* 				istgt_unsolicited_data(ctask); */
-/* 				set_bit(ISCSI_SUSPEND_BIT, &conn->suspend_rx); */
-/* 			} */
-
+		break;
+	case ISCSI_OP_SCSI_DATA_OUT:
+		BUG_ON(1);
+		ctask = hashlist_find(cls_session, hdr->itt);
+		if (!ctask) {
+			eprintk("Cannot find %x\n", ctask->hdr->itt);
+			rc = ISCSI_ERR_NO_SCSI_CMD;
+		} else {
+/* 			if (tcp_ctask->data_offset != be32_to_cpu(hdr->offset)) */
+/* 				eprintk("Cannot find %x\n", ctask->hdr->itt); */
+		}
 		break;
 	case ISCSI_OP_NOOP_OUT:
-	case ISCSI_OP_SCSI_DATA_OUT:
 	case ISCSI_OP_SCSI_TMFUNC:
 		BUG_ON(1);
 		/* Find a command in the hash list */
@@ -345,6 +391,10 @@ static int
 istgt_data_recv(struct iscsi_conn *conn)
 {
 	struct iscsi_tcp_conn *tcp_conn = conn->dd_data;
+	struct iscsi_cmd_task *ctask = tcp_conn->in.ctask;
+	struct iscsi_session *session = ctask->conn->session;
+	struct iscsi_cls_session *cls_session = session_to_cls(session);
+	struct istgt_session *istgt_session = cls_session->dd_data;
 	int rc = 0, opcode;
 
 	/* We need to return -EAGAIN if the buffer is not ready. */
@@ -354,32 +404,22 @@ istgt_data_recv(struct iscsi_conn *conn)
 	dprintk("opcode 0x%x offset %d copy %d datalen %d\n",
 		opcode, tcp_conn->in.offset, tcp_conn->in.copy,
 		tcp_conn->in.datalen);
-	return 1;
 
 	switch (opcode) {
 	case ISCSI_OP_SCSI_CMD:
-	case ISCSI_OP_SCSI_DATA_OUT:
-		iscsi_scsi_data_in(conn);
+		/* read immediate data */
+		rc = __iscsi_scsi_data_in(conn);
+		if (!rc) {
+			BUG_ON(ctask->data_count);
+			istgt_ctask_add(ctask);
+			schedule_work(&istgt_session->recvwork);
+		}
 		break;
+	case ISCSI_OP_SCSI_DATA_OUT:
 	case ISCSI_OP_TEXT:
 	case ISCSI_OP_LOGOUT:
 	case ISCSI_OP_NOOP_OUT:
 	case ISCSI_OP_ASYNC_EVENT:
-		/*
-		 * Collect data segment to the connection's data
-		 * placeholder
-		 */
-/* 		if (iscsi_tcp_copy(tcp_conn)) { */
-/* 			rc = -EAGAIN; */
-/* 			goto exit; */
-/* 		} */
-
-/* 		rc = iscsi_complete_pdu(conn, tcp_conn->in.hdr, tcp_conn->data, */
-/* 					tcp_conn->in.datalen); */
-/* 		if (!rc && conn->datadgst_en && opcode != ISCSI_OP_LOGIN_RSP) */
-/* 			iscsi_recv_digest_update(tcp_conn, tcp_conn->data, */
-/* 			  			tcp_conn->in.datalen); */
-		break;
 	default:
 		BUG_ON(1);
 	}
@@ -467,9 +507,7 @@ istgt_tcp_session_create(struct iscsi_transport *iscsit,
 	int i, err;
 
 	dprintk("%u %u\n", initial_cmdsn, *hostno);
-
-	cls_session = iscsi_tcp_session_create(iscsit, scsit, initial_cmdsn,
-					       hostno);
+	cls_session = iscsi_tcp_session_create(iscsit, scsit, initial_cmdsn, hostno);
 	if (!cls_session)
 		return NULL;
 	shost = iscsi_session_to_shost(cls_session);
@@ -486,10 +524,9 @@ istgt_tcp_session_create(struct iscsi_transport *iscsit,
 	session->exp_cmdsn = initial_cmdsn;
 
 	istgt_session =	(struct istgt_session *) cls_session->dd_data;
-
 	INIT_LIST_HEAD(&istgt_session->recvlist);
+	INIT_LIST_HEAD(&istgt_session->wtasklist);
 	INIT_LIST_HEAD(&istgt_session->cmd_hash);
-
 	INIT_WORK(&istgt_session->recvwork, istgt_recvworker, cls_session);
 
 	return cls_session;
@@ -510,6 +547,7 @@ static int istgt_transfer_response(struct scsi_cmnd *scmd,
 		ctask->hdr->cdb[0], scmd->request_bufflen, scmd->sc_data_direction);
 
 	if (scmd->sc_data_direction == DMA_TO_DEVICE) {
+		ctask->total_length = 0;
 		scmd->done = done;
 		__kfifo_put(conn->xmitqueue, (void*)&ctask, sizeof(void*));
 		scsi_queue_work(shost, &conn->xmitwork);
@@ -741,14 +779,16 @@ again:
 		}
 	}
 
-	sc->done(sc);
-
 	if (sc->sc_data_direction == DMA_TO_DEVICE || !sc->bufflen) {
 		spin_lock_bh(&conn->session->lock);
+		if (sc->sc_data_direction == DMA_TO_DEVICE)
+			list_del(&ctask->hash);
 		__kfifo_put(conn->session->cmdpool.queue, (void*)&ctask, sizeof(void*));
 		iscsi_tcp_cleanup_ctask(ctask->conn, ctask);
 		spin_unlock_bh(&conn->session->lock);
 	}
+
+	sc->done(sc);
 
 	return 0;
 }

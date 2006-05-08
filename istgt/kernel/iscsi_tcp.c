@@ -711,7 +711,7 @@ iscsi_recv_digest_update(struct iscsi_tcp_conn *tcp_conn, char* buf, int len)
 	crypto_digest_update(tcp_conn->data_rx_tfm, &tmp, 1);
 }
 
-int iscsi_scsi_data_in(struct iscsi_conn *conn)
+int __iscsi_scsi_data_in(struct iscsi_conn *conn)
 {
 	struct iscsi_tcp_conn *tcp_conn = conn->dd_data;
 	struct iscsi_cmd_task *ctask = tcp_conn->in.ctask;
@@ -790,19 +790,27 @@ int iscsi_scsi_data_in(struct iscsi_conn *conn)
 			return -EAGAIN;
 	}
 	BUG_ON(ctask->data_count);
-
 done:
-	/* check for non-exceptional status */
-	if (tcp_conn->in.hdr->flags & ISCSI_FLAG_DATA_STATUS) {
+	return rc;
+}
+
+static int iscsi_scsi_data_in(struct iscsi_conn *conn)
+{
+	int rc;
+	struct iscsi_tcp_conn *tcp_conn = conn->dd_data;
+	struct iscsi_cmd_task *ctask = tcp_conn->in.ctask;
+
+	rc = __iscsi_scsi_data_in(conn);
+	if (!rc && tcp_conn->in.hdr->flags & ISCSI_FLAG_DATA_STATUS) {
 		debug_scsi("done [sc %lx res %d itt 0x%x]\n",
-			   (long)sc, sc->result, ctask->itt);
+			   (long) ctask->sc, ctask->sc->result, ctask->itt);
 		spin_lock(&conn->session->lock);
 		__iscsi_ctask_cleanup(conn, ctask);
 		__iscsi_complete_pdu(conn, tcp_conn->in.hdr, NULL, 0);
 		spin_unlock(&conn->session->lock);
 	}
 
-	return rc;
+	return 0;
 }
 
 static int

@@ -40,5 +40,7 @@ extern int
 iscsi_conn_set_param(struct iscsi_cls_conn *cls_conn, enum iscsi_param param,
 		     uint32_t value);
 
+extern int __iscsi_scsi_data_in(struct iscsi_conn *conn);
+
 extern int iscsi_tcp_init(void);
 extern void iscsi_tcp_exit(void);
