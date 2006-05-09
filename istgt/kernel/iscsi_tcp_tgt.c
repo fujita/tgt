@@ -143,7 +143,7 @@ static void istgt_scsi_tgt_queue_command(struct iscsi_cmd_task *ctask)
 	enum dma_data_direction dir = (hdr->flags & ISCSI_FLAG_CMD_WRITE) ?
 		DMA_TO_DEVICE : DMA_FROM_DEVICE;
 
-	scmd = scsi_host_get_command(shost, dir, GFP_KERNEL);
+	scmd = scsi_host_get_command(shost, dir, GFP_ATOMIC);
 	BUG_ON(!scmd);
 	ctask->sc = scmd;
 	memcpy(scmd->data_cmnd, hdr->cdb, MAX_COMMAND_SIZE);
@@ -164,22 +164,18 @@ static void istgt_scsi_tgt_queue_command(struct iscsi_cmd_task *ctask)
 	}
 
 	scsi_tgt_queue_command(scmd, (struct scsi_lun *) hdr->lun, hdr->itt);
-	dprintk("%p %x\n", scmd, scmd->data_cmnd[0]);
 }
 
 static void istgt_scsi_cmd_exec(struct iscsi_cmd_task *ctask)
 {
-	struct scsi_cmnd *scmd = ctask->sc;
-
 	if (ctask->data_count) {
 		if (!ctask->unsol_count)
 			;
 /* 			send_r2t(ctask); */
 	} else {
-/* 		set_cmd_waitio(cmnd); */
-		if (scmd) {
-/* 			BUG_ON(!ctask->done); */
-/* 			cmnd->done(scmd); */
+		if (ctask->sc) {
+			BUG_ON(!ctask->sc->done);
+			ctask->sc->done(ctask->sc);
 		} else
 			istgt_scsi_tgt_queue_command(ctask);
 	}
@@ -556,7 +552,6 @@ static int istgt_transfer_response(struct scsi_cmnd *scmd,
 			done(scmd);
 			spin_lock_bh(&conn->session->lock);
 			__kfifo_put(conn->session->cmdpool.queue, (void*)&ctask, sizeof(void*));
-			scmd->sc_data_direction = DMA_TO_DEVICE;
 			iscsi_tcp_cleanup_ctask(ctask->conn, ctask);
 			spin_unlock_bh(&conn->session->lock);
 		} else {
@@ -583,6 +578,7 @@ static int istgt_transfer_data(struct scsi_cmnd *scmd,
 		struct iscsi_tcp_conn *tcp_conn = ctask->conn->dd_data;
 		struct sock *sk = tcp_conn->sock->sk;
 
+		scmd->done = done;
 		/* FIXME: too hacky */
 		bh_lock_sock(sk);
 

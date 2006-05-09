@@ -947,7 +947,7 @@ more:
 
 	if (unlikely(conn->suspend_rx)) {
 		debug_tcp("conn %d Rx suspended!\n", conn->id);
-		return 0;
+		goto nomore;
 	}
 
 	if (tcp_conn->in_progress == IN_PROGRESS_DATA_RECV &&
@@ -958,11 +958,8 @@ more:
 
 		rc = d->data_recv(conn);
 		if (rc) {
-			if (rc == -EAGAIN) {
-				rd_desc->count = tcp_conn->in.datalen -
-						tcp_conn->in.ctask->data_count;
+			if (rc == -EAGAIN)
 				goto again;
-			}
 			iscsi_conn_failure(conn, rc);
 			return 0;
 		}
