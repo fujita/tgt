@@ -304,7 +304,6 @@ static int istgt_tcp_hdr_recv(struct iscsi_conn *conn)
 			else
 				ctask->unsol_count = 1;
 			/* FIXME */
-			BUG_ON(ctask->unsol_count);
 			ctask->total_length = be32_to_cpu(ctask->hdr->data_length);
 			ctask->data_count = ctask->imm_count = tcp_conn->in.datalen;
 
@@ -354,8 +353,6 @@ static int istgt_tcp_hdr_recv(struct iscsi_conn *conn)
 	case ISCSI_OP_NOOP_OUT:
 	case ISCSI_OP_SCSI_TMFUNC:
 		BUG_ON(1);
-		/* Find a command in the hash list */
-		/* data_out_start(conn, cmnd); */
 		break;
 	case ISCSI_OP_TEXT:
 	case ISCSI_OP_SNACK:
@@ -416,14 +413,29 @@ istgt_data_recv(struct iscsi_conn *conn)
 			BUG_ON(ctask->data_count);
 			tcp_ctask->data_offset += ntoh24(tcp_conn->in.hdr->dlength);
 
-			if (tcp_conn->in.hdr->flags & ISCSI_FLAG_CMD_FINAL) {
-				BUG_ON(tcp_ctask->r2t_data_count);
-				BUG_ON(!ctask->sc->done);
-				ctask->sc->done(ctask->sc);
-			} else if (tcp_ctask->r2t_data_count) {
-				tcp_ctask->xmstate = XMSTATE_W_HDR;
-				__kfifo_put(conn->xmitqueue, (void*)&ctask, sizeof(void*));
-				scsi_queue_work(shost, &conn->xmitwork);
+			if (tcp_conn->in.hdr->ttt == cpu_to_be32(ISCSI_RESERVED_TAG)) {
+				dprintk("%p %x %u %u %u %u %u\n", ctask,
+					tcp_conn->in.hdr->flags,
+					tcp_ctask->r2t_data_count,
+					ctask->unsol_count,
+					ctask->total_length,
+					ctask->imm_count, tcp_ctask->data_offset);
+
+				tcp_ctask->r2t_data_count -= ntoh24(tcp_conn->in.hdr->dlength);
+				if (tcp_conn->in.hdr->flags & ISCSI_FLAG_CMD_FINAL) {
+					ctask->unsol_count = 0;
+					istgt_scsi_cmd_exec(ctask);
+				}
+			} else {
+				if (tcp_conn->in.hdr->flags & ISCSI_FLAG_CMD_FINAL) {
+					BUG_ON(tcp_ctask->r2t_data_count);
+					BUG_ON(!ctask->sc->done);
+					ctask->sc->done(ctask->sc);
+				} else if (tcp_ctask->r2t_data_count) {
+					tcp_ctask->xmstate = XMSTATE_W_HDR;
+					__kfifo_put(conn->xmitqueue, (void*)&ctask, sizeof(void*));
+					scsi_queue_work(shost, &conn->xmitwork);
+				}
 			}
 		}
 		break;
