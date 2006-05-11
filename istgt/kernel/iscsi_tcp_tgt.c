@@ -50,62 +50,30 @@ struct istgt_session {
 	struct work_struct recvwork;
 };
 
-#if 0
-static void build_r2t(struct iscsi_cmd_task *ctask)
+static void r2t_build(struct iscsi_cmd_task *ctask)
 {
-	struct iscsi_r2t_rsp *hdr;
-	struct iscsi_data_task *dtask;
-	struct iscsi_r2t_info *r2t;
-/* 	struct iscsi_session *session = ctask->conn->session; */
+	struct iscsi_session *session = ctask->conn->session;
 	struct iscsi_tcp_cmd_task *tcp_ctask = ctask->dd_data;
-/* 	struct iscsi_tcp_conn *tcp_conn = ctask->conn->dd_data; */
-	int rc;
+	struct iscsi_r2t_rsp *rhdr = (struct iscsi_r2t_rsp *) &tcp_ctask->rhdr;
+	int length;
 
-/* 	length = req->r2t_length; */
-/* 	burst = req->conn->session->param.max_burst_length; */
-/* 	offset = be32_to_cpu(cmd_hdr(req)->data_length) - length; */
-/* more: */
-	rc = __kfifo_get(tcp_ctask->r2tpool.queue, (void*)&r2t, sizeof(void*));
-	BUG_ON(!rc);
+	rhdr->opcode = ISCSI_OP_R2T;
+	rhdr->flags = ISCSI_FLAG_CMD_FINAL;
+	memcpy(rhdr->lun, ctask->hdr->lun, 8);
+	rhdr->itt = ctask->hdr->itt;
+	rhdr->r2tsn = cpu_to_be32(tcp_ctask->exp_r2tsn++);
+	rhdr->data_offset = cpu_to_be32(tcp_ctask->data_offset);
+	rhdr->ttt = 0; /* FIXME */
 
-	dtask = mempool_alloc(tcp_ctask->datapool, GFP_ATOMIC);
-	BUG_ON(!dtask);
+	length = min(tcp_ctask->r2t_data_count, session->max_burst);
+	rhdr->data_length = cpu_to_be32(length);
 
-	INIT_LIST_HEAD(&dtask->item);
-	r2t->dtask = dtask;
-	hdr = (struct iscsi_r2t_rsp *) &dtask->hdr;
+	tcp_ctask->r2t_data_count -= length;
 
-/* 	rsp->pdu.bhs.ttt = req->target_task_tag; */
-
-	hdr->opcode = ISCSI_OP_R2T;
-	hdr->flags = ISCSI_FLAG_CMD_FINAL;
-	memcpy(hdr->lun, ctask->hdr->lun, 8);
-	hdr->itt = ctask->hdr->itt;
-	hdr->r2tsn = cpu_to_be32(tcp_ctask->exp_r2tsn++);
-/* 	hdr->data_offset = cpu_to_be32(offset); */
-/* 	if (length > burst) { */
-/* 		rsp_hdr->data_length = cpu_to_be32(burst); */
-/* 		length -= burst; */
-/* 		offset += burst; */
-/* 	} else { */
-/* 		rsp_hdr->data_length = cpu_to_be32(length); */
-/* 		length = 0; */
-/* 	} */
-
-	dprintk("%x %u %u %u\n", ctask->hdr->itt,
-		be32_to_cpu(hdr->data_length),
-		be32_to_cpu(hdr->data_offset),
-		be32_to_cpu(hdr->r2tsn));
-
-/* 	if (++req->outstanding_r2t >= req->conn->session->param.max_outstanding_r2t) */
-/* 		break; */
-
-	__kfifo_put(tcp_ctask->r2tpool.queue, (void*)&r2t, sizeof(void*));
-
-/* 	if (length) */
-/* 		goto more; */
+	dprintk("%p %u %u %u %u\n",
+		ctask, length, tcp_ctask->r2t_data_count, tcp_ctask->data_offset,
+		session->max_burst);
 }
-#endif
 
 static void hashlist_add(struct iscsi_cls_session *cls_session,
 			 struct iscsi_cmd_task *ctask)
@@ -120,16 +88,17 @@ static void hashlist_add(struct iscsi_cls_session *cls_session,
 static struct iscsi_cmd_task *hashlist_find(struct iscsi_cls_session *cls_session, u32 itt)
 {
 	struct iscsi_cmd_task *ctask = NULL;
+	struct iscsi_session *session = class_to_transport_session(cls_session);
 	struct istgt_session *istgt_session = cls_session->dd_data;
 
-	spin_lock_bh(&ctask->conn->session->lock);
+	spin_lock_bh(&session->lock);
 	list_for_each_entry(ctask, &istgt_session->cmd_hash, hash) {
 		if (ctask->hdr->itt == itt)
 			goto found;
 	}
 	ctask = NULL;
 found:
-	spin_unlock_bh(&ctask->conn->session->lock);
+	spin_unlock_bh(&session->lock);
 	return ctask;
 }
 
@@ -168,10 +137,15 @@ static void istgt_scsi_tgt_queue_command(struct iscsi_cmd_task *ctask)
 
 static void istgt_scsi_cmd_exec(struct iscsi_cmd_task *ctask)
 {
-	if (ctask->data_count) {
-		if (!ctask->unsol_count)
-			;
-/* 			send_r2t(ctask); */
+	struct iscsi_tcp_cmd_task *tcp_ctask = ctask->dd_data;
+	struct iscsi_cls_session *cls_session = session_to_cls(ctask->conn->session);
+	struct Scsi_Host *shost = iscsi_session_to_shost(cls_session);
+
+	if (tcp_ctask->r2t_data_count) {
+		if (!ctask->unsol_count) {
+			__kfifo_put(ctask->conn->xmitqueue, (void*)&ctask, sizeof(void*));
+			scsi_queue_work(shost, &ctask->conn->xmitwork);
+		}
 	} else {
 		if (ctask->sc) {
 			BUG_ON(!ctask->sc->done);
@@ -319,15 +293,18 @@ static int istgt_tcp_hdr_recv(struct iscsi_conn *conn)
 		tcp_ctask = ctask->dd_data;
 		tcp_ctask->sg = NULL;
 		tcp_ctask->sent = 0;
-		tcp_ctask->xmstate = XMSTATE_UNS_INIT;
 		tcp_ctask->data_offset = 0;
 		if (hdr->flags & ISCSI_FLAG_CMD_WRITE) {
+			tcp_ctask->xmstate = XMSTATE_W_HDR;
+			tcp_ctask->exp_r2tsn = 0;
 			tcp_ctask->r2t_data_count = be32_to_cpu(ctask->hdr->data_length)
 				- tcp_conn->in.datalen;
 			if (hdr->flags & ISCSI_FLAG_CMD_FINAL)
 				ctask->unsol_count = 0;
 			else
 				ctask->unsol_count = 1;
+			/* FIXME */
+			BUG_ON(ctask->unsol_count);
 			ctask->total_length = be32_to_cpu(ctask->hdr->data_length);
 			ctask->data_count = ctask->imm_count = tcp_conn->in.datalen;
 
@@ -336,7 +313,6 @@ static int istgt_tcp_hdr_recv(struct iscsi_conn *conn)
 				ctask->unsol_count,
 				ctask->total_length,
 				ctask->imm_count);
-			BUG_ON(ctask->total_length != ctask->imm_count);
 
 			hashlist_add(cls_session, ctask);
 			spin_lock_bh(&session->lock);
@@ -349,20 +325,30 @@ static int istgt_tcp_hdr_recv(struct iscsi_conn *conn)
 			if (!tcp_conn->in.datalen)
 				ctask = NULL;
 		} else {
+			tcp_ctask->xmstate = XMSTATE_UNS_INIT;
 			istgt_ctask_add(ctask);
 			ctask = NULL;
 			schedule_work(&istgt_session->recvwork);
 		}
 		break;
 	case ISCSI_OP_SCSI_DATA_OUT:
-		BUG_ON(1);
 		ctask = hashlist_find(cls_session, hdr->itt);
 		if (!ctask) {
 			eprintk("Cannot find %x\n", ctask->hdr->itt);
 			rc = ISCSI_ERR_NO_SCSI_CMD;
-		} else {
-/* 			if (tcp_ctask->data_offset != be32_to_cpu(hdr->offset)) */
-/* 				eprintk("Cannot find %x\n", ctask->hdr->itt); */
+			break;
+		}
+		ctask->data_count = tcp_conn->in.datalen;
+		tcp_ctask = ctask->dd_data;
+		{
+			struct iscsi_data *dhdr =
+				(struct iscsi_data *) hdr;
+			dprintk("%p %u %u %u %u %u %x\n", ctask,
+				ctask->total_length,
+				be32_to_cpu(dhdr->offset),
+				tcp_ctask->data_offset,
+				tcp_ctask->r2t_data_count, ctask->data_count,
+				tcp_conn->in.hdr->flags);
 		}
 		break;
 	case ISCSI_OP_NOOP_OUT:
@@ -391,6 +377,7 @@ istgt_data_recv(struct iscsi_conn *conn)
 	struct iscsi_session *session = ctask->conn->session;
 	struct iscsi_cls_session *cls_session = session_to_cls(session);
 	struct istgt_session *istgt_session = cls_session->dd_data;
+	struct Scsi_Host *shost = iscsi_session_to_shost(cls_session);
 	int rc = 0, opcode;
 
 	/* We need to return -EAGAIN if the buffer is not ready. */
@@ -406,12 +393,40 @@ istgt_data_recv(struct iscsi_conn *conn)
 		/* read immediate data */
 		rc = __iscsi_scsi_data_in(conn);
 		if (!rc) {
+			struct iscsi_tcp_cmd_task *tcp_ctask = ctask->dd_data;
+
+			dprintk("%p %x %u %u %u %u %u\n", ctask,
+				tcp_conn->in.hdr->flags,
+				tcp_ctask->r2t_data_count,
+				ctask->unsol_count,
+				ctask->total_length,
+				ctask->imm_count, tcp_ctask->data_offset);
+
 			BUG_ON(ctask->data_count);
+			tcp_ctask->data_offset += ctask->imm_count;
 			istgt_ctask_add(ctask);
 			schedule_work(&istgt_session->recvwork);
 		}
 		break;
 	case ISCSI_OP_SCSI_DATA_OUT:
+		rc = __iscsi_scsi_data_in(conn);
+		if (!rc) {
+			struct iscsi_tcp_cmd_task *tcp_ctask = ctask->dd_data;
+
+			BUG_ON(ctask->data_count);
+			tcp_ctask->data_offset += ntoh24(tcp_conn->in.hdr->dlength);
+
+			if (tcp_conn->in.hdr->flags & ISCSI_FLAG_CMD_FINAL) {
+				BUG_ON(tcp_ctask->r2t_data_count);
+				BUG_ON(!ctask->sc->done);
+				ctask->sc->done(ctask->sc);
+			} else if (tcp_ctask->r2t_data_count) {
+				tcp_ctask->xmstate = XMSTATE_W_HDR;
+				__kfifo_put(conn->xmitqueue, (void*)&ctask, sizeof(void*));
+				scsi_queue_work(shost, &conn->xmitwork);
+			}
+		}
+		break;
 	case ISCSI_OP_TEXT:
 	case ISCSI_OP_LOGOUT:
 	case ISCSI_OP_NOOP_OUT:
@@ -535,6 +550,7 @@ static int istgt_transfer_response(struct scsi_cmnd *scmd,
 				   void (*done)(struct scsi_cmnd *))
 {
 	struct iscsi_cmd_task *ctask = (struct iscsi_cmd_task *) scmd->SCp.ptr;
+	struct iscsi_tcp_cmd_task *tcp_ctask = ctask->dd_data;
 	struct iscsi_conn *conn = ctask->conn;
 	struct iscsi_cls_session *cls_session = session_to_cls(conn->session);
 	struct Scsi_Host *shost = iscsi_session_to_shost(cls_session);
@@ -543,6 +559,7 @@ static int istgt_transfer_response(struct scsi_cmnd *scmd,
 		ctask->hdr->cdb[0], scmd->request_bufflen, scmd->sc_data_direction);
 
 	if (scmd->sc_data_direction == DMA_TO_DEVICE) {
+		tcp_ctask->xmstate = XMSTATE_UNS_INIT;
 		ctask->total_length = 0;
 		scmd->done = done;
 		__kfifo_put(conn->xmitqueue, (void*)&ctask, sizeof(void*));
@@ -696,9 +713,6 @@ static void rsp_build(struct iscsi_cmd_task *ctask)
 	default:
 		break;
 	}
-
-	iscsi_buf_init_iov(&tcp_ctask->headbuf, (char *) &tcp_ctask->rhdr,
-			   sizeof(struct iscsi_hdr));
 }
 
 static int
@@ -731,7 +745,6 @@ istgt_tcp_ctask_data_xmit(struct iscsi_conn *conn, struct iscsi_cmd_task *ctask)
 	return 0;
 }
 
-
 static int
 istgt_tcp_ctask_xmit(struct iscsi_conn *conn, struct iscsi_cmd_task *ctask)
 {
@@ -746,6 +759,8 @@ istgt_tcp_ctask_xmit(struct iscsi_conn *conn, struct iscsi_cmd_task *ctask)
 again:
 	if (tcp_ctask->xmstate & XMSTATE_UNS_INIT) {
 		rsp_build(ctask);
+		iscsi_buf_init_iov(&tcp_ctask->headbuf, (char *) &tcp_ctask->rhdr,
+				   sizeof(struct iscsi_hdr));
 		tcp_ctask->xmstate &= ~XMSTATE_UNS_INIT;
 		tcp_ctask->xmstate |= XMSTATE_UNS_HDR;
 	}
@@ -775,7 +790,25 @@ again:
 		}
 	}
 
-	if (sc->sc_data_direction == DMA_TO_DEVICE || !sc->bufflen) {
+	if (tcp_ctask->xmstate & XMSTATE_W_HDR) {
+		r2t_build(ctask);
+		iscsi_buf_init_iov(&tcp_ctask->headbuf, (char *) &tcp_ctask->rhdr,
+				   sizeof(struct iscsi_hdr));
+		tcp_ctask->xmstate &= ~XMSTATE_W_HDR;
+		tcp_ctask->xmstate |= XMSTATE_SOL_HDR;
+	}
+
+	if (tcp_ctask->xmstate |= XMSTATE_SOL_HDR) {
+		err = iscsi_sendhdr(conn, &tcp_ctask->headbuf, ctask->data_count);
+		if (err)
+			return -EAGAIN;
+		else
+			tcp_ctask->xmstate &= ~XMSTATE_SOL_HDR;
+	}
+
+	if (tcp_ctask->rhdr.opcode == ISCSI_OP_SCSI_CMD_RSP ||
+	    (tcp_ctask->rhdr.opcode == ISCSI_OP_SCSI_DATA_IN &&
+	     tcp_ctask->rhdr.flags & ISCSI_FLAG_CMD_FINAL)) {
 		spin_lock_bh(&conn->session->lock);
 		if (sc->sc_data_direction == DMA_TO_DEVICE)
 			list_del(&ctask->hash);
@@ -784,7 +817,8 @@ again:
 		spin_unlock_bh(&conn->session->lock);
 	}
 
-	sc->done(sc);
+	if (tcp_ctask->rhdr.opcode != ISCSI_OP_R2T)
+		sc->done(sc);
 
 	return 0;
 }
