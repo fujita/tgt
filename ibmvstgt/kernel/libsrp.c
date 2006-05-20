@@ -375,19 +375,19 @@ static int vscsis_data_length(struct srp_cmd *cmd, enum dma_data_direction dir)
 	return len;
 }
 
-static uint8_t getcontrolbyte(u8 *cdb)
+static u8 getcontrolbyte(u8 *cdb)
 {
 	return cdb[COMMAND_SIZE(cdb[0]) - 1];
 }
 
-static inline uint8_t getlink(struct srp_cmd *cmd)
+static inline u8 getlink(struct srp_cmd *cmd)
 {
 	return (getcontrolbyte(cmd->cdb) & 0x01);
 }
 
 int srp_cmd_perform(struct iu_entry *iue, struct srp_cmd *cmd)
 {
-	struct Scsi_host *shost = iue->target->shost;
+	struct Scsi_Host *shost = iue->target->shost;
 	enum dma_data_direction data_dir;
 	struct scsi_cmnd *scmd;
 	int tag, len;

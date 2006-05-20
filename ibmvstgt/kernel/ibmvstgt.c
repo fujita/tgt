@@ -4,7 +4,7 @@
  *			   Santiago Leon (santil@us.ibm.com) IBM Corp.
  *			   Linda Xie (lxie@us.ibm.com) IBM Corp.
  *
- * Copyright (C) 2005 FUJITA Tomonori <tomof@acm.org>
+ * Copyright (C) 2005-2006 FUJITA Tomonori <tomof@acm.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -89,14 +89,14 @@ static inline union viosrp_iu *vio_iu(struct iu_entry *iue)
 	return (union viosrp_iu *) (iue->sbuf->buf);
 }
 
-static int send_iu(struct iu_entry *iue, uint64_t length, uint8_t format)
+static int send_iu(struct iu_entry *iue, u64 length, u8 format)
 {
 	struct srp_target *target = iue->target;
 	struct vio_port *vport = target_to_port(target);
 	long rc, rc1;
 	union {
 		struct viosrp_crq cooked;
-		uint64_t raw[2];
+		u64 raw[2];
 	} crq;
 
 	/* First copy the SRP */
@@ -134,7 +134,7 @@ static int send_rsp(struct iu_entry *iue, unsigned char status,
 		    unsigned char asc)
 {
 	union viosrp_iu *iu = vio_iu(iue);
-	uint64_t tag = iu->srp.rsp.tag;
+	u64 tag = iu->srp.rsp.tag;
 
 	/* If the linked bit is on and status is good */
 	if (test_bit(V_LINKED, &iue->flags) && (status == NO_SENSE))
@@ -156,7 +156,7 @@ static int send_rsp(struct iu_entry *iue, unsigned char status,
 	iu->srp.rsp.resp_data_len = 0;
 	iu->srp.rsp.status = status;
 	if (status) {
-		uint8_t *sense = iu->srp.rsp.data;
+		u8 *sense = iu->srp.rsp.data;
 
 		if (iue->scmd) {
 			iu->srp.rsp.flags |= SRP_RSP_FLAG_SNSVALID;
@@ -306,7 +306,7 @@ static int ibmvstgt_cmd_done(struct scsi_cmnd *scmd,
 }
 
 int send_adapter_info(struct iu_entry *iue,
-		      dma_addr_t remote_buffer, uint16_t length)
+		      dma_addr_t remote_buffer, u16 length)
 {
 	struct srp_target *target = iue->target;
 	struct vio_port *vport = target_to_port(target);
@@ -358,7 +358,7 @@ static void process_login(struct iu_entry *iue)
 {
 	union viosrp_iu *iu = vio_iu(iue);
 	struct srp_login_rsp *rsp = &iu->srp.login_rsp;
-	uint64_t tag = iu->srp.rsp.tag;
+	u64 tag = iu->srp.rsp.tag;
 
 	/* TODO handle case that requested size is wrong and
 	 * buffer format is wrong
