@@ -1481,8 +1481,6 @@ int iscsi_conn_start(struct iscsi_cls_conn *cls_conn)
 	conn->c_stage = ISCSI_CONN_STARTED;
 	session->state = ISCSI_STATE_LOGGED_IN;
 
-	printk("%s(%d) %x\n", __FUNCTION__, __LINE__, conn->stop_stage);
-
 	switch(conn->stop_stage) {
 	case STOP_CONN_RECOVER:
 		/*
@@ -1512,8 +1510,6 @@ int iscsi_conn_start(struct iscsi_cls_conn *cls_conn)
 		break;
 	}
 	spin_unlock_bh(&session->lock);
-
-	printk("%s(%d) %x\n", __FUNCTION__, __LINE__, conn->stop_stage);
 
 	return 0;
 }

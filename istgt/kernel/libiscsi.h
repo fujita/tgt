@@ -39,7 +39,7 @@ struct iscsi_cls_conn;
 struct iscsi_session;
 struct iscsi_nopin;
 
-#define DEBUG_SCSI
+/* #define DEBUG_SCSI */
 #ifdef DEBUG_SCSI
 #define debug_scsi(fmt...) printk(KERN_INFO "iscsi: " fmt)
 #else
@@ -139,7 +139,6 @@ struct iscsi_conn {
 	struct kfifo		*xmitqueue;	/* data-path cmd queue */
 	struct list_head	run_list;	/* list of cmds in progress */
 	struct work_struct	xmitwork;	/* per-conn. xmit workqueue */
-
 	/*
 	 * serializes connection xmit, access to kfifos:
 	 * xmitqueue, immqueue, mgmtqueue
