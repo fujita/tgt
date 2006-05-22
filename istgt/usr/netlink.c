@@ -330,7 +330,7 @@ static int transport_handle_init(void)
 	int fd, err;
 	char buf[64];
 
-	fd = open("/sys/class/iscsi_transport/iscsi_tgt_tcp/handle", O_RDONLY);
+	fd = open("/sys/class/iscsi_transport/iscsi_tcp_tgt/handle", O_RDONLY);
 	if (fd < 0)
 		return fd;
 	err = read(fd, buf, sizeof(buf));

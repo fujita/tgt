@@ -71,6 +71,13 @@ struct iscsi_tcp_recv {
 	char			zero_copy_hdr;
 };
 
+/* TODO: unsolicited and solicit data should be treated equally */
+struct iscsi_tcp_operations {
+	int (*hdr_recv)(struct iscsi_conn *);
+	int (*data_recv)(struct iscsi_conn *);
+	void (*unsolicit_data_init)(struct iscsi_conn *, struct iscsi_cmd_task *);
+};
+
 struct iscsi_tcp_conn {
 	struct iscsi_conn	*iscsi_conn;
 	struct socket		*sock;
@@ -107,6 +114,8 @@ struct iscsi_tcp_conn {
 	uint32_t		discontiguous_hdr_cnt;
 
 	ssize_t (*sendpage)(struct socket *, struct page *, int, size_t, int);
+	struct iscsi_tcp_operations *ops;
+	struct work_struct	recvwork;	/* per-conn. recv workqueue */
 };
 
 struct iscsi_buf {
@@ -118,11 +127,9 @@ struct iscsi_buf {
 struct iscsi_data_task {
 	struct iscsi_data	hdr;			/* PDU */
 	char			hdrext[sizeof(__u32)];	/* Header-Digest */
-	struct list_head	item;			/* data queue item */
 	struct iscsi_buf	digestbuf;		/* digest buffer */
 	uint32_t		digest;			/* data digest */
 };
-#define ISCSI_DTASK_DEFAULT_MAX	ISCSI_SG_TABLESIZE * PAGE_SIZE / 512
 
 struct iscsi_tcp_mgmt_task {
 	struct iscsi_hdr	hdr;
@@ -144,7 +151,7 @@ struct iscsi_r2t_info {
 	int			data_count;	/* DATA-Out payload progress */
 	struct scatterlist	*sg;		/* per-R2T SG list */
 	int			solicit_datasn;
-	struct iscsi_data_task   *dtask;        /* which data task */
+	struct iscsi_data_task   dtask;        /* which data task */
 };
 
 struct iscsi_tcp_cmd_task {
@@ -167,21 +174,40 @@ struct iscsi_tcp_cmd_task {
 	struct iscsi_queue	r2tpool;
 	struct kfifo		*r2tqueue;
 	struct iscsi_r2t_info	**r2ts;
-	struct list_head	dataqueue;		/* Data-Out dataqueue */
-	mempool_t		*datapool;
 	uint32_t		datadigest;		/* for recover digest */
 	int			digest_count;
 	uint32_t		immdigest;		/* for imm data */
 	struct iscsi_buf	immbuf;			/* for imm data digest */
-	struct iscsi_data_task   *dtask;		/* data task in progress*/
-	int			digest_offset;		/* for partial buff digest */
-	struct iscsi_cmd	rhdr;
+	struct iscsi_data_task	*dtask;		/* data task in progress*/
+	struct iscsi_data_task	unsol_dtask;	/* unsol data task */
+	int			digest_offset;	/* for partial buff digest */
 };
 
-struct data_ready_desc {
-	struct iscsi_conn *conn;
-	int (* hdr_recv)(struct iscsi_conn *conn);
-	int (* data_recv)(struct iscsi_conn *conn);
-};
+
+extern struct iscsi_cls_session *
+iscsi_tcp_session_create(struct iscsi_transport *iscsit,
+			 struct scsi_transport_template *scsit,
+			 uint32_t initial_cmdsn, uint32_t *hostno);
+extern void iscsi_tcp_session_destroy(struct iscsi_cls_session *cls_session);
+
+extern struct iscsi_cls_conn *
+iscsi_tcp_conn_create(struct iscsi_cls_session *cls_session, uint32_t conn_idx,
+		      struct iscsi_tcp_operations *ops);
+extern void iscsi_tcp_conn_destroy(struct iscsi_cls_conn *cls_conn);
+
+extern int iscsi_tcp_conn_bind(struct iscsi_cls_session *cls_session,
+			       struct iscsi_cls_conn *cls_conn,
+			       uint64_t transport_eph, int is_leading);
+extern int iscsi_tcp_conn_set_param(struct iscsi_cls_conn *cls_conn,
+				    enum iscsi_param param, uint32_t value);
+extern void iscsi_tcp_terminate_conn(struct iscsi_conn *conn);
+
+extern int iscsi_tcp_ctask_xmit(struct iscsi_conn *conn,
+				struct iscsi_cmd_task *ctask);
+extern int iscsi_tcp_hdr_recv(struct iscsi_conn *conn);
+
+extern int iscsi_scsi_data_in(struct iscsi_conn *conn);
+extern void
+iscsi_buf_init_iov(struct iscsi_buf *ibuf, char *vbuf, int size);
 
 #endif /* ISCSI_H */

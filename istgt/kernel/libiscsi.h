@@ -39,7 +39,7 @@ struct iscsi_cls_conn;
 struct iscsi_session;
 struct iscsi_nopin;
 
-/* #define DEBUG_SCSI */
+#define DEBUG_SCSI
 #ifdef DEBUG_SCSI
 #define debug_scsi(fmt...) printk(KERN_INFO "iscsi: " fmt)
 #else
@@ -103,9 +103,8 @@ struct iscsi_cmd_task {
 
 	struct list_head	running;	/* running cmd list */
 	void			*dd_data;	/* driver/transport data */
-
 	struct list_head	hash;
-	struct list_head	tgtlist;
+	struct list_head	pending;
 };
 
 struct iscsi_conn {
@@ -140,6 +139,7 @@ struct iscsi_conn {
 	struct kfifo		*xmitqueue;	/* data-path cmd queue */
 	struct list_head	run_list;	/* list of cmds in progress */
 	struct work_struct	xmitwork;	/* per-conn. xmit workqueue */
+
 	/*
 	 * serializes connection xmit, access to kfifos:
 	 * xmitqueue, immqueue, mgmtqueue
@@ -174,7 +174,6 @@ struct iscsi_conn {
 
 	/* custom statistics */
 	uint32_t		eh_abort_cnt;
-	struct work_struct	tcpwork;
 };
 
 struct iscsi_queue {

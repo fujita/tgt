@@ -7,7 +7,7 @@ PATH=/sbin:/bin:/usr/sbin:/usr/bin
 MEM_SIZE=1048576
 export LD_LIBRARY_PATH=${PWD}/usr:${PWD}/istgt/usr:${PWD}/ibmvstgt/usr:${LD_LIBRARY_PATH}
 
-if [ -f ${PWD}/istgt/kernel/istgt_tcp.ko ] ; then
+if [ -f ${PWD}/istgt/kernel/iscsi_tcp_tgt.ko ] ; then
 	TARGET=istgt
 fi
 
@@ -19,7 +19,8 @@ start_server()
 		modprobe -q crc32c
 		insmod ${PWD}/istgt/kernel/scsi_transport_iscsi.ko
 		insmod ${PWD}/istgt/kernel/libiscsi.ko
-		insmod ${PWD}/istgt/kernel/istgt_tcp.ko
+		insmod ${PWD}/istgt/kernel/iscsi_tcp.ko
+		insmod ${PWD}/istgt/kernel/iscsi_tcp_tgt.ko
 		${PWD}/istgt/usr/istgtd
 	else
 		insmod ${PWD}/ibmvstgt/kernel/libsrp.ko
@@ -45,7 +46,8 @@ stop_server()
 	sleep 1
 
 	if [ "$TARGET" = "istgt" ] ; then
-		rmmod istgt_tcp
+		rmmod iscsi_tcp_tgt
+		rmmod iscsi_tcp
 		rmmod libiscsi
 		rmmod scsi_transport_iscsi
 	else
