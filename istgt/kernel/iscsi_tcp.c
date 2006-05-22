@@ -762,11 +762,10 @@ static void iscsi_scsi_data_in_done(struct iscsi_conn *conn)
 {
 	struct iscsi_tcp_conn *tcp_conn = conn->dd_data;
 	struct iscsi_cmd_task *ctask = tcp_conn->in.ctask;
-	struct scsi_cmnd *sc = ctask->sc;
 
 	if (tcp_conn->in.hdr->flags & ISCSI_FLAG_DATA_STATUS) {
 		debug_scsi("done [sc %lx res %d itt 0x%x]\n",
-			   (long)sc, sc->result, ctask->itt);
+			   (long)cask->sc, ctask->sc->result, ctask->itt);
 		spin_lock(&conn->session->lock);
 		__iscsi_ctask_cleanup(conn, ctask);
 		__iscsi_complete_pdu(conn, tcp_conn->in.hdr, NULL, 0);
