@@ -735,7 +735,7 @@ static struct iscsi_transport iscsi_tcp_tgt_transport = {
 	.destroy_conn		= iscsi_tcp_conn_destroy,
 	.bind_conn		= iscsi_tcp_conn_bind,
 	.start_conn		= iscsi_conn_start,
-	.set_param		= iscsi_tcp_conn_set_param,
+	.set_param		= iscsi_conn_set_param,
 	.terminate_conn		= iscsi_tcp_terminate_conn,
 	.xmit_cmd_task		= iscsi_tcp_tgt_ctask_xmit,
 };

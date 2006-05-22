@@ -198,8 +198,8 @@ extern void iscsi_tcp_conn_destroy(struct iscsi_cls_conn *cls_conn);
 extern int iscsi_tcp_conn_bind(struct iscsi_cls_session *cls_session,
 			       struct iscsi_cls_conn *cls_conn,
 			       uint64_t transport_eph, int is_leading);
-extern int iscsi_tcp_conn_set_param(struct iscsi_cls_conn *cls_conn,
-				    enum iscsi_param param, uint32_t value);
+extern int iscsi_conn_set_param(struct iscsi_cls_conn *cls_conn,
+				enum iscsi_param param, uint32_t value);
 extern void iscsi_tcp_terminate_conn(struct iscsi_conn *conn);
 
 extern int iscsi_tcp_ctask_xmit(struct iscsi_conn *conn,

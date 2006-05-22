@@ -48,7 +48,7 @@ MODULE_AUTHOR("Dmitry Yusupov <dmitry_yus@yahoo.com>, "
 MODULE_DESCRIPTION("iSCSI/TCP data-path");
 MODULE_LICENSE("GPL");
 MODULE_VERSION("0:4.445");
-#define DEBUG_TCP
+/* #define DEBUG_TCP */
 #define DEBUG_ASSERT
 
 #ifdef DEBUG_TCP
@@ -1989,9 +1989,6 @@ iscsi_tcp_conn_bind(struct iscsi_cls_session *cls_session,
 	struct socket *sock;
 	int err;
 
-	printk("%s(%d) %llu %d\n", __FUNCTION__, __LINE__,
-	       (unsigned long long) transport_eph, is_leading);
-
 	/* lookup for existing socket */
 	sock = sockfd_lookup((int)transport_eph, &err);
 	if (!sock) {
@@ -2002,9 +1999,6 @@ iscsi_tcp_conn_bind(struct iscsi_cls_session *cls_session,
 	err = iscsi_conn_bind(cls_session, cls_conn, is_leading);
 	if (err)
 		return err;
-
-	printk("%s(%d) %llu %d %d\n", __FUNCTION__, __LINE__,
-	       (unsigned long long) transport_eph, is_leading, conn->stop_stage);
 
 	if (conn->stop_stage != STOP_CONN_SUSPEND) {
 		/* bind iSCSI connection and socket */
@@ -2031,8 +2025,6 @@ iscsi_tcp_conn_bind(struct iscsi_cls_session *cls_session,
 		tcp_conn->in_progress = IN_PROGRESS_WAIT_HEADER;
 	}
 
-	printk("%s(%d) %llu %d\n", __FUNCTION__, __LINE__,
-	       (unsigned long long) transport_eph, is_leading);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(iscsi_tcp_conn_bind);
@@ -2164,8 +2156,8 @@ iscsi_r2tpool_free(struct iscsi_session *session)
 	}
 }
 
-int iscsi_tcp_conn_set_param(struct iscsi_cls_conn *cls_conn, enum iscsi_param param,
-			     uint32_t value)
+int iscsi_conn_set_param(struct iscsi_cls_conn *cls_conn, enum iscsi_param param,
+			 uint32_t value)
 {
 	struct iscsi_conn *conn = cls_conn->dd_data;
 	struct iscsi_session *session = conn->session;
@@ -2303,7 +2295,7 @@ int iscsi_tcp_conn_set_param(struct iscsi_cls_conn *cls_conn, enum iscsi_param p
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(iscsi_tcp_conn_set_param);
+EXPORT_SYMBOL_GPL(iscsi_conn_set_param);
 
 static int
 iscsi_session_get_param(struct iscsi_cls_session *cls_session,
@@ -2551,7 +2543,7 @@ static struct iscsi_transport iscsi_tcp_transport = {
 	.create_conn		= iscsi_tcp_initiator_conn_create,
 	.bind_conn		= iscsi_tcp_conn_bind,
 	.destroy_conn		= iscsi_tcp_conn_destroy,
-	.set_param		= iscsi_tcp_conn_set_param,
+	.set_param		= iscsi_conn_set_param,
 	.get_conn_param		= iscsi_conn_get_param,
 	.get_conn_str_param	= iscsi_conn_get_str_param,
 	.get_session_param	= iscsi_session_get_param,
