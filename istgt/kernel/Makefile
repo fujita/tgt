@@ -14,7 +14,7 @@ obj-m				+= scsi_transport_iscsi.o
 obj-m				+= libiscsi.o
 obj-m				+= iscsi_tcp.o
 obj-m				+= iscsi_tcp_initiator.o
-obj-m				+= iscsi_tcp_tgt.o
+obj-m				+= iscsi_tcp_target.o
 else
 
 ifeq ($(KERNELSRC),)
