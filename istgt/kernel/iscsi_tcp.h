@@ -189,25 +189,41 @@ iscsi_tcp_session_create(struct iscsi_transport *iscsit,
 			 struct scsi_transport_template *scsit,
 			 uint32_t initial_cmdsn, uint32_t *hostno);
 extern void iscsi_tcp_session_destroy(struct iscsi_cls_session *cls_session);
+extern int iscsi_session_get_param(struct iscsi_cls_session *cls_session,
+				   enum iscsi_param param, uint32_t *value);
 
 extern struct iscsi_cls_conn *
 iscsi_tcp_conn_create(struct iscsi_cls_session *cls_session, uint32_t conn_idx,
 		      struct iscsi_tcp_operations *ops);
 extern void iscsi_tcp_conn_destroy(struct iscsi_cls_conn *cls_conn);
-
 extern int iscsi_tcp_conn_bind(struct iscsi_cls_session *cls_session,
 			       struct iscsi_cls_conn *cls_conn,
 			       uint64_t transport_eph, int is_leading);
 extern int iscsi_conn_set_param(struct iscsi_cls_conn *cls_conn,
 				enum iscsi_param param, uint32_t value);
+extern int iscsi_conn_get_param(struct iscsi_cls_conn *cls_conn,
+				enum iscsi_param param, uint32_t *value);
+extern int iscsi_conn_get_str_param(struct iscsi_cls_conn *cls_conn,
+				    enum iscsi_param param, char *buf);
+extern void iscsi_conn_get_stats(struct iscsi_cls_conn *cls_conn,
+				 struct iscsi_stats *stats);
 extern void iscsi_tcp_terminate_conn(struct iscsi_conn *conn);
 
 extern int iscsi_tcp_ctask_xmit(struct iscsi_conn *conn,
 				struct iscsi_cmd_task *ctask);
 extern int iscsi_tcp_hdr_recv(struct iscsi_conn *conn);
+extern int iscsi_sendhdr(struct iscsi_conn *conn, struct iscsi_buf *buf,
+			 int datalen);
+extern int iscsi_sendpage(struct iscsi_conn *conn, struct iscsi_buf *buf,
+			  int *count, int *sent);
 
 extern int iscsi_scsi_data_in(struct iscsi_conn *conn);
-extern void
-iscsi_buf_init_iov(struct iscsi_buf *ibuf, char *vbuf, int size);
+extern void iscsi_buf_init_iov(struct iscsi_buf *ibuf, char *vbuf, int size);
+extern void iscsi_buf_init_sg(struct iscsi_buf *ibuf, struct scatterlist *sg);
+extern int iscsi_tcp_copy(struct iscsi_tcp_conn *tcp_conn);
+extern void iscsi_hdr_digest(struct iscsi_conn *conn, struct iscsi_buf *buf,
+			     u8* crc);
+extern void iscsi_recv_digest_update(struct iscsi_tcp_conn *tcp_conn, char* buf,
+				     int len);
 
 #endif /* ISCSI_H */
