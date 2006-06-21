@@ -61,6 +61,7 @@ static struct option const long_options[] =
 	{"lun", required_argument, NULL, 'l'},
 	{"params", required_argument, NULL, 'p'},
 	{"user", no_argument, NULL, 'u'},
+	{"hostno", required_argument, NULL, 'i'},
 	{"bus", required_argument, NULL, 'b'},
 	{"version", no_argument, NULL, 'v'},
 	{"help", no_argument, NULL, 'h'},
@@ -471,6 +472,9 @@ int main(int argc, char **argv)
 		case 'l':
 			lun = strtoull(optarg, NULL, 10);
 			set |= (1 << MODE_DEVICE);
+			break;
+		case 'i':
+			hostno = strtol(optarg, NULL, 10);
 			break;
 		case 'b':
 			hostno = bus_to_host(optarg);
