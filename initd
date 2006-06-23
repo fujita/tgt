@@ -13,7 +13,7 @@ fi
 
 start_server()
 {
-	insmod ${PWD}/kernel/scsi_tgt_core.ko
+	insmod ${PWD}/kernel/scsi_tgt.ko
 
 	if [ "$TARGET" = "istgt" ] ; then
 		modprobe -q crc32c
@@ -55,7 +55,7 @@ stop_server()
 		rmmod ibmvstgt
 	fi
 
-	rmmod scsi_tgt_core
+	rmmod scsi_tgt
 }
 
 case "$1" in
