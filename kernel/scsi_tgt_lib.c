@@ -70,6 +70,95 @@ struct scsi_tgt_queuedata {
 	struct list_head cmd_req;
 };
 
+/*
+ * Function:	scsi_host_get_command()
+ *
+ * Purpose:	Allocate and setup a scsi command block and blk request
+ *
+ * Arguments:	shost	- scsi host
+ *		data_dir - dma data dir
+ *		gfp_mask- allocator flags
+ *
+ * Returns:	The allocated scsi command structure.
+ *
+ * This should be called by target LLDs to get a command.
+ */
+struct scsi_cmnd *scsi_host_get_command(struct Scsi_Host *shost,
+					enum dma_data_direction data_dir,
+					gfp_t gfp_mask)
+{
+	int write = (data_dir == DMA_TO_DEVICE);
+	struct request *rq;
+	struct scsi_cmnd *cmd;
+	struct scsi_tgt_cmd *tcmd;
+
+	/* Bail if we can't get a reference to the device */
+	if (!get_device(&shost->shost_gendev))
+		return NULL;
+
+	tcmd = kmem_cache_alloc(scsi_tgt_cmd_cache, GFP_ATOMIC);
+	if (!tcmd)
+		goto put_dev;
+
+	rq = blk_get_request(shost->uspace_req_q, write, gfp_mask);
+	if (!rq)
+		goto free_tcmd;
+
+	cmd = __scsi_get_command(shost, gfp_mask);
+	if (!cmd)
+		goto release_rq;
+
+	memset(cmd, 0, sizeof(*cmd));
+	cmd->sc_data_direction = data_dir;
+	cmd->jiffies_at_alloc = jiffies;
+	cmd->request = rq;
+
+	rq->special = cmd;
+	rq->flags |= REQ_SPECIAL | REQ_BLOCK_PC;
+	rq->end_io_data = tcmd;
+
+	return cmd;
+
+release_rq:
+	blk_put_request(rq);
+free_tcmd:
+	kmem_cache_free(scsi_tgt_cmd_cache, tcmd);
+put_dev:
+	put_device(&shost->shost_gendev);
+	return NULL;
+
+}
+EXPORT_SYMBOL_GPL(scsi_host_get_command);
+
+/*
+ * Function:	scsi_host_put_command()
+ *
+ * Purpose:	Free a scsi command block
+ *
+ * Arguments:	shost	- scsi host
+ * 		cmd	- command block to free
+ *
+ * Returns:	Nothing.
+ *
+ * Notes:	The command must not belong to any lists.
+ */
+static void scsi_host_put_command(struct Scsi_Host *shost,
+				  struct scsi_cmnd *cmd)
+{
+	struct request_queue *q = shost->uspace_req_q;
+	struct request *rq = cmd->request;
+	struct scsi_tgt_cmd *tcmd = rq->end_io_data;
+	unsigned long flags;
+
+	kmem_cache_free(scsi_tgt_cmd_cache, tcmd);
+
+	spin_lock_irqsave(q->queue_lock, flags);
+	__blk_put_request(q, rq);
+	spin_unlock_irqrestore(q->queue_lock, flags);
+
+	__scsi_put_command(shost, cmd, &shost->shost_gendev);
+}
+
 static void scsi_unmap_user_pages(struct scsi_tgt_cmd *tcmd)
 {
 	struct bio *bio;
@@ -110,7 +199,6 @@ static void scsi_tgt_cmd_destroy(void *data)
 		cmd->request->flags &= ~1UL;
 
 	scsi_unmap_user_pages(tcmd);
-	kmem_cache_free(scsi_tgt_cmd_cache, tcmd);
 	scsi_host_put_command(scsi_tgt_cmd_to_host(cmd), cmd);
 }
 
@@ -177,13 +265,13 @@ out:
 		goto retry;
 }
 
-/**
+/*
  * scsi_tgt_alloc_queue - setup queue used for message passing
  * shost: scsi host
  *
  * This should be called by the LLD after host allocation.
  * And will be released when the host is released.
- **/
+ */
 int scsi_tgt_alloc_queue(struct Scsi_Host *shost)
 {
 	struct scsi_tgt_queuedata *queuedata;
@@ -244,28 +332,19 @@ struct Scsi_Host *scsi_tgt_cmd_to_host(struct scsi_cmnd *cmd)
 }
 EXPORT_SYMBOL_GPL(scsi_tgt_cmd_to_host);
 
-/**
+/*
  * scsi_tgt_queue_command - queue command for userspace processing
  * @cmd:	scsi command
  * @scsilun:	scsi lun
  * @noblock:	set to nonzero if the command should be queued
- **/
+ */
 int scsi_tgt_queue_command(struct scsi_cmnd *cmd, struct scsi_lun *scsilun,
 			   u64 tag)
 {
 	struct request_queue *q = cmd->request->q;
 	struct scsi_tgt_queuedata *qdata = q->queuedata;
 	unsigned long flags;
-	struct scsi_tgt_cmd *tcmd;
-
-	/*
-	 * It would be better to allocate scsi_tgt_cmd structure in
-	 * scsi_host_get_command and not to fail due to OOM.
-	 */
-	tcmd = kmem_cache_alloc(scsi_tgt_cmd_cache, GFP_ATOMIC);
-	if (!tcmd)
-		return -ENOMEM;
-	cmd->request->end_io_data = tcmd;
+	struct scsi_tgt_cmd *tcmd = cmd->request->end_io_data;
 
 	bio_list_init(&tcmd->xfer_list);
 	bio_list_init(&tcmd->xfer_done_list);
