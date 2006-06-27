@@ -50,6 +50,9 @@ struct scsi_tgt_cmd {
 	struct list_head hash_list;
 	struct request *rq;
 	u64 tag;
+
+	void *buffer;
+	unsigned bufflen;
 };
 
 #define TGT_HASH_ORDER	4
@@ -328,6 +331,7 @@ static void scsi_tgt_transfer_response(struct scsi_cmnd *cmd)
 static int scsi_tgt_init_cmd(struct scsi_cmnd *cmd, gfp_t gfp_mask)
 {
 	struct request *rq = cmd->request;
+	struct scsi_tgt_cmd *tcmd = rq->end_io_data;
 	int count;
 
 	cmd->use_sg = rq->nr_phys_segments;
@@ -337,7 +341,7 @@ static int scsi_tgt_init_cmd(struct scsi_cmnd *cmd, gfp_t gfp_mask)
 
 	cmd->request_bufflen = rq->data_len;
 
-	dprintk("cmd %p addr %p cnt %d %lu\n", cmd, cmd->buffer, cmd->use_sg,
+	dprintk("cmd %p addr %p cnt %d %lu\n", cmd, tcmd->buffer, cmd->use_sg,
 		rq_data_dir(rq));
 	count = blk_rq_map_sg(rq->q, rq, cmd->request_buffer);
 	if (likely(count <= cmd->use_sg)) {
@@ -345,7 +349,7 @@ static int scsi_tgt_init_cmd(struct scsi_cmnd *cmd, gfp_t gfp_mask)
 		return 0;
 	}
 
-	eprintk("cmd %p addr %p cnt %d\n", cmd, cmd->buffer, cmd->use_sg);
+	eprintk("cmd %p addr %p cnt %d\n", cmd, tcmd->buffer, cmd->use_sg);
 	scsi_free_sgtable(cmd->request_buffer, cmd->sglist_len);
 	return -EINVAL;
 }
@@ -356,8 +360,8 @@ static int scsi_map_user_pages(struct scsi_tgt_cmd *tcmd, struct scsi_cmnd *cmd,
 {
 	struct request_queue *q = cmd->request->q;
 	struct request *rq = cmd->request;
-	void *uaddr = cmd->buffer;
-	unsigned int len = cmd->bufflen;
+	void *uaddr = tcmd->buffer;
+	unsigned int len = tcmd->bufflen;
 	struct bio *bio;
 	int err;
 
@@ -425,12 +429,12 @@ send_uspace_err:
 	}
 
 	dprintk("cmd %p request_bufflen %u bufflen %u\n",
-		cmd, cmd->request_bufflen, cmd->bufflen);
+		cmd, cmd->request_bufflen, tcmd->bufflen);
 
 	scsi_free_sgtable(cmd->request_buffer, cmd->sglist_len);
 	bio_list_add(&tcmd->xfer_done_list, cmd->request->bio);
 
-	cmd->buffer += cmd->request_bufflen;
+	tcmd->buffer += cmd->request_bufflen;
 	cmd->offset += cmd->request_bufflen;
 
 	if (!tcmd->xfer_list.head) {
@@ -439,7 +443,7 @@ send_uspace_err:
 	}
 
 	dprintk("cmd2 %p request_bufflen %u bufflen %u\n",
-		cmd, cmd->request_bufflen, cmd->bufflen);
+		cmd, cmd->request_bufflen, tcmd->bufflen);
 
 	bio = bio_list_pop(&tcmd->xfer_list);
 	BUG_ON(!bio);
@@ -525,6 +529,7 @@ int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len,
 	struct Scsi_Host *shost;
 	struct scsi_cmnd *cmd;
 	struct request *rq;
+	struct scsi_tgt_cmd *tcmd;
 	int err = 0;
 
 	dprintk("%d %u %d %u %lx %u\n", host_no, cid, result,
@@ -556,12 +561,12 @@ int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len,
 	 * store the userspace values here, the working values are
 	 * in the request_* values
 	 */
-	cmd->buffer = (void *)uaddr;
-	if (len)
-		cmd->bufflen = len;
+	tcmd = cmd->request->end_io_data;
+	tcmd->buffer = (void *)uaddr;
+	tcmd->bufflen = len;
 	cmd->result = result;
 
-	if (!cmd->bufflen) {
+	if (!tcmd->bufflen) {
 		err = __scsi_tgt_transfer_response(cmd);
 		goto done;
 	}

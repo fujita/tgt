@@ -433,7 +433,7 @@ int srp_cmd_perform(struct iu_entry *iue, struct srp_cmd *cmd)
 	scmd = scsi_host_get_command(shost, data_dir, GFP_KERNEL);
 	BUG_ON(!scmd);
 	scmd->SCp.ptr = (char *) iue;
-	memcpy(scmd->data_cmnd, cmd->cdb, MAX_COMMAND_SIZE);
+	memcpy(scmd->cmnd, cmd->cdb, MAX_COMMAND_SIZE);
 	scmd->request_bufflen = len;
 	scmd->tag = tag;
 	iue->scmd = scmd;

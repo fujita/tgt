@@ -65,9 +65,6 @@ int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun, u64 tag,
 	struct tgt_event *ev;
 	int err, len;
 
-	/* FIXME: we need scsi core to do that. */
-	memcpy(cmd->cmnd, cmd->data_cmnd, MAX_COMMAND_SIZE);
-
 	len = NLMSG_SPACE(sizeof(*ev));
 	/*
 	 * TODO: add MAX_COMMAND_SIZE to ev and add mempool
@@ -122,7 +119,7 @@ int scsi_tgt_uspace_send_tsk_mgmt(int host_no, int function, u64 tag,
 	ev.k.tsk_mgmt_req.function = function;
 	ev.k.tsk_mgmt_req.tag = tag;
 	memcpy(ev.k.tsk_mgmt_req.lun, scsilun, sizeof(ev.k.tsk_mgmt_req.lun));
-	ev.k.tsk_mgmt_req.mid = (u64) data;
+	ev.k.tsk_mgmt_req.mid = (u64) (unsigned long) data;
 
 	dprintk("%d %x %llx %llx\n", host_no, function, (unsigned long long) tag,
 		(unsigned long long) ev.k.tsk_mgmt_req.mid);
