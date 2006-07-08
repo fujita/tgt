@@ -111,7 +111,7 @@ static void iscsi_tcp_tgt_sc_queue(struct iscsi_cmd_task *ctask)
 	scmd = scsi_host_get_command(shost, dir, GFP_ATOMIC);
 	BUG_ON(!scmd);
 	ctask->sc = scmd;
-	memcpy(scmd->data_cmnd, hdr->cdb, MAX_COMMAND_SIZE);
+	memcpy(scmd->cmnd, hdr->cdb, MAX_COMMAND_SIZE);
 	scmd->request_bufflen = be32_to_cpu(hdr->data_length);
 	scmd->SCp.ptr = (void *) ctask;
 	scmd->done = NULL;
