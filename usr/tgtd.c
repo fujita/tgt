@@ -234,7 +234,7 @@ int main(int argc, char **argv)
 		exit(1);
 
 	nr = dl_init(dlinfo);
-	if (nr < nr)
+	if (nr < 0)
 		exit(1);
 
 	pfd = poll_init(nr, nl_fd, ud_fd);

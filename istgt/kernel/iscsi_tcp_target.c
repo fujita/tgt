@@ -445,12 +445,12 @@ static void __iscsi_data_rsp_build(struct iscsi_cmd_task *ctask,
 	if (left <= ctask->conn->max_xmit_dlength) {
 		hdr->flags = ISCSI_FLAG_CMD_FINAL | ISCSI_FLAG_DATA_STATUS;
 
-		if (sc->bufflen < exp_datalen) {
+		if (sc->request_bufflen < exp_datalen) {
 			hdr->flags |= ISCSI_FLAG_CMD_UNDERFLOW;
-			residual = exp_datalen - sc->bufflen;
-		} else if (sc->bufflen > exp_datalen) {
+			residual = exp_datalen - sc->request_bufflen;
+		} else if (sc->request_bufflen > exp_datalen) {
 			hdr->flags |= ISCSI_FLAG_CMD_OVERFLOW;
-			residual = sc->bufflen - exp_datalen;
+			residual = sc->request_bufflen - exp_datalen;
 		} else
 			residual = 0;
 		hdr->residual_count = cpu_to_be32(residual);
@@ -459,7 +459,7 @@ static void __iscsi_data_rsp_build(struct iscsi_cmd_task *ctask,
 		size = ctask->conn->max_xmit_dlength;
 
 	dprintk("%d %d %d %d %d\n", size, left, ctask->conn->max_xmit_dlength,
-		exp_datalen, sc->bufflen);
+		exp_datalen, sc->request_bufflen);
 
 	hton24(hdr->dlength, size);
 	ctask->data_count = ctask->unsol_count = size;
@@ -541,11 +541,10 @@ static int iscsi_tgt_transfer_response(struct scsi_cmnd *scmd,
 {
 	struct iscsi_cmd_task *ctask = (struct iscsi_cmd_task *) scmd->SCp.ptr;
 
-	dprintk("%p %x %x %u %u %u\n", ctask, ctask->hdr->opcode & ISCSI_OPCODE_MASK,
-		ctask->hdr->cdb[0], scmd->request_bufflen,
-		scmd->bufflen, scmd->sc_data_direction);
+	dprintk("%p %x %x %u %u\n", ctask, ctask->hdr->opcode & ISCSI_OPCODE_MASK,
+		ctask->hdr->cdb[0], scmd->request_bufflen, scmd->sc_data_direction);
 
-	if (scmd->sc_data_direction == DMA_FROM_DEVICE && scmd->bufflen) {
+	if (scmd->sc_data_direction == DMA_FROM_DEVICE && scmd->request_bufflen) {
 		/* We've already sent data in transfer_data. */
 		iscsi_tcp_tgt_ctask_cleanup(ctask);
 		done(scmd);
@@ -577,6 +576,9 @@ static int iscsi_tgt_transfer_data(struct scsi_cmnd *sc,
 	dprintk("%p %x %x %u %u\n", ctask, ctask->hdr->opcode & ISCSI_OPCODE_MASK,
 		ctask->hdr->cdb[0], sc->request_bufflen, sc->sc_data_direction);
 
+	/* We cannot handle this. */
+	BUG_ON(sc->offset);
+
 	sc->done = done;
 	if (sc->sc_data_direction == DMA_TO_DEVICE) {
 		struct iscsi_tcp_conn *tcp_conn = ctask->conn->dd_data;
@@ -590,7 +592,7 @@ static int iscsi_tgt_transfer_data(struct scsi_cmnd *sc,
 	} else {
 		tcp_ctask->sg_count = 0;
 		tcp_ctask->data_offset = 0;
-		ctask->unsol_count = sc->bufflen;
+		ctask->unsol_count = sc->request_bufflen;
 		tcp_ctask->sg = sc->request_buffer;
 		tcp_ctask->xmstate = XMSTATE_UNS_INIT | XMSTATE_UNS_HDR;
 		iscsi_tcp_tgt_ctask_xmitqueue(ctask);
