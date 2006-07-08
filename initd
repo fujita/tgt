@@ -1,31 +1,85 @@
 #!/bin/bash
 #
-# Temporary script to start tgt and istgt
+# Temporary script to start tgt
 #
 
 PATH=/sbin:/bin:/usr/sbin:/usr/bin
 MEM_SIZE=1048576
 export LD_LIBRARY_PATH=${PWD}/usr:${PWD}/istgt/usr:${PWD}/ibmvstgt/usr:${LD_LIBRARY_PATH}
 
-if [ -f ${PWD}/istgt/kernel/iscsi_tcp_tgt.ko ] ; then
-	TARGET=istgt
-fi
+#
+# Need to select one
+#
+#TARGET=ibmvio
+TARGET=iscsi_tcp
+
+#
+# IBM pSeries VIO server
+#
+start_ibmvio()
+{
+	insmod ${PWD}/ibmvstgt/kernel/libsrp.ko
+	insmod ${PWD}/ibmvstgt/kernel/ibmvstgt.ko
+}
+
+stop_ibmvio()
+{
+	rmmod libsrp
+	rmmod ibmvstgt
+}
+
+
+#
+# iSCSI stuff
+#
+start_iscsi_core()
+{
+	insmod ${PWD}/istgt/kernel/scsi_transport_iscsi.ko
+	insmod ${PWD}/istgt/kernel/libiscsi.ko
+}
+
+stop_iscsi_core()
+{
+	rmmod libiscsi
+	rmmod scsi_transport_iscsi
+}
+
+start_iscsi_tcp()
+{
+	modprobe -q crc32c
+
+	start_iscsi_core
+
+	insmod ${PWD}/istgt/kernel/iscsi_tcp.ko
+	insmod ${PWD}/istgt/kernel/iscsi_tcp_target.ko
+	${PWD}/istgt/usr/istgtd
+}
+
+stop_iscsi_tcp()
+{
+	rmmod iscsi_tcp_target
+	rmmod iscsi_tcp
+}
+
+start_iscsi_iser()
+{
+    	start_iscsi_core
+}
 
 start_server()
 {
 	insmod ${PWD}/kernel/scsi_tgt.ko
 
-	if [ "$TARGET" = "istgt" ] ; then
-		modprobe -q crc32c
-		insmod ${PWD}/istgt/kernel/scsi_transport_iscsi.ko
-		insmod ${PWD}/istgt/kernel/libiscsi.ko
-		insmod ${PWD}/istgt/kernel/iscsi_tcp.ko
-		insmod ${PWD}/istgt/kernel/iscsi_tcp_tgt.ko
-		${PWD}/istgt/usr/istgtd
-	else
-		insmod ${PWD}/ibmvstgt/kernel/libsrp.ko
-		insmod ${PWD}/ibmvstgt/kernel/ibmvstgt.ko
-	fi
+	case "$TARGET" in
+	    iscsi_tcp)
+		start_iscsi_tcp
+		;;
+	    ibmvio)
+		start_ibmvio
+		;;
+	    *)
+		;;
+	esac
 
 	${PWD}/usr/tgtd -d0
 
@@ -34,26 +88,32 @@ start_server()
 	
 stop_server()
 {
-	if [ "$TARGET" = "istgt" ] ; then
+	case "$TARGET" in
+	    iscsi_tcp)
 		${PWD}/usr/tgtadm --driver istgt --op delete
 		killall -9 istgtd
-	else
+		;;
+	    ibmvio)
 		${PWD}/usr/tgtadm --driver ibmvstgt --op delete
-	fi
+		;;
+	    *)
+		;;
+	esac
 
 	killall -9 tgtd
 
 	sleep 1
 
-	if [ "$TARGET" = "istgt" ] ; then
-		rmmod iscsi_tcp_tgt
-		rmmod iscsi_tcp
-		rmmod libiscsi
-		rmmod scsi_transport_iscsi
-	else
-		rmmod libsrp
-		rmmod ibmvstgt
-	fi
+	case "$TARGET" in
+	    iscsi_tcp)
+		stop_iscsi_tcp
+		;;
+	    ibmvio)
+		stop_ibmvio
+		;;
+	    *)
+		;;
+	esac
 
 	rmmod scsi_tgt
 }
