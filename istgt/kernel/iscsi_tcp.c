@@ -53,11 +53,16 @@ MODULE_VERSION(ISCSI_TCP_VERSION);
 /* #define DEBUG_TCP */
 #define DEBUG_ASSERT
 
-#ifdef DEBUG_TCP
-#define debug_tcp(fmt...) printk(KERN_INFO "tcp: " fmt)
-#else
-#define debug_tcp(fmt...)
-#endif
+/* #ifdef DEBUG_TCP */
+/* #define debug_tcp(fmt...) printk(KERN_INFO "tcp: " fmt) */
+/* #else */
+/* #define debug_tcp(fmt...) */
+/* #endif */
+
+#define debug_tcp(fmt, args...)					\
+do {								\
+	printk("%s(%d) " fmt, __FUNCTION__, __LINE__, ##args);	\
+} while (0)
 
 #ifndef DEBUG_ASSERT
 #ifdef BUG_ON

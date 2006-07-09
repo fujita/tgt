@@ -356,22 +356,23 @@ static void iscsi_handle_data_out_cmd(struct iscsi_conn *conn)
 	struct iscsi_tcp_conn *tcp_conn = conn->dd_data;
 	struct iscsi_cmd_task *ctask = tcp_conn->in.ctask;
 	struct iscsi_tcp_cmd_task *tcp_ctask = ctask->dd_data;
+	struct iscsi_hdr *hdr = (struct iscsi_hdr *) ctask->hdr;
 
 	BUG_ON(ctask->data_count);
-	tcp_ctask->data_offset += ntoh24(tcp_conn->in.hdr->dlength);
+	tcp_ctask->data_offset += ntoh24(hdr->dlength);
 
-	dprintk("%p %x %u %u %u %u %u\n", ctask, tcp_conn->in.hdr->flags,
+	dprintk("%p %x %u %u %u %u %u\n", ctask, hdr->flags,
 		tcp_ctask->r2t_data_count, ctask->unsol_count,
 		ctask->total_length, ctask->imm_count, tcp_ctask->data_offset);
 
-	if (tcp_conn->in.hdr->ttt == cpu_to_be32(ISCSI_RESERVED_TAG)) {
-		tcp_ctask->r2t_data_count -= ntoh24(tcp_conn->in.hdr->dlength);
-		if (tcp_conn->in.hdr->flags & ISCSI_FLAG_CMD_FINAL) {
+	if (hdr->ttt == cpu_to_be32(ISCSI_RESERVED_TAG)) {
+		tcp_ctask->r2t_data_count -= ntoh24(hdr->dlength);
+		if (hdr->flags & ISCSI_FLAG_CMD_FINAL) {
 			ctask->unsol_count = 0;
 			iscsi_cmd_data_done(ctask);
 		}
 	} else {
-		if (tcp_conn->in.hdr->flags & ISCSI_FLAG_CMD_FINAL)
+		if (hdr->flags & ISCSI_FLAG_CMD_FINAL)
 			iscsi_cmd_data_done(ctask);
 	}
 }
@@ -380,9 +381,10 @@ static int iscsi_tcp_tgt_data_recv(struct iscsi_conn *conn)
 {
 	struct iscsi_tcp_conn *tcp_conn = conn->dd_data;
 	struct iscsi_cmd_task *ctask = tcp_conn->in.ctask;
+	struct iscsi_cmd *hdr = ctask->hdr;
 	int rc = 0, opcode;
 
-	opcode = tcp_conn->in.hdr->opcode & ISCSI_OPCODE_MASK;
+	opcode = hdr->opcode & ISCSI_OPCODE_MASK;
 	dprintk("opcode 0x%x offset %d copy %d datalen %d\n",
 		opcode, tcp_conn->in.offset, tcp_conn->in.copy,
 		tcp_conn->in.datalen);
@@ -394,7 +396,7 @@ static int iscsi_tcp_tgt_data_recv(struct iscsi_conn *conn)
 			struct iscsi_tcp_cmd_task *tcp_ctask = ctask->dd_data;
 
 			dprintk("%p %x %u %u %u %u %u\n", ctask,
-				tcp_conn->in.hdr->flags,
+				hdr->flags,
 				tcp_ctask->r2t_data_count,
 				ctask->unsol_count,
 				ctask->total_length,
@@ -562,9 +564,9 @@ static void recvworker(void *data)
 	struct iscsi_tcp_conn *tcp_conn = conn->dd_data;
 	struct sock *sk = tcp_conn->sock->sk;
 
-	bh_lock_sock(sk);
+	lock_sock(sk);
 	sk->sk_data_ready(sk, 0);
-	bh_unlock_sock(sk);
+	release_sock(sk);
 }
 
 static int iscsi_tgt_transfer_data(struct scsi_cmnd *sc,
