@@ -151,7 +151,7 @@ static void iscsi_r2t_build(struct iscsi_cmd_task *ctask)
 	hdr->itt = ctask->itt;
 	hdr->r2tsn = cpu_to_be32(tcp_ctask->exp_r2tsn++);
 	hdr->data_offset = cpu_to_be32(tcp_ctask->data_offset);
-	hdr->ttt = (unsigned long) ctask; /* FIXME */
+	hdr->ttt = (unsigned long) ctask;
 	length = min(tcp_ctask->r2t_data_count, session->max_burst);
 	hdr->data_length = cpu_to_be32(length);
 	tcp_ctask->r2t_data_count -= length;
@@ -310,7 +310,7 @@ static int iscsi_tcp_tgt_hdr_recv(struct iscsi_conn *conn)
 	case ISCSI_OP_SCSI_DATA_OUT:
 		ctask = hashlist_find(cls_session, hdr->itt);
 		if (!ctask) {
-			eprintk("Cannot find %x\n", ctask->hdr->itt);
+			eprintk("Cannot find %x\n", hdr->itt);
 			rc = ISCSI_ERR_NO_SCSI_CMD;
 			break;
 		}
