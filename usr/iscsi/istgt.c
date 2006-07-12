@@ -41,17 +41,14 @@
 
 enum {
 	POLL_LISTEN,
-	POLL_IPC = POLL_LISTEN + LISTEN_MAX,
-	POLL_NL,
+	POLL_NL = POLL_LISTEN + LISTEN_MAX,
 	POLL_INCOMING,
 	POLL_MAX = POLL_INCOMING + INCOMING_MAX,
 };
 
-static struct pollfd pfd[POLL_MAX];
 static struct connection *incoming[INCOMING_MAX];
-static char program_name[] = "istgt";
 uint64_t thandle;
-int nl_fd, ipc_fd;
+int nl_fd;
 
 static void set_non_blocking(int fd)
 {
@@ -169,7 +166,7 @@ out:
 	return;
 }
 
-static void poll_event(struct pollfd *pfds)
+void iscsi_event_handle(struct pollfd *pfds)
 {
 	struct connection *conn;
 	struct pollfd *pfd;
@@ -179,12 +176,6 @@ static void poll_event(struct pollfd *pfds)
 		if (pfds[POLL_LISTEN + i].revents)
 			accept_connection(pfds, pfds[POLL_LISTEN + i].fd);
 	}
-
-/* 	if (pfd[POLL_NL].revents) */
-/* 		handle_iscsi_events(nl_fd); */
-
-	if (pfds[POLL_IPC].revents)
-		ipc_event();
 
 	for (i = 0; i < INCOMING_MAX; i++) {
 		conn = incoming[i];
@@ -318,14 +309,12 @@ static void poll_event(struct pollfd *pfds)
 	}
 }
 
-static void event_loop(void)
+int iscsi_poll_init(struct pollfd *pfd)
 {
-	int i, err;
+	int i;
 
 	pfd[POLL_NL].fd = nl_fd;
 	pfd[POLL_NL].events = POLLIN;
-	pfd[POLL_IPC].fd = ipc_fd;
-	pfd[POLL_IPC].events = POLLIN;
 
 	listen_socket_create(pfd + POLL_LISTEN);
 
@@ -335,59 +324,13 @@ static void event_loop(void)
 		incoming[i] = NULL;
 	}
 
-retry:
-	err = poll(pfd, POLL_MAX, -1);
-	if (err < 0) {
-		if (errno != EINTR) {
-			eprintf("%d %d\n", err, errno);
-			exit(1);
-		} else
-			goto retry;
-	}
-
-	poll_event(pfd);
-	goto retry;
-}
-
-static int daemon_init(void)
-{
-	pid_t pid;
-
-	pid = fork();
-	if (pid < 0)
-		return -ENOMEM;
-	else if (pid)
-		exit(0);
-
-	setsid();
-	chdir("/");
-	close(0);
-	open("/dev/null", O_RDWR);
-	dup2(0, 1);
-	dup2(0, 2);
-
 	return 0;
 }
 
-int main(int argc, char **argv)
+int iscsi_init(int *npfd)
 {
-	int err, is_daemon = 1, is_debug = 1;
-
-	if (is_daemon && daemon_init())
-		exit(1);
-
-	if (log_init(program_name, LOG_SPACE_SIZE, is_daemon, is_debug))
-		exit(1);
-
-	err = nl_init();
-	if (err)
-		exit(1);
-
-	err = ipc_init();
-	if (err)
-		exit(1);
-
-	event_loop();
+	iscsi_nl_init();
+	*npfd = POLL_MAX;
 
 	return 0;
 }

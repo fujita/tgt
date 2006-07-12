@@ -36,24 +36,25 @@
 #include <scsi/scsi_tgt_if.h>
 
 #include "tgtd.h"
-
-extern int tgt_sysfs_init(void);
+#include "driver.h"
 
 enum {
 	POLL_NL, /* netlink socket between kernel and user space */
 	POLL_UD, /* unix domain socket for tgtdadm */
+	POLL_END,
 };
+
+static char program_name[] = "tgtd";
 
 static struct option const long_options[] =
 {
+	{"drivers", required_argument, 0, 'p'},
 	{"foreground", no_argument, 0, 'f'},
 	{"debug", required_argument, 0, 'd'},
 	{"version", no_argument, 0, 'v'},
 	{"help", no_argument, 0, 'h'},
 	{0, 0, 0, 0},
 };
-
-static char program_name[] = "tgtd";
 
 static int daemon_init(void)
 {
@@ -123,79 +124,124 @@ static void tgtd_init(void)
 	close(fd);
 }
 
-/* TODO: rewrite makeshift poll code */
-
-static void event_loop(struct driver_info *dlinfo, struct pollfd *pfd, int nr_dls)
+static void event_loop(struct pollfd *pfd, int npfd, int timeout)
 {
-	int err, i, poll_max = (nr_dls + 1) * POLLS_PER_DRV;
-	void (* fn)(struct pollfd *, int);
+	int nevent, i;
+	struct tgt_driver *d;
 
-	while (1) {
-		if ((err = poll(pfd, poll_max, -1)) < 0) {
-			if (errno != EINTR) {
-				eprintf("%d %d\n", err, errno);
-				exit(1);
-			}
-			continue;
+retry:
+	/*
+	 * TODO: replace something efficient than poll.
+	 */
+	nevent = poll(pfd, npfd, timeout);
+	if (nevent < 0) {
+		if (errno != EINTR) {
+			eprintf("%s\n", strerror(errno));
+			exit(1);
 		}
-
-		if (pfd[POLL_NL].revents) {
-			nl_event_handle(pfd[POLL_NL].fd);
-			err--;
-		}
-
-		if (pfd[POLL_UD].revents) {
-			ipc_event_handle(dlinfo, pfd[POLL_UD].fd);
-			err--;
-		}
-
-		if (!err)
-			continue;
-
-		for (i = 0; i < nr_dls; i++) {
-			fn = dl_fn(dlinfo, i, DL_FN_POLL_EVENT);
-			if (fn)
-				fn(pfd + ((i + 1) * POLLS_PER_DRV), POLLS_PER_DRV);
-		}
+		goto retry;
+	} else if (nevent == 0) {
+		/*
+		 * TODO: need kinda scheduling stuff like open-iscsi here.
+		 */
+		goto retry;
 	}
+
+	if (pfd[POLL_NL].revents) {
+		dprintf("nl event\n");
+		nl_event_handle(pfd[POLL_NL].fd);
+		nevent--;
+	}
+
+	if (pfd[POLL_UD].revents) {
+		dprintf("ipc event\n");
+		ipc_event_handle(pfd[POLL_UD].fd);
+		nevent--;
+	}
+
+	if (!nevent)
+		goto retry;
+
+	for (i = 0; tgt_drivers[i]; i++) {
+		dprintf("lld event\n");
+		d = tgt_drivers[i];
+		d->event_handle(pfd + d->pfd_index);
+	}
+
+	goto retry;
 }
 
-static struct pollfd * poll_init(int nr, int nl_fd, int ud_fd)
+static struct pollfd *poll_init(int npfd, int nl_fd, int ud_fd)
 {
+	struct tgt_driver *d;
 	struct pollfd *pfd;
-	void (* fn)(struct pollfd *, int);
-	int i;
+	int i, idx = POLL_END;
 
-	pfd = calloc((nr + 1) * POLLS_PER_DRV, sizeof(struct pollfd));
-	if (!pfd) {
-		eprintf("Out of memory\n");
-		exit(1);
-	}
+	pfd = calloc(npfd, sizeof(struct pollfd));
+	if (!pfd)
+		return NULL;
 
 	pfd[POLL_NL].fd = nl_fd;
 	pfd[POLL_NL].events = POLLIN;
 	pfd[POLL_UD].fd = ud_fd;
 	pfd[POLL_UD].events = POLLIN;
 
-	for (i = 0; i < nr; i++) {
-		fn = dl_fn(dlinfo, i, DL_FN_POLL_INIT);
-		if (fn)
-			fn(pfd + (i + 1) * POLLS_PER_DRV, POLLS_PER_DRV);
+	for (i = 0; tgt_drivers[i]; i++) {
+		d = tgt_drivers[i];
+		if (d->enable && d->npfd) {
+			d->pfd_index = idx;
+			d->poll_init(pfd + idx);
+			idx += d->npfd;
+		}
 	}
 
 	return pfd;
 }
 
+static int enable_drivers(char *data, int *npfd)
+{
+	char *list, *p;
+	int index, err, np, ndriver = 0;
+
+	list = strdup(data);
+	if (!list)
+		return 0;
+
+	p = strtok(list, ",");
+	while (p) {
+		index = get_driver_index(p);
+		if (index >= 0) {
+			np = 0;
+			if (tgt_drivers[index]->init) {
+				err = tgt_drivers[index]->init(&np);
+				if (err)
+					continue;
+			}
+			tgt_drivers[index]->enable = 1;
+			tgt_drivers[index]->npfd = np;
+			ndriver++;
+			*npfd += np;
+		}
+		p = strtok(NULL, ",");
+	}
+	free(list);
+
+	return ndriver;
+}
+
 int main(int argc, char **argv)
 {
 	struct pollfd *pfd;
-	int ch, longindex, nr;
+	int err, ch, longindex, ndriver = 0, npfd = POLL_END;
 	int is_daemon = 1, is_debug = 1;
-	int nl_fd, ud_fd;
+	int nl_fd, ud_fd, timeout = -1;
 
-	while ((ch = getopt_long(argc, argv, "fd:vh", long_options,
+	while ((ch = getopt_long(argc, argv, "s:d:fd:vh", long_options,
 				 &longindex)) >= 0) {
 		switch (ch) {
+		case 'p':
+			ndriver = enable_drivers(optarg, &npfd);
+			break;
 		case 'f':
 			is_daemon = 0;
 			break;
@@ -214,15 +260,18 @@ int main(int argc, char **argv)
 		}
 	}
 
+	if (!ndriver) {
+		printf("No driver!\n");
+		exit(1);
+	}
+
 	if (is_daemon && daemon_init())
 		exit(1);
 
 	tgtd_init();
 
-	if (log_init(program_name, LOG_SPACE_SIZE, is_daemon, is_debug))
-		exit(1);
-
-	if (tgt_sysfs_init())
+	err = log_init(program_name, LOG_SPACE_SIZE, is_daemon, is_debug);
+	if (err)
 		exit(1);
 
 	nl_fd = nl_init();
@@ -233,13 +282,9 @@ int main(int argc, char **argv)
 	if (ud_fd < 0)
 		exit(1);
 
-	nr = dl_init(dlinfo);
-	if (nr < 0)
-		exit(1);
+	pfd = poll_init(npfd, nl_fd, ud_fd);
 
-	pfd = poll_init(nr, nl_fd, ud_fd);
-
-	event_loop(dlinfo, pfd, nr);
+	event_loop(pfd, npfd, timeout);
 
 	return 0;
 }

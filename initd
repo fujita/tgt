@@ -5,7 +5,6 @@
 
 PATH=/sbin:/bin:/usr/sbin:/usr/bin
 MEM_SIZE=1048576
-export LD_LIBRARY_PATH=${PWD}/usr:${PWD}/istgt/usr:${PWD}/ibmvstgt/usr:${LD_LIBRARY_PATH}
 
 #
 # Need to select one
@@ -52,7 +51,6 @@ start_iscsi_tcp()
 
 	insmod ${PWD}/istgt/kernel/iscsi_tcp.ko
 	insmod ${PWD}/istgt/kernel/iscsi_tcp_target.ko
-	${PWD}/istgt/usr/istgtd
 }
 
 stop_iscsi_tcp()
@@ -81,7 +79,7 @@ start_server()
 		;;
 	esac
 
-	${PWD}/usr/tgtd -d0
+	${PWD}/usr/tgtd -d8 --drivers iscsi
 
 	sleep 1
 }

@@ -16,6 +16,8 @@
 
 #include "iscsid.h"
 
+struct qelem sessions_list = LIST_HEAD_INIT(sessions_list);
+
 static struct session *session_alloc(int tid)
 {
 	struct session *session;
@@ -34,6 +36,18 @@ static struct session *session_alloc(int tid)
 	INIT_LIST_HEAD(&session->conn_list);
 
 	return session;
+}
+
+int iscsi_target_bind(int hostno)
+{
+	struct session *session;
+
+	list_for_each_entry(session, &sessions_list, hlist) {
+		if (session->hostno == hostno)
+			return session->target->tid;
+	}
+
+	return -ENOENT;
 }
 
 struct session *session_find_name(int tid, const char *iname, uint8_t *isid)
@@ -101,7 +115,7 @@ void session_create(struct connection *conn)
 	ki->create_session(thandle, conn->exp_cmd_sn, &session->ksid,
 			   &session->hostno);
 
-	target_bind(session->target->tid, session->hostno);
+	insque(&session->hlist, &sessions_list);
 }
 
 void session_remove(struct session *session)
@@ -120,6 +134,8 @@ void session_remove(struct session *session)
 		remque(&session->slist);
 /* 		session->target->nr_sessions--; */
 	}
+
+	remque(&session->hlist);
 
 	free(session->initiator);
 	free(session);

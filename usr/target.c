@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <poll.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
@@ -39,7 +40,7 @@
 
 #include "tgtd.h"
 #include "tgtadm.h"
-#include "tgt_sysfs.h"
+#include "driver.h"
 
 /* better if we can include the followings in kernel header files. */
 #define	MSG_SIMPLE_TAG	0x20
@@ -251,10 +252,6 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 		return err;
 	}
 
-	err = tgt_device_dir_create(tid, dev_id);
-	if (err < 0)
-		goto close_dev_fd;
-
 	if (dev_id >= target->max_device)
 		resize_device_table(target, dev_id);
 
@@ -311,8 +308,6 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 		munmap((void *) (unsigned long) device->addr, device->size);
 
 	close(device->fd);
-
-	tgt_device_dir_delete(tid, dev_id);
 
 	list_del(&device->dlist);
 
@@ -393,12 +388,25 @@ static void cmd_queue(struct tgt_event *ev_req, int nl_fd)
 	uint64_t offset, dev_id;
 	uint8_t rw = 0, mmapped = 0;
 	unsigned long uaddr = 0;
+	int hostno = ev_req->k.cmd_req.host_no;
 
-	target = host_to_target(ev_req->k.cmd_req.host_no);
+	target = host_to_target(hostno);
 	if (!target) {
-		eprintf("%d is not bind to any target\n",
-			ev_req->k.cmd_req.host_no);
-		return;
+		int tid, lid = 0, err = -1;
+		if (tgt_drivers[lid]->target_bind) {
+			tid = tgt_drivers[0]->target_bind(hostno);
+			if (tid >= 0) {
+				err = tgt_target_bind(tid, hostno, lid);
+				if (!err)
+					target = host_to_target(hostno);
+			}
+		}
+
+		if (!target) {
+			eprintf("%d is not bind to any target\n",
+				ev_req->k.cmd_req.host_no);
+			return;
+		}
 	}
 
 	/* TODO: preallocate cmd */
@@ -743,8 +751,6 @@ void nl_event_handle(int nl_fd)
 
 int tgt_target_bind(int tid, int host_no, int lid)
 {
-	int err;
-
 	if (!tgtt[tid]) {
 		eprintf("target is not found %d\n", tid);
 		return -EINVAL;
@@ -755,10 +761,6 @@ int tgt_target_bind(int tid, int host_no, int lid)
 		eprintf("host is already binded %d %d\n", tid, host_no);
 		return -EINVAL;
 	}
-
-	err = tgt_target_dir_attr_create(tid, "hostno", "%d\n", host_no);
-	if (err < 0)
-		return -EINVAL;
 
 	eprintf("Succeed to bind the target %d to the scsi host %d\n",
 		tid, host_no);
@@ -802,18 +804,12 @@ int tgt_target_create(int tid)
 	}
 	target->max_device = DEFAULT_NR_DEVICE;
 
-	err = tgt_target_dir_create(tid);
-	if (err < 0)
-		goto free_device_table;
-
 	tgt_cmd_queue_init(&target->cmd_queue);
 
 	eprintf("Succeed to create a new target %d\n", tid);
 	tgtt[tid] = target;
 	return 0;
 
-free_device_table:
-	free(target->devt);
 free_target:
 	free(target);
 	return err;
@@ -835,9 +831,6 @@ int tgt_target_destroy(int tid)
 		return -EBUSY;
 
 	free(target->devt);
-
-	tgt_target_dir_attr_delete(tid, "hostno");
-	tgt_target_dir_delete(tid);
 
 	tgtt[tid] = NULL;
 	free(target);

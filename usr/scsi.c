@@ -24,8 +24,10 @@
 #include <scsi/scsi.h>
 #include <scsi/scsi_tgt_if.h>
 #include <sys/mman.h>
+#include <poll.h>
 
 #include "tgtd.h"
+#include "driver.h"
 
 #define BLK_SHIFT	9
 
@@ -255,7 +257,8 @@ static int inquiry(int lid, struct tgt_device *dev, int host_no,
 		   uint8_t *lun_buf, uint8_t *scb, uint8_t *data, int *len)
 {
 	typeof(__inquiry) *fn;
-	fn = dl_fn(dlinfo, lid, DL_FN_SCSI_INQUIRY) ? : __inquiry;
+
+	fn = tgt_drivers[lid]->scsi_inquiry ? : __inquiry;
 	return fn(dev, host_no, lun_buf, scb, data, len);
 }
 
@@ -308,7 +311,7 @@ static int report_luns(int lid, struct list_head *dev_list, uint8_t *lun_buf,
 		       uint8_t *scb, uint8_t *p, int *len)
 {
 	typeof(__report_luns) *fn;
-	fn = dl_fn(dlinfo, lid, DL_FN_SCSI_REPORT_LUNS) ? : __report_luns;
+	fn = tgt_drivers[lid]->scsi_report_luns ? : __report_luns;
 	return fn(dev_list, lun_buf, scb, p, len);
 }
 
@@ -478,7 +481,7 @@ static uint64_t __scsi_get_devid(uint8_t *p)
 uint64_t scsi_get_devid(int lid, uint8_t *p)
 {
 	typeof(__scsi_get_devid) *fn;
-	fn = dl_fn(dlinfo, lid, DL_FN_SCSI_LUN_TO_INT) ? : __scsi_get_devid;
+	fn = tgt_drivers[lid]->scsi_get_lun ? : __scsi_get_devid;
 	return fn(p);
 }
 

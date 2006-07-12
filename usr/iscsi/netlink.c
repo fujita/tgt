@@ -41,33 +41,6 @@
 
 static struct sockaddr_nl saddr, daddr;
 
-#if 0
-void async_event(char *data)
-{
-	struct tgt_event *ev = (struct tgt_event *) data;
-	struct iet_msg *msg = (struct iet_msg *) ev->data;
-	struct session *session;
-
-	eprintf("%u %u\n", msg->msg_type, msg->result);
-
-	switch (msg->k.conn_state_change.state) {
-	case E_CONN_CLOSE:
-		if (!(session = session_find_id(msg->k.conn_state_change.tid,
-						msg->k.conn_state_change.sid))) {
-			eprintf("session %#" PRIx64 " not found?",
-				msg->k.conn_state_change.sid);
-		}
-
-		if (!--session->conn_cnt)
-			session_remove(session);
-		break;
-	default:
-		eprintf("%u\n", msg->k.conn_state_change.state);
-		break;
-	}
-}
-#endif
-
 static int __nl_read(int fd, void *data, int size, int flags)
 {
 	struct sockaddr_nl saddr;
@@ -344,7 +317,7 @@ out:
 	return err;
 }
 
-int nl_init(void)
+int iscsi_nl_init(void)
 {
 	int err, rsize = 256 * 1024;
 
@@ -357,6 +330,7 @@ int nl_init(void)
 		eprintf("Fail to create the netlink socket %d\n", errno);
 		return err;
 	}
+	eprintf("create the netlink socket %d\n", nl_fd);
 
 	err = setsockopt(nl_fd, SOL_SOCKET, SO_RCVBUF, &rsize, sizeof(rsize));
 	if (err) {
@@ -368,17 +342,18 @@ int nl_init(void)
 	saddr.nl_family = AF_NETLINK;
 	saddr.nl_pid = getpid();
 	saddr.nl_groups = 0; /* not in mcast groups */
-	err = bind(nl_fd, (struct sockaddr *) &saddr, sizeof(saddr));
-	if (err) {
-		eprintf("can not bind NETLINK_ISCSI socket %d\n", errno);
-		close(nl_fd);
-		return err;
-	}
+/* 	err = bind(nl_fd, (struct sockaddr *) &saddr, sizeof(saddr)); */
+/* 	if (err) { */
+/* 		eprintf("can not bind NETLINK_ISCSI socket %d\n", errno); */
+/* 		close(nl_fd); */
+/* 		return err; */
+/* 	} */
 
 	memset(&daddr, 0, sizeof(daddr));
 	daddr.nl_family = AF_NETLINK;
 	daddr.nl_pid = 0; /* kernel */
 	daddr.nl_groups = 0; /* unicast */
+	eprintf("create the netlink socket %d %d\n", nl_fd, err);
 
 	return err;
 }

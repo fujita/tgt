@@ -27,7 +27,7 @@
 #define DIGEST_CRC32C           (1 << 1)
 
 extern uint64_t thandle;
-extern int nl_fd, ipc_fd;
+extern int nl_fd;
 
 #define sid64(isid, tsih)					\
 ({								\
@@ -51,6 +51,7 @@ struct PDU {
 
 struct session {
 	struct qelem slist;
+	struct qelem hlist;
 
 	char *initiator;
 	struct target *target;
@@ -187,6 +188,7 @@ extern void text_key_add(struct connection *conn, char *key, char *value);
 /* session.c */
 extern struct session *session_find_name(int tid, const char *iname, uint8_t *isid);
 extern struct session *session_find_id(int tid, uint64_t sid);
+extern struct session *session_find_hostno(int hostno);
 extern void session_create(struct connection *conn);
 extern void session_remove(struct session *session);
 
@@ -225,7 +227,7 @@ struct iscsi_kernel_interface {
 			  uint32_t cid, int flag);
 };
 
-extern int nl_init(void);
+extern int iscsi_nl_init(void);
 
 extern struct iscsi_kernel_interface *ki;
 

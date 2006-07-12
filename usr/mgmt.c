@@ -40,6 +40,7 @@
 #include "tgtd.h"
 #include "log.h"
 #include "tgtadm.h"
+#include "driver.h"
 
 static void device_create_parser(char *args, char **path, char **devtype)
 {
@@ -65,7 +66,7 @@ static void device_create_parser(char *args, char **path, char **devtype)
 	}
 }
 
-static int target_mgmt(struct tgtadm_req *req, char *params,
+static int target_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 		       char *rbuf, int *rlen)
 {
 	int err = -EINVAL;
@@ -73,12 +74,16 @@ static int target_mgmt(struct tgtadm_req *req, char *params,
 	switch (req->op) {
 	case OP_NEW:
 		err = tgt_target_create(req->tid);
+		if (!err)
+			tgt_drivers[lld_no]->target_create(req->tid, params);
 		break;
 	case OP_DELETE:
 		err = tgt_target_destroy(req->tid);
+		if (!err)
+			tgt_drivers[lld_no]->target_destroy(req->tid);
 		break;
 	case OP_BIND:
-		err = tgt_target_bind(req->tid, req->host_no, req->typeid);
+		err = tgt_target_bind(req->tid, req->host_no, lld_no);
 		break;
 	default:
 		break;
@@ -87,7 +92,7 @@ static int target_mgmt(struct tgtadm_req *req, char *params,
 	return err;
 }
 
-static int device_mgmt(struct tgtadm_req *req, char *params,
+static int device_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 		       char *rbuf, int *rlen)
 {
 	int err = -EINVAL;
@@ -112,7 +117,7 @@ static int device_mgmt(struct tgtadm_req *req, char *params,
 	return err;
 }
 
-int tgt_mgmt(char *sbuf, char *rbuf)
+int tgt_mgmt(int lld_no, char *sbuf, char *rbuf)
 {
 	struct nlmsghdr *nlh = (struct nlmsghdr *) sbuf;
 	struct tgtadm_req *req;
@@ -124,15 +129,15 @@ int tgt_mgmt(char *sbuf, char *rbuf)
 	params = (char *) req + sizeof(*req);
 
 	dprintf("%d %d %d %d %d %" PRIx64 " %" PRIx64 " %s %d\n",
-		nlh->nlmsg_len,	req->typeid, req->mode, req->op,
+		nlh->nlmsg_len, lld_no, req->mode, req->op,
 		req->tid, req->sid, req->lun, params, getpid());
 
 	switch (req->mode) {
 	case MODE_TARGET:
-		err = target_mgmt(req, params, rbuf, &rlen);
+		err = target_mgmt(lld_no, req, params, rbuf, &rlen);
 		break;
 	case MODE_DEVICE:
-		err = device_mgmt(req, params, rbuf, &rlen);
+		err = device_mgmt(lld_no, req, params, rbuf, &rlen);
 		break;
 	default:
 		break;
@@ -174,7 +179,7 @@ out:
 	return err;
 }
 
-void ipc_event_handle(struct driver_info *dinfo, int accept_fd)
+void ipc_event_handle(int accept_fd)
 {
 	int fd, err;
 	char sbuf[4096], rbuf[4096];
@@ -183,7 +188,7 @@ void ipc_event_handle(struct driver_info *dinfo, int accept_fd)
 	struct msghdr msg;
 	struct tgtadm_res *res;
 	struct tgtadm_req *req;
-	int (*fn) (char *, char *);
+	int lld_no;
 
 	fd = ipc_accept(accept_fd);
 	if (fd < 0) {
@@ -222,16 +227,17 @@ void ipc_event_handle(struct driver_info *dinfo, int accept_fd)
 		goto fail;
 
 	req = NLMSG_DATA(nlh);
-	dprintf("%d %d %d %d %d\n", req->mode, req->typeid, err, nlh->nlmsg_len, fd);
+	dprintf("%d %s %d %d %d\n", req->mode, req->lld, err, nlh->nlmsg_len, fd);
+	lld_no = get_driver_index(req->lld);
+	if (lld_no < 0) {
+		err = -ENOENT;
+		goto fail;
+	}
 
-	err = tgt_mgmt((char *) nlh, rbuf);
+	err = tgt_mgmt(lld_no, (char *) nlh, rbuf);
 	if (err)
 		eprintf("%d %d %d %d %d\n",
-			req->mode, req->typeid, err, nlh->nlmsg_len, fd);
-	fn = dl_fn(dinfo, req->typeid, DL_FN_IPC_MGMT);
-	if (fn)
-		err = fn((char *) nlh, rbuf);
-
+			req->mode, lld_no, err, nlh->nlmsg_len, fd);
 send:
 	err = write(fd, nlh, nlh->nlmsg_len);
 	if (err < 0)

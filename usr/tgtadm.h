@@ -1,7 +1,8 @@
 #ifndef TGTADM_H
 #define TGTADM_H
 
-#define TGT_IPC_NAMESPACE "TGT_IPC_ABSTRACT_NAMESPACE"
+#define TGT_IPC_NAMESPACE	"TGT_IPC_ABSTRACT_NAMESPACE"
+#define TGT_LLD_NAME_LEN	64
 
 enum tgtadm_op {
 	OP_NEW,
@@ -28,7 +29,7 @@ struct tgtadm_req {
 	uint64_t sid;
 	int cid;
 	uint64_t lun;
-	int typeid;
+	char lld[TGT_LLD_NAME_LEN];
 	int host_no;
 	unsigned long addr;
 };
@@ -37,7 +38,5 @@ struct tgtadm_res {
 	int err;
 	unsigned long addr;
 };
-
-extern int tgt_mgmt(char *sbuf, char *rbuf);
 
 #endif

@@ -38,18 +38,22 @@
 #include <linux/types.h>
 #include <linux/netlink.h>
 
+#include "tgtd.h"
 #include "tgtadm.h"
-#include "tgt_sysfs.h"
+#include "driver.h"
 
+#undef eprintf
 #define eprintf(fmt, args...)						\
 do {									\
 	fprintf(stderr, "%s(%d) " fmt, __FUNCTION__, __LINE__, ##args);	\
 } while (0)
 
+#undef dprintf
 #define dprintf eprintf
 
+#define BUFSIZE 4096
+
 static char program_name[] = "tgtadm";
-static char *driver;
 
 static struct option const long_options[] =
 {
@@ -62,7 +66,6 @@ static struct option const long_options[] =
 	{"params", required_argument, NULL, 'p'},
 	{"user", no_argument, NULL, 'u'},
 	{"hostno", required_argument, NULL, 'i'},
-	{"bus", required_argument, NULL, 'b'},
 	{"version", no_argument, NULL, 'v'},
 	{"help", no_argument, NULL, 'h'},
 	{NULL, 0, NULL, 0},
@@ -117,119 +120,6 @@ Linux Target Framework Administration Utility.\n\
 Report bugs to <stgt-devel@lists.berlios.de>.\n");
 	}
 	exit(status == 0 ? 0 : -1);
-}
-
-static int filter(const struct dirent *dir)
-{
-	return strcmp(dir->d_name, ".") && strcmp(dir->d_name, "..");
-}
-
-static void all_devices_destroy(int tid)
-{
-	struct dirent **namelist;
-	char path[PATH_MAX], key[] = "device";
-	int i, nr, err;
-	uint64_t dev_id;
-
-	snprintf(path, sizeof(path), TGT_TARGET_SYSFSDIR "/target%d", tid);
-	nr = scandir(path, &namelist, filter, alphasort);
-	if (!nr)
-		return;
-
-	for (i = 0; i < nr; i++) {
-		if (strncmp(namelist[i]->d_name, key, strlen(key)))
-			continue;
-		dev_id = strtoull(namelist[i]->d_name + strlen(key), NULL, 10);
-		snprintf(path, sizeof(path),
-			 "./usr/tgtadm --driver %s --op delete --tid %d --lun %"
-			 PRIu64, driver, tid, dev_id);
-		err = system(path);
-	}
-
-	for (i = 0; i < nr; i++)
-		free(namelist[i]);
-	free(namelist);
-}
-
-static int tid_to_hostno(int tid)
-{
-	int fd, hostno, err;
-	char path[PATH_MAX], buf[32];
-
-	snprintf(path, sizeof(path), TGT_TARGET_SYSFSDIR "/target%d/hostno", tid);
-	fd = open(path, O_RDONLY);
-	if (fd < 0) {
-		eprintf("Cannot open %s\n", path);
-		return -EINVAL;
-	}
-	err = read(fd, buf, sizeof(buf));
-	close(fd);
-	if (err < 0) {
-		eprintf("Cannot read\n");
-		return -EINVAL;
-	}
-
-	sscanf(buf, "%d\n", &hostno);
-
-	return hostno;
-}
-
-static int hostno_to_name(int hostno, char *buf, int len)
-{
-	int fd, err;
-	char path[PATH_MAX];
-
-	snprintf(path, sizeof(path), "/sys/class/scsi_host/host%d/proc_name",
-		 hostno);
-
-	fd = open(path, O_RDONLY);
-	if (fd < 0) {
-		eprintf("Cannot open %s\n", path);
-		return -EINVAL;
-	}
-	err = read(fd, buf, len);
-	close(fd);
-
-	return strlen(buf);
-}
-
-static int system_mgmt(struct tgtadm_req *req, char *lld)
-{
-	int err = -EINVAL, i, nr, hostno;
-	struct dirent **namelist;
-	char cmd[PATH_MAX], buf[64], *p;
-
-	if (req->op != OP_DELETE)
-		return err;
-
-	nr = scandir(TGT_TARGET_SYSFSDIR, &namelist, filter, alphasort);
-	if (!nr)
-		return -ENOENT;
-
-	for (i = 0; i < nr; i++) {
-		int tid;
-		for (p = namelist[i]->d_name; !isdigit((int) *p); p++)
-			;
-		tid = atoi(p);
-		hostno = tid_to_hostno(tid);
-		if (hostno < 0)
-			continue;
-		hostno_to_name(hostno, buf, sizeof(buf));
-		if (strcmp(buf, lld))
-			continue;
-
-		all_devices_destroy(tid);
-		snprintf(cmd, sizeof(cmd),
-			 "./usr/tgtadm --driver %s --op delete --tid %d",
-			 lld, tid);
-		err = system(cmd);
-	}
-
-	for (i = 0; i < nr; i++)
-		free(namelist[i]);
-	free(namelist);
-
-	return 0;
 }
 
 static int ipc_mgmt_connect(void)
@@ -350,109 +240,23 @@ static int str_to_op(char *str)
 	return op;
 }
 
-static int lldname_to_id(char *name)
-{
-	struct dirent **namelist;
-	int i, nr, id = -EINVAL;
-	char *p;
-
-	nr = scandir(TGT_LLD_SYSFSDIR, &namelist, filter, alphasort);
-	if (!nr)
-		return -EINVAL;
-
-	for (i = 0; i < nr; i++) {
-		p = strchr(namelist[i]->d_name, '-');
-		if (p && !strcmp(name, p + 1)) {
-			*p='\0';
-			id = atoi(namelist[i]->d_name);
-			break;
-		}
-	}
-
-	for (i = 0; i < nr; i++)
-		free(namelist[i]);
-	free(namelist);
-
-	return id;
-}
-
-static int bus_to_host(char *bus)
-{
-	int i, nr, host = -1;
-	char path[PATH_MAX], *p;
-	char key[] = "host";
-	struct dirent **namelist;
-
-	p = strchr(bus, ',');
-	if (!p)
-		return -EINVAL;
-	*(p++) = '\0';
-
-	snprintf(path, sizeof(path), "/sys/bus/%s/devices/%s", bus, p);
-	nr = scandir(path, &namelist, filter, alphasort);
-	if (!nr)
-		return -ENOENT;
-
-	for (i = 0; i < nr; i++) {
-		if (strncmp(namelist[i]->d_name, key, strlen(key)))
-			continue;
-		p = namelist[i]->d_name + strlen(key);
-		host = strtoull(p, NULL, 10);
-	}
-
-	for (i = 0; i < nr; i++)
-		free(namelist[i]);
-	free(namelist);
-
-	return host;
-}
-
-static int lld_id_get(int argc, char **argv)
-{
-	int ch, longindex, id = -EINVAL;
-	char *name = NULL;
-
-	while ((ch = getopt_long(argc, argv, "n:", long_options,
-				 &longindex)) >= 0) {
-		switch (ch) {
-		case 'n':
-			name = optarg;
-			break;
-		}
-	}
-
-	if (name)
-		id = lldname_to_id(name);
-
-	if (id < 0) {
-		eprintf("You must specify the driver name\n");
-		exit(-1);
-	}
-
-	return id;
-}
-
 int main(int argc, char **argv)
 {
 	int ch, longindex;
 	int err = -EINVAL, op = -1, len;
 	int tid = -1;
-	uint32_t cid = 0, set = 0, hostno = 0, lld_id;
+	uint32_t cid = 0, set = 0, hostno = 0;
 	uint64_t sid = 0, lun = 0;
-	char *params = NULL, *lld_name = NULL;
+	char *params = NULL, *lldname = NULL;
 	struct tgtadm_req *req;
-	char sbuf[8192], rbuf[8912];
-
-	lld_id = lld_id_get(argc, argv);
-	if (lld_id < 0)
-		goto out;
+	char sbuf[BUFSIZE], rbuf[BUFSIZE];
 
 	optind = 1;
-	while ((ch = getopt_long(argc, argv, "n:o:t:s:c:l:b:p:uvh",
+	while ((ch = getopt_long(argc, argv, "n:o:t:s:c:l:p:uvh",
 				 long_options, &longindex)) >= 0) {
 		switch (ch) {
 		case 'n':
-			lld_name = optarg;
+			lldname = optarg;
 			break;
 		case 'o':
 			op = str_to_op(optarg);
@@ -477,7 +281,6 @@ int main(int argc, char **argv)
 			hostno = strtol(optarg, NULL, 10);
 			break;
 		case 'b':
-			hostno = bus_to_host(optarg);
 			break;
 		case 'p':
 			params = optarg;
@@ -513,7 +316,7 @@ int main(int argc, char **argv)
 	memset(rbuf, 0, sizeof(rbuf));
 
 	req = (struct tgtadm_req *) sbuf;
-	req->typeid = lld_id;
+	strncpy(req->lld, lldname, sizeof(req->lld));
 	req->mode = set_to_mode(set);
 	req->op = op;
 	req->tid = tid;
@@ -527,12 +330,8 @@ int main(int argc, char **argv)
 		len += strlen(params);
 	}
 
-	if (req->mode == MODE_SYSTEM)
-		err = system_mgmt(req, lld_name);
-	else {
-		err = ipc_mgmt_call(sbuf, len, rbuf);
-		ipc_mgmt_result(rbuf);
-	}
+	err = ipc_mgmt_call(sbuf, len, rbuf);
+	ipc_mgmt_result(rbuf);
 out:
 	return err;
 }
