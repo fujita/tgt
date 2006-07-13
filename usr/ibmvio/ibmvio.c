@@ -264,4 +264,3 @@ uint64_t scsi_lun_to_int(uint8_t *p)
 	else
 		return GETTARGET(lun);
 }
-
