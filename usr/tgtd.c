@@ -199,16 +199,19 @@ static struct pollfd *poll_init(int npfd, int nl_fd, int ud_fd)
 
 static int enable_drivers(char *data, int *npfd)
 {
-	char *list, *p;
+	char *list, *p, *q;
 	int index, err, np, ndriver = 0;
 
-	list = strdup(data);
-	if (!list)
+	p = list = strdup(data);
+	if (!p)
 		return 0;
 
-	p = strtok(list, ",");
 	while (p) {
+		q = strchr(p, ',');
+		if (q)
+			*q++ = '\0';
 		index = get_driver_index(p);
+		p = q;
 		if (index >= 0) {
 			np = 0;
 			if (tgt_drivers[index]->init) {
@@ -221,7 +224,6 @@ static int enable_drivers(char *data, int *npfd)
 			ndriver++;
 			*npfd += np;
 		}
-		p = strtok(NULL, ",");
 	}
 	free(list);
 
