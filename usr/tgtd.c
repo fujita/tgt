@@ -39,8 +39,8 @@
 #include "driver.h"
 
 enum {
-	POLL_IF, /* netlink socket between kernel and user space */
-	POLL_UD, /* unix domain socket for tgtdadm */
+	POLL_KI, /* kernel interface */
+	POLL_IPC, /* unix domain socket for tgtdadm */
 	POLL_END,
 };
 
@@ -147,14 +147,14 @@ retry:
 		goto retry;
 	}
 
-	if (pfd[POLL_IF].revents) {
+	if (pfd[POLL_KI].revents) {
 		kreq_recv();
 		nevent--;
 	}
 
-	if (pfd[POLL_UD].revents) {
+	if (pfd[POLL_IPC].revents) {
 		dprintf("ipc event\n");
-		ipc_event_handle(pfd[POLL_UD].fd);
+		ipc_event_handle(pfd[POLL_IPC].fd);
 		nevent--;
 	}
 
@@ -180,10 +180,10 @@ static struct pollfd *poll_init(int npfd, int nl_fd, int ud_fd)
 	if (!pfd)
 		return NULL;
 
-	pfd[POLL_IF].fd = nl_fd;
-	pfd[POLL_IF].events = POLLIN;
-	pfd[POLL_UD].fd = ud_fd;
-	pfd[POLL_UD].events = POLLIN;
+	pfd[POLL_KI].fd = nl_fd;
+	pfd[POLL_KI].events = POLLIN;
+	pfd[POLL_IPC].fd = ud_fd;
+	pfd[POLL_IPC].events = POLLIN;
 
 	for (i = 0; tgt_drivers[i]; i++) {
 		d = tgt_drivers[i];
@@ -235,7 +235,7 @@ int main(int argc, char **argv)
 	struct pollfd *pfd;
 	int err, ch, longindex, ndriver = 0, npfd = POLL_END;
 	int is_daemon = 1, is_debug = 1;
-	int if_fd, ud_fd, timeout = -1;
+	int ki_fd, ipc_fd, timeout = -1;
 
 	while ((ch = getopt_long(argc, argv, "s:d:fd:vh", long_options,
 				 &longindex)) >= 0) {
@@ -275,15 +275,15 @@ int main(int argc, char **argv)
 	if (err)
 		exit(1);
 
-	if_fd = kreq_init();
-	if (if_fd < 0)
+	ki_fd = kreq_init();
+	if (ki_fd < 0)
 		exit(1);
 
-	ud_fd = ipc_open();
-	if (ud_fd < 0)
+	ipc_fd = ipc_open();
+	if (ipc_fd < 0)
 		exit(1);
 
-	pfd = poll_init(npfd, if_fd, ud_fd);
+	pfd = poll_init(npfd, ki_fd, ipc_fd);
 
 	event_loop(pfd, npfd, timeout);
 
