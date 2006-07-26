@@ -21,7 +21,6 @@
  */
 #include <linux/blkdev.h>
 #include <linux/file.h>
-#include <linux/netlink.h>
 #include <net/tcp.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
@@ -32,87 +31,129 @@
 
 #include "scsi_tgt_priv.h"
 
-static int tgtd_pid;
-static struct sock *nl_sk;
+struct rbuf {
+	u32 idx;
+	u32 nr_entry;
+	int entry_size;
+	char *buf;
+	int buf_size;
+	spinlock_t lock;
+};
 
-static int send_event_rsp(uint16_t type, struct tgt_event *p, gfp_t flags,
-			  pid_t pid)
+static int chrdev;
+static struct rbuf txbuf, rxbuf;
+static DECLARE_WAIT_QUEUE_HEAD(tgt_poll_wait);
+
+static inline struct rbuf_hdr *head_rbuf_hdr(struct rbuf *rbuf, u32 idx)
+{
+	u32 offset = (idx & (rbuf->nr_entry - 1)) * rbuf->entry_size;
+	return (struct rbuf_hdr *) (rbuf->buf + offset);
+}
+
+static void rbuf_init(struct rbuf *rbuf, char *buf, int bsize, int esize)
+{
+	int i;
+
+	esize += sizeof(struct rbuf_hdr);
+	rbuf->idx = 0;
+	rbuf->entry_size = esize;
+	rbuf->buf = buf;
+	spin_lock_init(&rbuf->lock);
+
+	bsize /= esize;
+	for (i = 0; (1 << i) < bsize && (1 << (i + 1)) <= bsize; i++)
+		;
+	rbuf->nr_entry = 1 << i;
+}
+
+static int send_event_rsp(u32 type, struct tgt_event *p)
 {
 	struct tgt_event *ev;
-	struct nlmsghdr *nlh;
-	struct sk_buff *skb;
-	uint32_t len;
+	struct rbuf_hdr *hdr;
+	struct page *sp, *ep;
+	unsigned long flags;
+	int err = 0;
 
-	len = NLMSG_SPACE(sizeof(*ev));
-	skb = alloc_skb(len, flags);
-	if (!skb)
-		return -ENOMEM;
+	spin_lock_irqsave(&txbuf.lock, flags);
 
-	nlh = __nlmsg_put(skb, pid, 0, type, len - sizeof(*nlh), 0);
+	hdr = head_rbuf_hdr(&txbuf, txbuf.idx);
+	if (hdr->status)
+		err = 1;
+	else
+		txbuf.idx++;
 
-	ev = NLMSG_DATA(nlh);
+	spin_unlock_irqrestore(&txbuf.lock, flags);
+
+	if (err)
+		return err;
+
+	ev = (struct tgt_event *) hdr->data;
 	memcpy(ev, p, sizeof(*ev));
+	ev->type = type;
+	hdr->status = 1;
+	mb();
 
-	return netlink_unicast(nl_sk, skb, pid, 0);
+	sp = virt_to_page(hdr);
+	ep = virt_to_page((char *) hdr->data + sizeof(*ev));
+	for (;sp <= ep; sp++)
+		flush_dcache_page(sp);
+
+	wake_up_interruptible(&tgt_poll_wait);
+
+	return 0;
 }
 
-int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun, u64 tag,
-			 gfp_t flags)
-{
-	struct Scsi_Host *shost = scsi_tgt_cmd_to_host(cmd);
-	struct sk_buff *skb;
-	struct nlmsghdr *nlh;
-	struct tgt_event *ev;
-	int err, len;
-
-	len = NLMSG_SPACE(sizeof(*ev));
-	/*
-	 * TODO: add MAX_COMMAND_SIZE to ev and add mempool
-	 */
-	skb = alloc_skb(NLMSG_SPACE(len), flags);
-	if (!skb)
-		return -ENOMEM;
-
-	nlh = __nlmsg_put(skb, tgtd_pid, 0, TGT_KEVENT_CMD_REQ,
-			  len - sizeof(*nlh), 0);
-
-	ev = NLMSG_DATA(nlh);
-	ev->k.cmd_req.host_no = shost->host_no;
-	ev->k.cmd_req.cid = cmd->request->tag;
-	ev->k.cmd_req.data_len = cmd->request_bufflen;
-	memcpy(ev->k.cmd_req.scb, cmd->cmnd, sizeof(ev->k.cmd_req.scb));
-	memcpy(ev->k.cmd_req.lun, lun, sizeof(ev->k.cmd_req.lun));
-	ev->k.cmd_req.attribute = cmd->tag;
-	ev->k.cmd_req.tag = tag;
-
-	dprintk("%p %d %u %u %x %llx\n", cmd, shost->host_no, ev->k.cmd_req.cid,
-		ev->k.cmd_req.data_len, cmd->tag,
-		(unsigned long long) ev->k.cmd_req.tag);
-
-	err = netlink_unicast(nl_sk, skb, tgtd_pid, 0);
-	if (err < 0)
-		printk(KERN_ERR "scsi_tgt_uspace_send: could not send skb %d\n",
-		       err);
-	return err;
-}
-
-int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd, gfp_t gfp_mask)
+int scsi_tgt_uspace_send_cmd(struct scsi_cmnd *cmd, struct scsi_lun *lun, u64 tag)
 {
 	struct Scsi_Host *shost = scsi_tgt_cmd_to_host(cmd);
 	struct tgt_event ev;
+	int err;
+
+	memset(&ev, 0, sizeof(ev));
+	ev.k.cmd_req.host_no = shost->host_no;
+	ev.k.cmd_req.cid = cmd->request->tag;
+	ev.k.cmd_req.data_len = cmd->request_bufflen;
+	memcpy(ev.k.cmd_req.scb, cmd->cmnd, sizeof(ev.k.cmd_req.scb));
+	memcpy(ev.k.cmd_req.lun, lun, sizeof(ev.k.cmd_req.lun));
+	ev.k.cmd_req.attribute = cmd->tag;
+	ev.k.cmd_req.tag = tag;
+
+	dprintk("%p %d %u %u %x %llx\n", cmd, shost->host_no, ev.k.cmd_req.cid,
+		ev.k.cmd_req.data_len, cmd->tag,
+		(unsigned long long) ev.k.cmd_req.tag);
+
+	err = send_event_rsp(TGT_KEVENT_CMD_REQ, &ev);
+	if (err)
+		eprintk("tx buf is full, could not send\n");
+	return err;
+}
+
+int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd)
+{
+	struct Scsi_Host *shost = scsi_tgt_cmd_to_host(cmd);
+	struct tgt_event ev;
+	int err;
 
 	memset(&ev, 0, sizeof(ev));
 	ev.k.cmd_done.host_no = shost->host_no;
 	ev.k.cmd_done.cid = cmd->request->tag;
 	ev.k.cmd_done.result = cmd->result;
 
-	return send_event_rsp(TGT_KEVENT_CMD_DONE, &ev, gfp_mask, tgtd_pid);
+	dprintk("%p %d %u %u %x %llx\n", cmd, shost->host_no, ev.k.cmd_req.cid,
+		ev.k.cmd_req.data_len, cmd->tag,
+		(unsigned long long) ev.k.cmd_req.tag);
+
+	err = send_event_rsp(TGT_KEVENT_CMD_DONE, &ev);
+	if (err)
+		eprintk("tx buf is full, could not send\n");
+	return err;
 }
 
 int scsi_tgt_uspace_send_tsk_mgmt(int host_no, int function, u64 tag,
 				  struct scsi_lun *scsilun, void *data)
 {
 	struct tgt_event ev;
+	int err;
 
 	memset(&ev, 0, sizeof(ev));
 	ev.k.tsk_mgmt_req.host_no = host_no;
@@ -124,23 +165,18 @@ int scsi_tgt_uspace_send_tsk_mgmt(int host_no, int function, u64 tag,
 	dprintk("%d %x %llx %llx\n", host_no, function, (unsigned long long) tag,
 		(unsigned long long) ev.k.tsk_mgmt_req.mid);
 
-	return send_event_rsp(TGT_KEVENT_TSK_MGMT_REQ, &ev, GFP_KERNEL, tgtd_pid);
+	err = send_event_rsp(TGT_KEVENT_TSK_MGMT_REQ, &ev);
+	if (err)
+		eprintk("tx buf is full, could not send\n");
+	return err;
 }
 
-static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
+static int event_recv_msg(struct tgt_event *ev)
 {
-	struct tgt_event *ev = NLMSG_DATA(nlh);
 	int err = 0;
 
-	dprintk("%d %d %d\n", nlh->nlmsg_type,
-		nlh->nlmsg_pid, current->pid);
-
-	switch (nlh->nlmsg_type) {
-	case TGT_UEVENT_REQ:
-		tgtd_pid = NETLINK_CREDS(skb)->pid;
-		break;
+	switch (ev->type) {
 	case TGT_UEVENT_CMD_RSP:
-		/* TODO: handle multiple cmds in one event */
 		err = scsi_tgt_kspace_exec(ev->u.cmd_rsp.host_no,
 					   ev->u.cmd_rsp.cid,
 					   ev->u.cmd_rsp.result,
@@ -154,79 +190,126 @@ static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 					       ev->u.tsk_mgmt_rsp.result);
 		break;
 	default:
-		eprintk("unknown type %d\n", nlh->nlmsg_type);
+		eprintk("unknown type %d\n", ev->type);
 		err = -EINVAL;
 	}
 
 	return err;
 }
 
-static int event_recv_skb(struct sk_buff *skb)
+static ssize_t tgt_write(struct file *file, const char __user * buffer,
+			 size_t count, loff_t * ppos)
 {
-	int err;
-	uint32_t rlen;
-	struct nlmsghdr	*nlh;
-	struct tgt_event ev;
+	struct rbuf_hdr *hdr;
+	struct tgt_event *ev;
+	struct page *sp, *ep;
 
-	while (skb->len >= NLMSG_SPACE(0)) {
-		nlh = (struct nlmsghdr *) skb->data;
-		if (nlh->nlmsg_len < sizeof(*nlh) || skb->len < nlh->nlmsg_len)
-			return 0;
-		rlen = NLMSG_ALIGN(nlh->nlmsg_len);
-		if (rlen > skb->len)
-			rlen = skb->len;
-		err = event_recv_msg(skb, nlh);
+retry:
+	hdr = head_rbuf_hdr(&rxbuf, rxbuf.idx);
 
-		dprintk("%d %d\n", nlh->nlmsg_type, err);
-		/*
-		 * TODO for passthru commands the lower level should
-		 * probably handle the result or we should modify this
-		 */
-		switch (nlh->nlmsg_type) {
-		case TGT_UEVENT_CMD_RSP:
-		case TGT_UEVENT_TSK_MGMT_RSP:
-			break;
-		default:
-			memset(&ev, 0, sizeof(ev));
-			ev.k.event_rsp.err = err;
-			send_event_rsp(TGT_KEVENT_RSP, &ev,
-				       GFP_KERNEL | __GFP_NOFAIL,
-					nlh->nlmsg_pid);
-		}
-		skb_pull(skb, rlen);
+	sp = virt_to_page(hdr);
+	ep = virt_to_page((char *) hdr->data + sizeof(*ev));
+	for (;sp <= ep; sp++)
+		flush_dcache_page(sp);
+
+	if (!hdr->status)
+		return count;
+
+	rxbuf.idx++;
+	ev = (struct tgt_event *) hdr->data;
+	event_recv_msg(ev);
+	hdr->status = 0;
+
+	goto retry;
+}
+
+static unsigned int tgt_poll(struct file * file, struct poll_table_struct *wait)
+{
+	struct rbuf_hdr *hdr;
+	unsigned long flags;
+	unsigned int mask = 0;
+
+	poll_wait(file, &tgt_poll_wait, wait);
+
+	spin_lock_irqsave(&txbuf.lock, flags);
+
+	hdr = head_rbuf_hdr(&txbuf, txbuf.idx - 1);
+	if (hdr->status)
+		mask |= POLLIN | POLLRDNORM;
+
+	spin_unlock_irqrestore(&txbuf.lock, flags);
+
+	return mask;
+}
+
+static int tgt_mmap(struct file *filp, struct vm_area_struct *vma)
+{
+	unsigned long size, addr;
+	struct page *page;
+	int err, i;
+
+	if (vma->vm_pgoff) {
+		eprintk("bug\n");
+		return -EINVAL;
 	}
+
+	size = vma->vm_end - vma->vm_start;
+	if (size != TGT_RINGBUF_SIZE * 2) {
+		eprintk("%lu\n", size);
+		return -EINVAL;
+	}
+	addr = vma->vm_start;
+	page = virt_to_page(txbuf.buf);
+	for (i = 0; i < size >> PAGE_SHIFT; i++) {
+		err = vm_insert_page(vma, addr, page);
+		if (err) {
+			eprintk("%d %d %lu\n", err, i, addr);
+			return -EINVAL;
+		}
+		addr += PAGE_SIZE;
+		page++;
+	}
+
 	return 0;
 }
 
-static void event_recv(struct sock *sk, int length)
-{
-	struct sk_buff *skb;
-
-	while ((skb = skb_dequeue(&sk->sk_receive_queue))) {
-		if (NETLINK_CREDS(skb)->uid) {
-			skb_pull(skb, skb->len);
-			kfree_skb(skb);
-			continue;
-		}
-
-		if (event_recv_skb(skb) && skb->len)
-			skb_queue_head(&sk->sk_receive_queue, skb);
-		else
-			kfree_skb(skb);
-	}
-}
+static struct file_operations tgt_fops = {
+	.owner	= THIS_MODULE,
+	.poll	= tgt_poll,
+	.write	= tgt_write,
+	.mmap	= tgt_mmap,
+};
 
 void __exit scsi_tgt_if_exit(void)
 {
-	sock_release(nl_sk->sk_socket);
+	int order = long_log2(TGT_RINGBUF_SIZE * 2);
+
+	unregister_chrdev(chrdev, "tgt");
+	free_pages((unsigned long) txbuf.buf, order);
 }
 
 int __init scsi_tgt_if_init(void)
 {
-	nl_sk = netlink_kernel_create(NETLINK_TGT, 1, event_recv,
-				    THIS_MODULE);
-	if (!nl_sk)
-		return -ENOMEM;
+	u32 bsize = TGT_RINGBUF_SIZE;
+	int order;
+	char *buf;
+
+	chrdev = register_chrdev(0, "tgt", &tgt_fops);
+	if (chrdev < 0)
+		return chrdev;
+
+	order = long_log2((bsize * 2) >> PAGE_SHIFT);
+	buf = (char *) __get_free_pages(GFP_KERNEL | __GFP_COMP | __GFP_ZERO,
+					order);
+	if (!buf)
+		goto free_dev;
+	rbuf_init(&txbuf, buf, bsize, sizeof(struct tgt_event));
+	rbuf_init(&rxbuf, buf + bsize, bsize, sizeof(struct tgt_event));
 
 	return 0;
+
+free_dev:
+	unregister_chrdev(chrdev, "tgt");
+
+	return -ENOMEM;
 }

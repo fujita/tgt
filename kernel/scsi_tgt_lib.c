@@ -45,11 +45,9 @@ struct scsi_tgt_cmd {
 	/* TODO replace the lists with a large bio */
 	struct bio_list xfer_done_list;
 	struct bio_list xfer_list;
-	struct scsi_lun *lun;
 
 	struct list_head hash_list;
 	struct request *rq;
-	u64 tag;
 
 	void *buffer;
 	unsigned bufflen;
@@ -62,12 +60,6 @@ struct scsi_tgt_queuedata {
 	struct Scsi_Host *shost;
 	struct list_head cmd_hash[1 << TGT_HASH_ORDER];
 	spinlock_t cmd_hash_lock;
-
-	struct work_struct uspace_send_work;
-
-	spinlock_t cmd_req_lock;
-	struct mutex cmd_req_mutex;
-	struct list_head cmd_req;
 };
 
 /*
@@ -116,6 +108,10 @@ struct scsi_cmnd *scsi_host_get_command(struct Scsi_Host *shost,
 	rq->special = cmd;
 	rq->flags |= REQ_SPECIAL | REQ_BLOCK_PC;
 	rq->end_io_data = tcmd;
+
+	bio_list_init(&tcmd->xfer_list);
+	bio_list_init(&tcmd->xfer_done_list);
+	tcmd->rq = rq;
 
 	return cmd;
 
@@ -175,19 +171,27 @@ static void scsi_unmap_user_pages(struct scsi_tgt_cmd *tcmd)
 	}
 }
 
-static void scsi_tgt_cmd_destroy(void *data)
+static void cmd_hashlist_del(struct scsi_cmnd *cmd)
 {
-	struct scsi_cmnd *cmd = data;
-	struct scsi_tgt_cmd *tcmd = cmd->request->end_io_data;
-	struct scsi_tgt_queuedata *qdata = cmd->request->q->queuedata;
+	struct request_queue *q = cmd->request->q;
+	struct scsi_tgt_queuedata *qdata = q->queuedata;
 	unsigned long flags;
-
-	dprintk("cmd %p %d %lu\n", cmd, cmd->sc_data_direction,
-		rq_data_dir(cmd->request));
+	struct scsi_tgt_cmd *tcmd = cmd->request->end_io_data;
 
 	spin_lock_irqsave(&qdata->cmd_hash_lock, flags);
 	list_del(&tcmd->hash_list);
 	spin_unlock_irqrestore(&qdata->cmd_hash_lock, flags);
+}
+
+static void scsi_tgt_cmd_destroy(void *data)
+{
+	struct scsi_cmnd *cmd = data;
+	struct scsi_tgt_cmd *tcmd = cmd->request->end_io_data;
+
+	dprintk("cmd %p %d %lu\n", cmd, cmd->sc_data_direction,
+		rq_data_dir(cmd->request));
+
+	cmd_hashlist_del(cmd);
 
 	/*
 	 * We must set rq->flags here because bio_map_user and
@@ -214,55 +218,6 @@ static void init_scsi_tgt_cmd(struct request *rq, struct scsi_tgt_cmd *tcmd)
 	head = &qdata->cmd_hash[cmd_hashfn(rq->tag)];
 	list_add(&tcmd->hash_list, head);
 	spin_unlock_irqrestore(&qdata->cmd_hash_lock, flags);
-}
-
-static void scsi_tgt_uspace_send_fn(void *data)
-{
-	struct request_queue *q = data;
-	struct scsi_tgt_queuedata *qdata = q->queuedata;
-	struct request *rq;
-	struct scsi_cmnd *cmd;
-	struct scsi_tgt_cmd *tcmd;
-	unsigned long flags;
-	int err;
-
-retry:
-	err = 0;
-	if (list_empty(&qdata->cmd_req))
-		return;
-
-	mutex_lock(&qdata->cmd_req_mutex);
-
-	spin_lock_irqsave(&qdata->cmd_req_lock, flags);
-	if (list_empty(&qdata->cmd_req)) {
-		spin_unlock_irqrestore(&qdata->cmd_req_lock, flags);
-		mutex_unlock(&qdata->cmd_req_mutex);
-		goto out;
-	}
-	rq = list_entry_rq(qdata->cmd_req.next);
-	list_del_init(&rq->queuelist);
-	spin_unlock_irqrestore(&qdata->cmd_req_lock, flags);
-
-	tcmd = rq->end_io_data;
-	init_scsi_tgt_cmd(rq, tcmd);
-	cmd = rq->special;
-	err = scsi_tgt_uspace_send(cmd, tcmd->lun, tcmd->tag, GFP_ATOMIC);
-	if (err < 0) {
-		eprintk("failed to send: %p %d\n", cmd, err);
-
-		spin_lock_irqsave(&qdata->cmd_req_lock, flags);
-		list_add(&rq->queuelist, &qdata->cmd_req);
-		spin_unlock_irqrestore(&qdata->cmd_req_lock, flags);
-	}
-
-	mutex_unlock(&qdata->cmd_req_mutex);
-out:
-	/* TODO: proper error handling */
-	if (err < 0)
-		queue_delayed_work(scsi_tgtd, &qdata->uspace_send_work,
-				   HZ / 10);
-	else
-		goto retry;
 }
 
 /*
@@ -312,11 +267,6 @@ int scsi_tgt_alloc_queue(struct Scsi_Host *shost)
 		INIT_LIST_HEAD(&queuedata->cmd_hash[i]);
 	spin_lock_init(&queuedata->cmd_hash_lock);
 
-	INIT_LIST_HEAD(&queuedata->cmd_req);
-	spin_lock_init(&queuedata->cmd_req_lock);
-	INIT_WORK(&queuedata->uspace_send_work, scsi_tgt_uspace_send_fn, q);
-	mutex_init(&queuedata->cmd_req_mutex);
-
 	return 0;
 
 cleanup_queue:
@@ -336,28 +286,20 @@ EXPORT_SYMBOL_GPL(scsi_tgt_cmd_to_host);
  * scsi_tgt_queue_command - queue command for userspace processing
  * @cmd:	scsi command
  * @scsilun:	scsi lun
- * @noblock:	set to nonzero if the command should be queued
+ * @tag:	unique value to identify this command for tmf
  */
 int scsi_tgt_queue_command(struct scsi_cmnd *cmd, struct scsi_lun *scsilun,
 			   u64 tag)
 {
-	struct request_queue *q = cmd->request->q;
-	struct scsi_tgt_queuedata *qdata = q->queuedata;
-	unsigned long flags;
 	struct scsi_tgt_cmd *tcmd = cmd->request->end_io_data;
+	int err;
 
-	bio_list_init(&tcmd->xfer_list);
-	bio_list_init(&tcmd->xfer_done_list);
-	tcmd->lun = scsilun;
-	tcmd->tag = tag;
-	tcmd->rq = cmd->request;
+	init_scsi_tgt_cmd(cmd->request, tcmd);
+	err = scsi_tgt_uspace_send_cmd(cmd, scsilun, tag);
+	if (err)
+		cmd_hashlist_del(cmd);
 
-	spin_lock_irqsave(&qdata->cmd_req_lock, flags);
-	list_add_tail(&cmd->request->queuelist, &qdata->cmd_req);
-	spin_unlock_irqrestore(&qdata->cmd_req_lock, flags);
-
-	queue_work(scsi_tgtd, &qdata->uspace_send_work);
-	return 0;
+	return err;
 }
 EXPORT_SYMBOL_GPL(scsi_tgt_queue_command);
 
@@ -371,7 +313,7 @@ static void scsi_tgt_cmd_done(struct scsi_cmnd *cmd)
 
 	dprintk("cmd %p %lu\n", cmd, rq_data_dir(cmd->request));
 
-	scsi_tgt_uspace_send_status(cmd, GFP_ATOMIC);
+	scsi_tgt_uspace_send_status(cmd);
 	INIT_WORK(&tcmd->work, scsi_tgt_cmd_destroy, cmd);
 	queue_work(scsi_tgtd, &tcmd->work);
 }
@@ -402,7 +344,8 @@ static void scsi_tgt_transfer_response(struct scsi_cmnd *cmd)
 		return;
 
 	cmd->result = DID_BUS_BUSY << 16;
-	if (scsi_tgt_uspace_send_status(cmd, GFP_ATOMIC) <= 0)
+	err = scsi_tgt_uspace_send_status(cmd);
+	if (err <= 0)
 		/* the eh will have to pick this up */
 		printk(KERN_ERR "Could not send cmd %p status\n", cmd);
 }
@@ -501,7 +444,8 @@ static void scsi_tgt_data_transfer_done(struct scsi_cmnd *cmd)
 	/* should we free resources here on error ? */
 	if (cmd->result) {
 send_uspace_err:
-		if (scsi_tgt_uspace_send_status(cmd, GFP_ATOMIC) <= 0)
+		err = scsi_tgt_uspace_send_status(cmd);
+		if (err <= 0)
 			/* the tgt uspace eh will have to pick this up */
 			printk(KERN_ERR "Could not send cmd %p status\n", cmd);
 		return;
