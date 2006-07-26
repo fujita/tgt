@@ -39,7 +39,7 @@
 #include "driver.h"
 
 enum {
-	POLL_NL, /* netlink socket between kernel and user space */
+	POLL_IF, /* netlink socket between kernel and user space */
 	POLL_UD, /* unix domain socket for tgtdadm */
 	POLL_END,
 };
@@ -147,9 +147,8 @@ retry:
 		goto retry;
 	}
 
-	if (pfd[POLL_NL].revents) {
-		dprintf("nl event\n");
-		nl_event_handle(pfd[POLL_NL].fd);
+	if (pfd[POLL_IF].revents) {
+		kreq_recv();
 		nevent--;
 	}
 
@@ -181,8 +180,8 @@ static struct pollfd *poll_init(int npfd, int nl_fd, int ud_fd)
 	if (!pfd)
 		return NULL;
 
-	pfd[POLL_NL].fd = nl_fd;
-	pfd[POLL_NL].events = POLLIN;
+	pfd[POLL_IF].fd = nl_fd;
+	pfd[POLL_IF].events = POLLIN;
 	pfd[POLL_UD].fd = ud_fd;
 	pfd[POLL_UD].events = POLLIN;
 
@@ -234,7 +233,7 @@ int main(int argc, char **argv)
 	struct pollfd *pfd;
 	int err, ch, longindex, ndriver = 0, npfd = POLL_END;
 	int is_daemon = 1, is_debug = 1;
-	int nl_fd, ud_fd, timeout = -1;
+	int if_fd, ud_fd, timeout = -1;
 
 	while ((ch = getopt_long(argc, argv, "s:d:fd:vh", long_options,
 				 &longindex)) >= 0) {
@@ -274,15 +273,15 @@ int main(int argc, char **argv)
 	if (err)
 		exit(1);
 
-	nl_fd = nl_init();
-	if (nl_fd < 0)
+	if_fd = kreq_init();
+	if (if_fd < 0)
 		exit(1);
 
 	ud_fd = ipc_open();
 	if (ud_fd < 0)
 		exit(1);
 
-	pfd = poll_init(npfd, nl_fd, ud_fd);
+	pfd = poll_init(npfd, if_fd, ud_fd);
 
 	event_loop(pfd, npfd, timeout);
 

@@ -3,6 +3,7 @@
 
 #include "log.h"
 #include "util.h"
+#include <scsi/scsi_tgt_if.h>
 
 #define	SCSI_ID_LEN	24
 
@@ -23,14 +24,14 @@ struct tgt_device {
 	struct tgt_cmd_queue cmd_queue;
 };
 
-extern int nl_init(void);
-extern int __nl_write(int fd, int type, char *data, int len);
-extern int __nl_read(int fd, void *data, int size, int flags);
-void nl_event_handle(int nl_fd);
+extern int kreq_init(void);
+extern int kreq_recv(void);
+extern int kreq_send(struct tgt_event *ev);
 
 extern int ipc_open(void);
 extern void ipc_event_handle(int accept_fd);
 
+extern void kreq_exec(struct tgt_event *ev);
 extern int tgt_device_create(int tid, uint64_t lun, char *path);
 extern int tgt_device_destroy(int tid, uint64_t lun);
 extern int tgt_target_create(int tid);

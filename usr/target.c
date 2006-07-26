@@ -36,7 +36,6 @@
 #include <linux/hash.h>
 #include <linux/netlink.h>
 #include <scsi/scsi.h>
-#include <scsi/scsi_tgt_if.h>
 
 #include "tgtd.h"
 #include "tgtadm.h"
@@ -315,20 +314,19 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 	return 0;
 }
 
-static int tgt_kspace_send_cmd(int nl_fd, struct cmd *cmd, int result, int rw)
+static int tgt_kspace_send_cmd(struct cmd *cmd, int result, int rw)
 {
-	char resbuf[NLMSG_SPACE(sizeof(struct tgt_event))];
-	struct tgt_event *ev_res = NLMSG_DATA(resbuf);
+	struct tgt_event ev;
 
-	ev_res->u.cmd_rsp.host_no = cmd->hostno;
-	ev_res->u.cmd_rsp.cid = cmd->cid;
-	ev_res->u.cmd_rsp.len = cmd->len;
-	ev_res->u.cmd_rsp.result = result;
-	ev_res->u.cmd_rsp.uaddr = cmd->uaddr;
-	ev_res->u.cmd_rsp.rw = rw;
+	ev.type = TGT_UEVENT_CMD_RSP;
+	ev.u.cmd_rsp.host_no = cmd->hostno;
+	ev.u.cmd_rsp.cid = cmd->cid;
+	ev.u.cmd_rsp.len = cmd->len;
+	ev.u.cmd_rsp.result = result;
+	ev.u.cmd_rsp.uaddr = cmd->uaddr;
+	ev.u.cmd_rsp.rw = rw;
 
-	return __nl_write(nl_fd, TGT_UEVENT_CMD_RSP, resbuf,
-			  NLMSG_SPACE(sizeof(*ev_res)));
+	return kreq_send(&ev);
 }
 
 static int cmd_pre_perform(struct tgt_cmd_queue *q, struct cmd *cmd)
@@ -379,7 +377,7 @@ static void cmd_post_perform(struct tgt_cmd_queue *q, struct cmd *cmd,
 	}
 }
 
-static void cmd_queue(struct tgt_event *ev_req, int nl_fd)
+static void cmd_queue(struct tgt_event *ev_req)
 {
 	struct target *target;
 	struct tgt_cmd_queue *q;
@@ -446,7 +444,7 @@ static void cmd_queue(struct tgt_event *ev_req, int nl_fd)
 			offset, result);
 
 		set_cmd_processed(cmd);
-		tgt_kspace_send_cmd(nl_fd, cmd, result, rw);
+		tgt_kspace_send_cmd(cmd, result, rw);
 	} else {
 		set_cmd_queued(cmd);
 		dprintf("blocked %u %x %" PRIu64 " %d\n",
@@ -461,7 +459,7 @@ static void cmd_queue(struct tgt_event *ev_req, int nl_fd)
 	}
 }
 
-static void post_cmd_done(int nl_fd, struct tgt_cmd_queue *q)
+static void post_cmd_done(struct tgt_cmd_queue *q)
 {
 	struct cmd *cmd, *tmp;
 	int enabled, result, len = 0;
@@ -493,7 +491,7 @@ static void post_cmd_done(int nl_fd, struct tgt_cmd_queue *q)
 						  &target->device_list);
 			cmd_post_perform(q, cmd, uaddr, len, mmapped);
 			set_cmd_processed(cmd);
-			tgt_kspace_send_cmd(nl_fd, cmd, result, rw);
+			tgt_kspace_send_cmd(cmd, result, rw);
 		} else
 			break;
 	}
@@ -529,7 +527,7 @@ static int scsi_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
 	return err;
 }
 
-static void __cmd_done(struct target *target, struct cmd *cmd, int nl_fd)
+static void __cmd_done(struct target *target, struct cmd *cmd)
 {
 	struct tgt_cmd_queue *q;
 	int err, do_munmap;
@@ -566,24 +564,21 @@ static void __cmd_done(struct target *target, struct cmd *cmd, int nl_fd)
 
 	free(cmd);
 
-	post_cmd_done(nl_fd, q);
+	post_cmd_done(q);
 }
 
-static int tgt_kspace_send_tsk_mgmt(int nl_fd, int host_no, uint64_t mid,
-				    int result)
+static int tgt_kspace_send_tsk_mgmt(int host_no, uint64_t mid, int result)
 {
-	char resbuf[NLMSG_SPACE(sizeof(struct tgt_event))];
-	struct tgt_event *ev_res = NLMSG_DATA(resbuf);
+	struct tgt_event ev;
 
-	ev_res->u.tsk_mgmt_rsp.host_no = host_no;
-	ev_res->u.tsk_mgmt_rsp.mid = mid;
-	ev_res->u.tsk_mgmt_rsp.result = result;
+	ev.u.tsk_mgmt_rsp.host_no = host_no;
+	ev.u.tsk_mgmt_rsp.mid = mid;
+	ev.u.tsk_mgmt_rsp.result = result;
 
-	return __nl_write(nl_fd, TGT_UEVENT_TSK_MGMT_RSP, resbuf,
-			  NLMSG_SPACE(sizeof(*ev_res)));
+	return kreq_send(&ev);
 }
 
-static void cmd_done(struct tgt_event *ev, int nl_fd)
+static void cmd_done(struct tgt_event *ev)
 {
 	struct target *target;
 	struct cmd *cmd;
@@ -606,15 +601,15 @@ static void cmd_done(struct tgt_event *ev, int nl_fd)
 	mreq = cmd->mreq;
 	if (mreq && !--mreq->busy) {
 		int err = mreq->function == ABORT_TASK ? -EEXIST : 0;
-		tgt_kspace_send_tsk_mgmt(nl_fd, cmd->hostno, mreq->mid, err);
+		tgt_kspace_send_tsk_mgmt(cmd->hostno, mreq->mid, err);
 		free(mreq);
 	}
 
-	__cmd_done(target, cmd, nl_fd);
+	__cmd_done(target, cmd);
 }
 
 static int abort_cmd(struct target* target, struct mgmt_req *mreq,
-		     struct cmd *cmd, int nl_fd)
+		     struct cmd *cmd)
 {
 	int err = 0;
 
@@ -629,14 +624,14 @@ static int abort_cmd(struct target* target, struct mgmt_req *mreq,
 		cmd->mreq = mreq;
 		err = -EBUSY;
 	} else {
-		__cmd_done(target, cmd, nl_fd);
-		tgt_kspace_send_cmd(nl_fd, cmd, TASK_ABORTED, 0);
+		__cmd_done(target, cmd);
+		tgt_kspace_send_cmd(cmd, TASK_ABORTED, 0);
 	}
 	return err;
 }
 
 static int abort_task_set(struct mgmt_req *mreq, struct target* target, int host_no,
-			  uint64_t tag, uint8_t *lun, int all, int nl_fd)
+			  uint64_t tag, uint8_t *lun, int all)
 {
 	struct cmd *cmd, *tmp;
 	int err, count = 0;
@@ -647,7 +642,7 @@ static int abort_task_set(struct mgmt_req *mreq, struct target* target, int host
 		if ((all && cmd->hostno == host_no)||
 		    (cmd->tag == tag && cmd->hostno == host_no) ||
 		    (lun && !memcmp(cmd->lun, lun, sizeof(cmd->lun)))) {
-			err = abort_cmd(target, mreq, cmd, nl_fd);
+			err = abort_cmd(target, mreq, cmd);
 			if (err)
 				mreq->busy++;
 			count++;
@@ -657,7 +652,7 @@ static int abort_task_set(struct mgmt_req *mreq, struct target* target, int host
 	return count;
 }
 
-static void tsk_mgmt_req(struct tgt_event *ev_req, int nl_fd)
+static void tsk_mgmt_req(struct tgt_event *ev_req)
 {
 	struct target *target;
 	struct mgmt_req *mreq;
@@ -679,14 +674,14 @@ static void tsk_mgmt_req(struct tgt_event *ev_req, int nl_fd)
 	case ABORT_TASK:
 		count = abort_task_set(mreq, target, host_no,
 				       ev_req->k.tsk_mgmt_req.tag,
-				       NULL, 0, nl_fd);
+				       NULL, 0);
 		if (mreq->busy)
 			send = 0;
 		if (!count)
 			err = -EEXIST;
 		break;
 	case ABORT_TASK_SET:
-		count = abort_task_set(mreq, target, host_no, 0, NULL, 1, nl_fd);
+		count = abort_task_set(mreq, target, host_no, 0, NULL, 1);
 		if (mreq->busy)
 			send = 0;
 		break;
@@ -698,7 +693,7 @@ static void tsk_mgmt_req(struct tgt_event *ev_req, int nl_fd)
 		break;
 	case LOGICAL_UNIT_RESET:
 		count = abort_task_set(mreq, target, host_no, 0,
-				       ev_req->k.tsk_mgmt_req.lun, 0, nl_fd);
+				       ev_req->k.tsk_mgmt_req.lun, 0);
 		if (mreq->busy)
 			send = 0;
 		break;
@@ -709,42 +704,28 @@ static void tsk_mgmt_req(struct tgt_event *ev_req, int nl_fd)
 	}
 
 	if (send) {
-		tgt_kspace_send_tsk_mgmt(nl_fd, ev_req->k.cmd_req.host_no,
+		tgt_kspace_send_tsk_mgmt(ev_req->k.cmd_req.host_no,
 					 ev_req->k.tsk_mgmt_req.mid, err);
 		free(mreq);
 	}
 }
 
-void nl_event_handle(int nl_fd)
+void kreq_exec(struct tgt_event *ev)
 {
-	struct nlmsghdr *nlh;
-	struct tgt_event *ev;
-	char buf[NLMSG_SPACE(sizeof(struct tgt_event))];
-	int err;
+	dprintf("event %u\n", ev->type);
 
-	err = __nl_read(nl_fd, buf, sizeof(buf), MSG_WAITALL);
-
-	nlh = (struct nlmsghdr *) buf;
-	ev = (struct tgt_event *) NLMSG_DATA(nlh);
-
-	if (nlh->nlmsg_len != err) {
-		eprintf("unexpected len %d %d %d %d\n",
-			nlh->nlmsg_len, sizeof(*ev), sizeof(buf), err);
-		exit(1);
-	}
-
-	switch (nlh->nlmsg_type) {
+	switch (ev->type) {
 	case TGT_KEVENT_CMD_REQ:
-		cmd_queue(ev, nl_fd);
+		cmd_queue(ev);
 		break;
 	case TGT_KEVENT_CMD_DONE:
-		cmd_done(ev, nl_fd);
+		cmd_done(ev);
 		break;
 	case TGT_KEVENT_TSK_MGMT_REQ:
-		tsk_mgmt_req(ev, nl_fd);
+		tsk_mgmt_req(ev);
 		break;
 	default:
-		eprintf("unknown event %u\n", nlh->nlmsg_type);
+		eprintf("unknown event %u\n", ev->type);
 		exit(1);
 	}
 }

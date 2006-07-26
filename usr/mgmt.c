@@ -74,12 +74,12 @@ static int target_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 	switch (req->op) {
 	case OP_NEW:
 		err = tgt_target_create(req->tid);
-		if (!err)
+		if (!err && tgt_drivers[lld_no]->target_create)
 			tgt_drivers[lld_no]->target_create(req->tid, params);
 		break;
 	case OP_DELETE:
 		err = tgt_target_destroy(req->tid);
-		if (!err)
+		if (!err && tgt_drivers[lld_no]->target_destroy)
 			tgt_drivers[lld_no]->target_destroy(req->tid);
 		break;
 	case OP_BIND:
