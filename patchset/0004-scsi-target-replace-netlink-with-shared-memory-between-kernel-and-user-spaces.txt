@@ -1,0 +1,554 @@
+Subject: [PATCH] scsi target: replace netlink with shared memory between kernel and user spaces
+
+The user-space damoen and tgt kernel module need to exhange mmapped
+addresses. netlink cannot do that. We need two-way kernel/user
+high-performance interface, however, mainline kernel provides no
+standard interface like that.
+
+This patch replaces netlink shared memory between kernel and user
+spaces. The user-space damoen and tgt kernel module creates shared
+memory via mmap and use it like ring buffer. poll (kernel to user) and
+write (user to kernel) system calls are used for notification.
+
+Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
+Signed-off-by: Mike Christie <michaelc@cs.wisc.edu>
+
+---
+
+ drivers/scsi/scsi_tgt_if.c   |  311 +++++++++++++++++++++++++++---------------
+ drivers/scsi/scsi_tgt_lib.c  |   10 +
+ drivers/scsi/scsi_tgt_priv.h |    6 -
+ include/linux/netlink.h      |    1 
+ include/scsi/scsi_tgt_if.h   |   19 +--
+ 5 files changed, 216 insertions(+), 131 deletions(-)
+
+cd29acfca7cdeb8c351db14af357207e9dcb17f3
+diff --git a/drivers/scsi/scsi_tgt_if.c b/drivers/scsi/scsi_tgt_if.c
+index 37e0feb..c4c5bdb 100644
+--- a/drivers/scsi/scsi_tgt_if.c
++++ b/drivers/scsi/scsi_tgt_if.c
+@@ -21,7 +21,6 @@
+  */
+ #include <linux/blkdev.h>
+ #include <linux/file.h>
+-#include <linux/netlink.h>
+ #include <net/tcp.h>
+ #include <scsi/scsi.h>
+ #include <scsi/scsi_cmnd.h>
+@@ -32,87 +31,129 @@
+ 
+ #include "scsi_tgt_priv.h"
+ 
+-static int tgtd_pid;
+-static struct sock *nl_sk;
++struct rbuf {
++	u32 idx;
++	u32 nr_entry;
++	int entry_size;
++	char *buf;
++	int buf_size;
++	spinlock_t lock;
++};
++
++static int chrdev;
++static struct rbuf txbuf, rxbuf;
++static DECLARE_WAIT_QUEUE_HEAD(tgt_poll_wait);
+ 
+-static int send_event_rsp(uint16_t type, struct tgt_event *p, gfp_t flags,
+-			  pid_t pid)
++static inline struct rbuf_hdr *head_rbuf_hdr(struct rbuf *rbuf, u32 idx)
++{
++	u32 offset = (idx & (rbuf->nr_entry - 1)) * rbuf->entry_size;
++	return (struct rbuf_hdr *) (rbuf->buf + offset);
++}
++
++static void rbuf_init(struct rbuf *rbuf, char *buf, int bsize, int esize)
++{
++	int i;
++
++	esize += sizeof(struct rbuf_hdr);
++	rbuf->idx = 0;
++	rbuf->entry_size = esize;
++	rbuf->buf = buf;
++	spin_lock_init(&rbuf->lock);
++
++	bsize /= esize;
++	for (i = 0; (1 << i) < bsize && (1 << (i + 1)) <= bsize; i++)
++		;
++	rbuf->nr_entry = 1 << i;
++}
++
++static int send_event_rsp(u32 type, struct tgt_event *p)
+ {
+ 	struct tgt_event *ev;
+-	struct nlmsghdr *nlh;
+-	struct sk_buff *skb;
+-	uint32_t len;
+-
+-	len = NLMSG_SPACE(sizeof(*ev));
+-	skb = alloc_skb(len, flags);
+-	if (!skb)
+-		return -ENOMEM;
++	struct rbuf_hdr *hdr;
++	struct page *sp, *ep;
++	unsigned long flags;
++	int err = 0;
++
++	spin_lock_irqsave(&txbuf.lock, flags);
++
++	hdr = head_rbuf_hdr(&txbuf, txbuf.idx);
++	if (hdr->status)
++		err = 1;
++	else
++		txbuf.idx++;
+ 
+-	nlh = __nlmsg_put(skb, pid, 0, type, len - sizeof(*nlh), 0);
++	spin_unlock_irqrestore(&txbuf.lock, flags);
+ 
+-	ev = NLMSG_DATA(nlh);
++	if (err)
++		return err;
++
++	ev = (struct tgt_event *) hdr->data;
+ 	memcpy(ev, p, sizeof(*ev));
++	ev->type = type;
++	hdr->status = 1;
++	mb();
++
++	sp = virt_to_page(hdr);
++	ep = virt_to_page((char *) hdr->data + sizeof(*ev));
++	for (;sp <= ep; sp++)
++		flush_dcache_page(sp);
++
++	wake_up_interruptible(&tgt_poll_wait);
+ 
+-	return netlink_unicast(nl_sk, skb, pid, 0);
++	return 0;
+ }
+ 
+-int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun, u64 tag,
+-			 gfp_t flags)
++int scsi_tgt_uspace_send_cmd(struct scsi_cmnd *cmd, struct scsi_lun *lun, u64 tag)
+ {
+ 	struct Scsi_Host *shost = scsi_tgt_cmd_to_host(cmd);
+-	struct sk_buff *skb;
+-	struct nlmsghdr *nlh;
+-	struct tgt_event *ev;
+-	int err, len;
++	struct tgt_event ev;
++	int err;
+ 
+-	len = NLMSG_SPACE(sizeof(*ev));
+-	/*
+-	 * TODO: add MAX_COMMAND_SIZE to ev and add mempool
+-	 */
+-	skb = alloc_skb(NLMSG_SPACE(len), flags);
+-	if (!skb)
+-		return -ENOMEM;
+-
+-	nlh = __nlmsg_put(skb, tgtd_pid, 0, TGT_KEVENT_CMD_REQ,
+-			  len - sizeof(*nlh), 0);
+-
+-	ev = NLMSG_DATA(nlh);
+-	ev->k.cmd_req.host_no = shost->host_no;
+-	ev->k.cmd_req.cid = cmd->request->tag;
+-	ev->k.cmd_req.data_len = cmd->request_bufflen;
+-	memcpy(ev->k.cmd_req.scb, cmd->cmnd, sizeof(ev->k.cmd_req.scb));
+-	memcpy(ev->k.cmd_req.lun, lun, sizeof(ev->k.cmd_req.lun));
+-	ev->k.cmd_req.attribute = cmd->tag;
+-	ev->k.cmd_req.tag = tag;
+-
+-	dprintk("%p %d %u %u %x %llx\n", cmd, shost->host_no, ev->k.cmd_req.cid,
+-		ev->k.cmd_req.data_len, cmd->tag,
+-		(unsigned long long) ev->k.cmd_req.tag);
+-
+-	err = netlink_unicast(nl_sk, skb, tgtd_pid, 0);
+-	if (err < 0)
+-		printk(KERN_ERR "scsi_tgt_uspace_send: could not send skb %d\n",
+-		       err);
++	memset(&ev, 0, sizeof(ev));
++	ev.k.cmd_req.host_no = shost->host_no;
++	ev.k.cmd_req.cid = cmd->request->tag;
++	ev.k.cmd_req.data_len = cmd->request_bufflen;
++	memcpy(ev.k.cmd_req.scb, cmd->cmnd, sizeof(ev.k.cmd_req.scb));
++	memcpy(ev.k.cmd_req.lun, lun, sizeof(ev.k.cmd_req.lun));
++	ev.k.cmd_req.attribute = cmd->tag;
++	ev.k.cmd_req.tag = tag;
++
++	dprintk("%p %d %u %u %x %llx\n", cmd, shost->host_no, ev.k.cmd_req.cid,
++		ev.k.cmd_req.data_len, cmd->tag,
++		(unsigned long long) ev.k.cmd_req.tag);
++
++	err = send_event_rsp(TGT_KEVENT_CMD_REQ, &ev);
++	if (err)
++		eprintk("tx buf is full, could not send\n");
+ 	return err;
+ }
+ 
+-int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd, gfp_t gfp_mask)
++int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd)
+ {
+ 	struct Scsi_Host *shost = scsi_tgt_cmd_to_host(cmd);
+ 	struct tgt_event ev;
++	int err;
+ 
+ 	memset(&ev, 0, sizeof(ev));
+ 	ev.k.cmd_done.host_no = shost->host_no;
+ 	ev.k.cmd_done.cid = cmd->request->tag;
+ 	ev.k.cmd_done.result = cmd->result;
+ 
+-	return send_event_rsp(TGT_KEVENT_CMD_DONE, &ev, gfp_mask, tgtd_pid);
++	dprintk("%p %d %u %u %x %llx\n", cmd, shost->host_no, ev.k.cmd_req.cid,
++		ev.k.cmd_req.data_len, cmd->tag,
++		(unsigned long long) ev.k.cmd_req.tag);
++
++	err = send_event_rsp(TGT_KEVENT_CMD_DONE, &ev);
++	if (err)
++		eprintk("tx buf is full, could not send\n");
++	return err;
+ }
+ 
+ int scsi_tgt_uspace_send_tsk_mgmt(int host_no, int function, u64 tag,
+ 				  struct scsi_lun *scsilun, void *data)
+ {
+ 	struct tgt_event ev;
++	int err;
+ 
+ 	memset(&ev, 0, sizeof(ev));
+ 	ev.k.tsk_mgmt_req.host_no = host_no;
+@@ -124,23 +165,18 @@ int scsi_tgt_uspace_send_tsk_mgmt(int ho
+ 	dprintk("%d %x %llx %llx\n", host_no, function, (unsigned long long) tag,
+ 		(unsigned long long) ev.k.tsk_mgmt_req.mid);
+ 
+-	return send_event_rsp(TGT_KEVENT_TSK_MGMT_REQ, &ev, GFP_KERNEL, tgtd_pid);
++	err = send_event_rsp(TGT_KEVENT_TSK_MGMT_REQ, &ev);
++	if (err)
++		eprintk("tx buf is full, could not send\n");
++	return err;
+ }
+ 
+-static int event_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
++static int event_recv_msg(struct tgt_event *ev)
+ {
+-	struct tgt_event *ev = NLMSG_DATA(nlh);
+ 	int err = 0;
+ 
+-	dprintk("%d %d %d\n", nlh->nlmsg_type,
+-		nlh->nlmsg_pid, current->pid);
+-
+-	switch (nlh->nlmsg_type) {
+-	case TGT_UEVENT_REQ:
+-		tgtd_pid = NETLINK_CREDS(skb)->pid;
+-		break;
++	switch (ev->type) {
+ 	case TGT_UEVENT_CMD_RSP:
+-		/* TODO: handle multiple cmds in one event */
+ 		err = scsi_tgt_kspace_exec(ev->u.cmd_rsp.host_no,
+ 					   ev->u.cmd_rsp.cid,
+ 					   ev->u.cmd_rsp.result,
+@@ -154,79 +190,126 @@ static int event_recv_msg(struct sk_buff
+ 					       ev->u.tsk_mgmt_rsp.result);
+ 		break;
+ 	default:
+-		eprintk("unknown type %d\n", nlh->nlmsg_type);
++		eprintk("unknown type %d\n", ev->type);
+ 		err = -EINVAL;
+ 	}
+ 
+ 	return err;
+ }
+ 
+-static int event_recv_skb(struct sk_buff *skb)
++static ssize_t tgt_write(struct file *file, const char __user * buffer,
++			 size_t count, loff_t * ppos)
+ {
+-	int err;
+-	uint32_t rlen;
+-	struct nlmsghdr	*nlh;
+-	struct tgt_event ev;
++	struct rbuf_hdr *hdr;
++	struct tgt_event *ev;
++	struct page *sp, *ep;
+ 
+-	while (skb->len >= NLMSG_SPACE(0)) {
+-		nlh = (struct nlmsghdr *) skb->data;
+-		if (nlh->nlmsg_len < sizeof(*nlh) || skb->len < nlh->nlmsg_len)
+-			return 0;
+-		rlen = NLMSG_ALIGN(nlh->nlmsg_len);
+-		if (rlen > skb->len)
+-			rlen = skb->len;
+-		err = event_recv_msg(skb, nlh);
+-
+-		dprintk("%d %d\n", nlh->nlmsg_type, err);
+-		/*
+-		 * TODO for passthru commands the lower level should
+-		 * probably handle the result or we should modify this
+-		 */
+-		switch (nlh->nlmsg_type) {
+-		case TGT_UEVENT_CMD_RSP:
+-		case TGT_UEVENT_TSK_MGMT_RSP:
+-			break;
+-		default:
+-			memset(&ev, 0, sizeof(ev));
+-			ev.k.event_rsp.err = err;
+-			send_event_rsp(TGT_KEVENT_RSP, &ev,
+-				       GFP_KERNEL | __GFP_NOFAIL,
+-					nlh->nlmsg_pid);
+-		}
+-		skb_pull(skb, rlen);
+-	}
+-	return 0;
++retry:
++	hdr = head_rbuf_hdr(&rxbuf, rxbuf.idx);
++
++	sp = virt_to_page(hdr);
++	ep = virt_to_page((char *) hdr->data + sizeof(*ev));
++	for (;sp <= ep; sp++)
++		flush_dcache_page(sp);
++
++	if (!hdr->status)
++		return count;
++
++	rxbuf.idx++;
++	ev = (struct tgt_event *) hdr->data;
++	event_recv_msg(ev);
++	hdr->status = 0;
++
++	goto retry;
+ }
+ 
+-static void event_recv(struct sock *sk, int length)
++static unsigned int tgt_poll(struct file * file, struct poll_table_struct *wait)
+ {
+-	struct sk_buff *skb;
++	struct rbuf_hdr *hdr;
++	unsigned long flags;
++	unsigned int mask = 0;
+ 
+-	while ((skb = skb_dequeue(&sk->sk_receive_queue))) {
+-		if (NETLINK_CREDS(skb)->uid) {
+-			skb_pull(skb, skb->len);
+-			kfree_skb(skb);
+-			continue;
+-		}
++	poll_wait(file, &tgt_poll_wait, wait);
++
++	spin_lock_irqsave(&txbuf.lock, flags);
+ 
+-		if (event_recv_skb(skb) && skb->len)
+-			skb_queue_head(&sk->sk_receive_queue, skb);
+-		else
+-			kfree_skb(skb);
++	hdr = head_rbuf_hdr(&txbuf, txbuf.idx - 1);
++	if (hdr->status)
++		mask |= POLLIN | POLLRDNORM;
++
++	spin_unlock_irqrestore(&txbuf.lock, flags);
++
++	return mask;
++}
++
++static int tgt_mmap(struct file *filp, struct vm_area_struct *vma)
++{
++	unsigned long size, addr;
++	struct page *page;
++	int err, i;
++
++	if (vma->vm_pgoff) {
++		eprintk("bug\n");
++		return -EINVAL;
++	}
++
++	size = vma->vm_end - vma->vm_start;
++	if (size != TGT_RINGBUF_SIZE * 2) {
++		eprintk("%lu\n", size);
++		return -EINVAL;
++	}
++	addr = vma->vm_start;
++	page = virt_to_page(txbuf.buf);
++	for (i = 0; i < size >> PAGE_SHIFT; i++) {
++		err = vm_insert_page(vma, addr, page);
++		if (err) {
++			eprintk("%d %d %lu\n", err, i, addr);
++			return -EINVAL;
++		}
++		addr += PAGE_SIZE;
++		page++;
+ 	}
++
++	return 0;
+ }
+ 
++static struct file_operations tgt_fops = {
++	.owner	= THIS_MODULE,
++	.poll	= tgt_poll,
++	.write	= tgt_write,
++	.mmap	= tgt_mmap,
++};
++
+ void __exit scsi_tgt_if_exit(void)
+ {
+-	sock_release(nl_sk->sk_socket);
++	int order = long_log2(TGT_RINGBUF_SIZE * 2);
++
++	unregister_chrdev(chrdev, "tgt");
++	free_pages((unsigned long) txbuf.buf, order);
+ }
+ 
+ int __init scsi_tgt_if_init(void)
+ {
+-	nl_sk = netlink_kernel_create(NETLINK_TGT, 1, event_recv,
+-				    THIS_MODULE);
+-	if (!nl_sk)
+-		return -ENOMEM;
++	u32 bsize = TGT_RINGBUF_SIZE;
++	int order;
++	char *buf;
++
++	chrdev = register_chrdev(0, "tgt", &tgt_fops);
++	if (chrdev < 0)
++		return chrdev;
++
++	order = long_log2((bsize * 2) >> PAGE_SHIFT);
++	buf = (char *) __get_free_pages(GFP_KERNEL | __GFP_COMP | __GFP_ZERO,
++					order);
++	if (!buf)
++		goto free_dev;
++	rbuf_init(&txbuf, buf, bsize, sizeof(struct tgt_event));
++	rbuf_init(&rxbuf, buf + bsize, bsize, sizeof(struct tgt_event));
+ 
+ 	return 0;
++
++free_dev:
++	unregister_chrdev(chrdev, "tgt");
++
++	return -ENOMEM;
+ }
+diff --git a/drivers/scsi/scsi_tgt_lib.c b/drivers/scsi/scsi_tgt_lib.c
+index e82340c..7ebfbc0 100644
+--- a/drivers/scsi/scsi_tgt_lib.c
++++ b/drivers/scsi/scsi_tgt_lib.c
+@@ -246,7 +246,7 @@ retry:
+ 	tcmd = rq->end_io_data;
+ 	init_scsi_tgt_cmd(rq, tcmd);
+ 	cmd = rq->special;
+-	err = scsi_tgt_uspace_send(cmd, tcmd->lun, tcmd->tag, GFP_ATOMIC);
++	err = scsi_tgt_uspace_send_cmd(cmd, tcmd->lun, tcmd->tag);
+ 	if (err < 0) {
+ 		eprintk("failed to send: %p %d\n", cmd, err);
+ 
+@@ -371,7 +371,7 @@ static void scsi_tgt_cmd_done(struct scs
+ 
+ 	dprintk("cmd %p %lu\n", cmd, rq_data_dir(cmd->request));
+ 
+-	scsi_tgt_uspace_send_status(cmd, GFP_ATOMIC);
++	scsi_tgt_uspace_send_status(cmd);
+ 	INIT_WORK(&tcmd->work, scsi_tgt_cmd_destroy, cmd);
+ 	queue_work(scsi_tgtd, &tcmd->work);
+ }
+@@ -402,7 +402,8 @@ static void scsi_tgt_transfer_response(s
+ 		return;
+ 
+ 	cmd->result = DID_BUS_BUSY << 16;
+-	if (scsi_tgt_uspace_send_status(cmd, GFP_ATOMIC) <= 0)
++	err = scsi_tgt_uspace_send_status(cmd);
++	if (err <= 0)
+ 		/* the eh will have to pick this up */
+ 		printk(KERN_ERR "Could not send cmd %p status\n", cmd);
+ }
+@@ -501,7 +502,8 @@ static void scsi_tgt_data_transfer_done(
+ 	/* should we free resources here on error ? */
+ 	if (cmd->result) {
+ send_uspace_err:
+-		if (scsi_tgt_uspace_send_status(cmd, GFP_ATOMIC) <= 0)
++		err = scsi_tgt_uspace_send_status(cmd);
++		if (err <= 0)
+ 			/* the tgt uspace eh will have to pick this up */
+ 			printk(KERN_ERR "Could not send cmd %p status\n", cmd);
+ 		return;
+diff --git a/drivers/scsi/scsi_tgt_priv.h b/drivers/scsi/scsi_tgt_priv.h
+index 77a1d06..bd16a2c 100644
+--- a/drivers/scsi/scsi_tgt_priv.h
++++ b/drivers/scsi/scsi_tgt_priv.h
+@@ -14,9 +14,9 @@ do {								\
+ extern void scsi_tgt_if_exit(void);
+ extern int scsi_tgt_if_init(void);
+ 
+-extern int scsi_tgt_uspace_send(struct scsi_cmnd *cmd, struct scsi_lun *lun,
+-				u64 tag, gfp_t flags);
+-extern int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd, gfp_t flags);
++extern int scsi_tgt_uspace_send_cmd(struct scsi_cmnd *cmd, struct scsi_lun *lun,
++				    u64 tag);
++extern int scsi_tgt_uspace_send_status(struct scsi_cmnd *cmd);
+ extern int scsi_tgt_kspace_exec(int host_no, u32 cid, int result, u32 len,
+ 				unsigned long uaddr, u8 rw);
+ extern int scsi_tgt_uspace_send_tsk_mgmt(int host_no, int function, u64 tag,
+diff --git a/include/linux/netlink.h b/include/linux/netlink.h
+index 9422ae5..c256ebe 100644
+--- a/include/linux/netlink.h
++++ b/include/linux/netlink.h
+@@ -21,7 +21,6 @@
+ #define NETLINK_DNRTMSG		14	/* DECnet routing messages */
+ #define NETLINK_KOBJECT_UEVENT	15	/* Kernel messages to userspace */
+ #define NETLINK_GENERIC		16
+-#define NETLINK_TGT		17	/* SCSI target */
+ 
+ #define MAX_LINKS 32		
+ 
+diff --git a/include/scsi/scsi_tgt_if.h b/include/scsi/scsi_tgt_if.h
+index 63b2e3a..74392a9 100644
+--- a/include/scsi/scsi_tgt_if.h
++++ b/include/scsi/scsi_tgt_if.h
+@@ -24,25 +24,20 @@
+ 
+ enum tgt_event_type {
+ 	/* user -> kernel */
+-	TGT_UEVENT_REQ,
+ 	TGT_UEVENT_CMD_RSP,
+ 	TGT_UEVENT_TSK_MGMT_RSP,
+ 
+ 	/* kernel -> user */
+-	TGT_KEVENT_RSP,
+ 	TGT_KEVENT_CMD_REQ,
+ 	TGT_KEVENT_CMD_DONE,
+ 	TGT_KEVENT_TSK_MGMT_REQ,
+ };
+ 
+ struct tgt_event {
++	uint32_t type;
+ 	/* user-> kernel */
+ 	union {
+ 		struct {
+-			int type;
+-			int host_no;
+-		} event_req;
+-		struct {
+ 			int host_no;
+ 			uint32_t cid;
+ 			uint32_t len;
+@@ -60,9 +55,6 @@ struct tgt_event {
+ 	/* kernel -> user */
+ 	union {
+ 		struct {
+-			int err;
+-		} event_rsp;
+-		struct {
+ 			int host_no;
+ 			uint32_t cid;
+ 			uint32_t data_len;
+@@ -86,4 +78,13 @@ struct tgt_event {
+ 	} k;
+ 
+ } __attribute__ ((aligned (sizeof(uint64_t))));
++
++#define TGT_RINGBUF_SIZE (1UL << 16)
++
++struct rbuf_hdr {
++	uint32_t status;
++	uint32_t len;
++	uint64_t data[0];
++} __attribute__ ((aligned (sizeof(uint64_t))));
++
+ #endif
+-- 
+1.1.3
