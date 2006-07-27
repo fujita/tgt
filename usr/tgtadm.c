@@ -55,7 +55,7 @@ static char program_name[] = "tgtadm";
 
 static struct option const long_options[] =
 {
-	{"driver", required_argument, NULL, 'n'},
+	{"lld", required_argument, NULL, 'n'},
 	{"op", required_argument, NULL, 'o'},
 	{"tid", required_argument, NULL, 't'},
 	{"sid", required_argument, NULL, 's'},

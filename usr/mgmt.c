@@ -24,7 +24,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
-#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -273,7 +272,7 @@ out:
 	return;
 }
 
-int ipc_open(int *ipc_fd)
+int ipc_init(int *ipc_fd)
 {
 	int fd, err;
 	struct sockaddr_un addr;

@@ -23,6 +23,7 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <inttypes.h>
+#include <poll.h>
 #include <signal.h>
 #include <string.h>
 #include <stdint.h>
@@ -30,10 +31,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <asm/types.h>
-#include <sys/poll.h>
 #include <sys/signal.h>
 #include <sys/stat.h>
-#include <scsi/scsi_tgt_if.h>
 
 #include "tgtd.h"
 #include "driver.h"
@@ -48,7 +47,7 @@ static char program_name[] = "tgtd";
 
 static struct option const long_options[] =
 {
-	{"drivers", required_argument, 0, 'p'},
+	{"lld", required_argument, 0, 'l'},
 	{"foreground", no_argument, 0, 'f'},
 	{"debug", required_argument, 0, 'd'},
 	{"version", no_argument, 0, 'v'},
@@ -56,7 +55,27 @@ static struct option const long_options[] =
 	{0, 0, 0, 0},
 };
 
-static int daemon_init(void)
+static void usage(int status)
+{
+	if (status)
+		fprintf(stderr, "Try `%s --help' for more information.\n", program_name);
+	else {
+		printf("Usage: %s [OPTION]\n", program_name);
+		printf("\
+Target framework daemon.\n\
+  -l, --lld               specify low level drivers to run\n\
+  -f, --foreground        make the program run in the foreground\n\
+  -d, --debug debuglevel  print debugging information\n\
+  -h, --help              display this help and exit\n\
+");
+	}
+	exit(1);
+}
+
+static void signal_catch(int signo) {
+}
+
+static int daemonize(void)
 {
 	pid_t pid;
 
@@ -76,39 +95,10 @@ static int daemon_init(void)
 	return 0;
 }
 
-static void usage(int status)
-{
-	if (status != 0)
-		fprintf(stderr, "Try `%s --help' for more information.\n", program_name);
-	else {
-		printf("Usage: %s [OPTION]\n", program_name);
-		printf("\
-Target framework daemon.\n\
-  -f, --foreground        make the program run in the foreground\n\
-  -d, --debug debuglevel  print debugging information\n\
-  -h, --help              display this help and exit\n\
-");
-	}
-	exit(1);
-}
-
-static void signal_catch(int signo) {
-}
-
-static void tgtd_init(void)
+static void oom_adjust(void)
 {
 	int fd;
 	char path[64];
-	struct sigaction sa_old;
-	struct sigaction sa_new;
-
-	/* do not allow ctrl-c for now... */
-	sa_new.sa_handler = signal_catch;
-	sigemptyset(&sa_new.sa_mask);
-	sa_new.sa_flags = 0;
-	sigaction(SIGINT, &sa_new, &sa_old );
-	sigaction(SIGPIPE, &sa_new, &sa_old );
-	sigaction(SIGTERM, &sa_new, &sa_old );
 
 	/* Should we use RT stuff? */
 	nice(-20);
@@ -170,7 +160,7 @@ retry:
 	goto retry;
 }
 
-static struct pollfd *poll_init(int npfd, int nl_fd, int ud_fd)
+static struct pollfd *pfd_init(int npfd, int nl_fd, int ud_fd)
 {
 	struct tgt_driver *d;
 	struct pollfd *pfd;
@@ -197,7 +187,7 @@ static struct pollfd *poll_init(int npfd, int nl_fd, int ud_fd)
 	return pfd;
 }
 
-static int enable_drivers(char *data, int *npfd)
+static int lld_init(char *data, int *npfd)
 {
 	char *list, *p, *q;
 	int index, err, np, ndriver = 0;
@@ -233,15 +223,25 @@ static int enable_drivers(char *data, int *npfd)
 int main(int argc, char **argv)
 {
 	struct pollfd *pfd;
-	int err, ch, longindex, ndriver = 0, npfd = POLL_END;
+	struct sigaction sa_old;
+	struct sigaction sa_new;
+	int err, ch, longindex, nr_lld = 0, nr_pfd = POLL_END;
 	int is_daemon = 1, is_debug = 1;
 	int ki_fd, ipc_fd, timeout = -1;
 
-	while ((ch = getopt_long(argc, argv, "s:d:fd:vh", long_options,
+	/* do not allow ctrl-c for now... */
+	sa_new.sa_handler = signal_catch;
+	sigemptyset(&sa_new.sa_mask);
+	sa_new.sa_flags = 0;
+	sigaction(SIGINT, &sa_new, &sa_old );
+	sigaction(SIGPIPE, &sa_new, &sa_old );
+	sigaction(SIGTERM, &sa_new, &sa_old );
+
+	while ((ch = getopt_long(argc, argv, "l:fd:vh", long_options,
 				 &longindex)) >= 0) {
 		switch (ch) {
 		case 'p':
-			ndriver = enable_drivers(optarg, &npfd);
+			nr_lld = lld_init(optarg, &nr_pfd);
 			break;
 		case 'f':
 			is_daemon = 0;
@@ -261,15 +261,15 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (!ndriver) {
-		printf("No driver!\n");
+	if (!nr_lld) {
+		printf("No available low level driver!\n");
 		exit(1);
 	}
 
-	if (is_daemon && daemon_init())
+	if (is_daemon && daemonize())
 		exit(1);
 
-	tgtd_init();
+	oom_adjust();
 
 	err = log_init(program_name, LOG_SPACE_SIZE, is_daemon, is_debug);
 	if (err)
@@ -279,13 +279,13 @@ int main(int argc, char **argv)
 	if (err)
 		exit(1);
 
-	err = ipc_open(&ipc_fd);
+	err = ipc_init(&ipc_fd);
 	if (err)
 		exit(1);
 
-	pfd = poll_init(npfd, ki_fd, ipc_fd);
+	pfd = pfd_init(nr_pfd, ki_fd, ipc_fd);
 
-	event_loop(pfd, npfd, timeout);
+	event_loop(pfd, nr_pfd, timeout);
 
 	return 0;
 }
