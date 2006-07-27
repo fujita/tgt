@@ -35,8 +35,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/un.h>
-#include <linux/types.h>
-#include <linux/netlink.h>
 
 #include "tgtd.h"
 #include "tgtadm.h"
@@ -122,85 +120,90 @@ Report bugs to <stgt-devel@lists.berlios.de>.\n");
 	exit(status == 0 ? 0 : -1);
 }
 
-static int ipc_mgmt_connect(void)
+static int ipc_mgmt_connect(int *fd)
 {
-	int fd, err;
+	int err;
 	struct sockaddr_un addr;
 
-	fd = socket(AF_LOCAL, SOCK_STREAM, 0);
-	if (fd < 0)
-		return fd;
+	*fd = socket(AF_LOCAL, SOCK_STREAM, 0);
+	if (*fd < 0) {
+		eprintf("Cannot create a socket %s\n", strerror(errno));
+		return -1;
+	}
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_LOCAL;
 	memcpy((char *) &addr.sun_path + 1, TGT_IPC_NAMESPACE, strlen(TGT_IPC_NAMESPACE));
 
-	err = connect(fd, (struct sockaddr *) &addr, sizeof(addr));
-	if (err < 0)
-		return err;
+	err = connect(*fd, (struct sockaddr *) &addr, sizeof(addr));
+	if (err < 0) {
+		eprintf("Cannot connect to tgtd %s\n", strerror(errno));
+		return -1;
+	}
 
-	return fd;
+	return 0;
 }
 
-static void ipc_mgmt_result(char *rbuf)
+static int ipc_mgmt_res(int fd)
 {
-	struct nlmsghdr *nlh = (struct nlmsghdr *) rbuf;
-	struct tgtadm_res *res = NLMSG_DATA(nlh);
+	struct tgtadm_res *res;
+	char buf[BUFSIZE];
+	int err, len = (void *) res->data - (void *) res;
 
-	if (res->err < 0)
-		fprintf(stderr, "%d\n", res->err);
+	err = read(fd, buf, len);
+	if (err < 0) {
+		eprintf("Cannot read from tgtd %s\n", strerror(errno));
+		return -1;
+	}
 
-	if (nlh->nlmsg_len > NLMSG_LENGTH(0))
-		fprintf(stderr, "%s\n", (char *) res + sizeof(*res));
+	res = (struct tgtadm_res *) buf;
+	if (res->err) {
+		eprintf("Error %d\n", res->err);
+		return -1;
+	}
+
+	dprintf("got the response %d %d\n", res->err, res->len);
+
+	len = res->len - len;
+	if (!len)
+		return 0;
+
+	while (len) {
+		int t;
+		memset(buf, 0, sizeof(buf));
+		t = min_t(int, sizeof(buf), len);
+		err = read(fd, buf, t);
+		if (err < 0) {
+			eprintf("Cannot read from tgtd %s\n", strerror(errno));
+			return -1;
+		}
+		printf("%s", buf);
+		len -= t;
+	}
+
+	return 0;
 }
 
-static int ipc_mgmt_call(char *data, int len, char *rbuf)
+static int ipc_mgmt_req(struct tgtadm_req *req)
 {
-	int fd, err;
-	char sbuf[8192];
-	struct nlmsghdr *nlh = (struct nlmsghdr *) sbuf;
-	struct iovec iov;
-	struct msghdr msg;
+	int err, fd = 0;
 
-	memset(sbuf, 0, sizeof(sbuf));
-	memcpy(NLMSG_DATA(nlh), data, len);
-
-	nlh->nlmsg_len = NLMSG_LENGTH(len);
-	nlh->nlmsg_type = 0;
-	nlh->nlmsg_flags = 0;
-	nlh->nlmsg_pid = getpid();
-
-	fd = ipc_mgmt_connect();
-	if (fd < 0)
-		return fd;
-
-	err = write(fd, sbuf, nlh->nlmsg_len);
+	err = ipc_mgmt_connect(&fd);
 	if (err < 0)
 		goto out;
 
-	nlh = (struct nlmsghdr *) rbuf;
-	iov.iov_base = nlh;
-	iov.iov_len = NLMSG_ALIGN(nlh->nlmsg_len);
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
+	err = write(fd, (char *) req, req->len);
+	if (err < 0) {
+		eprintf("Cannot send to tgtd %s\n", strerror(errno));
+		goto out;
+	}
 
-	err = recvmsg(fd, &msg, MSG_PEEK);
-	if (err < 0)
-		return err;
+	dprintf("sent to tgtd %d\n", err);
 
-	iov.iov_base = nlh;
-	iov.iov_len = NLMSG_ALIGN(nlh->nlmsg_len);
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-
-	err = recvmsg(fd, &msg, MSG_DONTWAIT);
-	if (err < 0)
-		return err;
-
+	err = ipc_mgmt_res(fd);
 out:
-	close(fd);
+	if (fd > 0)
+		close(fd);
 	return err;
 }
 
@@ -243,13 +246,13 @@ static int str_to_op(char *str)
 int main(int argc, char **argv)
 {
 	int ch, longindex;
-	int err = -EINVAL, op = -1, len;
+	int err = -EINVAL, op = -1, len = 0;
 	int tid = -1;
 	uint32_t cid = 0, set = 0, hostno = 0;
 	uint64_t sid = 0, lun = 0;
 	char *params = NULL, *lldname = NULL;
 	struct tgtadm_req *req;
-	char sbuf[BUFSIZE], rbuf[BUFSIZE];
+	char buf[BUFSIZE];
 
 	optind = 1;
 	while ((ch = getopt_long(argc, argv, "n:o:t:s:c:l:p:uvh",
@@ -312,10 +315,9 @@ int main(int argc, char **argv)
 		usage(-1);
 	}
 
-	memset(sbuf, 0, sizeof(sbuf));
-	memset(rbuf, 0, sizeof(rbuf));
+	memset(buf, 0, sizeof(buf));
 
-	req = (struct tgtadm_req *) sbuf;
+	req = (struct tgtadm_req *) buf;
 	strncpy(req->lld, lldname, sizeof(req->lld));
 	req->mode = set_to_mode(set);
 	req->op = op;
@@ -324,14 +326,13 @@ int main(int argc, char **argv)
 	req->lun = lun;
 	req->host_no = hostno;
 
-	len = sizeof(struct tgtadm_req);
 	if (params) {
-		memcpy(sbuf + sizeof(struct tgtadm_req), params, strlen(params));
-		len += strlen(params);
+		len = min(strlen(params), sizeof(buf) - len);
+		strncpy((char *) req->data, params, len);
 	}
+	req->len = ((char *) req->data - (char *) req) + len;
 
-	err = ipc_mgmt_call(sbuf, len, rbuf);
-	ipc_mgmt_result(rbuf);
+	err = ipc_mgmt_req(req);
 out:
 	return err;
 }

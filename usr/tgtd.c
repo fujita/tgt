@@ -275,12 +275,12 @@ int main(int argc, char **argv)
 	if (err)
 		exit(1);
 
-	ki_fd = kreq_init();
-	if (ki_fd < 0)
+	err = kreq_init(&ki_fd);
+	if (err)
 		exit(1);
 
-	ipc_fd = ipc_open();
-	if (ipc_fd < 0)
+	err = ipc_open(&ipc_fd);
+	if (err)
 		exit(1);
 
 	pfd = poll_init(npfd, ki_fd, ipc_fd);

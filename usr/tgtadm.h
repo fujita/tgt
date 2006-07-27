@@ -24,19 +24,21 @@ enum tgtadm_mode {
 struct tgtadm_req {
 	enum tgtadm_mode mode;
 	enum tgtadm_op op;
+	uint32_t len;
 
-	int tid;
+	uint32_t tid;
 	uint64_t sid;
-	int cid;
+	uint32_t cid;
 	uint64_t lun;
 	char lld[TGT_LLD_NAME_LEN];
-	int host_no;
-	unsigned long addr;
-};
+	uint32_t host_no;
+	uint64_t data[0];
+} __attribute__ ((aligned (sizeof(uint64_t))));
 
 struct tgtadm_res {
-	int err;
-	unsigned long addr;
-};
+	uint32_t err;
+	uint32_t len;
+	uint64_t data[0];
+} __attribute__ ((aligned (sizeof(uint64_t))));;
 
 #endif

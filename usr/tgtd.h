@@ -24,11 +24,11 @@ struct tgt_device {
 	struct tgt_cmd_queue cmd_queue;
 };
 
-extern int kreq_init(void);
+extern int kreq_init(int *fd);
 extern int kreq_recv(void);
 extern int kreq_send(struct tgt_event *ev);
 
-extern int ipc_open(void);
+extern int ipc_open(int *fd);
 extern void ipc_event_handle(int accept_fd);
 
 extern void kreq_exec(struct tgt_event *ev);

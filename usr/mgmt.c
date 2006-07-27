@@ -33,14 +33,14 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/un.h>
-#include <linux/netlink.h>
-#include <linux/types.h>
 #include <scsi/scsi_tgt_if.h>
 
 #include "tgtd.h"
 #include "log.h"
 #include "tgtadm.h"
 #include "driver.h"
+
+#define BUFSIZE 4096
 
 static void device_create_parser(char *args, char **path, char **devtype)
 {
@@ -67,7 +67,7 @@ static void device_create_parser(char *args, char **path, char **devtype)
 }
 
 static int target_mgmt(int lld_no, struct tgtadm_req *req, char *params,
-		       char *rbuf, int *rlen)
+		       struct tgtadm_res *res, int *rlen)
 {
 	int err = -EINVAL;
 
@@ -89,11 +89,14 @@ static int target_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 		break;
 	}
 
+	res->err = err;
+	res->len = (char *) res->data - (char *) res;
+
 	return err;
 }
 
 static int device_mgmt(int lld_no, struct tgtadm_req *req, char *params,
-		       char *rbuf, int *rlen)
+		       struct tgtadm_res *res, int *rlen)
 {
 	int err = -EINVAL;
 	char *path, *devtype;
@@ -114,50 +117,47 @@ static int device_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 		break;
 	}
 
+	res->err = err;
+	res->len = (char *) res->data - (char *) res;
+
 	return err;
 }
 
-int tgt_mgmt(int lld_no, char *sbuf, char *rbuf)
+int tgt_mgmt(int lld_no, struct tgtadm_req *req, struct tgtadm_res *res,
+	     int len)
 {
-	struct nlmsghdr *nlh = (struct nlmsghdr *) sbuf;
-	struct tgtadm_req *req;
-	struct tgtadm_res *res;
-	int err = -EINVAL, rlen = 0;
-	char *params;
-
-	req = NLMSG_DATA(nlh);
-	params = (char *) req + sizeof(*req);
+	int err = -EINVAL;
+	char *params = (char *) req->data;
 
 	dprintf("%d %d %d %d %d %" PRIx64 " %" PRIx64 " %s %d\n",
-		nlh->nlmsg_len, lld_no, req->mode, req->op,
+		req->len, lld_no, req->mode, req->op,
 		req->tid, req->sid, req->lun, params, getpid());
 
 	switch (req->mode) {
 	case MODE_TARGET:
-		err = target_mgmt(lld_no, req, params, rbuf, &rlen);
+		err = target_mgmt(lld_no, req, params, res, &len);
 		break;
 	case MODE_DEVICE:
-		err = device_mgmt(lld_no, req, params, rbuf, &rlen);
+		err = device_mgmt(lld_no, req, params, res, &len);
 		break;
 	default:
 		break;
 	}
 
-	nlh = (struct nlmsghdr *) rbuf;
-	nlh->nlmsg_len = NLMSG_LENGTH(sizeof(*res) + rlen);
-	res = NLMSG_DATA(nlh);
-	res->err = err;
-
 	return err;
 }
 
-static int ipc_accept(int afd)
+static int ipc_accept(int accept_fd)
 {
 	struct sockaddr addr;
 	socklen_t len;
+	int fd;
 
 	len = sizeof(addr);
-	return accept(afd, (struct sockaddr *) &addr, &len);
+	fd = accept(accept_fd, (struct sockaddr *) &addr, &len);
+	if (fd < 0)
+		eprintf("can't accept a new connection %s\n", strerror(errno));
+	return fd;
 }
 
 static int ipc_perm(int fd)
@@ -168,112 +168,142 @@ static int ipc_perm(int fd)
 
 	len = sizeof(cred);
 	err = getsockopt(fd, SOL_SOCKET, SO_PEERCRED, (void *) &cred, &len);
-	if (err < 0)
-		goto out;
-
-	if (cred.uid || cred.gid) {
-		err = -EPERM;
-		goto out;
+	if (err) {
+		eprintf("can't get sockopt %s\n", strerror(errno));
+		return -1;
 	}
-out:
-	return err;
+
+	if (cred.uid || cred.gid)
+		return -EPERM;
+
+	return 0;
+}
+
+static void ipc_send_res(int fd, struct tgtadm_res *res)
+{
+	struct iovec iov;
+	struct msghdr msg;
+	int err;
+
+	iov.iov_base = res;
+	iov.iov_len = res->len;
+	memset(&msg, 0, sizeof(msg));
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+
+	err = sendmsg(fd, &msg, MSG_DONTWAIT);
+	if (err != res->len)
+		eprintf("can't write %s\n", strerror(errno));
 }
 
 void ipc_event_handle(int accept_fd)
 {
 	int fd, err;
-	char sbuf[4096], rbuf[4096];
-	struct nlmsghdr *nlh;
+	char sbuf[BUFSIZE], rbuf[BUFSIZE];
 	struct iovec iov;
 	struct msghdr msg;
-	struct tgtadm_res *res;
 	struct tgtadm_req *req;
-	int lld_no;
+	struct tgtadm_res *res;
+	int lld_no, len;
+
+	req = (struct tgtadm_req *) sbuf;
+	memset(sbuf, 0, sizeof(sbuf));
 
 	fd = ipc_accept(accept_fd);
-	if (fd < 0) {
-		eprintf("%d\n", fd);
+	if (fd < 0)
 		return;
-	}
 
 	err = ipc_perm(fd);
 	if (err < 0)
-		goto fail;
+		goto out;
 
-	memset(sbuf, 0, sizeof(sbuf));
-	memset(rbuf, 0, sizeof(rbuf));
-
-	nlh = (struct nlmsghdr *) sbuf;
-	iov.iov_base = nlh;
-	iov.iov_len = NLMSG_ALIGN(sizeof(struct nlmsghdr));
+	len = (char *) req->data - (char *) req;
+	iov.iov_base = req;
+	iov.iov_len = len;
 	memset(&msg, 0, sizeof(msg));
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
 
-	err = recvmsg(fd, &msg, MSG_PEEK);
-	if (err != NLMSG_ALIGN(sizeof(struct nlmsghdr))) {
-		err = -EIO;
-		goto fail;
+	err = recvmsg(fd, &msg, MSG_PEEK | MSG_DONTWAIT);
+	if (err != len) {
+		eprintf("can't read %s\n", strerror(errno));
+		goto out;
 	}
 
-	iov.iov_base = nlh;
-	iov.iov_len = NLMSG_ALIGN(nlh->nlmsg_len);
+	if (req->len > sizeof(sbuf) - len) {
+		eprintf("too long data %d\n", req->len);
+		goto out;
+	}
+
+	iov.iov_base = req;
+	iov.iov_len = req->len;
 	memset(&msg, 0, sizeof(msg));
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
 
 	err = recvmsg(fd, &msg, MSG_DONTWAIT);
-	if (err < 0)
-		goto fail;
-
-	req = NLMSG_DATA(nlh);
-	dprintf("%d %s %d %d %d\n", req->mode, req->lld, err, nlh->nlmsg_len, fd);
-	lld_no = get_driver_index(req->lld);
-	if (lld_no < 0) {
-		err = -ENOENT;
-		goto fail;
+	if (err != req->len) {
+		eprintf("can't read %s\n", strerror(errno));
+		err = -EIO;
+		goto out;
 	}
 
-	err = tgt_mgmt(lld_no, (char *) nlh, rbuf);
-	if (err)
-		eprintf("%d %d %d %d %d\n",
-			req->mode, lld_no, err, nlh->nlmsg_len, fd);
-send:
-	err = write(fd, nlh, nlh->nlmsg_len);
-	if (err < 0)
-		eprintf("%d\n", err);
+	dprintf("%d %s %d %d %d\n", req->mode, req->lld, err, req->len, fd);
+	res = (struct tgtadm_res *) rbuf;
+	memset(rbuf, 0, sizeof(rbuf));
 
+	lld_no = get_driver_index(req->lld);
+	if (lld_no < 0) {
+		eprintf("can't find the driver\n");
+		res->err = ENOENT;
+		res->len = (char *) res->data - (char *) res;
+		goto send;
+	}
+
+	err = tgt_mgmt(lld_no, req, res, sizeof(rbuf));
+	if (err)
+		eprintf("%d %d %d %d\n", req->mode, lld_no, err, res->len);
+
+send:
+	ipc_send_res(fd, res);
+out:
 	if (fd > 0)
 		close(fd);
 
 	return;
-fail:
-	nlh = (struct nlmsghdr *) rbuf;
-	res = NLMSG_DATA(nlh);
-	res->err = err;
-	nlh->nlmsg_len = NLMSG_LENGTH(0);
-	goto send;
 }
 
-int ipc_open(void)
+int ipc_open(int *ipc_fd)
 {
 	int fd, err;
 	struct sockaddr_un addr;
 
 	fd = socket(AF_LOCAL, SOCK_STREAM, 0);
-	if (fd < 0)
-		return fd;
+	if (fd < 0) {
+		eprintf("can't open a socket %s\n", strerror(errno));
+		return -1;
+	}
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_LOCAL;
 	memcpy((char *) &addr.sun_path + 1, TGT_IPC_NAMESPACE,
 	       strlen(TGT_IPC_NAMESPACE));
 
-	if ((err = bind(fd, (struct sockaddr *) &addr, sizeof(addr))) < 0)
-		return err;
+	err = bind(fd, (struct sockaddr *) &addr, sizeof(addr));
+	if (err) {
+		eprintf("can't bind a socket %s\n", strerror(errno));
+		goto out;
+	}
 
-	if ((err = listen(fd, 32)) < 0)
-		return err;
+	err = listen(fd, 32);
+	if (err < 0) {
+		eprintf("can't listen a socket %s\n", strerror(errno));
+		goto out;
+	}
 
-	return fd;
+	*ipc_fd = fd;
+	return 0;
+out:
+	close(fd);
+	return -1;
 }

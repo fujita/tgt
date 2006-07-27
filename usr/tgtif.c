@@ -114,22 +114,23 @@ static int ctrdev_open(char *devpath)
 	int devn;
 	int ctlfd;
 
-	if (!(f = fopen("/proc/devices", "r"))) {
+	f = fopen("/proc/devices", "r");
+	if (!f) {
 		eprintf("Cannot open control path to the driver\n");
 		return -1;
 	}
 
 	devn = 0;
 	while (!feof(f)) {
-		if (!fgets(buf, sizeof (buf), f)) {
+		if (!fgets(buf, sizeof (buf), f))
 			break;
-		}
-		if (sscanf(buf, "%d %s", &devn, devname) != 2) {
+
+		if (sscanf(buf, "%d %s", &devn, devname) != 2)
 			continue;
-		}
-		if (!strcmp(devname, "tgt")) {
+
+		if (!strcmp(devname, "tgt"))
 			break;
-		}
+
 		devn = 0;
 	}
 
@@ -157,7 +158,7 @@ static int ctrdev_open(char *devpath)
 
 #define CHRDEV_PATH "/dev/tgt"
 
-int kreq_init(void)
+int kreq_init(int *ki_fd)
 {
 	int fd, size = TGT_RINGBUF_SIZE;
 	char *buf;
@@ -176,6 +177,7 @@ int kreq_init(void)
 	ring_init(&kuring, buf, size, sizeof(struct tgt_event));
 	ring_init(&ukring, buf + size, size, sizeof(struct tgt_event));
 
-	chrfd = fd;
-	return fd;
+	*ki_fd = chrfd = fd;
+
+	return 0;
 }
