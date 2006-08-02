@@ -240,7 +240,7 @@ int main(int argc, char **argv)
 	while ((ch = getopt_long(argc, argv, "l:fd:vh", long_options,
 				 &longindex)) >= 0) {
 		switch (ch) {
-		case 'p':
+		case 'l':
 			nr_lld = lld_init(optarg, &nr_pfd);
 			break;
 		case 'f':

@@ -30,6 +30,7 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 
 #include <linux/fs.h>
 #define BITS_PER_LONG (ULONG_MAX == 0xFFFFFFFFUL ? 32 : 64)
@@ -223,6 +224,7 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 {
 	struct target *target;
 	struct tgt_device *device;
+	struct stat64 st;
 	int err, dev_fd;
 	uint64_t size;
 
@@ -240,14 +242,27 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 
 	dev_fd = open(path, O_RDWR | O_LARGEFILE);
 	if (dev_fd < 0) {
-		eprintf("Could not open %s errno %d\n", path, errno);
+		eprintf("Could not open %s %s\n", path, strerror(errno));
 		return dev_fd;
 	}
 
-	err = ioctl(dev_fd, BLKGETSIZE64, &size);
+	err = fstat64(dev_fd, &st);
 	if (err < 0) {
-		eprintf("Cannot get size %d\n", dev_fd);
-		return err;
+		printf("Cannot get stat %d %s\n", dev_fd, strerror(errno));
+		goto close_dev_fd;
+	}
+
+	if (S_ISREG(st.st_mode))
+		size = st.st_size;
+	else if(S_ISBLK(st.st_mode)) {
+		err = ioctl(dev_fd, BLKGETSIZE64, &size);
+		if (err < 0) {
+			eprintf("Cannot get size %s\n", strerror(errno));
+			goto close_dev_fd;
+		}
+	} else {
+		eprintf("Cannot use this mode %x\n", st.st_mode);
+		goto close_dev_fd;
 	}
 
 	if (dev_id >= target->max_device)
