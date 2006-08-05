@@ -26,7 +26,7 @@ void conn_add_to_session(struct connection *conn, struct session *session)
 	}
 
 	conn->session = session;
-	insque(&conn->clist, &session->conn_list);
+	list_add(&conn->clist, &session->conn_list);
 }
 
 struct connection *conn_alloc(void)
@@ -47,7 +47,7 @@ struct connection *conn_alloc(void)
 
 void conn_free(struct connection *conn)
 {
-	remque(&conn->clist);
+	list_del(&conn->clist);
 	free(conn->initiator);
 	free(conn);
 }

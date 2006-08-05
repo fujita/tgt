@@ -16,7 +16,7 @@
 
 #include "iscsid.h"
 
-struct qelem sessions_list = LIST_HEAD_INIT(sessions_list);
+static LIST_HEAD(sessions_list);
 
 static struct session *session_alloc(int tid)
 {
@@ -31,7 +31,7 @@ static struct session *session_alloc(int tid)
 
 	session->target = target;
 	INIT_LIST_HEAD(&session->slist);
-	insque(&session->slist, &target->sessions_list);
+	list_add(&session->slist, &target->sessions_list);
 
 	INIT_LIST_HEAD(&session->conn_list);
 
@@ -115,7 +115,7 @@ void session_create(struct connection *conn)
 	ki->create_session(thandle, conn->exp_cmd_sn, &session->ksid,
 			   &session->hostno);
 
-	insque(&session->hlist, &sessions_list);
+	list_add(&session->hlist, &sessions_list);
 }
 
 void session_remove(struct session *session)
@@ -131,11 +131,11 @@ void session_remove(struct session *session)
 		ki->destroy_session(thandle, session->ksid);
 
 	if (session->target) {
-		remque(&session->slist);
+		list_del(&session->slist);
 /* 		session->target->nr_sessions--; */
 	}
 
-	remque(&session->hlist);
+	list_del(&session->hlist);
 
 	free(session->initiator);
 	free(session);

@@ -7,13 +7,12 @@
 #ifndef ISCSID_H
 #define ISCSID_H
 
-#include <search.h>
 #include <sys/types.h>
 #include <linux/types.h>
 
 #include "types.h"
 #include "iscsi_if.h"
-#include "misc.h"
+#include "list.h"
 #include "param.h"
 #include "log.h"
 
@@ -50,8 +49,8 @@ struct PDU {
 #define KEY_STATE_DONE		2
 
 struct session {
-	struct qelem slist;
-	struct qelem hlist;
+	struct list_head slist;
+	struct list_head hlist;
 
 	char *initiator;
 	struct target *target;
@@ -62,7 +61,7 @@ struct session {
 	uint32_t ksid;
 	uint32_t hostno;
 
-	struct qelem conn_list;
+	struct list_head conn_list;
 	int conn_cnt;
 };
 
@@ -71,7 +70,7 @@ struct connection {
 	int iostate;
 	int fd;
 
-	struct qelem clist;
+	struct list_head clist;
 	struct session *session;
 
 	int tid;
@@ -152,9 +151,9 @@ struct connection {
 #define INCOMING_BUFSIZE	8192
 
 struct target {
-	struct qelem tlist;
+	struct list_head tlist;
 
-	struct qelem sessions_list;
+	struct list_head sessions_list;
 
 	int tid;
 	char name[ISCSI_NAME_LEN];

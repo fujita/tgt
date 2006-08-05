@@ -19,7 +19,7 @@
 #include "iscsid.h"
 #include "tgtadm.h"
 
-struct qelem targets_list = LIST_HEAD_INIT(targets_list);
+static LIST_HEAD(targets_list);
 
 void target_list_build(struct connection *conn, char *addr, char *name)
 {
@@ -77,7 +77,7 @@ int iscsi_target_destroy(int tid)
 		exit(-1);
 	}
 
-	remque(&target->tlist);
+	list_del(&target->tlist);
 
 	free(target);
 
@@ -102,7 +102,7 @@ int iscsi_target_create(int tid, char *name)
 	INIT_LIST_HEAD(&target->tlist);
 	INIT_LIST_HEAD(&target->sessions_list);
 	target->tid = tid;
-	insque(&target->tlist, &targets_list);
+	list_add(&target->tlist, &targets_list);
 
 	return 0;
 }
