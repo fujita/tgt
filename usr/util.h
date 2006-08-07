@@ -1,5 +1,7 @@
+#ifndef __UTIL_H__
+#define __UTIL_H__
+
 #include <sys/user.h>
-#include "list.h"
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
@@ -31,3 +33,6 @@
 #define max_t(type,x,y) \
 	({ type __x = (x); type __y = (y); __x > __y ? __x: __y; })
 
+extern int chrdev_open(char *modname, char *devpath, uint8_t minor, int *fd);
+
+#endif

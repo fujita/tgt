@@ -35,6 +35,8 @@
 #include <sys/stat.h>
 #include <scsi/scsi_tgt_if.h>
 
+#include "list.h"
+#include "util.h"
 #include "tgtd.h"
 
 struct uring {
@@ -106,66 +108,16 @@ retry:
 	goto retry;
 }
 
-static int ctrdev_open(char *devpath)
-{
-	FILE *f;
-	char devname[256];
-	char buf[256];
-	int devn;
-	int ctlfd;
-
-	f = fopen("/proc/devices", "r");
-	if (!f) {
-		eprintf("Cannot open control path to the driver\n");
-		return -1;
-	}
-
-	devn = 0;
-	while (!feof(f)) {
-		if (!fgets(buf, sizeof (buf), f))
-			break;
-
-		if (sscanf(buf, "%d %s", &devn, devname) != 2)
-			continue;
-
-		if (!strcmp(devname, "tgt"))
-			break;
-
-		devn = 0;
-	}
-
-	fclose(f);
-	if (!devn) {
-		eprintf("cannot find iscsictl in /proc/devices - "
-			"make sure the module is loaded\n");
-		return -1;
-	}
-
-	unlink(devpath);
-	if (mknod(devpath, (S_IFCHR | 0600), (devn << 8))) {
-		eprintf("cannot create %s %s\n", devpath, strerror(errno));
-		return -1;
-	}
-
-	ctlfd = open(devpath, O_RDWR);
-	if (ctlfd < 0) {
-		eprintf("cannot open %s %s\n", devpath, strerror(errno));
-		return -1;
-	}
-
-	return ctlfd;
-}
-
 #define CHRDEV_PATH "/dev/tgt"
 
 int kreq_init(int *ki_fd)
 {
-	int fd, size = TGT_RINGBUF_SIZE;
+	int err, fd, size = TGT_RINGBUF_SIZE;
 	char *buf;
 
-	fd = ctrdev_open(CHRDEV_PATH);
-	if (fd < 0)
-		return fd;
+	err = chrdev_open("tgt", CHRDEV_PATH, 0, &fd);
+	if (err)
+		return err;
 
 	buf = mmap(NULL, size * 2, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if (buf == MAP_FAILED) {

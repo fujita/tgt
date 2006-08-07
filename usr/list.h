@@ -1,3 +1,6 @@
+#ifndef __LIST_H__
+#define __LIST_H__
+
 /* taken from linux kernel */
 
 #undef offsetof
@@ -79,3 +82,5 @@ static inline void list_del(struct list_head *entry)
 	__list_del(entry->prev, entry->next);
 	entry->next = entry->prev = NULL;
 }
+
+#endif

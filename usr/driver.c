@@ -3,6 +3,7 @@
 #include <poll.h>
 #include <inttypes.h>
 
+#include "list.h"
 #include "tgtd.h"
 #include "driver.h"
 

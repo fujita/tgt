@@ -2,7 +2,6 @@
 #define __TARGET_DAEMON_H
 
 #include "log.h"
-#include "util.h"
 #include <scsi/scsi_tgt_if.h>
 
 #define	SCSI_ID_LEN	24

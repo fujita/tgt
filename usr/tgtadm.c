@@ -36,6 +36,8 @@
 #include <sys/types.h>
 #include <sys/un.h>
 
+#include "util.h"
+#include "list.h"
 #include "tgtd.h"
 #include "tgtadm.h"
 #include "driver.h"

@@ -24,6 +24,8 @@
 #include <scsi/scsi.h>
 #include <sys/mman.h>
 
+#include "list.h"
+#include "util.h"
 #include "tgtd.h"
 #include "driver.h"
 

@@ -34,6 +34,7 @@
 #include <sys/signal.h>
 #include <sys/stat.h>
 
+#include "list.h"
 #include "tgtd.h"
 #include "driver.h"
 

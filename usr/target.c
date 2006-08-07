@@ -37,6 +37,8 @@
 #include <linux/hash.h>
 #include <scsi/scsi.h>
 
+#include "list.h"
+#include "util.h"
 #include "tgtd.h"
 #include "tgtadm.h"
 #include "driver.h"
