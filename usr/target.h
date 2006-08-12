@@ -6,13 +6,12 @@
 #define	MSG_HEAD_TAG	0x21
 #define	MSG_ORDERED_TAG	0x22
 
-#define	MAX_NR_TARGET		1024
 #define	MAX_NR_HOST		1024
 #define	DEFAULT_NR_DEVICE	64
 #define	MAX_NR_DEVICE		(1 << 20)
 
 #define	HASH_ORDER	4
-#define	cmd_hashfn(cid)	hash_long((cid), HASH_ORDER)
+#define	hashfn(cid)	hash_long((cid), HASH_ORDER)
 
 struct mgmt_req {
 	uint64_t mid;
@@ -44,6 +43,8 @@ struct cmd {
 struct target {
 	int tid;
 	int lid;
+
+	struct list_head tlist;
 
 	uint64_t max_device;
 	struct tgt_device **devt;

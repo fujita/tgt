@@ -42,16 +42,29 @@
 #include "driver.h"
 #include "target.h"
 
-static struct target *tgtt[MAX_NR_TARGET];
 static struct target *hostt[MAX_NR_HOST];
 
-static struct target *target_get(int tid)
+static struct list_head target_list[1 << HASH_ORDER];
+
+static struct target *target_lookup(int tid)
 {
-	if (tid >= MAX_NR_TARGET) {
-		eprintf("Too larget target id %d\n", tid);
-		return NULL;
-	}
-	return tgtt[tid];
+	struct target *target;
+
+	list_for_each_entry(target, &target_list[hashfn(tid)], tlist)
+		if (target->tid == tid)
+			return target;
+	return NULL;
+}
+
+static void target_list_insert(struct target *target)
+{
+	struct list_head *list = &target_list[hashfn(target->tid)];
+	list_add(&target->tlist, list);
+}
+
+static void target_list_remove(struct target *target)
+{
+	list_del(&target->tlist);
 }
 
 static struct tgt_device *device_get(struct target *target, uint64_t dev_id)
@@ -114,7 +127,7 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 
 	dprintf("%d %" PRIu64 " %s\n", tid, dev_id, path);
 
-	target = target_get(tid);
+	target = target_lookup(tid);
 	if (!target)
 		return -ENOENT;
 
@@ -187,7 +200,7 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 
 	dprintf("%u %" PRIu64 "\n", tid, dev_id);
 
-	target = target_get(tid);
+	target = target_lookup(tid);
 	if (!target)
 		return -ENOENT;
 
@@ -312,7 +325,7 @@ static void cmd_queue(struct tgt_event *ev_req)
 	cmd->attribute = ev_req->k.cmd_req.attribute;
 	cmd->tag = ev_req->k.cmd_req.tag;
 	list_add(&cmd->clist, &target->cmd_list);
-	list_add(&cmd->hlist, &target->cmd_hash_list[cmd_hashfn(cmd->cid)]);
+	list_add(&cmd->hlist, &target->cmd_hash_list[hashfn(cmd->cid)]);
 
 	dev_id = scsi_get_devid(target->lid, ev_req->k.cmd_req.lun);
 	dprintf("%u %x %" PRIx64 "\n", cmd->cid, ev_req->k.cmd_req.scb[0],
@@ -398,7 +411,7 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 static struct cmd *find_cmd(struct target *target, uint32_t cid)
 {
 	struct cmd *cmd;
-	struct list_head *head = &target->cmd_hash_list[cmd_hashfn(cid)];
+	struct list_head *head = &target->cmd_hash_list[hashfn(cid)];
 
 	list_for_each_entry(cmd, head, hlist) {
 		if (cmd->cid == cid)
@@ -630,11 +643,14 @@ void kreq_exec(struct tgt_event *ev)
 
 int tgt_target_bind(int tid, int host_no, int lid)
 {
-	if (!tgtt[tid]) {
+	struct target *target;
+
+	target = target_lookup(tid);
+	if (!target) {
 		eprintf("target is not found %d\n", tid);
 		return -EINVAL;
 	}
-	tgtt[tid]->lid = lid;
+	target->lid = lid;
 
 	if (hostt[host_no]) {
 		eprintf("host is already binded %d %d\n", tid, host_no);
@@ -643,7 +659,7 @@ int tgt_target_bind(int tid, int host_no, int lid)
 
 	eprintf("Succeed to bind the target %d to the scsi host %d\n",
 		tid, host_no);
-	hostt[host_no] = tgtt[tid];
+	hostt[host_no] = target;
 	return 0;
 }
 
@@ -652,12 +668,8 @@ int tgt_target_create(int tid)
 	int err, i;
 	struct target *target;
 
-	if (tid >= MAX_NR_TARGET) {
-		eprintf("Too larget target id %d\n", tid);
-		return -EINVAL;
-	}
-
-	if (tgtt[tid]) {
+	target = target_lookup(tid);
+	if (target) {
 		eprintf("Target id %d already exists\n", tid);
 		return -EINVAL;
 	}
@@ -686,7 +698,8 @@ int tgt_target_create(int tid)
 	tgt_cmd_queue_init(&target->cmd_queue);
 
 	eprintf("Succeed to create a new target %d\n", tid);
-	tgtt[tid] = target;
+	target_list_insert(target);
+
 	return 0;
 
 free_target:
@@ -696,8 +709,9 @@ free_target:
 
 int tgt_target_destroy(int tid)
 {
-	struct target *target = target_get(tid);
+	struct target *target;
 
+	target = target_lookup(tid);
 	if (!target)
 		return -ENOENT;
 
@@ -711,7 +725,7 @@ int tgt_target_destroy(int tid)
 
 	free(target->devt);
 
-	tgtt[tid] = NULL;
+	target_list_remove(target);
 	free(target);
 
 	return 0;
