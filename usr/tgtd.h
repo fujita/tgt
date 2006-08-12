@@ -40,7 +40,7 @@ extern int tgt_target_bind(int tid, int host_no, int lid);
 
 extern int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun,
 			    uint32_t data_len, int attribute, uint64_t tag);
-extern void target_cmd_done(int host_no, uint32_t cid);
+extern void target_cmd_done(int host_no, uint64_t tag);
 extern void target_mgmt_request(int host_no, int req_id, int function,
 				uint8_t *lun, uint64_t tag);
 

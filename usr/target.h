@@ -12,7 +12,7 @@
 #define	MAX_NR_HOST		1024
 
 #define	HASH_ORDER	4
-#define	hashfn(cid)	hash_long((cid), HASH_ORDER)
+#define	hashfn(val)	hash_long((unsigned long) (val), HASH_ORDER)
 
 struct mgmt_req {
 	uint64_t mid;
@@ -21,10 +21,10 @@ struct mgmt_req {
 };
 
 struct cmd {
-	struct list_head hlist;
+	/* linked target->cmd_hash_list */
+	struct list_head c_hlist;
 	struct list_head qlist;
-	struct list_head clist;
-	uint32_t cid;
+
 	uint64_t uaddr;
 	uint32_t len;
 	int mmapped;
@@ -51,7 +51,7 @@ struct target {
 	struct list_head device_list; /* for REPORT_LUNS */
 
 	struct list_head cmd_hash_list[1 << HASH_ORDER];
-	struct list_head cmd_list;
+
 	struct tgt_cmd_queue cmd_queue;
 };
 

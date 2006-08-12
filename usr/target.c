@@ -99,6 +99,28 @@ static void device_list_remove(struct tgt_device *device)
 	list_del(&device->d_list);
 }
 
+static struct cmd *cmd_lookup(struct target *target, uint64_t tag)
+{
+	struct cmd *cmd;
+	struct list_head *list = &target->cmd_hash_list[hashfn(tag)];
+	list_for_each_entry(cmd, list, c_hlist) {
+		if (cmd->tag == tag)
+			return cmd;
+	}
+	return NULL;
+}
+
+static void cmd_hlist_insert(struct target *target, struct cmd *cmd)
+{
+	struct list_head *list = &target->cmd_hash_list[hashfn(cmd->tag)];
+	list_add(&cmd->c_hlist, list);
+}
+
+static void cmd_hlist_remove(struct cmd *cmd)
+{
+	list_del(&cmd->c_hlist);
+}
+
 static struct target *host_to_target(int host_no)
 {
 	if (host_no < MAX_NR_HOST)
@@ -217,7 +239,7 @@ static int tgt_kspace_send_cmd(struct cmd *cmd, int result, int rw)
 
 	ev.type = TGT_UEVENT_CMD_RSP;
 	ev.u.cmd_rsp.host_no = cmd->hostno;
-	ev.u.cmd_rsp.cid = cmd->cid;
+/* 	ev.u.cmd_rsp.cid = cmd->cid; */
 	ev.u.cmd_rsp.len = cmd->len;
 	ev.u.cmd_rsp.result = result;
 	ev.u.cmd_rsp.uaddr = cmd->uaddr;
@@ -231,8 +253,8 @@ static int cmd_pre_perform(struct tgt_cmd_queue *q, struct cmd *cmd)
 	int enabled = 0;
 
 	if (cmd->attribute != MSG_SIMPLE_TAG)
-		dprintf("non simple attribute %u %x %" PRIu64 " %d\n",
-			cmd->cid, cmd->attribute, cmd->dev ? cmd->dev->lun : ~0ULL,
+		dprintf("non simple attribute %" PRIx64 " %x %" PRIu64 " %d\n",
+			cmd->tag, cmd->attribute, cmd->dev ? cmd->dev->lun : ~0ULL,
 			q->active_cmd);
 
 	switch (cmd->attribute) {
@@ -308,11 +330,9 @@ int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun, uint32_t data_len,
 	if (!cmd)
 		return -ENOMEM;
 	cmd->hostno = host_no;
-/*  	cmd->cid = ev_req->k.cmd_req.cid; */
 	cmd->attribute = attribute;
 	cmd->tag = tag;
-	list_add(&cmd->clist, &target->cmd_list);
-/* 	list_add(&cmd->hlist, &target->cmd_hash_list[hashfn(cmd->cid)]); */
+	cmd_hlist_insert(target, cmd);
 
 	dev_id = scsi_get_devid(target->lid, lun);
 	dprintf("%x %" PRIx64 "\n", scb[0], dev_id);
@@ -336,16 +356,15 @@ int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun, uint32_t data_len,
 
 		cmd_post_perform(q, cmd, uaddr, len, mmapped);
 
-		dprintf("%u %x %lx %" PRIu64 " %d\n",
-			cmd->cid, scb[0], uaddr, offset, result);
+		dprintf("%" PRIx64 " %x %lx %" PRIu64 " %d\n",
+			tag, scb[0], uaddr, offset, result);
 
 		set_cmd_processed(cmd);
 		tgt_kspace_send_cmd(cmd, result, rw);
 	} else {
 		set_cmd_queued(cmd);
-		dprintf("blocked %u %x %" PRIu64 " %d\n",
-			cmd->cid, scb[0],
-			cmd->dev ? cmd->dev->lun : ~0ULL,
+		dprintf("blocked %" PRIx64 " %x %" PRIu64 " %d\n",
+			tag, scb[0], cmd->dev ? cmd->dev->lun : ~0ULL,
 			q->active_cmd);
 
 		memcpy(cmd->scb, scb, sizeof(cmd->scb));
@@ -375,7 +394,7 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 				eprintf("fail to find target!\n");
 				exit(1);
 			}
-			dprintf("perform %u %x\n", cmd->cid, cmd->attribute);
+			dprintf("perform %" PRIx64 " %x\n", cmd->tag, cmd->attribute);
 			result = scsi_cmd_perform(target->lid,
 						  cmd->hostno, cmd->scb,
 						  &len,
@@ -393,18 +412,6 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 		} else
 			break;
 	}
-}
-
-static struct cmd *find_cmd(struct target *target, uint32_t cid)
-{
-	struct cmd *cmd;
-	struct list_head *head = &target->cmd_hash_list[hashfn(cid)];
-
-	list_for_each_entry(cmd, head, hlist) {
-		if (cmd->cid == cid)
-			return cmd;
-	}
-	return NULL;
 }
 
 static int scsi_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
@@ -430,8 +437,7 @@ static void __cmd_done(struct target *target, struct cmd *cmd)
 	struct tgt_cmd_queue *q;
 	int err, do_munmap;
 
-	list_del(&cmd->clist);
-	list_del(&cmd->hlist);
+	cmd_hlist_remove(cmd);
 
 	do_munmap = cmd->mmapped;
 	if (do_munmap) {
@@ -476,7 +482,7 @@ static int tgt_kspace_send_tsk_mgmt(int host_no, uint64_t mid, int result)
 	return kreq_send(&ev);
 }
 
-void target_cmd_done(int host_no, uint32_t cid)
+void target_cmd_done(int host_no, uint64_t tag)
 {
 	struct target *target;
 	struct cmd *cmd;
@@ -488,9 +494,9 @@ void target_cmd_done(int host_no, uint32_t cid)
 		return;
 	}
 
-	cmd = find_cmd(target, cid);
+	cmd = cmd_lookup(target, tag);
 	if (!cmd) {
-		eprintf("Cannot find cmd %d %u\n", host_no, cid);
+		eprintf("Cannot find cmd %d %" PRIx64 "\n", host_no, tag);
 		return;
 	}
 
@@ -530,18 +536,21 @@ static int abort_task_set(struct mgmt_req *mreq, struct target* target, int host
 			  uint64_t tag, uint8_t *lun, int all)
 {
 	struct cmd *cmd, *tmp;
-	int err, count = 0;
+	int i, err, count = 0;
 
 	eprintf("found %" PRIx64 " %d\n", tag, all);
 
-	list_for_each_entry_safe(cmd, tmp, &target->cmd_list, clist) {
-		if ((all && cmd->hostno == host_no)||
-		    (cmd->tag == tag && cmd->hostno == host_no) ||
-		    (lun && !memcmp(cmd->lun, lun, sizeof(cmd->lun)))) {
-			err = abort_cmd(target, mreq, cmd);
-			if (err)
-				mreq->busy++;
-			count++;
+	for (i = 0; i < ARRAY_SIZE(target->cmd_hash_list); i++) {
+		struct list_head *list = &target->cmd_hash_list[i];
+		list_for_each_entry_safe(cmd, tmp, list, c_hlist) {
+			if ((all && cmd->hostno == host_no) ||
+			    (cmd->tag == tag && cmd->hostno == host_no) ||
+			    (lun && !memcmp(cmd->lun, lun, sizeof(cmd->lun)))) {
+				err = abort_cmd(target, mreq, cmd);
+				if (err)
+					mreq->busy++;
+				count++;
+			}
 		}
 	}
 
@@ -639,7 +648,6 @@ int tgt_target_create(int tid)
 	}
 
 	target->tid = tid;
-	INIT_LIST_HEAD(&target->cmd_list);
 	for (i = 0; i < ARRAY_SIZE(target->cmd_hash_list); i++)
 		INIT_LIST_HEAD(&target->cmd_hash_list[i]);
 
