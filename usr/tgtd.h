@@ -18,7 +18,9 @@ struct tgt_device {
 	uint64_t size;
 	uint64_t lun;
 	char scsi_id[SCSI_ID_LEN];
-	struct list_head dlist;
+
+	struct list_head d_hlist;
+	struct list_head d_list;
 
 	struct tgt_cmd_queue cmd_queue;
 };

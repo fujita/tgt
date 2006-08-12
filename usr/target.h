@@ -1,14 +1,15 @@
 #ifndef __TARGET_H__
 #define __TARGET_H__
 
+#define BITS_PER_LONG (ULONG_MAX == 0xFFFFFFFFUL ? 32 : 64)
+#include <linux/hash.h>
+
 /* better if we can include the followings in kernel header files. */
 #define	MSG_SIMPLE_TAG	0x20
 #define	MSG_HEAD_TAG	0x21
 #define	MSG_ORDERED_TAG	0x22
 
 #define	MAX_NR_HOST		1024
-#define	DEFAULT_NR_DEVICE	64
-#define	MAX_NR_DEVICE		(1 << 20)
 
 #define	HASH_ORDER	4
 #define	hashfn(cid)	hash_long((cid), HASH_ORDER)
@@ -44,11 +45,10 @@ struct target {
 	int tid;
 	int lid;
 
-	struct list_head tlist;
+	struct list_head t_hlist;
 
-	uint64_t max_device;
-	struct tgt_device **devt;
-	struct list_head device_list;
+	struct list_head device_hash_list[1 << HASH_ORDER];
+	struct list_head device_list; /* for REPORT_LUNS */
 
 	struct list_head cmd_hash_list[1 << HASH_ORDER];
 	struct list_head cmd_list;

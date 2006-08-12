@@ -32,8 +32,6 @@
 #include <sys/stat.h>
 
 #include <linux/fs.h>
-#define BITS_PER_LONG (ULONG_MAX == 0xFFFFFFFFUL ? 32 : 64)
-#include <linux/hash.h>
 #include <scsi/scsi.h>
 
 #include "list.h"
@@ -43,37 +41,63 @@
 #include "target.h"
 
 static struct target *hostt[MAX_NR_HOST];
-
-static struct list_head target_list[1 << HASH_ORDER];
+static struct list_head target_hash_list[1 << HASH_ORDER];
 
 static struct target *target_lookup(int tid)
 {
 	struct target *target;
 
-	list_for_each_entry(target, &target_list[hashfn(tid)], tlist)
+	list_for_each_entry(target, &target_hash_list[hashfn(tid)], t_hlist)
 		if (target->tid == tid)
 			return target;
 	return NULL;
 }
 
-static void target_list_insert(struct target *target)
+static void target_hlist_insert(struct target *target)
 {
-	struct list_head *list = &target_list[hashfn(target->tid)];
-	list_add(&target->tlist, list);
+	struct list_head *list = &target_hash_list[hashfn(target->tid)];
+	list_add(&target->t_hlist, list);
 }
 
-static void target_list_remove(struct target *target)
+static void target_hlist_remove(struct target *target)
 {
-	list_del(&target->tlist);
+	list_del(&target->t_hlist);
 }
 
-static struct tgt_device *device_get(struct target *target, uint64_t dev_id)
+static struct tgt_device *device_lookup(struct target *target, uint64_t dev_id)
 {
-	if (dev_id < target->max_device || dev_id < MAX_NR_DEVICE)
-		return target->devt[dev_id];
-
-	dprintf("Invalid device id %" PRIu64 "%d\n", dev_id, MAX_NR_DEVICE);
+	struct tgt_device *device;
+	struct list_head *list = &target->device_hash_list[hashfn(dev_id)];
+	list_for_each_entry(device, list, d_hlist)
+		if (device->lun == dev_id)
+			return device;
 	return NULL;
+}
+
+static void device_hlist_insert(struct target *target, struct tgt_device *device)
+{
+	struct list_head *list = &target->device_hash_list[hashfn(device->lun)];
+	list_add(&device->d_hlist, list);
+}
+
+static void device_hlist_remove(struct tgt_device *device)
+{
+	list_del(&device->d_hlist);
+}
+
+static void device_list_insert(struct target *target, struct tgt_device *device)
+{
+	struct tgt_device *pos;
+	list_for_each_entry(pos, &target->device_list, d_list) {
+		if (device->lun < pos->lun)
+			break;
+	}
+	list_add(&device->d_list, &pos->d_list);
+}
+
+static void device_list_remove(struct tgt_device *device)
+{
+	list_del(&device->d_list);
 }
 
 static struct target *host_to_target(int host_no)
@@ -82,32 +106,6 @@ static struct target *host_to_target(int host_no)
 		return hostt[host_no];
 
 	return NULL;
-}
-
-static void resize_device_table(struct target *target, uint64_t did)
-{
-	struct tgt_device *device;
-	void *p, *q;
-
-	p = calloc(did + 1, sizeof(device));
-	memcpy(p, target->devt, sizeof(device) * target->max_device);
-	q = target->devt;
-	target->devt = p;
-	target->max_device = did + 1;
-	free(q);
-}
-
-static void tgt_device_link(struct target *target, struct tgt_device *dev)
-{
-	struct tgt_device *ent;
-	struct list_head *pos;
-
-	list_for_each(pos, &target->device_list) {
-		ent = list_entry(pos, struct tgt_device, dlist);
-		if (dev->lun < ent->lun)
-			break;
-	}
-	list_add(&dev->dlist, pos);
 }
 
 static void tgt_cmd_queue_init(struct tgt_cmd_queue *q)
@@ -131,7 +129,7 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 	if (!target)
 		return -ENOENT;
 
-	device = device_get(target, dev_id);
+	device = device_lookup(target, dev_id);
 	if (device) {
 		eprintf("device %" PRIu64 " already exists\n", dev_id);
 		return -EINVAL;
@@ -162,9 +160,6 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 		goto close_dev_fd;
 	}
 
-	if (dev_id >= target->max_device)
-		resize_device_table(target, dev_id);
-
 	device = malloc(sizeof(*device));
 	if (!device)
 		goto close_dev_fd;
@@ -175,14 +170,10 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 	device->lun = dev_id;
 	snprintf(device->scsi_id, sizeof(device->scsi_id),
 		 "deadbeaf%d:%" PRIu64, tid, dev_id);
-	target->devt[dev_id] = device;
 
-	if (device->addr)
-		eprintf("Succeed to mmap the device %" PRIx64 "\n",
-			device->addr);
-
-	tgt_device_link(target, device);
 	tgt_cmd_queue_init(&device->cmd_queue);
+	device_hlist_insert(target, device);
+	device_list_insert(target, device);
 
 	eprintf("Succeed to add a logical unit %" PRIu64 " to the target %d\n",
 		dev_id, tid);
@@ -204,7 +195,7 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 	if (!target)
 		return -ENOENT;
 
-	device = device_get(target, dev_id);
+	device = device_lookup(target, dev_id);
 	if (!device) {
 		eprintf("device %" PRIu64 " not found\n", dev_id);
 		return -EINVAL;
@@ -213,13 +204,9 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 	if (!list_empty(&device->cmd_queue.queue))
 		return -EBUSY;
 
-	target->devt[dev_id] = NULL;
-	if (device->addr)
-		munmap((void *) (unsigned long) device->addr, device->size);
-
 	close(device->fd);
-
-	list_del(&device->dlist);
+	device_hlist_remove(device);
+	device_list_remove(device);
 
 	free(device);
 	return 0;
@@ -331,9 +318,9 @@ static void cmd_queue(struct tgt_event *ev_req)
 	dprintf("%u %x %" PRIx64 "\n", cmd->cid, ev_req->k.cmd_req.scb[0],
 		dev_id);
 
-	cmd->dev = device_get(target, dev_id);
+	cmd->dev = device_lookup(target, dev_id);
 	if (cmd->dev) {
-		uaddr = target->devt[dev_id]->addr;
+		uaddr = cmd->dev->addr;
 		q = &cmd->dev->cmd_queue;
 	} else
 		q = &target->cmd_queue;
@@ -665,7 +652,7 @@ int tgt_target_bind(int tid, int host_no, int lid)
 
 int tgt_target_create(int tid)
 {
-	int err, i;
+	int i;
 	struct target *target;
 
 	target = target_lookup(tid);
@@ -686,25 +673,15 @@ int tgt_target_create(int tid)
 		INIT_LIST_HEAD(&target->cmd_hash_list[i]);
 
 	INIT_LIST_HEAD(&target->device_list);
-
-	target->devt = calloc(DEFAULT_NR_DEVICE, sizeof(struct tgt_device *));
-	if (!target->devt) {
-		eprintf("Out of memoryn\n");
-		err = 0;
-		goto free_target;
-	}
-	target->max_device = DEFAULT_NR_DEVICE;
+	for (i = 0; i < ARRAY_SIZE(target->device_hash_list); i++)
+		INIT_LIST_HEAD(&target->device_hash_list[i]);
 
 	tgt_cmd_queue_init(&target->cmd_queue);
+	target_hlist_insert(target);
 
 	eprintf("Succeed to create a new target %d\n", tid);
-	target_list_insert(target);
 
 	return 0;
-
-free_target:
-	free(target);
-	return err;
 }
 
 int tgt_target_destroy(int tid)
@@ -723,9 +700,7 @@ int tgt_target_destroy(int tid)
 	if (!list_empty(&target->cmd_queue.queue))
 		return -EBUSY;
 
-	free(target->devt);
-
-	target_list_remove(target);
+	target_hlist_remove(target);
 	free(target);
 
 	return 0;

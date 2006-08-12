@@ -287,7 +287,7 @@ static int __report_luns(struct list_head *dev_list, uint8_t *lun_buf,
 	idx = 1;
 	nr_luns = 0;
 
-	list_for_each_entry(dev, dev_list, dlist) {
+	list_for_each_entry(dev, dev_list, d_list) {
 		lun = dev->lun;
 
 		lun = ((lun > 0xff) ? (0x1 << 30) : 0) | ((0x3ff & lun) << 16);
