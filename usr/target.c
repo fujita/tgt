@@ -215,7 +215,7 @@ static void tgt_device_link(struct target *target, struct tgt_device *dev)
 	list_add(&dev->dlist, pos);
 }
 
-void tgt_cmd_queue_init(struct tgt_cmd_queue *q)
+static void tgt_cmd_queue_init(struct tgt_cmd_queue *q)
 {
 	q->active_cmd = 0;
 	q->state = 0;
