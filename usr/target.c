@@ -705,3 +705,10 @@ int tgt_target_destroy(int tid)
 
 	return 0;
 }
+
+__attribute__((constructor)) static void target_init(void)
+{
+	int i;
+	for (i = 0; i < ARRAY_SIZE(target_hash_list); i++)
+		INIT_LIST_HEAD(&target_hash_list[i]);
+}
