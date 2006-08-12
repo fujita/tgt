@@ -26,7 +26,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <poll.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
@@ -40,7 +39,6 @@
 #include "list.h"
 #include "util.h"
 #include "tgtd.h"
-#include "tgtadm.h"
 #include "driver.h"
 #include "target.h"
 
@@ -84,20 +82,6 @@ static void resize_device_table(struct target *target, uint64_t did)
 	target->devt = p;
 	target->max_device = did + 1;
 	free(q);
-}
-
-static uint64_t try_mmap_device(int fd, uint64_t size)
-{
-	void *p;
-
-	if (size != (size_t) size)
-		return 0;
-	p = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	if (p == MAP_FAILED)
-		return 0;
-	else
-		return (unsigned long) p;
-	return 0;
 }
 
 static void tgt_device_link(struct target *target, struct tgt_device *dev)
@@ -173,7 +157,7 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 		goto close_dev_fd;
 
 	device->fd = dev_fd;
-	device->addr = try_mmap_device(dev_fd, size);
+	device->addr = 0;
 	device->size = size;
 	device->lun = dev_id;
 	snprintf(device->scsi_id, sizeof(device->scsi_id),
