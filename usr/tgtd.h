@@ -32,12 +32,17 @@ extern int kreq_send(struct tgt_event *ev);
 extern int ipc_init(int *fd);
 extern void ipc_event_handle(int accept_fd);
 
-extern void kreq_exec(struct tgt_event *ev);
 extern int tgt_device_create(int tid, uint64_t lun, char *path);
 extern int tgt_device_destroy(int tid, uint64_t lun);
 extern int tgt_target_create(int tid);
 extern int tgt_target_destroy(int tid);
 extern int tgt_target_bind(int tid, int host_no, int lid);
+
+extern int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun,
+			    uint32_t data_len, int attribute, uint64_t tag);
+extern void target_cmd_done(int host_no, uint32_t cid);
+extern void target_mgmt_request(int host_no, int req_id, int function,
+				uint8_t *lun, uint64_t tag);
 
 extern uint64_t scsi_get_devid(int lid, uint8_t *pdu);
 extern int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu, int *len,

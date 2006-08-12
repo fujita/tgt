@@ -74,6 +74,32 @@ static void ring_init(struct uring *r, char *buf, int bsize, int esize)
 	dprintf("%u %u\n", r->entry_size, r->nr_entry);
 }
 
+static void kreq_exec(struct tgt_event *ev)
+{
+	dprintf("event %u\n", ev->type);
+
+	switch (ev->type) {
+	case TGT_KEVENT_CMD_REQ:
+		target_cmd_queue(ev->k.cmd_req.host_no, ev->k.cmd_req.scb,
+				 ev->k.cmd_req.lun, ev->k.cmd_req.data_len,
+				 ev->k.cmd_req.attribute, ev->k.cmd_req.tag);
+		break;
+	case TGT_KEVENT_CMD_DONE:
+		target_cmd_done(ev->k.cmd_done.host_no, ev->k.cmd_done.cid);
+		break;
+	case TGT_KEVENT_TSK_MGMT_REQ:
+		target_mgmt_request(ev->k.cmd_req.host_no,
+				    ev->k.tsk_mgmt_req.mid,
+				    ev->k.tsk_mgmt_req.function,
+				    ev->k.tsk_mgmt_req.lun,
+				    ev->k.tsk_mgmt_req.tag);
+		break;
+	default:
+		eprintf("unknown event %u\n", ev->type);
+		exit(1);
+	}
+}
+
 int kreq_send(struct tgt_event *ev)
 {
 	struct rbuf_hdr *hdr;

@@ -46,7 +46,6 @@ static struct list_head target_hash_list[1 << HASH_ORDER];
 static struct target *target_lookup(int tid)
 {
 	struct target *target;
-
 	list_for_each_entry(target, &target_hash_list[hashfn(tid)], t_hlist)
 		if (target->tid == tid)
 			return target;
@@ -275,7 +274,8 @@ static void cmd_post_perform(struct tgt_cmd_queue *q, struct cmd *cmd,
 	}
 }
 
-static void cmd_queue(struct tgt_event *ev_req)
+int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun, uint32_t data_len,
+		     int attribute, uint64_t tag)
 {
 	struct target *target;
 	struct tgt_cmd_queue *q;
@@ -284,39 +284,38 @@ static void cmd_queue(struct tgt_event *ev_req)
 	uint64_t offset, dev_id;
 	uint8_t rw = 0, mmapped = 0;
 	unsigned long uaddr = 0;
-	int hostno = ev_req->k.cmd_req.host_no;
 
-	target = host_to_target(hostno);
+	target = host_to_target(host_no);
 	if (!target) {
 		int tid, lid = 0, err = -1;
 		if (tgt_drivers[lid]->target_bind) {
-			tid = tgt_drivers[0]->target_bind(hostno);
+			tid = tgt_drivers[0]->target_bind(host_no);
 			if (tid >= 0) {
-				err = tgt_target_bind(tid, hostno, lid);
+				err = tgt_target_bind(tid, host_no, lid);
 				if (!err)
-					target = host_to_target(hostno);
+					target = host_to_target(host_no);
 			}
 		}
 
 		if (!target) {
-			eprintf("%d is not bind to any target\n",
-				ev_req->k.cmd_req.host_no);
-			return;
+			eprintf("%d is not bind to any target\n", host_no);
+			return -ENOENT;
 		}
 	}
 
 	/* TODO: preallocate cmd */
 	cmd = calloc(1, sizeof(*cmd));
-	cmd->hostno = ev_req->k.cmd_req.host_no;
- 	cmd->cid = ev_req->k.cmd_req.cid;
-	cmd->attribute = ev_req->k.cmd_req.attribute;
-	cmd->tag = ev_req->k.cmd_req.tag;
+	if (!cmd)
+		return -ENOMEM;
+	cmd->hostno = host_no;
+/*  	cmd->cid = ev_req->k.cmd_req.cid; */
+	cmd->attribute = attribute;
+	cmd->tag = tag;
 	list_add(&cmd->clist, &target->cmd_list);
-	list_add(&cmd->hlist, &target->cmd_hash_list[hashfn(cmd->cid)]);
+/* 	list_add(&cmd->hlist, &target->cmd_hash_list[hashfn(cmd->cid)]); */
 
-	dev_id = scsi_get_devid(target->lid, ev_req->k.cmd_req.lun);
-	dprintf("%u %x %" PRIx64 "\n", cmd->cid, ev_req->k.cmd_req.scb[0],
-		dev_id);
+	dev_id = scsi_get_devid(target->lid, lun);
+	dprintf("%x %" PRIx64 "\n", scb[0], dev_id);
 
 	cmd->dev = device_lookup(target, dev_id);
 	if (cmd->dev) {
@@ -329,32 +328,33 @@ static void cmd_queue(struct tgt_event *ev_req)
 
 	if (enabled) {
 		result = scsi_cmd_perform(target->lid,
-					  cmd->hostno, ev_req->k.cmd_req.scb,
-					  &len, ev_req->k.cmd_req.data_len,
+					  host_no, scb,
+					  &len, data_len,
 					  &uaddr, &rw, &mmapped, &offset,
-					  ev_req->k.cmd_req.lun, cmd->dev,
+					  lun, cmd->dev,
 					  &target->device_list);
 
 		cmd_post_perform(q, cmd, uaddr, len, mmapped);
 
 		dprintf("%u %x %lx %" PRIu64 " %d\n",
-			cmd->cid, ev_req->k.cmd_req.scb[0], uaddr,
-			offset, result);
+			cmd->cid, scb[0], uaddr, offset, result);
 
 		set_cmd_processed(cmd);
 		tgt_kspace_send_cmd(cmd, result, rw);
 	} else {
 		set_cmd_queued(cmd);
 		dprintf("blocked %u %x %" PRIu64 " %d\n",
-			cmd->cid, ev_req->k.cmd_req.scb[0],
+			cmd->cid, scb[0],
 			cmd->dev ? cmd->dev->lun : ~0ULL,
 			q->active_cmd);
 
-		memcpy(cmd->scb, ev_req->k.cmd_req.scb, sizeof(cmd->scb));
-		memcpy(cmd->lun, ev_req->k.cmd_req.lun, sizeof(cmd->lun));
-		cmd->len = ev_req->k.cmd_req.data_len;
+		memcpy(cmd->scb, scb, sizeof(cmd->scb));
+		memcpy(cmd->lun, lun, sizeof(cmd->lun));
+		cmd->len = data_len;
 		list_add_tail(&cmd->qlist, &q->queue);
 	}
+
+	return 0;
 }
 
 static void post_cmd_done(struct tgt_cmd_queue *q)
@@ -476,13 +476,11 @@ static int tgt_kspace_send_tsk_mgmt(int host_no, uint64_t mid, int result)
 	return kreq_send(&ev);
 }
 
-static void cmd_done(struct tgt_event *ev)
+void target_cmd_done(int host_no, uint32_t cid)
 {
 	struct target *target;
 	struct cmd *cmd;
 	struct mgmt_req *mreq;
-	int host_no = ev->k.cmd_done.host_no;
-	uint32_t cid = ev->k.cmd_done.cid;
 
 	target = host_to_target(host_no);
 	if (!target) {
@@ -550,29 +548,26 @@ static int abort_task_set(struct mgmt_req *mreq, struct target* target, int host
 	return count;
 }
 
-static void tsk_mgmt_req(struct tgt_event *ev_req)
+void target_mgmt_request(int host_no, int req_id, int function, uint8_t *lun,
+			 uint64_t tag)
 {
 	struct target *target;
 	struct mgmt_req *mreq;
 	int err = 0, count, send = 1;
-	int host_no = ev_req->k.cmd_req.host_no;
 
 	target = host_to_target(host_no);
 	if (!target) {
-		eprintf("%d is not bind to any target\n",
-			ev_req->k.cmd_req.host_no);
+		eprintf("%d is not bind to any target\n", host_no);
 		return;
 	}
 
 	mreq = calloc(1, sizeof(*mreq));
-	mreq->mid = ev_req->k.tsk_mgmt_req.mid;
-	mreq->function = ev_req->k.tsk_mgmt_req.function;
+	mreq->mid = req_id;
+	mreq->function = function;
 
-	switch (mreq->function) {
+	switch (function) {
 	case ABORT_TASK:
-		count = abort_task_set(mreq, target, host_no,
-				       ev_req->k.tsk_mgmt_req.tag,
-				       NULL, 0);
+		count = abort_task_set(mreq, target, host_no, tag, NULL, 0);
 		if (mreq->busy)
 			send = 0;
 		if (!count)
@@ -585,46 +580,22 @@ static void tsk_mgmt_req(struct tgt_event *ev_req)
 		break;
 	case CLEAR_ACA:
 	case CLEAR_TASK_SET:
-		eprintf("Not supported yet %x\n",
-			ev_req->k.tsk_mgmt_req.function);
+		eprintf("Not supported yet %x\n", function);
 		err = -EINVAL;
 		break;
 	case LOGICAL_UNIT_RESET:
-		count = abort_task_set(mreq, target, host_no, 0,
-				       ev_req->k.tsk_mgmt_req.lun, 0);
+		count = abort_task_set(mreq, target, host_no, 0, lun, 0);
 		if (mreq->busy)
 			send = 0;
 		break;
 	default:
 		err = -EINVAL;
-		eprintf("Unknown task management %x\n",
-			ev_req->k.tsk_mgmt_req.function);
+		eprintf("Unknown task management %x\n", function);
 	}
 
 	if (send) {
-		tgt_kspace_send_tsk_mgmt(ev_req->k.cmd_req.host_no,
-					 ev_req->k.tsk_mgmt_req.mid, err);
+		tgt_kspace_send_tsk_mgmt(host_no, req_id, err);
 		free(mreq);
-	}
-}
-
-void kreq_exec(struct tgt_event *ev)
-{
-	dprintf("event %u\n", ev->type);
-
-	switch (ev->type) {
-	case TGT_KEVENT_CMD_REQ:
-		cmd_queue(ev);
-		break;
-	case TGT_KEVENT_CMD_DONE:
-		cmd_done(ev);
-		break;
-	case TGT_KEVENT_TSK_MGMT_REQ:
-		tsk_mgmt_req(ev);
-		break;
-	default:
-		eprintf("unknown event %u\n", ev->type);
-		exit(1);
 	}
 }
 
