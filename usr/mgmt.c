@@ -32,7 +32,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/un.h>
-#include <scsi/scsi_tgt_if.h>
 
 #include "list.h"
 #include "tgtd.h"

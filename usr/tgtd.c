@@ -139,7 +139,7 @@ retry:
 	}
 
 	if (pfd[POLL_KI].revents) {
-		kreq_recv();
+		kspace_event_handle();
 		nevent--;
 	}
 

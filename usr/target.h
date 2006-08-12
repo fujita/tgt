@@ -18,6 +18,7 @@ struct mgmt_req {
 	uint64_t mid;
 	int busy;
 	int function;
+	mgmt_end_t *mgmt_end_func;
 };
 
 struct cmd {
@@ -39,6 +40,7 @@ struct cmd {
 	int attribute;
 	uint64_t tag;
 	struct mgmt_req *mreq;
+	cmd_end_t *cmd_end_func;
 };
 
 struct target {

@@ -233,21 +233,6 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 	return 0;
 }
 
-static int tgt_kspace_send_cmd(struct cmd *cmd, int result, int rw)
-{
-	struct tgt_event ev;
-
-	ev.type = TGT_UEVENT_CMD_RSP;
-	ev.u.cmd_rsp.host_no = cmd->hostno;
-/* 	ev.u.cmd_rsp.cid = cmd->cid; */
-	ev.u.cmd_rsp.len = cmd->len;
-	ev.u.cmd_rsp.result = result;
-	ev.u.cmd_rsp.uaddr = cmd->uaddr;
-	ev.u.cmd_rsp.rw = rw;
-
-	return kreq_send(&ev);
-}
-
 static int cmd_pre_perform(struct tgt_cmd_queue *q, struct cmd *cmd)
 {
 	int enabled = 0;
@@ -297,7 +282,7 @@ static void cmd_post_perform(struct tgt_cmd_queue *q, struct cmd *cmd,
 }
 
 int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun, uint32_t data_len,
-		     int attribute, uint64_t tag)
+		     int attribute, uint64_t tag, cmd_end_t *end_func)
 {
 	struct target *target;
 	struct tgt_cmd_queue *q;
@@ -332,6 +317,7 @@ int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun, uint32_t data_len,
 	cmd->hostno = host_no;
 	cmd->attribute = attribute;
 	cmd->tag = tag;
+	cmd->cmd_end_func = end_func;
 	cmd_hlist_insert(target, cmd);
 
 	dev_id = scsi_get_devid(target->lid, lun);
@@ -360,7 +346,7 @@ int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun, uint32_t data_len,
 			tag, scb[0], uaddr, offset, result);
 
 		set_cmd_processed(cmd);
-		tgt_kspace_send_cmd(cmd, result, rw);
+		cmd->cmd_end_func(host_no, len, result, rw, uaddr, tag);
 	} else {
 		set_cmd_queued(cmd);
 		dprintf("blocked %" PRIx64 " %x %" PRIu64 " %d\n",
@@ -408,7 +394,8 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 						  &target->device_list);
 			cmd_post_perform(q, cmd, uaddr, len, mmapped);
 			set_cmd_processed(cmd);
-			tgt_kspace_send_cmd(cmd, result, rw);
+			cmd->cmd_end_func(cmd->hostno, len, result, rw,
+					  uaddr, cmd->tag);
 		} else
 			break;
 	}
@@ -471,17 +458,6 @@ static void __cmd_done(struct target *target, struct cmd *cmd)
 	post_cmd_done(q);
 }
 
-static int tgt_kspace_send_tsk_mgmt(int host_no, uint64_t mid, int result)
-{
-	struct tgt_event ev;
-
-	ev.u.tsk_mgmt_rsp.host_no = host_no;
-	ev.u.tsk_mgmt_rsp.mid = mid;
-	ev.u.tsk_mgmt_rsp.result = result;
-
-	return kreq_send(&ev);
-}
-
 void target_cmd_done(int host_no, uint64_t tag)
 {
 	struct target *target;
@@ -503,7 +479,7 @@ void target_cmd_done(int host_no, uint64_t tag)
 	mreq = cmd->mreq;
 	if (mreq && !--mreq->busy) {
 		int err = mreq->function == ABORT_TASK ? -EEXIST : 0;
-		tgt_kspace_send_tsk_mgmt(cmd->hostno, mreq->mid, err);
+		mreq->mgmt_end_func(cmd->hostno, mreq->mid, err);
 		free(mreq);
 	}
 
@@ -527,7 +503,7 @@ static int abort_cmd(struct target* target, struct mgmt_req *mreq,
 		err = -EBUSY;
 	} else {
 		__cmd_done(target, cmd);
-		tgt_kspace_send_cmd(cmd, TASK_ABORTED, 0);
+		cmd->cmd_end_func(cmd->hostno, 0, TASK_ABORTED, 0, 0, cmd->tag);
 	}
 	return err;
 }
@@ -558,7 +534,7 @@ static int abort_task_set(struct mgmt_req *mreq, struct target* target, int host
 }
 
 void target_mgmt_request(int host_no, int req_id, int function, uint8_t *lun,
-			 uint64_t tag)
+			 uint64_t tag, mgmt_end_t *end_func)
 {
 	struct target *target;
 	struct mgmt_req *mreq;
@@ -573,6 +549,7 @@ void target_mgmt_request(int host_no, int req_id, int function, uint8_t *lun,
 	mreq = calloc(1, sizeof(*mreq));
 	mreq->mid = req_id;
 	mreq->function = function;
+	mreq->mgmt_end_func = end_func;
 
 	switch (function) {
 	case ABORT_TASK:
@@ -603,7 +580,7 @@ void target_mgmt_request(int host_no, int req_id, int function, uint8_t *lun,
 	}
 
 	if (send) {
-		tgt_kspace_send_tsk_mgmt(host_no, req_id, err);
+		mreq->mgmt_end_func(host_no, req_id, err);
 		free(mreq);
 	}
 }

@@ -74,33 +74,7 @@ static void ring_init(struct uring *r, char *buf, int bsize, int esize)
 	dprintf("%u %u\n", r->entry_size, r->nr_entry);
 }
 
-static void kreq_exec(struct tgt_event *ev)
-{
-	dprintf("event %u\n", ev->type);
-
-	switch (ev->type) {
-	case TGT_KEVENT_CMD_REQ:
-		target_cmd_queue(ev->k.cmd_req.host_no, ev->k.cmd_req.scb,
-				 ev->k.cmd_req.lun, ev->k.cmd_req.data_len,
-				 ev->k.cmd_req.attribute, ev->k.cmd_req.tag);
-		break;
-	case TGT_KEVENT_CMD_DONE:
-		target_cmd_done(ev->k.cmd_done.host_no, ev->k.cmd_done.cid);
-		break;
-	case TGT_KEVENT_TSK_MGMT_REQ:
-		target_mgmt_request(ev->k.cmd_req.host_no,
-				    ev->k.tsk_mgmt_req.mid,
-				    ev->k.tsk_mgmt_req.function,
-				    ev->k.tsk_mgmt_req.lun,
-				    ev->k.tsk_mgmt_req.tag);
-		break;
-	default:
-		eprintf("unknown event %u\n", ev->type);
-		exit(1);
-	}
-}
-
-int kreq_send(struct tgt_event *ev)
+static int kreq_send(struct tgt_event *ev)
 {
 	struct rbuf_hdr *hdr;
 	hdr = head_ring_hdr(&ukring);
@@ -116,18 +90,70 @@ int kreq_send(struct tgt_event *ev)
 	return 0;
 }
 
-int kreq_recv(void)
+static int kspace_send_tsk_mgmt(int host_no, uint64_t mid, int result)
+{
+	struct tgt_event ev;
+
+	ev.u.tsk_mgmt_rsp.host_no = host_no;
+	ev.u.tsk_mgmt_rsp.mid = mid;
+	ev.u.tsk_mgmt_rsp.result = result;
+
+	return kreq_send(&ev);
+}
+
+static int kspace_send_cmd_res(int host_no, int len, int result,
+			       int rw, uint64_t addr, uint64_t tag)
+{
+	struct tgt_event ev;
+
+	ev.type = TGT_UEVENT_CMD_RSP;
+	ev.u.cmd_rsp.host_no = host_no;
+/* 	ev.u.cmd_rsp.cid = cmd->cid; */
+	ev.u.cmd_rsp.len = len;
+	ev.u.cmd_rsp.result = result;
+	ev.u.cmd_rsp.uaddr = addr;
+	ev.u.cmd_rsp.rw = rw;
+
+	return kreq_send(&ev);
+}
+
+void kspace_event_handle(void)
 {
 	struct rbuf_hdr *hdr;
+	struct tgt_event *ev;
 
 	dprintf("nl event %u\n", kuring.idx);
-
 retry:
 	hdr = head_ring_hdr(&kuring);
 	if (!hdr->status)
-		return 0;
+		return;
 
-	kreq_exec((struct tgt_event *) (hdr->data));
+	ev = (struct tgt_event *) (hdr->data);
+
+	dprintf("event %u\n", ev->type);
+
+	switch (ev->type) {
+	case TGT_KEVENT_CMD_REQ:
+		target_cmd_queue(ev->k.cmd_req.host_no, ev->k.cmd_req.scb,
+				 ev->k.cmd_req.lun, ev->k.cmd_req.data_len,
+				 ev->k.cmd_req.attribute, ev->k.cmd_req.tag,
+				 kspace_send_cmd_res);
+		break;
+	case TGT_KEVENT_CMD_DONE:
+		target_cmd_done(ev->k.cmd_done.host_no, ev->k.cmd_done.cid);
+		break;
+	case TGT_KEVENT_TSK_MGMT_REQ:
+		target_mgmt_request(ev->k.cmd_req.host_no,
+				    ev->k.tsk_mgmt_req.mid,
+				    ev->k.tsk_mgmt_req.function,
+				    ev->k.tsk_mgmt_req.lun,
+				    ev->k.tsk_mgmt_req.tag,
+				    kspace_send_tsk_mgmt);
+		break;
+	default:
+		eprintf("unknown event %u\n", ev->type);
+	}
+
 	hdr->status = 0;
 	kuring.idx++;
 
