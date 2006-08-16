@@ -40,6 +40,8 @@
 #include <scsi/scsi_tgt_if.h>
 #include <sys/mman.h>
 
+#include "list.h"
+#include "util.h"
 #include "tgtd.h"
 
 #define GETTARGET(x) ((int)((((uint64_t)(x)) >> 56) & 0x003f))
@@ -230,7 +232,7 @@ int scsi_report_luns(struct list_head *dev_list, uint8_t *lun_buf,
 	idx = 2;
 	nr_luns = 1;
 
-	list_for_each_entry(dev, dev_list, dlist) {
+	list_for_each_entry(dev, dev_list, d_list) {
 		lun = dev->lun;
 		lun = make_lun(0, lun & 0x003f, 0);
 		data[idx++] = __cpu_to_be64(lun);

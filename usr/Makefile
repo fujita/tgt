@@ -24,3 +24,4 @@ tgtadm: tgtadm.o
 clean:
 	rm -f *.o $(PROGRAMS)
 	$(MAKE) -C iscsi clean
+	$(MAKE) -C ibmvio clean

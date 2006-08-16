@@ -41,49 +41,38 @@
 
 struct uring {
 	uint32_t idx;
-	uint32_t nr_entry;
-	int entry_size;
 	char *buf;
-	int buf_size;
 };
 
 static struct uring kuring, ukring;
 static int chrfd;
 
-static inline struct rbuf_hdr *head_ring_hdr(struct uring *r)
+static inline void ring_index_inc(struct uring *ring)
 {
-	uint32_t offset = (r->idx & (r->nr_entry - 1)) * r->entry_size;
-	return (struct rbuf_hdr *) (r->buf + offset);
+	ring->idx = (ring->idx == TGT_MAX_EVENTS - 1) ? 0 : ring->idx + 1;
 }
 
-static void ring_init(struct uring *r, char *buf, int bsize, int esize)
+static inline struct tgt_event *head_ring_hdr(struct uring *ring)
 {
-	int i;
+	uint32_t pidx, off, pos;
 
-	esize += sizeof(struct rbuf_hdr);
-	r->idx = 0;
-	r->buf = buf;
-	r->buf_size = bsize;
-	r->entry_size = esize;
+	pidx = ring->idx / TGT_EVENT_PER_PAGE;
+	off = ring->idx % TGT_EVENT_PER_PAGE;
+	pos = pidx * PAGE_SIZE + off * sizeof(struct tgt_event);
 
-	bsize /= esize;
-	for (i = 0; (1 << i) < bsize && (1 << (i + 1)) <= bsize; i++)
-		;
-	r->nr_entry = 1 << i;
-
-	dprintf("%u %u\n", r->entry_size, r->nr_entry);
+	return (struct tgt_event *) (ring->buf + pos);
 }
 
-static int kreq_send(struct tgt_event *ev)
+static int kreq_send(struct tgt_event *p)
 {
-	struct rbuf_hdr *hdr;
-	hdr = head_ring_hdr(&ukring);
-	if (hdr->status)
+	struct tgt_event *ev;
+	ev = head_ring_hdr(&ukring);
+	if (ev->status == TGT_EVENT_STATUS_USED)
 		return -ENOMEM;
 
-	memcpy(hdr->data, ev, sizeof(*ev));
-	ukring.idx++;
-	hdr->status = 1;
+	memcpy(ev, p, sizeof(*p));
+	ring_index_inc(&ukring);
+	ev->status = TGT_EVENT_STATUS_USED;
 
 	write(chrfd, ev, 1);
 
@@ -108,27 +97,24 @@ static int kspace_send_cmd_res(int host_no, int len, int result,
 
 	ev.type = TGT_UEVENT_CMD_RSP;
 	ev.u.cmd_rsp.host_no = host_no;
-/* 	ev.u.cmd_rsp.cid = cmd->cid; */
 	ev.u.cmd_rsp.len = len;
 	ev.u.cmd_rsp.result = result;
 	ev.u.cmd_rsp.uaddr = addr;
 	ev.u.cmd_rsp.rw = rw;
+	ev.u.cmd_rsp.tag = tag;
 
 	return kreq_send(&ev);
 }
 
 void kspace_event_handle(void)
 {
-	struct rbuf_hdr *hdr;
 	struct tgt_event *ev;
 
 	dprintf("nl event %u\n", kuring.idx);
 retry:
-	hdr = head_ring_hdr(&kuring);
-	if (!hdr->status)
+	ev = head_ring_hdr(&kuring);
+	if (ev->status == TGT_EVENT_STATUS_EMPTY)
 		return;
-
-	ev = (struct tgt_event *) (hdr->data);
 
 	dprintf("event %u\n", ev->type);
 
@@ -140,7 +126,7 @@ retry:
 				 kspace_send_cmd_res);
 		break;
 	case TGT_KEVENT_CMD_DONE:
-		target_cmd_done(ev->k.cmd_done.host_no, ev->k.cmd_done.cid);
+		target_cmd_done(ev->k.cmd_done.host_no, ev->k.cmd_done.tag);
 		break;
 	case TGT_KEVENT_TSK_MGMT_REQ:
 		target_mgmt_request(ev->k.cmd_req.host_no,
@@ -154,20 +140,55 @@ retry:
 		eprintf("unknown event %u\n", ev->type);
 	}
 
-	hdr->status = 0;
-	kuring.idx++;
+	ev->status = TGT_EVENT_STATUS_EMPTY;
+	ring_index_inc(&kuring);
 
 	goto retry;
 }
 
 #define CHRDEV_PATH "/dev/tgt"
 
+static int tgt_miscdev_init(char *path, int *fd)
+{
+	int major, minor, err;
+	FILE *fp;
+	char buf[64];
+
+	fp = fopen("/sys/class/misc/tgt/dev", "r");
+	if (!fp) {
+		eprintf("Cannot open control path to the driver\n");
+		return -1;
+	}
+
+	if (!fgets(buf, sizeof(buf), fp))
+		goto out;
+
+	if (sscanf(buf, "%d:%d", &major, &minor) != 2)
+		goto out;
+
+	unlink(path);
+	err = mknod(path, (S_IFCHR | 0600), (major << 8) | minor);
+	if (err)
+		goto out;
+
+	*fd = open(path, O_RDWR);
+	if (*fd < 0) {
+		eprintf("cannot open %s %s\n", path, strerror(errno));
+		goto out;
+	}
+
+	return 0;
+out:
+	fclose(fp);
+	return -errno;
+}
+
 int kreq_init(int *ki_fd)
 {
-	int err, fd, size = TGT_RINGBUF_SIZE;
+	int err, fd, size = TGT_RING_SIZE;
 	char *buf;
 
-	err = chrdev_open("tgt", CHRDEV_PATH, 0, &fd);
+	err = tgt_miscdev_init(CHRDEV_PATH, &fd);
 	if (err)
 		return err;
 
@@ -178,8 +199,9 @@ int kreq_init(int *ki_fd)
 		return -EINVAL;
 	}
 
-	ring_init(&kuring, buf, size, sizeof(struct tgt_event));
-	ring_init(&ukring, buf + size, size, sizeof(struct tgt_event));
+	kuring.idx = ukring.idx = 0;
+	kuring.buf = buf;
+	ukring.buf = buf + size;
 
 	*ki_fd = chrfd = fd;
 
