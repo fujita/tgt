@@ -1,7 +1,7 @@
-From fff20a33841c7ab473dea824b4c52e2b9a9c8edc Mon Sep 17 00:00:00 2001
-From: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
-Date: Thu, 17 Aug 2006 08:48:43 +0900
-Subject: [PATCH 7/9] scsi tgt: scsi target netlink interface
+From 855bdf3bd4a0c9cbcb57a37fe34a7188e8adb61f Mon Sep 17 00:00:00 2001
+From: Mike Christie <michaelc@cs.wisc.edu>
+Date: Fri, 18 Aug 2006 00:33:17 +0900
+Subject: [PATCH 7/9] scsi-ml: Makefile and Kconfig changes for tgt
 
 Makefile and Kconfig stuff.
 
@@ -53,5 +53,5 @@ index ebd0cf0..ede0c45 100644
  sr_mod-objs	:= sr.o sr_ioctl.o sr_vendor.o
  ncr53c8xx-flags-$(CONFIG_SCSI_ZALON) \
 -- 
-1.4.1.1
+1.4.1
 

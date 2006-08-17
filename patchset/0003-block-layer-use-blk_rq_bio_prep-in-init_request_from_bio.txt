@@ -1,7 +1,7 @@
-From 682da4d3e68a63d56a8a306b9e61ea0305be19d6 Mon Sep 17 00:00:00 2001
-From: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
-Date: Wed, 16 Aug 2006 08:23:21 +0900
-Subject: [PATCH 3/9] [PATCH] block layer: use blk_rq_bio_prep in init_request_from_bio
+From 23c2123adf959725f1f7b49b0b13606725586d82 Mon Sep 17 00:00:00 2001
+From: Mike Christie <michaelc@cs.wisc.edu>
+Date: Thu, 17 Aug 2006 23:52:17 +0900
+Subject: [PATCH 3/9] block layer: use blk_rq_bio_prep in init_request_from_bio
 
 Patch to use blk_rq_bio_prep in init_request_from_bio. And remove
 blk_rq_bio_prep's flags copying. The first three bits have not been
@@ -50,5 +50,5 @@ index aee4f4b..3f46356 100644
  	rq->nr_hw_segments = bio_hw_segments(q, bio);
  	rq->current_nr_sectors = bio_cur_sectors(bio);
 -- 
-1.4.1.1
+1.4.1
 

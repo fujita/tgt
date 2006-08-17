@@ -1,6 +1,6 @@
-From 74646b3cdc53f2f8bee28d5d5533b08ef93253c2 Mon Sep 17 00:00:00 2001
-From: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
-Date: Thu, 17 Aug 2006 08:42:16 +0900
+From dc6a0cdc52e680b696d86b25d698a847205cad98 Mon Sep 17 00:00:00 2001
+From: Mike Christie <michaelc@cs.wisc.edu>
+Date: Fri, 18 Aug 2006 00:45:35 +0900
 Subject: [PATCH 5/9] scsi tgt: scsi target lib functionality
 
 The core scsi target lib functions.
@@ -13,23 +13,22 @@ to kill our scsi_tgt_cmd.
 - add host state checking. We do refcouting so hotplug is partially
 supported, but we need to add state checking to make it easier on
 the LLD.
-- must remove our request->flags hack
 
 Signed-off-by: Mike Christie <michaelc@cs.wisc.edu>
 Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
 Signed-off-by: James Bottomley <James.Bottomley@SteelEye.com>
 ---
- drivers/scsi/scsi_tgt_lib.c  |  699 ++++++++++++++++++++++++++++++++++++++++++
+ drivers/scsi/scsi_tgt_lib.c  |  700 ++++++++++++++++++++++++++++++++++++++++++
  drivers/scsi/scsi_tgt_priv.h |   24 +
- include/scsi/scsi_tgt.h      |   17 +
- 3 files changed, 740 insertions(+), 0 deletions(-)
+ include/scsi/scsi_tgt.h      |   18 +
+ 3 files changed, 742 insertions(+), 0 deletions(-)
 
 diff --git a/drivers/scsi/scsi_tgt_lib.c b/drivers/scsi/scsi_tgt_lib.c
 new file mode 100644
-index 0000000..f7ae7e2
+index 0000000..c515c27
 --- /dev/null
 +++ b/drivers/scsi/scsi_tgt_lib.c
-@@ -0,0 +1,699 @@
+@@ -0,0 +1,700 @@
 +/*
 + * SCSI target lib functions
 + *
@@ -84,7 +83,6 @@ index 0000000..f7ae7e2
 +
 +	void *buffer;
 +	unsigned bufflen;
-+	unsigned offset; /* we need this ? */
 +};
 +
 +#define TGT_HASH_ORDER	4
@@ -172,8 +170,7 @@ index 0000000..f7ae7e2
 + *
 + * Notes:	The command must not belong to any lists.
 + */
-+static void scsi_host_put_command(struct Scsi_Host *shost,
-+				  struct scsi_cmnd *cmd)
++void scsi_host_put_command(struct Scsi_Host *shost, struct scsi_cmnd *cmd)
 +{
 +	struct request_queue *q = shost->uspace_req_q;
 +	struct request *rq = cmd->request;
@@ -188,6 +185,7 @@ index 0000000..f7ae7e2
 +
 +	__scsi_put_command(shost, cmd, &shost->shost_gendev);
 +}
++EXPORT_SYMBOL_GPL(scsi_host_put_command);
 +
 +static void scsi_unmap_user_pages(struct scsi_tgt_cmd *tcmd)
 +{
@@ -226,15 +224,6 @@ index 0000000..f7ae7e2
 +		rq_data_dir(cmd->request));
 +
 +	cmd_hashlist_del(cmd);
-+
-+	/*
-+	 * We must set rq->flags here because bio_map_user and
-+	 * blk_rq_bio_prep ruined ti.
-+	 */
-+	if (cmd->sc_data_direction == DMA_TO_DEVICE)
-+		cmd->request->flags |= 1;
-+	else
-+		cmd->request->flags &= ~1UL;
 +
 +	scsi_unmap_user_pages(tcmd);
 +	scsi_host_put_command(scsi_tgt_cmd_to_host(cmd), cmd);
@@ -451,7 +440,7 @@ index 0000000..f7ae7e2
 +			bio_list_add(&tcmd->xfer_list, bio);
 +	}
 +
-+	tcmd->offset = 0;
++	cmd->offset = 0;
 +	err = scsi_tgt_init_cmd(cmd, GFP_KERNEL);
 +	if (err)
 +		goto unmap_bios;
@@ -493,7 +482,7 @@ index 0000000..f7ae7e2
 +	bio_list_add(&tcmd->xfer_done_list, cmd->request->bio);
 +
 +	tcmd->buffer += cmd->request_bufflen;
-+	tcmd->offset += cmd->request_bufflen;
++	cmd->offset += cmd->request_bufflen;
 +
 +	if (!tcmd->xfer_list.head) {
 +		scsi_tgt_transfer_response(cmd);
@@ -600,6 +589,11 @@ index 0000000..f7ae7e2
 +		return -EINVAL;
 +	}
 +
++	if (!shost->uspace_req_q) {
++		printk(KERN_ERR "Not target scsi host %d\n", host_no);
++		goto done;
++	}
++
 +	rq = tgt_cmd_hash_lookup(shost->uspace_req_q, tag);
 +	if (!rq) {
 +		printk(KERN_ERR "Could not find tag %llu\n",
@@ -625,7 +619,7 @@ index 0000000..f7ae7e2
 +	tcmd->bufflen = len;
 +	cmd->result = result;
 +
-+	if (!tcmd->bufflen) {
++	if (!tcmd->bufflen || cmd->request_buffer) {
 +		err = __scsi_tgt_transfer_response(cmd);
 +		goto done;
 +	}
@@ -673,18 +667,24 @@ index 0000000..f7ae7e2
 +int scsi_tgt_kspace_tsk_mgmt(int host_no, u64 mid, int result)
 +{
 +	struct Scsi_Host *shost;
-+	int err;
++	int err = -EINVAL;
 +
 +	dprintk("%d %d %llx\n", host_no, result, (unsigned long long) mid);
 +
 +	shost = scsi_host_lookup(host_no);
 +	if (IS_ERR(shost)) {
 +		printk(KERN_ERR "Could not find host no %d\n", host_no);
-+		return -EINVAL;
++		return err;
 +	}
-+	err = shost->hostt->tsk_mgmt_response(mid, result);
-+	scsi_host_put(shost);
 +
++	if (!shost->uspace_req_q) {
++		printk(KERN_ERR "Not target scsi host %d\n", host_no);
++		goto done;
++	}
++
++	err = shost->hostt->tsk_mgmt_response(mid, result);
++done:
++	scsi_host_put(shost);
 +	return err;
 +}
 +
@@ -761,10 +761,10 @@ index 0000000..b7b6ea6
 +extern int scsi_tgt_kspace_tsk_mgmt(int host_no, u64 mid, int result);
 diff --git a/include/scsi/scsi_tgt.h b/include/scsi/scsi_tgt.h
 new file mode 100644
-index 0000000..61e8ee9
+index 0000000..1771151
 --- /dev/null
 +++ b/include/scsi/scsi_tgt.h
-@@ -0,0 +1,17 @@
+@@ -0,0 +1,18 @@
 +/*
 + * SCSI target definitions
 + */
@@ -782,6 +782,7 @@ index 0000000..61e8ee9
 +				     void *);
 +extern struct scsi_cmnd *scsi_host_get_command(struct Scsi_Host *,
 +					       enum dma_data_direction,	gfp_t);
++extern void scsi_host_put_command(struct Scsi_Host *, struct scsi_cmnd *);
 -- 
-1.4.1.1
+1.4.1
 

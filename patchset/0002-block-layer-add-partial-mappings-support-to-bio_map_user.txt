@@ -1,7 +1,7 @@
-From 810f8fd6b5ad802477ad9a95bbf6540c5d44f2de Mon Sep 17 00:00:00 2001
-From: fujita <fujita@debian.localdomain>
-Date: Thu, 17 Aug 2006 07:31:59 +0900
-Subject: [PATCH 2/9] [PATCH] block layer: add partial mappings support to bio_map_user
+From edae3e91816a0aa1d6afc5bfc5c7cbdb8d2f1229 Mon Sep 17 00:00:00 2001
+From: Mike Christie <michaelc@cs.wisc.edu>
+Date: Thu, 17 Aug 2006 23:48:58 +0900
+Subject: [PATCH 2/9] block layer: add partial mappings support to bio_map_user
 
 For target mode we could end up with the case where we get very large
 request from the initiator. The request could be so large that we
@@ -150,5 +150,5 @@ index aafe827..613a441 100644
  			  struct request *, int);
  extern void blk_execute_rq_nowait(request_queue_t *, struct gendisk *,
 -- 
-1.4.1.1
+1.4.1
 

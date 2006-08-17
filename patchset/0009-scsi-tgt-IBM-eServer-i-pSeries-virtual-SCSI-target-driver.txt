@@ -1,14 +1,10 @@
-From 49997b6ea087c515fad787cb90637e03a44f396f Mon Sep 17 00:00:00 2001
+From 747144ea9774596a61b7ba39c0ae18b378b33d36 Mon Sep 17 00:00:00 2001
 From: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
-Date: Thu, 17 Aug 2006 08:51:51 +0900
-Subject: [PATCH 9/9] scsi tgt: IBM eServer i/pSeries Virtual SCSI Target Driver
+Date: Fri, 18 Aug 2006 00:41:02 +0900
+Subject: [PATCH 9/9] scsi tgt: IBM eServer i/pSeries virtual SCSI target driver
 
-This is IBM Virtual SCSI target driver for tgt.
-
-This patch dependents on the previous patch to convert the ibmvscsi
-driver to use include/scsi/srp.h.
-
-The driver is based on the original ibmvscsis driver:
+This is IBM Virtual SCSI target driver for tgt. The driver is based on
+the original ibmvscsis driver:
 
 http://lkml.org/lkml/2005/10/17/99
 
@@ -19,8 +15,8 @@ Signed-off-by: James Bottomley <James.Bottomley@SteelEye.com>
  drivers/scsi/Kconfig             |   14 +
  drivers/scsi/Makefile            |    1 
  drivers/scsi/ibmvscsi/Makefile   |    2 
- drivers/scsi/ibmvscsi/ibmvstgt.c |  943 ++++++++++++++++++++++++++++++++++++++
- 4 files changed, 960 insertions(+), 0 deletions(-)
+ drivers/scsi/ibmvscsi/ibmvstgt.c |  952 ++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 969 insertions(+), 0 deletions(-)
 
 diff --git a/drivers/scsi/Kconfig b/drivers/scsi/Kconfig
 index e5098d3..c25154c 100644
@@ -71,10 +67,10 @@ index 4e247b6..6ac0633 100644
 +obj-$(CONFIG_SCSI_IBMVSCSIS)	+= ibmvstgt.o
 diff --git a/drivers/scsi/ibmvscsi/ibmvstgt.c b/drivers/scsi/ibmvscsi/ibmvstgt.c
 new file mode 100644
-index 0000000..cf1e851
+index 0000000..7a98517
 --- /dev/null
 +++ b/drivers/scsi/ibmvscsi/ibmvstgt.c
-@@ -0,0 +1,943 @@
+@@ -0,0 +1,952 @@
 +/*
 + * IBM eServer i/pSeries Virtual SCSI Target Driver
 + * Copyright (C) 2003-2005 Dave Boutcher (boutcher@us.ibm.com) IBM Corp.
@@ -207,8 +203,8 @@ index 0000000..cf1e851
 +
 +#define SRP_RSP_SENSE_DATA_LEN	18
 +
-+static int send_rsp(struct iu_entry *iue, unsigned char status,
-+		    unsigned char asc)
++static int send_rsp(struct iu_entry *iue, struct scsi_cmnd *sc,
++		    unsigned char status, unsigned char asc)
 +{
 +	union viosrp_iu *iu = vio_iu(iue);
 +	uint64_t tag = iu->srp.rsp.tag;
@@ -235,11 +231,10 @@ index 0000000..cf1e851
 +	if (status) {
 +		uint8_t *sense = iu->srp.rsp.data;
 +
-+		if (iue->scmd) {
++		if (sc) {
 +			iu->srp.rsp.flags |= SRP_RSP_FLAG_SNSVALID;
 +			iu->srp.rsp.sense_data_len = SCSI_SENSE_BUFFERSIZE;
-+			memcpy(sense, iue->scmd->sense_buffer,
-+			       SCSI_SENSE_BUFFERSIZE);
++			memcpy(sense, sc->sense_buffer, SCSI_SENSE_BUFFERSIZE);
 +		} else {
 +			iu->srp.rsp.status = SAM_STAT_CHECK_CONDITION;
 +			iu->srp.rsp.flags |= SRP_RSP_FLAG_SNSVALID;
@@ -264,8 +259,11 @@ index 0000000..cf1e851
 +
 +static void handle_cmd_queue(struct srp_target *target)
 +{
++	struct Scsi_Host *shost = target->shost;
 +	struct iu_entry *iue;
++	struct srp_cmd *cmd;
 +	unsigned long flags;
++	int err;
 +
 +retry:
 +	spin_lock_irqsave(&target->lock, flags);
@@ -273,7 +271,12 @@ index 0000000..cf1e851
 +	list_for_each_entry(iue, &target->cmd_queue, ilist) {
 +		if (!test_and_set_bit(V_FLYING, &iue->flags)) {
 +			spin_unlock_irqrestore(&target->lock, flags);
-+			srp_cmd_perform(iue, (struct srp_cmd *) iue->sbuf->buf);
++			cmd = iue->sbuf->buf;
++			err = srp_cmd_queue(shost, cmd, iue, 0);
++			if (err) {
++				eprintk("cannot queue cmd %p %d\n", cmd, err);
++				srp_iu_put(iue);
++			}
 +			goto retry;
 +		}
 +	}
@@ -281,10 +284,11 @@ index 0000000..cf1e851
 +	spin_unlock_irqrestore(&target->lock, flags);
 +}
 +
-+static int ibmvstgt_rdma(struct iu_entry *iue, struct scatterlist *sg, int nsg,
++static int ibmvstgt_rdma(struct scsi_cmnd *sc, struct scatterlist *sg, int nsg,
 +			 struct srp_direct_buf *md, int nmd,
 +			 enum dma_data_direction dir, unsigned int rest)
 +{
++	struct iu_entry *iue = (struct iu_entry *) sc->SCp.ptr;
 +	struct srp_target *target = iue->target;
 +	struct vio_port *vport = target_to_port(target);
 +	dma_addr_t token;
@@ -345,23 +349,24 @@ index 0000000..cf1e851
 +	return 0;
 +}
 +
-+static int ibmvstgt_transfer_data(struct scsi_cmnd *scmd,
++static int ibmvstgt_transfer_data(struct scsi_cmnd *sc,
 +				  void (*done)(struct scsi_cmnd *))
 +{
-+	struct iu_entry	*iue = (struct iu_entry *) scmd->SCp.ptr;
++	struct iu_entry	*iue = (struct iu_entry *) sc->SCp.ptr;
 +	int err;
 +
-+	err = srp_transfer_data(scmd, &vio_iu(iue)->srp.cmd, ibmvstgt_rdma);
-+	done(scmd);
++	err = srp_transfer_data(sc, &vio_iu(iue)->srp.cmd, ibmvstgt_rdma, 1, 1);
++
++	done(sc);
 +
 +	return err;
 +}
 +
-+static int ibmvstgt_cmd_done(struct scsi_cmnd *scmd,
++static int ibmvstgt_cmd_done(struct scsi_cmnd *sc,
 +			     void (*done)(struct scsi_cmnd *))
 +{
 +	unsigned long flags;
-+	struct iu_entry *iue = (struct iu_entry *) scmd->SCp.ptr;
++	struct iu_entry *iue = (struct iu_entry *) sc->SCp.ptr;
 +	struct srp_target *target = iue->target;
 +
 +	dprintk("%p %p %x\n", iue, target, vio_iu(iue)->srp.cmd.cdb[0]);
@@ -370,14 +375,14 @@ index 0000000..cf1e851
 +	list_del(&iue->ilist);
 +	spin_unlock_irqrestore(&target->lock, flags);
 +
-+	if (scmd->result != SAM_STAT_GOOD) {
++	if (sc->result != SAM_STAT_GOOD) {
 +		eprintk("operation failed %p %d %x\n",
-+			iue, scmd->result, vio_iu(iue)->srp.cmd.cdb[0]);
-+		send_rsp(iue, HARDWARE_ERROR, 0x00);
++			iue, sc->result, vio_iu(iue)->srp.cmd.cdb[0]);
++		send_rsp(iue, sc, HARDWARE_ERROR, 0x00);
 +	} else
-+		send_rsp(iue, NO_SENSE, 0x00);
++		send_rsp(iue, sc, NO_SENSE, 0x00);
 +
-+	done(scmd);
++	done(sc);
 +	srp_iu_put(iue);
 +	return 0;
 +}
@@ -494,7 +499,7 @@ index 0000000..cf1e851
 +					  (struct scsi_lun *) &iu->srp.tsk_mgmt.lun,
 +					  iue);
 +	else
-+		send_rsp(iue, ILLEGAL_REQUEST, 0x20);
++		send_rsp(iue, NULL, ILLEGAL_REQUEST, 0x20);
 +
 +	return !fn;
 +}
@@ -778,10 +783,10 @@ index 0000000..cf1e851
 +}
 +
 +
-+static int ibmvstgt_eh_abort_handler(struct scsi_cmnd *scmd)
++static int ibmvstgt_eh_abort_handler(struct scsi_cmnd *sc)
 +{
 +	unsigned long flags;
-+	struct iu_entry *iue = (struct iu_entry *) scmd->SCp.ptr;
++	struct iu_entry *iue = (struct iu_entry *) sc->SCp.ptr;
 +	struct srp_target *target = iue->target;
 +
 +	dprintk("%p %p %x\n", iue, target, vio_iu(iue)->srp.cmd.cdb[0]);
@@ -815,7 +820,7 @@ index 0000000..cf1e851
 +		break;
 +	}
 +
-+	send_rsp(iue, status, asc);
++	send_rsp(iue, NULL, status, asc);
 +	srp_iu_put(iue);
 +
 +	return 0;
@@ -834,7 +839,7 @@ index 0000000..cf1e851
 +static ssize_t unit_address_show(struct class_device *cdev, char *buf)
 +{
 +	struct Scsi_Host *shost = class_to_shost(cdev);
-+	struct srp_target *target = host_to_target(shost);
++	struct srp_target *target = host_to_srp_target(shost);
 +	struct vio_port *vport = target_to_port(target);
 +	return snprintf(buf, PAGE_SIZE, "%x\n", vport->dma_dev->unit_address);
 +}
@@ -883,7 +888,7 @@ index 0000000..cf1e851
 +	if (err)
 +		goto put_host;
 +
-+	target = host_to_target(shost);
++	target = host_to_srp_target(shost);
 +	target->shost = shost;
 +	vport->dma_dev = dev;
 +	target->ldata = vport;
@@ -948,7 +953,7 @@ index 0000000..cf1e851
 +	.probe = ibmvstgt_probe,
 +	.remove = ibmvstgt_remove,
 +	.driver = {
-+		.name = "ibmvscsi",
++		.name = "ibmvscsis",
 +		.owner = THIS_MODULE,
 +	}
 +};
@@ -1019,5 +1024,5 @@ index 0000000..cf1e851
 +module_init(ibmvstgt_init);
 +module_exit(ibmvstgt_exit);
 -- 
-1.4.1.1
+1.4.1
 

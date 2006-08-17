@@ -1,18 +1,18 @@
-From c4e930538407cf31b2eb9f718685cd07e4070569 Mon Sep 17 00:00:00 2001
+From 4587372bbb53c83f86c14cc2f33073937e2ca0b7 Mon Sep 17 00:00:00 2001
 From: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
-Date: Thu, 17 Aug 2006 08:44:21 +0900
+Date: Fri, 18 Aug 2006 00:32:41 +0900
 Subject: [PATCH 6/9] scsi tgt: scsi target user and kernel communication interface
 
-The user-space damoen and tgt kernel module need to exhange mmapped
+The user-space daemon and tgt kernel module need to exchange mmapped
 addresses. netlink cannot do that. We need two-way kernel/user
 high-performance interface, however, mainline kernel provides no
 standard interface like that.
 
-This patch addes shared memory interface between kernel and user
-spaces like some other drivers do. The user-space damoen and tgt
-kernel module creates shared memory via mmap and use it like ring
-buffer. poll (kernel to user) and write (user to kernel) system calls
-are used for notification.
+This patch adds shared memory interface between kernel and user spaces
+like some other drivers do by using own character device. The
+user-space daemon and tgt kernel module creates shared memory via mmap
+and use it like ring buffer. poll (kernel to user) and write (user to
+kernel) system calls are used for notification.
 
 Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
 Signed-off-by: Mike Christie <michaelc@cs.wisc.edu>
@@ -477,5 +477,5 @@ index 0000000..5671920
 +
 +#endif
 -- 
-1.4.1.1
+1.4.1
 

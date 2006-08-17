@@ -1,9 +1,23 @@
-From 26dc82d471a4e83acec09789c8da6cc7fa788c89 Mon Sep 17 00:00:00 2001
-From: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
-Date: Thu, 17 Aug 2006 08:39:42 +0900
+From 3ee7022b3d6bed6ea506c205e58f03588d7a170e Mon Sep 17 00:00:00 2001
+From: Mike Christie <michaelc@cs.wisc.edu>
+Date: Thu, 17 Aug 2006 23:56:41 +0900
 Subject: [PATCH 4/9] scsi-ml: export scsi-ml functions needed by tgt_scsi_lib and its LLDs
 
 This patch contains the needed changes to the scsi-ml to support targets.
+
+Note, per the last review we moved almost all the fields we added
+to the scsi_cmnd to our internal data structure which we are going
+to try and kill off when we can replace it with support from other
+parts of the kernel.
+
+The one field we left on was the offset variable. This is needed to handle
+the case where the target gets request that is so large that it cannot
+execute it in one dma operation. So max_secotors or a segment limit may
+limit the size of the transfer. In this case our tgt core code will
+break up the command into managable transfers and send them to the
+LLD one at a time. The offset is then used to tell the LLD where in
+the command we are at. Is there another field on the scsi_cmd for
+that?
 
 Signed-off-by: Mike Christie <michaelc@cs.wisc.edu>
 Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
@@ -12,9 +26,9 @@ Signed-off-by: James Bottomley <James.Bottomley@SteelEye.com>
  drivers/scsi/hosts.c     |    4 ++++
  drivers/scsi/scsi.c      |   43 ++++++++++++++++++++++++++-----------------
  drivers/scsi/scsi_lib.c  |   33 ++++++++++++++++++++++++---------
- include/scsi/scsi_cmnd.h |    7 +++++++
+ include/scsi/scsi_cmnd.h |   10 ++++++++++
  include/scsi/scsi_host.h |   43 +++++++++++++++++++++++++++++++++++++++++++
- 5 files changed, 104 insertions(+), 26 deletions(-)
+ 5 files changed, 107 insertions(+), 26 deletions(-)
 
 diff --git a/drivers/scsi/hosts.c b/drivers/scsi/hosts.c
 index dfcb96f..341c1ee 100644
@@ -196,7 +210,7 @@ index 077c1c6..ea22612 100644
  void scsi_free_queue(struct request_queue *q)
  {
 diff --git a/include/scsi/scsi_cmnd.h b/include/scsi/scsi_cmnd.h
-index 58e6444..254a904 100644
+index 58e6444..fe4455c 100644
 --- a/include/scsi/scsi_cmnd.h
 +++ b/include/scsi/scsi_cmnd.h
 @@ -8,6 +8,7 @@ #include <linux/timer.h>
@@ -207,7 +221,17 @@ index 58e6444..254a904 100644
  struct scsi_device;
  
  
-@@ -133,7 +134,10 @@ #define SCSI_STATE_MLQUEUE         0x100
+@@ -72,6 +73,9 @@ #define MAX_COMMAND_SIZE	16
+ 	unsigned short use_sg;	/* Number of pieces of scatter-gather */
+ 	unsigned short sglist_len;	/* size of malloc'd scatter-gather list */
+ 
++	/* offset in cmd we are at (for multi-transfer tgt cmds) */
++	unsigned offset;
++
+ 	unsigned underflow;	/* Return error if less than
+ 				   this amount is transferred */
+ 
+@@ -133,7 +137,10 @@ #define SCSI_STATE_MLQUEUE         0x100
  
  
  extern struct scsi_cmnd *scsi_get_command(struct scsi_device *, gfp_t);
@@ -218,7 +242,7 @@ index 58e6444..254a904 100644
  extern void scsi_io_completion(struct scsi_cmnd *, unsigned int);
  extern void scsi_finish_command(struct scsi_cmnd *cmd);
  extern void scsi_req_abort_cmd(struct scsi_cmnd *cmd);
-@@ -142,4 +146,7 @@ extern void *scsi_kmap_atomic_sg(struct 
+@@ -142,4 +149,7 @@ extern void *scsi_kmap_atomic_sg(struct 
  				 size_t *offset, size_t *len);
  extern void scsi_kunmap_atomic_sg(void *virt);
  
@@ -302,5 +326,5 @@ index b3dd90f..1a393b6 100644
   * These two functions are used to allocate and free a pseudo device
   * which will connect to the host adapter itself rather than any
 -- 
-1.4.1.1
+1.4.1
 

@@ -1,7 +1,7 @@
-From dca0bd3d8d7bc4493a11c3897e69d0187513c5b4 Mon Sep 17 00:00:00 2001
+From 7f19e763441525e31f6b771890ef534e0512398d Mon Sep 17 00:00:00 2001
 From: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
-Date: Thu, 17 Aug 2006 08:50:32 +0900
-Subject: [PATCH 8/9] scsi tgt: SRP library functions
+Date: Fri, 18 Aug 2006 00:36:47 +0900
+Subject: [PATCH 8/9] scsi tgt: SCSI RDMA Protocol library functions
 
 libsrp provides helper functions for SRP target drivers.
 
@@ -18,9 +18,9 @@ Signed-off-by: James Bottomley <James.Bottomley@SteelEye.com>
 ---
  drivers/scsi/Kconfig  |    9 +
  drivers/scsi/Makefile |    1 
- drivers/scsi/libsrp.c |  449 +++++++++++++++++++++++++++++++++++++++++++++++++
- include/scsi/libsrp.h |   75 ++++++++
- 4 files changed, 534 insertions(+), 0 deletions(-)
+ drivers/scsi/libsrp.c |  441 +++++++++++++++++++++++++++++++++++++++++++++++++
+ include/scsi/libsrp.h |   79 +++++++++
+ 4 files changed, 530 insertions(+), 0 deletions(-)
 
 diff --git a/drivers/scsi/Kconfig b/drivers/scsi/Kconfig
 index 566626c..e5098d3 100644
@@ -56,10 +56,10 @@ index ede0c45..d71bb59 100644
  obj-$(CONFIG_SCSI_SATA_SVW)	+= libata.o sata_svw.o
 diff --git a/drivers/scsi/libsrp.c b/drivers/scsi/libsrp.c
 new file mode 100644
-index 0000000..b8a7c3d
+index 0000000..86b7718
 --- /dev/null
 +++ b/drivers/scsi/libsrp.c
-@@ -0,0 +1,449 @@
+@@ -0,0 +1,441 @@
 +/*
 + * SCSI RDAM Protocol lib functions
 + *
@@ -146,8 +146,8 @@ index 0000000..b8a7c3d
 +	kfree(q->pool);
 +}
 +
-+static struct srp_buf ** srp_ring_alloc(struct device *dev,
-+					size_t max, size_t size)
++static struct srp_buf **srp_ring_alloc(struct device *dev,
++				       size_t max, size_t size)
 +{
 +	int i;
 +	struct srp_buf **ring;
@@ -233,7 +233,6 @@ index 0000000..b8a7c3d
 +	BUG_ON(!iue);
 +
 +	iue->target = target;
-+	iue->scmd = NULL;
 +	INIT_LIST_HEAD(&iue->ilist);
 +	iue->flags = 0;
 +	return iue;
@@ -246,49 +245,62 @@ index 0000000..b8a7c3d
 +}
 +EXPORT_SYMBOL_GPL(srp_iu_put);
 +
-+static int direct_data(struct scsi_cmnd *scmd, struct srp_direct_buf *md,
-+		       enum dma_data_direction dir, rdma_io_t rdma_io)
++static int srp_direct_data(struct scsi_cmnd *sc, struct srp_direct_buf *md,
++			   enum dma_data_direction dir, srp_rdma_t rdma_io,
++			   int dma_map, int ext_desc)
 +{
-+	struct iu_entry *iue = (struct iu_entry *) scmd->SCp.ptr;
-+	struct srp_target *target = iue->target;
-+	struct scatterlist *sg = scmd->request_buffer;
-+	int nsg, err;
++	struct iu_entry *iue = NULL;
++	struct scatterlist *sg = NULL;
++	int err, nsg = 0, len;
 +
-+	dprintk("%p %u %u %u %d\n", iue, scmd->request_bufflen, scmd->bufflen,
-+		md->len, scmd->use_sg);
++	if (dma_map) {
++		iue = (struct iu_entry *) sc->SCp.ptr;
++		sg = sc->request_buffer;
 +
-+	nsg = dma_map_sg(target->dev, sg, scmd->use_sg, DMA_BIDIRECTIONAL);
-+	if (!nsg) {
-+		printk("fail to map %p %d\n", iue, scmd->use_sg);
-+		return 0;
-+	}
-+	err = rdma_io(iue, sg, nsg, md, 1, dir,
-+		      min(scmd->request_bufflen, md->len));
++		dprintk("%p %u %u %d\n", iue, sc->request_bufflen,
++			md->len, sc->use_sg);
 +
-+	dma_unmap_sg(target->dev, sg, nsg, DMA_BIDIRECTIONAL);
++		nsg = dma_map_sg(iue->target->dev, sg, sc->use_sg,
++				 DMA_BIDIRECTIONAL);
++		if (!nsg) {
++			printk("fail to map %p %d\n", iue, sc->use_sg);
++			return 0;
++		}
++		len = min(sc->request_bufflen, md->len);
++	} else
++		len = md->len;
++
++	err = rdma_io(sc, sg, nsg, md, 1, dir, len);
++
++	if (dma_map)
++		dma_unmap_sg(iue->target->dev, sg, nsg, DMA_BIDIRECTIONAL);
 +
 +	return err;
 +}
 +
-+static int indirect_data(struct scsi_cmnd *scmd, struct srp_cmd *cmd,
-+			 struct srp_indirect_buf *id,
-+			 enum dma_data_direction dir, rdma_io_t rdma_io)
++static int srp_indirect_data(struct scsi_cmnd *sc, struct srp_cmd *cmd,
++			     struct srp_indirect_buf *id,
++			     enum dma_data_direction dir, srp_rdma_t rdma_io,
++			     int dma_map, int ext_desc)
 +{
-+	struct iu_entry *iue = (struct iu_entry *) scmd->SCp.ptr;
-+	struct srp_target *target = iue->target;
-+	struct srp_direct_buf *md;
-+	struct scatterlist dummy, *sg = scmd->request_buffer;
++	struct iu_entry *iue = NULL;
++	struct srp_direct_buf *md = NULL;
++	struct scatterlist dummy, *sg = NULL;
 +	dma_addr_t token = 0;
 +	long err;
 +	unsigned int done = 0;
-+	int nmd, nsg;
++	int nmd, nsg = 0, len;
++
++	if (dma_map || ext_desc) {
++		iue = (struct iu_entry *) sc->SCp.ptr;
++		sg = sc->request_buffer;
++
++		dprintk("%p %u %u %d %d\n",
++			iue, sc->request_bufflen, id->len,
++			cmd->data_in_desc_cnt, cmd->data_out_desc_cnt);
++	}
 +
 +	nmd = id->table_desc.len / sizeof(struct srp_direct_buf);
-+
-+	dprintk("%p %u %u %u %u %d %d %d\n",
-+		iue, scmd->request_bufflen, scmd->bufflen,
-+		id->len, scmd->offset, nmd,
-+		cmd->data_in_desc_cnt, cmd->data_out_desc_cnt);
 +
 +	if ((dir == DMA_FROM_DEVICE && nmd == cmd->data_in_desc_cnt) ||
 +	    (dir == DMA_TO_DEVICE && nmd == cmd->data_out_desc_cnt)) {
@@ -296,36 +308,46 @@ index 0000000..b8a7c3d
 +		goto rdma;
 +	}
 +
-+	md = dma_alloc_coherent(target->dev, id->table_desc.len,
-+				 &token, GFP_KERNEL);
-+	if (!md) {
-+		eprintk("Can't get dma memory %u\n", id->table_desc.len);
-+		return 0;
-+	}
++	if (ext_desc && dma_map) {
++		md = dma_alloc_coherent(iue->target->dev, id->table_desc.len,
++				&token, GFP_KERNEL);
++		if (!md) {
++			eprintk("Can't get dma memory %u\n", id->table_desc.len);
++			return -ENOMEM;
++		}
 +
-+	sg_init_one(&dummy, md, id->table_desc.len);
-+	sg_dma_address(&dummy) = token;
-+	err = rdma_io(iue, &dummy, 1, &id->table_desc, 1, DMA_TO_DEVICE,
-+		      id->table_desc.len);
-+	if (err < 0) {
-+		eprintk("Error copying indirect table %ld\n", err);
-+		goto free_mem;
++		sg_init_one(&dummy, md, id->table_desc.len);
++		sg_dma_address(&dummy) = token;
++		err = rdma_io(sc, &dummy, 1, &id->table_desc, 1, DMA_TO_DEVICE,
++			      id->table_desc.len);
++		if (err < 0) {
++			eprintk("Error copying indirect table %ld\n", err);
++			goto free_mem;
++		}
++	} else {
++		eprintk("This command uses external indirect buffer\n");
++		return -EINVAL;
 +	}
 +
 +rdma:
-+	nsg = dma_map_sg(target->dev, sg, scmd->use_sg, DMA_BIDIRECTIONAL);
-+	if (!nsg) {
-+		eprintk("fail to map %p %d\n", iue, scmd->use_sg);
-+		goto free_mem;
-+	}
++	if (dma_map) {
++		nsg = dma_map_sg(iue->target->dev, sg, sc->use_sg, DMA_BIDIRECTIONAL);
++		if (!nsg) {
++			eprintk("fail to map %p %d\n", iue, sc->use_sg);
++			goto free_mem;
++		}
++		len = min(sc->request_bufflen, id->len);
++	} else
++		len = id->len;
 +
-+	err = rdma_io(iue, sg, nsg, md, nmd, dir,
-+		      min(scmd->request_bufflen, id->len));
-+	dma_unmap_sg(target->dev, sg, nsg, DMA_BIDIRECTIONAL);
++	err = rdma_io(sc, sg, nsg, md, nmd, dir, len);
++
++	if (dma_map)
++		dma_unmap_sg(iue->target->dev, sg, nsg, DMA_BIDIRECTIONAL);
 +
 +free_mem:
-+	if (token)
-+		dma_free_coherent(target->dev, id->table_desc.len, md, token);
++	if (token && dma_map)
++		dma_free_coherent(iue->target->dev, id->table_desc.len, md, token);
 +
 +	return done;
 +}
@@ -352,15 +374,22 @@ index 0000000..b8a7c3d
 +	return size;
 +}
 +
-+static int __srp_transfer_data(struct scsi_cmnd *scmd, struct srp_cmd *cmd,
-+			       enum dma_data_direction dir, rdma_io_t rdma_io)
++/*
++ * TODO: this can be called multiple times for a single command if it
++ * has very long data.
++ */
++int srp_transfer_data(struct scsi_cmnd *sc, struct srp_cmd *cmd,
++		      srp_rdma_t rdma_io, int dma_map, int ext_desc)
 +{
 +	struct srp_direct_buf *md;
 +	struct srp_indirect_buf *id;
++	enum dma_data_direction dir;
 +	int offset, err = 0;
 +	u8 format;
 +
 +	offset = cmd->add_cdb_len * 4;
++
++	dir = srp_cmd_direction(cmd);
 +	if (dir == DMA_FROM_DEVICE)
 +		offset += data_out_desc_size(cmd);
 +
@@ -375,12 +404,13 @@ index 0000000..b8a7c3d
 +	case SRP_DATA_DESC_DIRECT:
 +		md = (struct srp_direct_buf *)
 +			(cmd->add_data + offset);
-+		err = direct_data(scmd, md, dir, rdma_io);
++		err = srp_direct_data(sc, md, dir, rdma_io, dma_map, ext_desc);
 +		break;
 +	case SRP_DATA_DESC_INDIRECT:
 +		id = (struct srp_indirect_buf *)
 +			(cmd->add_data + offset);
-+		err = indirect_data(scmd, cmd, id, dir, rdma_io);
++		err = srp_indirect_data(sc, cmd, id, dir, rdma_io, dma_map,
++					ext_desc);
 +		break;
 +	default:
 +		eprintk("Unknown format %d %x\n", dir, format);
@@ -388,21 +418,6 @@ index 0000000..b8a7c3d
 +	}
 +
 +	return err;
-+}
-+
-+/* TODO: this can be called multiple times for a single command. */
-+int srp_transfer_data(struct scsi_cmnd *scmd, struct srp_cmd *cmd,
-+		      rdma_io_t rdma_io)
-+{
-+	struct iu_entry	*iue = (struct iu_entry *) scmd->SCp.ptr;
-+	enum dma_data_direction dir;
-+
-+	if (test_bit(V_WRITE, &iue->flags))
-+		dir = DMA_TO_DEVICE;
-+	else
-+		dir = DMA_FROM_DEVICE;
-+	__srp_transfer_data(scmd, cmd, dir, rdma_io);
-+	return 0;
 +}
 +EXPORT_SYMBOL_GPL(srp_transfer_data);
 +
@@ -438,27 +453,12 @@ index 0000000..b8a7c3d
 +	return len;
 +}
 +
-+static uint8_t getcontrolbyte(u8 *cdb)
++int srp_cmd_queue(struct Scsi_Host *shost, struct srp_cmd *cmd, void *info,
++		  u64 addr)
 +{
-+	return cdb[COMMAND_SIZE(cdb[0]) - 1];
-+}
-+
-+static inline uint8_t getlink(struct srp_cmd *cmd)
-+{
-+	return (getcontrolbyte(cmd->cdb) & 0x01);
-+}
-+
-+int srp_cmd_perform(struct iu_entry *iue, struct srp_cmd *cmd)
-+{
-+	struct Scsi_Host *shost = iue->target->shost;
-+	enum dma_data_direction data_dir;
-+	struct scsi_cmnd *scmd;
-+	int tag, len;
-+
-+	if (getlink(cmd))
-+		__set_bit(V_LINKED, &iue->flags);
-+
-+	tag = MSG_SIMPLE_TAG;
++	enum dma_data_direction dir;
++	struct scsi_cmnd *sc;
++	int tag, len, err;
 +
 +	switch (cmd->task_attr) {
 +	case SRP_SIMPLE_TASK:
@@ -475,46 +475,38 @@ index 0000000..b8a7c3d
 +		tag = MSG_ORDERED_TAG;
 +	}
 +
-+	switch (cmd->cdb[0]) {
-+	case WRITE_6:
-+	case WRITE_10:
-+	case WRITE_VERIFY:
-+	case WRITE_12:
-+	case WRITE_VERIFY_12:
-+		__set_bit(V_WRITE, &iue->flags);
-+	}
++	dir = srp_cmd_direction(cmd);
++	len = vscsis_data_length(cmd, dir);
 +
-+	if (cmd->buf_fmt >> 4)
-+		data_dir = DMA_TO_DEVICE;
-+	else
-+		data_dir = DMA_FROM_DEVICE;
-+	len = vscsis_data_length(cmd, data_dir);
++	dprintk("%p %x %lx %d %d %d %llx\n", info, cmd->cdb[0],
++		cmd->lun, dir, len, tag, (unsigned long long) cmd->tag);
 +
-+	dprintk("%p %x %lx %d %d %d %llx\n", iue, cmd->cdb[0],
-+		cmd->lun, data_dir, len, tag, (unsigned long long) cmd->tag);
++	sc = scsi_host_get_command(shost, dir, GFP_KERNEL);
++	if (!sc)
++		return -ENOMEM;
 +
-+	scmd = scsi_host_get_command(shost, data_dir, GFP_KERNEL);
-+	BUG_ON(!scmd);
-+	scmd->SCp.ptr = (char *) iue;
-+	memcpy(scmd->cmnd, cmd->cdb, MAX_COMMAND_SIZE);
-+	scmd->request_bufflen = len;
-+	scmd->tag = tag;
-+	iue->scmd = scmd;
-+	scsi_tgt_queue_command(scmd, (struct scsi_lun *) &cmd->lun, cmd->tag);
++	sc->SCp.ptr = info;
++	memcpy(sc->cmnd, cmd->cdb, MAX_COMMAND_SIZE);
++	sc->request_bufflen = len;
++	sc->request_buffer = (void *) (unsigned long) addr;
++	sc->tag = tag;
++	err = scsi_tgt_queue_command(sc, (struct scsi_lun *) &cmd->lun, cmd->tag);
++	if (err)
++		scsi_host_put_command(shost, sc);
 +
-+	return 0;
++	return err;
 +}
-+EXPORT_SYMBOL_GPL(srp_cmd_perform);
++EXPORT_SYMBOL_GPL(srp_cmd_queue);
 +
 +MODULE_DESCRIPTION("SCSI RDAM Protocol lib functions");
 +MODULE_AUTHOR("FUJITA Tomonori");
 +MODULE_LICENSE("GPL");
 diff --git a/include/scsi/libsrp.h b/include/scsi/libsrp.h
 new file mode 100644
-index 0000000..9dd10ff
+index 0000000..8ec13b9
 --- /dev/null
 +++ b/include/scsi/libsrp.h
-@@ -0,0 +1,75 @@
+@@ -0,0 +1,79 @@
 +#ifndef __LIBSRP_H__
 +#define __LIBSRP_H__
 +
@@ -561,7 +553,6 @@ index 0000000..9dd10ff
 +
 +struct iu_entry {
 +	struct srp_target *target;
-+	struct scsi_cmnd *scmd;
 +
 +	struct list_head ilist;
 +	dma_addr_t remote_token;
@@ -570,26 +561,31 @@ index 0000000..9dd10ff
 +	struct srp_buf *sbuf;
 +};
 +
-+typedef int (rdma_io_t) (struct iu_entry *, struct scatterlist *, int,
++typedef int (srp_rdma_t)(struct scsi_cmnd *, struct scatterlist *, int,
 +			 struct srp_direct_buf *, int,
 +			 enum dma_data_direction, unsigned int);
-+
-+static inline struct srp_target *host_to_target(struct Scsi_Host *host)
-+{
-+	return (struct srp_target *) host->hostdata;
-+}
-+
 +extern int srp_target_alloc(struct srp_target *, struct device *, size_t, size_t);
 +extern void srp_target_free(struct srp_target *);
 +
 +extern struct iu_entry *srp_iu_get(struct srp_target *);
 +extern void srp_iu_put(struct iu_entry *);
 +
-+extern int srp_cmd_perform(struct iu_entry *iue, struct srp_cmd *cmd);
-+extern int srp_transfer_data(struct scsi_cmnd *scmd, struct srp_cmd *cmd,
-+			     rdma_io_t rdma_io);
++extern int srp_cmd_queue(struct Scsi_Host *, struct srp_cmd *, void *, u64);
++extern int srp_transfer_data(struct scsi_cmnd *, struct srp_cmd *,
++			     srp_rdma_t, int, int);
++
++
++static inline struct srp_target *host_to_srp_target(struct Scsi_Host *host)
++{
++	return (struct srp_target *) host->hostdata;
++}
++
++static inline int srp_cmd_direction(struct srp_cmd *cmd)
++{
++	return (cmd->buf_fmt >> 4) ? DMA_TO_DEVICE : DMA_FROM_DEVICE;
++}
 +
 +#endif
 -- 
-1.4.1.1
+1.4.1
 
