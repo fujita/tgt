@@ -1,6 +1,6 @@
-From dc6a0cdc52e680b696d86b25d698a847205cad98 Mon Sep 17 00:00:00 2001
+From 116f6f576a16fd7a2685916e4146930f90204d46 Mon Sep 17 00:00:00 2001
 From: Mike Christie <michaelc@cs.wisc.edu>
-Date: Fri, 18 Aug 2006 00:45:35 +0900
+Date: Fri, 18 Aug 2006 11:55:41 +0900
 Subject: [PATCH 5/9] scsi tgt: scsi target lib functionality
 
 The core scsi target lib functions.
@@ -19,9 +19,9 @@ Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
 Signed-off-by: James Bottomley <James.Bottomley@SteelEye.com>
 ---
  drivers/scsi/scsi_tgt_lib.c  |  700 ++++++++++++++++++++++++++++++++++++++++++
- drivers/scsi/scsi_tgt_priv.h |   24 +
+ drivers/scsi/scsi_tgt_priv.h |   25 ++
  include/scsi/scsi_tgt.h      |   18 +
- 3 files changed, 742 insertions(+), 0 deletions(-)
+ 3 files changed, 743 insertions(+), 0 deletions(-)
 
 diff --git a/drivers/scsi/scsi_tgt_lib.c b/drivers/scsi/scsi_tgt_lib.c
 new file mode 100644
@@ -731,10 +731,10 @@ index 0000000..c515c27
 +MODULE_LICENSE("GPL");
 diff --git a/drivers/scsi/scsi_tgt_priv.h b/drivers/scsi/scsi_tgt_priv.h
 new file mode 100644
-index 0000000..b7b6ea6
+index 0000000..84488c5
 --- /dev/null
 +++ b/drivers/scsi/scsi_tgt_priv.h
-@@ -0,0 +1,24 @@
+@@ -0,0 +1,25 @@
 +struct scsi_cmnd;
 +struct scsi_lun;
 +struct Scsi_Host;
@@ -746,7 +746,8 @@ index 0000000..b7b6ea6
 +	printk("%s(%d) " fmt, __FUNCTION__, __LINE__, ##args);	\
 +} while (0)
 +
-+#define dprintk eprintk
++#define dprintk(fmt, args...)
++/* #define dprintk eprintk */
 +
 +extern void scsi_tgt_if_exit(void);
 +extern int scsi_tgt_if_init(void);

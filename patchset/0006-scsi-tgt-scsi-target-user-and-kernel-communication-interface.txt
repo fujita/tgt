@@ -1,4 +1,4 @@
-From 4587372bbb53c83f86c14cc2f33073937e2ca0b7 Mon Sep 17 00:00:00 2001
+From 4f1934d63d45a88066061f460a7e57fdddba6bf6 Mon Sep 17 00:00:00 2001
 From: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
 Date: Fri, 18 Aug 2006 00:32:41 +0900
 Subject: [PATCH 6/9] scsi tgt: scsi target user and kernel communication interface

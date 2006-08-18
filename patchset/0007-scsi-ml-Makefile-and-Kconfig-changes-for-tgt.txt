@@ -1,4 +1,4 @@
-From 855bdf3bd4a0c9cbcb57a37fe34a7188e8adb61f Mon Sep 17 00:00:00 2001
+From 4d62965a2d1d43b05529bf2f26563d3ddbe449cb Mon Sep 17 00:00:00 2001
 From: Mike Christie <michaelc@cs.wisc.edu>
 Date: Fri, 18 Aug 2006 00:33:17 +0900
 Subject: [PATCH 7/9] scsi-ml: Makefile and Kconfig changes for tgt

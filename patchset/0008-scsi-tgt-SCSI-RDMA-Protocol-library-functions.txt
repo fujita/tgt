@@ -1,4 +1,4 @@
-From 7f19e763441525e31f6b771890ef534e0512398d Mon Sep 17 00:00:00 2001
+From b5ab4781574e70ed224a5dee7fe600880c98dda4 Mon Sep 17 00:00:00 2001
 From: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
 Date: Fri, 18 Aug 2006 00:36:47 +0900
 Subject: [PATCH 8/9] scsi tgt: SCSI RDMA Protocol library functions

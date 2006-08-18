@@ -1,4 +1,4 @@
-From 3ee7022b3d6bed6ea506c205e58f03588d7a170e Mon Sep 17 00:00:00 2001
+From 8f167fea740f5d82c70a2e9938e983b704baae67 Mon Sep 17 00:00:00 2001
 From: Mike Christie <michaelc@cs.wisc.edu>
 Date: Thu, 17 Aug 2006 23:56:41 +0900
 Subject: [PATCH 4/9] scsi-ml: export scsi-ml functions needed by tgt_scsi_lib and its LLDs

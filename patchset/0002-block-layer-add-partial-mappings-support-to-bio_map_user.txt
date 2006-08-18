@@ -1,4 +1,4 @@
-From edae3e91816a0aa1d6afc5bfc5c7cbdb8d2f1229 Mon Sep 17 00:00:00 2001
+From 79acdaa1243aecedcd035c3219375a7cb9c9f786 Mon Sep 17 00:00:00 2001
 From: Mike Christie <michaelc@cs.wisc.edu>
 Date: Thu, 17 Aug 2006 23:48:58 +0900
 Subject: [PATCH 2/9] block layer: add partial mappings support to bio_map_user

@@ -1,4 +1,4 @@
-From 23c2123adf959725f1f7b49b0b13606725586d82 Mon Sep 17 00:00:00 2001
+From 3f63e5e44b012927b6054f7025d3a5e7be6f7f09 Mon Sep 17 00:00:00 2001
 From: Mike Christie <michaelc@cs.wisc.edu>
 Date: Thu, 17 Aug 2006 23:52:17 +0900
 Subject: [PATCH 3/9] block layer: use blk_rq_bio_prep in init_request_from_bio

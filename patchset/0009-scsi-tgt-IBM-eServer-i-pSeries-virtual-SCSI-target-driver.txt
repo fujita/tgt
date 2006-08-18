@@ -1,4 +1,4 @@
-From 747144ea9774596a61b7ba39c0ae18b378b33d36 Mon Sep 17 00:00:00 2001
+From eed708a465130a096f3ce2892198ed77ef2504b8 Mon Sep 17 00:00:00 2001
 From: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
 Date: Fri, 18 Aug 2006 00:41:02 +0900
 Subject: [PATCH 9/9] scsi tgt: IBM eServer i/pSeries virtual SCSI target driver
