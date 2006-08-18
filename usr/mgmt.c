@@ -223,8 +223,16 @@ void ipc_event_handle(int accept_fd)
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
 
+retry:
 	err = recvmsg(fd, &msg, MSG_PEEK | MSG_DONTWAIT);
 	if (err != len) {
+		/*
+		 * workaround. We need to put this request to
+		 * scheduler and wait for timeout or data.
+		 */
+		if (errno == EAGAIN)
+			goto retry;
+
 		eprintf("can't read %s\n", strerror(errno));
 		goto out;
 	}
