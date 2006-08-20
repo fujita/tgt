@@ -14,19 +14,9 @@ export ISCSI
 export KERNELSRC
 
 all:
-ifeq ($(ARCH), powerpc)
-	make -C ibmvstgt
-else
-	make -C istgt
-endif
 	make -C usr
-	make -C kernel
+	make -C istgt
+
 clean:
 	make -C usr clean
-	make -C kernel clean
-
-ifeq ($(ARCH), powerpc)
-	make -C ibmvstgt clean
-else
 	make -C istgt clean
-endif
