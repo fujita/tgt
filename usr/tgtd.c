@@ -76,26 +76,6 @@ Target framework daemon.\n\
 static void signal_catch(int signo) {
 }
 
-static int daemonize(void)
-{
-	pid_t pid;
-
-	pid = fork();
-	if (pid < 0)
-		return -ENOMEM;
-	else if (pid)
-		exit(0);
-
-	setsid();
-	chdir("/");
-	close(0);
-	open("/dev/null", O_RDWR);
-	dup2(0, 1);
-	dup2(0, 2);
-
-	return 0;
-}
-
 static void oom_adjust(void)
 {
 	int fd;
@@ -267,7 +247,7 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	if (is_daemon && daemonize())
+	if (is_daemon && daemon(0,0))
 		exit(1);
 
 	oom_adjust();
