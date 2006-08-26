@@ -23,7 +23,7 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <inttypes.h>
-#include <poll.h>
+#include <sys/epoll.h>
 #include <signal.h>
 #include <string.h>
 #include <stdint.h>
@@ -37,14 +37,20 @@
 #include "list.h"
 #include "tgtd.h"
 #include "driver.h"
+#include "util.h"
 
-enum {
-	POLL_KERN, /* kernel interface */
-	POLL_IPC, /* unix domain socket for tgtdadm */
-	POLL_END,
+#define MAX_FDS	4096
+
+struct tgt_event {
+	event_handler_t *handler;
+	void *data;
+	int fd;
+	struct list_head e_list;
 };
 
+static int ep_fd;
 static char program_name[] = "tgtd";
+static LIST_HEAD(tgt_events_list);
 
 static struct option const long_options[] =
 {
@@ -95,16 +101,54 @@ static void oom_adjust(void)
 	close(fd);
 }
 
-static void event_loop(struct pollfd *pfd, int npfd, int timeout)
+int tgt_event_add(int fd, int events, event_handler_t handler, void *data)
+{
+	struct epoll_event ev;
+	struct tgt_event *tev;
+	int err;
+
+	tev = malloc(sizeof(*tev));
+	if (!tev)
+		return -ENOMEM;
+
+	tev->data = data;
+	tev->handler = handler;
+	tev->fd = fd;
+
+	ev.events = events;
+	ev.data.ptr = tev;
+	err = epoll_ctl(ep_fd, EPOLL_CTL_ADD, fd, &ev);
+	if (err)
+		free(tev);
+	else
+		list_add(&tev->e_list, &tgt_events_list);
+
+	return err;
+}
+
+void tgt_event_del(int fd)
+{
+	struct tgt_event *tev;
+
+	epoll_ctl(ep_fd, EPOLL_CTL_DEL, fd, NULL);
+
+	list_for_each_entry(tev, &tgt_events_list, e_list) {
+		if (tev->fd == fd) {
+			list_del(&tev->e_list);
+			free(tev);
+			break;
+		}
+	}
+}
+
+static void event_loop(int timeout)
 {
 	int nevent, i;
-	struct tgt_driver *d;
+	struct epoll_event events[1024];
+	struct tgt_event *tev;
 
 retry:
-	/*
-	 * TODO: replace something efficient than poll.
-	 */
-	nevent = poll(pfd, npfd, timeout);
+	nevent = epoll_wait(ep_fd, events, ARRAY_SIZE(events), timeout);
 	if (nevent < 0) {
 		if (errno != EINTR) {
 			eprintf("%m\n");
@@ -118,59 +162,15 @@ retry:
 		goto retry;
 	}
 
-	if (pfd[POLL_KERN].revents) {
-		kspace_event_handle();
-		nevent--;
-	}
-
-	if (pfd[POLL_IPC].revents) {
-		dprintf("ipc event\n");
-		ipc_event_handle(pfd[POLL_IPC].fd);
-		nevent--;
-	}
-
-	if (!nevent)
-		goto retry;
-
-	for (i = 0; tgt_drivers[i]; i++) {
-		dprintf("lld event\n");
-		d = tgt_drivers[i];
-		d->event_handle(pfd + d->pfd_index);
+	for (i = 0; i < nevent; i++) {
+		tev = (struct tgt_event *) events[i].data.ptr;
+		tev->handler(tev->fd, tev->data);
 	}
 
 	goto retry;
 }
 
-static struct pollfd *pfd_init(int npfd, int ki_fd, int ud_fd)
-{
-	struct tgt_driver *d;
-	struct pollfd *pfd;
-	int i, idx = POLL_END;
-
-	pfd = calloc(npfd, sizeof(struct pollfd));
-	if (!pfd)
-		return NULL;
-
-	if (ki_fd) {
-		pfd[POLL_KERN].fd = ki_fd;
-		pfd[POLL_KERN].events = POLLIN;
-	}
-	pfd[POLL_IPC].fd = ud_fd;
-	pfd[POLL_IPC].events = POLLIN;
-
-	for (i = 0; tgt_drivers[i]; i++) {
-		d = tgt_drivers[i];
-		if (d->enable && d->npfd) {
-			d->pfd_index = idx;
-			d->poll_init(pfd + idx);
-			idx += d->npfd;
-		}
-	}
-
-	return pfd;
-}
-
-static int lld_init(char *data, int *npfd)
+static int lld_init(char *data)
 {
 	char *list, *p, *q;
 	int index, err, np, ndriver = 0;
@@ -193,9 +193,7 @@ static int lld_init(char *data, int *npfd)
 					continue;
 			}
 			tgt_drivers[index]->enable = 1;
-			tgt_drivers[index]->npfd = np;
 			ndriver++;
-			*npfd += np;
 		}
 	}
 	free(list);
@@ -205,12 +203,11 @@ static int lld_init(char *data, int *npfd)
 
 int main(int argc, char **argv)
 {
-	struct pollfd *pfd;
 	struct sigaction sa_old;
 	struct sigaction sa_new;
-	int err, ch, longindex, nr_lld = 0, nr_pfd = POLL_END;
+	int err, ch, longindex, fd, nr_lld = 0, maxfds = MAX_FDS, timeout = -1;
 	int is_daemon = 1, is_debug = 1;
-	int ki_fd, ipc_fd, timeout = -1;
+	char *modes = NULL;
 
 	/* do not allow ctrl-c for now... */
 	sa_new.sa_handler = signal_catch;
@@ -224,7 +221,7 @@ int main(int argc, char **argv)
 				 &longindex)) >= 0) {
 		switch (ch) {
 		case 'l':
-			nr_lld = lld_init(optarg, &nr_pfd);
+			modes = optarg;
 			break;
 		case 'f':
 			is_daemon = 0;
@@ -244,6 +241,7 @@ int main(int argc, char **argv)
 		}
 	}
 
+	nr_lld = lld_init(modes);
 	if (!nr_lld) {
 		printf("No available low level driver!\n");
 		exit(1);
@@ -258,19 +256,25 @@ int main(int argc, char **argv)
 	if (err)
 		exit(1);
 
-	err = kreq_init(&ki_fd);
-	if (err) {
-		eprintf("No kernel interface\n");
-		ki_fd = 0;
+	ep_fd = epoll_create(maxfds);
+	if (ep_fd < 0) {
+		eprintf("can't create epoll fd, %m\n");
+		exit(1);
 	}
 
-	err = ipc_init(&ipc_fd);
+	err = kreq_init(&fd);
+	if (err)
+		eprintf("No kernel interface\n");
+	else
+		tgt_event_add(fd, POLL_IN, kern_event_handler, NULL);
+
+	err = ipc_init(&fd);
 	if (err)
 		exit(1);
+	else
+		tgt_event_add(fd, POLL_IN, mgmt_event_handler, NULL);
 
-	pfd = pfd_init(nr_pfd, ki_fd, ipc_fd);
-
-	event_loop(pfd, nr_pfd, timeout);
+	event_loop(timeout);
 
 	return 0;
 }

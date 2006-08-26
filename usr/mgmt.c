@@ -195,7 +195,7 @@ static void ipc_send_res(int fd, struct tgtadm_res *res)
 		eprintf("can't write, %m\n");
 }
 
-void ipc_event_handle(int accept_fd)
+void mgmt_event_handler(int accept_fd, void *data)
 {
 	int fd, err;
 	char sbuf[BUFSIZE], rbuf[BUFSIZE];

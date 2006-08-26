@@ -1,11 +1,7 @@
-#include <poll.h>
-
 struct tgt_driver {
 	const char *name;
 
 	int (*init) (int *);
-	int (*poll_init) (struct pollfd *);
-	int (*event_handle) (struct pollfd *);
 
 	int (*target_create) (int, char *);
 	int (*target_destroy) (int);
@@ -16,7 +12,6 @@ struct tgt_driver {
 				uint8_t *, int *);
 	int (*scsi_inquiry)(struct tgt_device *, int, uint8_t *, uint8_t *,
 			    uint8_t *, int *);
-	int npfd;
 	int enable;
 	int pfd_index;
 };

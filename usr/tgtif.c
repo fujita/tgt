@@ -106,7 +106,7 @@ static int kspace_send_cmd_res(int host_no, int len, int result,
 	return kreq_send(&ev);
 }
 
-void kspace_event_handle(void)
+void kern_event_handler(int fd, void *data)
 {
 	struct tgt_event *ev;
 

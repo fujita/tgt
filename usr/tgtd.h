@@ -25,16 +25,20 @@ struct tgt_device {
 };
 
 extern int kreq_init(int *fd);
-extern void kspace_event_handle(void);
+extern void kern_event_handler(int, void *data);
 
 extern int ipc_init(int *fd);
-extern void ipc_event_handle(int accept_fd);
+extern void mgmt_event_handler(int accept_fd, void *data);
 
 extern int tgt_device_create(int tid, uint64_t lun, char *path);
 extern int tgt_device_destroy(int tid, uint64_t lun);
 extern int tgt_target_create(int tid);
 extern int tgt_target_destroy(int tid);
 extern int tgt_target_bind(int tid, int host_no, int lid);
+
+typedef void (event_handler_t)(int fd, void *data);
+extern int tgt_event_add(int fd, int events, event_handler_t handler, void *data);
+extern void tgt_event_del(int fd);
 
 typedef int (cmd_end_t)(int host_no, int len, int result, int rw, uint64_t addr,
 			 uint64_t tag);
@@ -54,4 +58,5 @@ extern int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu, int *len,
 
 extern int sense_data_build(uint8_t *data, uint8_t res_code, uint8_t key,
 			    uint8_t ascode, uint8_t ascodeq);
+
 #endif
