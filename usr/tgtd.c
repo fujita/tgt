@@ -141,7 +141,7 @@ retry:
 	goto retry;
 }
 
-static struct pollfd *pfd_init(int npfd, int nl_fd, int ud_fd)
+static struct pollfd *pfd_init(int npfd, int ki_fd, int ud_fd)
 {
 	struct tgt_driver *d;
 	struct pollfd *pfd;
@@ -151,8 +151,10 @@ static struct pollfd *pfd_init(int npfd, int nl_fd, int ud_fd)
 	if (!pfd)
 		return NULL;
 
-	pfd[POLL_KERN].fd = nl_fd;
-	pfd[POLL_KERN].events = POLLIN;
+	if (ki_fd) {
+		pfd[POLL_KERN].fd = ki_fd;
+		pfd[POLL_KERN].events = POLLIN;
+	}
 	pfd[POLL_IPC].fd = ud_fd;
 	pfd[POLL_IPC].events = POLLIN;
 
@@ -257,8 +259,10 @@ int main(int argc, char **argv)
 		exit(1);
 
 	err = kreq_init(&ki_fd);
-	if (err)
-		exit(1);
+	if (err) {
+		eprintf("No kernel interface\n");
+		ki_fd = 0;
+	}
 
 	err = ipc_init(&ipc_fd);
 	if (err)
