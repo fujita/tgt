@@ -39,7 +39,7 @@
 #include "driver.h"
 
 enum {
-	POLL_KI, /* kernel interface */
+	POLL_KERN, /* kernel interface */
 	POLL_IPC, /* unix domain socket for tgtdadm */
 	POLL_END,
 };
@@ -118,7 +118,7 @@ retry:
 		goto retry;
 	}
 
-	if (pfd[POLL_KI].revents) {
+	if (pfd[POLL_KERN].revents) {
 		kspace_event_handle();
 		nevent--;
 	}
@@ -151,8 +151,8 @@ static struct pollfd *pfd_init(int npfd, int nl_fd, int ud_fd)
 	if (!pfd)
 		return NULL;
 
-	pfd[POLL_KI].fd = nl_fd;
-	pfd[POLL_KI].events = POLLIN;
+	pfd[POLL_KERN].fd = nl_fd;
+	pfd[POLL_KERN].events = POLLIN;
 	pfd[POLL_IPC].fd = ud_fd;
 	pfd[POLL_IPC].events = POLLIN;
 
