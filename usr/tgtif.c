@@ -31,7 +31,6 @@
 #include <unistd.h>
 #include <asm/types.h>
 #include <sys/mman.h>
-#include <sys/poll.h>
 #include <sys/stat.h>
 #include <scsi/scsi_tgt_if.h>
 

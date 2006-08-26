@@ -1,6 +1,5 @@
 #include <errno.h>
 #include <string.h>
-#include <poll.h>
 #include <inttypes.h>
 
 #include "list.h"
