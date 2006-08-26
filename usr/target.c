@@ -158,13 +158,13 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 
 	dev_fd = open(path, O_RDWR | O_LARGEFILE);
 	if (dev_fd < 0) {
-		eprintf("Could not open %s %s\n", path, strerror(errno));
+		eprintf("Could not open %s, %m\n", path);
 		return dev_fd;
 	}
 
 	err = fstat64(dev_fd, &st);
 	if (err < 0) {
-		printf("Cannot get stat %d %s\n", dev_fd, strerror(errno));
+		printf("Cannot get stat %d, %m\n", dev_fd);
 		goto close_dev_fd;
 	}
 
@@ -173,7 +173,7 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 	else if(S_ISBLK(st.st_mode)) {
 		err = ioctl(dev_fd, BLKGETSIZE64, &size);
 		if (err < 0) {
-			eprintf("Cannot get size %s\n", strerror(errno));
+			eprintf("Cannot get size, %m\n");
 			goto close_dev_fd;
 		}
 	} else {

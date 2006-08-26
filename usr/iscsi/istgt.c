@@ -57,9 +57,9 @@ static void set_non_blocking(int fd)
 	if (res != -1) {
 		res = fcntl(fd, F_SETFL, res | O_NONBLOCK);
 		if (res)
-			dprintf("unable to set fd flags (%s)!\n", strerror(errno));
+			dprintf("unable to set fd flags, %m\n");
 	} else
-		dprintf("unable to get fd flags (%s)!\n", strerror(errno));
+		dprintf("unable to get fd flags, %m\n");
 }
 
 static void listen_socket_create(struct pollfd *pfds)
@@ -76,35 +76,35 @@ static void listen_socket_create(struct pollfd *pfds)
 	hints.ai_flags = AI_PASSIVE;
 
 	if (getaddrinfo(NULL, servname, &hints, &res0)) {
-		eprintf("unable to get address info (%s)!\n", strerror(errno));
+		eprintf("unable to get address info, %m\n");
 		exit(1);
 	}
 
 	for (i = 0, res = res0; res && i < LISTEN_MAX; i++, res = res->ai_next) {
 		sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
 		if (sock < 0) {
-			eprintf("unable to create server socket (%s) %d %d %d!\n",
-				  strerror(errno), res->ai_family,
-				  res->ai_socktype, res->ai_protocol);
+			eprintf("unable to create socket %d %d %d, %m\n",
+				res->ai_family,	res->ai_socktype,
+				res->ai_protocol);
 			continue;
 		}
 
 		opt = 1;
 		if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)))
-			dprintf("unable to set SO_REUSEADDR on server socket (%s)!\n",
-				    strerror(errno));
+			dprintf("unable to set SO_REUSEADDR, %m\n");
+
 		opt = 1;
 		if (res->ai_family == AF_INET6 &&
 		    setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof(opt)))
 			continue;
 
 		if (bind(sock, res->ai_addr, res->ai_addrlen)) {
-			eprintf("unable to bind server socket (%s)!\n", strerror(errno));
+			eprintf("unable to bind server socket, %m\n");
 			continue;
 		}
 
 		if (listen(sock, INCOMING_MAX)) {
-			eprintf("unable to listen to server socket (%s)!\n", strerror(errno));
+			eprintf("unable to listen to server socket, %m\n");
 			continue;
 		}
 

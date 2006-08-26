@@ -155,7 +155,7 @@ static int ipc_accept(int accept_fd)
 	len = sizeof(addr);
 	fd = accept(accept_fd, (struct sockaddr *) &addr, &len);
 	if (fd < 0)
-		eprintf("can't accept a new connection %s\n", strerror(errno));
+		eprintf("can't accept a new connection, %m\n");
 	return fd;
 }
 
@@ -168,7 +168,7 @@ static int ipc_perm(int fd)
 	len = sizeof(cred);
 	err = getsockopt(fd, SOL_SOCKET, SO_PEERCRED, (void *) &cred, &len);
 	if (err) {
-		eprintf("can't get sockopt %s\n", strerror(errno));
+		eprintf("can't get sockopt, %m\n");
 		return -1;
 	}
 
@@ -192,7 +192,7 @@ static void ipc_send_res(int fd, struct tgtadm_res *res)
 
 	err = sendmsg(fd, &msg, MSG_DONTWAIT);
 	if (err != res->len)
-		eprintf("can't write %s\n", strerror(errno));
+		eprintf("can't write, %m\n");
 }
 
 void ipc_event_handle(int accept_fd)
@@ -233,7 +233,7 @@ retry:
 		if (errno == EAGAIN)
 			goto retry;
 
-		eprintf("can't read %s\n", strerror(errno));
+		eprintf("can't read, %m\n");
 		goto out;
 	}
 
@@ -250,7 +250,7 @@ retry:
 
 	err = recvmsg(fd, &msg, MSG_DONTWAIT);
 	if (err != req->len) {
-		eprintf("can't read %s\n", strerror(errno));
+		eprintf("can't read, %m\n");
 		err = -EIO;
 		goto out;
 	}
@@ -287,7 +287,7 @@ int ipc_init(int *ipc_fd)
 
 	fd = socket(AF_LOCAL, SOCK_STREAM, 0);
 	if (fd < 0) {
-		eprintf("can't open a socket %s\n", strerror(errno));
+		eprintf("can't open a socket, %m\n");
 		return -1;
 	}
 
@@ -298,13 +298,13 @@ int ipc_init(int *ipc_fd)
 
 	err = bind(fd, (struct sockaddr *) &addr, sizeof(addr));
 	if (err) {
-		eprintf("can't bind a socket %s\n", strerror(errno));
+		eprintf("can't bind a socket, %m\n");
 		goto out;
 	}
 
 	err = listen(fd, 32);
 	if (err < 0) {
-		eprintf("can't listen a socket %s\n", strerror(errno));
+		eprintf("can't listen a socket, %m\n");
 		goto out;
 	}
 

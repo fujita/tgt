@@ -17,7 +17,7 @@ int chrdev_open(char *modname, char *devpath, uint8_t minor, int *fd)
 
 	fp = fopen("/proc/devices", "r");
 	if (!fp) {
-		eprintf("Cannot open control path to the driver\n");
+		eprintf("Cannot open /proc/devices, %m\n");
 		return -1;
 	}
 
@@ -44,13 +44,13 @@ int chrdev_open(char *modname, char *devpath, uint8_t minor, int *fd)
 	unlink(devpath);
 	err = mknod(devpath, (S_IFCHR | 0600), (major << 8) | minor);
 	if (err) {
-		eprintf("cannot create %s %s\n", devpath, strerror(errno));
+		eprintf("cannot create %s, %m\n", devpath);
 		return -errno;
 	}
 
 	*fd = open(devpath, O_RDWR);
 	if (*fd < 0) {
-		eprintf("cannot open %s %s\n", devpath, strerror(errno));
+		eprintf("cannot open %s, %m\n", devpath);
 		return -errno;
 	}
 

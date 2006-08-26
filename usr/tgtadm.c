@@ -129,7 +129,7 @@ static int ipc_mgmt_connect(int *fd)
 
 	*fd = socket(AF_LOCAL, SOCK_STREAM, 0);
 	if (*fd < 0) {
-		eprintf("Cannot create a socket %s\n", strerror(errno));
+		eprintf("Cannot create a socket, %m\n");
 		return -1;
 	}
 
@@ -139,7 +139,7 @@ static int ipc_mgmt_connect(int *fd)
 
 	err = connect(*fd, (struct sockaddr *) &addr, sizeof(addr));
 	if (err < 0) {
-		eprintf("Cannot connect to tgtd %s\n", strerror(errno));
+		eprintf("Cannot connect to tgtd, %m\n");
 		return -1;
 	}
 
@@ -154,7 +154,7 @@ static int ipc_mgmt_res(int fd)
 
 	err = read(fd, buf, len);
 	if (err < 0) {
-		eprintf("Cannot read from tgtd %s\n", strerror(errno));
+		eprintf("Cannot read from tgtd, %m\n");
 		return -1;
 	}
 
@@ -176,7 +176,7 @@ static int ipc_mgmt_res(int fd)
 		t = min_t(int, sizeof(buf), len);
 		err = read(fd, buf, t);
 		if (err < 0) {
-			eprintf("Cannot read from tgtd %s\n", strerror(errno));
+			eprintf("Cannot read from tgtd, %m\n");
 			return -1;
 		}
 		printf("%s", buf);
@@ -196,7 +196,7 @@ static int ipc_mgmt_req(struct tgtadm_req *req)
 
 	err = write(fd, (char *) req, req->len);
 	if (err < 0) {
-		eprintf("Cannot send to tgtd %s\n", strerror(errno));
+		eprintf("Cannot send to tgtd, %m\n");
 		goto out;
 	}
 

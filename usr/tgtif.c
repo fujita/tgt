@@ -173,7 +173,7 @@ static int tgt_miscdev_init(char *path, int *fd)
 
 	*fd = open(path, O_RDWR);
 	if (*fd < 0) {
-		eprintf("cannot open %s %s\n", path, strerror(errno));
+		eprintf("cannot open %s, %m\n", path);
 		goto out;
 	}
 
@@ -194,7 +194,7 @@ int kreq_init(int *ki_fd)
 
 	buf = mmap(NULL, size * 2, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if (buf == MAP_FAILED) {
-		eprintf("fail to mmap %s\n", strerror(errno));
+		eprintf("fail to mmap, %m\n");
 		close(fd);
 		return -EINVAL;
 	}

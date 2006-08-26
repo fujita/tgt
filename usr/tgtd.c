@@ -107,7 +107,7 @@ retry:
 	nevent = poll(pfd, npfd, timeout);
 	if (nevent < 0) {
 		if (errno != EINTR) {
-			eprintf("%s\n", strerror(errno));
+			eprintf("%m\n");
 			exit(1);
 		}
 		goto retry;
