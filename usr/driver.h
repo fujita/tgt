@@ -1,3 +1,5 @@
+extern struct backedio_operations mmapio;
+
 struct tgt_driver {
 	const char *name;
 
@@ -14,6 +16,8 @@ struct tgt_driver {
 			    uint8_t *, int *);
 	int enable;
 	int pfd_index;
+
+	struct backedio_operations *io_ops;
 };
 
 extern struct tgt_driver *tgt_drivers[];

@@ -22,7 +22,6 @@
 #include <asm/byteorder.h>
 #include <linux/fs.h>
 #include <scsi/scsi.h>
-#include <sys/mman.h>
 
 #include "list.h"
 #include "util.h"
@@ -411,32 +410,6 @@ static uint64_t scsi_cmd_data_offset(uint8_t *scb)
 	return off << BLK_SHIFT;
 }
 
-static int mmap_device(struct tgt_device *dev, uint32_t datalen,
-		       unsigned long *uaddr, uint64_t offset)
-{
-	int fd = dev->fd;
-	void *p;
-	int err = SAM_STAT_GOOD;
-
-	if (*uaddr)
-		*uaddr = *uaddr + offset;
-	else {
-		p = mmap64(NULL, pgcnt(datalen, offset) << PAGE_SHIFT,
-			   PROT_READ | PROT_WRITE, MAP_SHARED, fd,
-			   offset & ~((1ULL << PAGE_SHIFT) - 1));
-
-		*uaddr = (unsigned long) p + (offset & ~PAGE_MASK);
-		if (p == MAP_FAILED) {
-			err = SAM_STAT_CHECK_CONDITION;
-			eprintf("%lx %u %" PRIu64 "\n", *uaddr, datalen, offset);
-		}
-	}
-
-	printf("%lx %u %" PRIu64 "\n", *uaddr, datalen, offset);
-
-	return err;
-}
-
 static int scsi_cmd_rw(uint8_t *scb, uint8_t *rw)
 {
 	int is_data = 1;
@@ -494,15 +467,13 @@ int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu, int *len,
 		     struct tgt_device *dev, struct list_head *dev_list)
 {
 	int result = SAM_STAT_GOOD;
-	uint8_t *data = NULL, *scb = pdu;
+	uint8_t *data, *scb = pdu;
 
 	dprintf("%x %u\n", scb[0], datalen);
 
 	*offset = 0;
-	if (!scsi_cmd_rw(scb, rw)) {
-		data = valloc(PAGE_SIZE);
-		memset(data, 0, PAGE_SIZE);
-	}
+	data = tgt_drivers[lid]->io_ops->cmd_buffer_alloc(scsi_cmd_rw(scb, rw),
+							  datalen);
 
 	if (!dev)
 		switch (scb[0]) {
@@ -557,7 +528,8 @@ int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu, int *len,
 	case WRITE_16:
 	case WRITE_VERIFY:
 		*offset = scsi_cmd_data_offset(scb);
-		result = mmap_device(dev, datalen, uaddr, *offset);
+		result = tgt_drivers[lid]->io_ops->cmd_prepare(dev, datalen,
+							       uaddr, *offset);
 		if (result == SAM_STAT_GOOD) {
 			*len = datalen;
 			*try_map = 1;

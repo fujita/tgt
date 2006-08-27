@@ -24,6 +24,13 @@ struct tgt_device {
 	struct tgt_cmd_queue cmd_queue;
 };
 
+struct backedio_operations {
+	void * (*cmd_buffer_alloc)(int devio, uint32_t datalen);
+	int (*cmd_prepare)(struct tgt_device *dev, uint32_t datalen,
+			   unsigned long *uaddr, uint64_t offset);
+	int (*cmd_done) (int do_munmap, int do_free, uint64_t uaddr, int len);
+};
+
 extern int kreq_init(int *fd);
 extern void kern_event_handler(int, void *data);
 

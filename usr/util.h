@@ -4,6 +4,7 @@
 #include <sys/user.h>
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+#define ALIGN(x,a) (((x)+(a)-1)&~((a)-1))
 
 #ifndef PAGE_SHIFT
 #define	PAGE_SHIFT	12

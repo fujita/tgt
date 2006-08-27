@@ -27,7 +27,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
-#include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 
@@ -401,24 +400,6 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 	}
 }
 
-static int scsi_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
-{
-	int err = 0;
-
-	dprintf("%d %d %" PRIx64 " %d\n", do_munmap, do_free, uaddr, len);
-
-	if (do_munmap) {
-		len = pgcnt(len, (uaddr & ~PAGE_MASK)) << PAGE_SHIFT;
-		uaddr &= PAGE_MASK;
-		err = munmap((void *) (unsigned long) uaddr, len);
-		if (err)
-			eprintf("%" PRIx64 " %d\n", uaddr, len);
-	} else if (do_free)
-		free((void *) (unsigned long) uaddr);
-
-	return err;
-}
-
 static void __cmd_done(struct target *target, struct cmd *cmd)
 {
 	struct tgt_cmd_queue *q;
@@ -436,7 +417,9 @@ static void __cmd_done(struct target *target, struct cmd *cmd)
 		if (cmd->dev->addr)
 			do_munmap = 0;
 	}
-	err = scsi_cmd_done(do_munmap, !cmd->mmapped, cmd->uaddr, cmd->len);
+	err = tgt_drivers[target->lid]->io_ops->cmd_done(do_munmap,
+							 !cmd->mmapped,
+							 cmd->uaddr, cmd->len);
 
 	dprintf("%d %" PRIx64 " %u %d\n", cmd->mmapped, cmd->uaddr, cmd->len, err);
 

@@ -1,6 +1,6 @@
 CFLAGS += -O2 -fno-inline -Wall -Wstrict-prototypes -fPIC -I$(KERNELSRC)/include -I../istgt/include -I../include -I. -D_LARGEFILE64_SOURCE
 PROGRAMS = tgtd tgtadm
-TGTD_OBJS = tgtd.o tgtif.o mgmt.o target.o scsi.o log.o driver.o util.o
+TGTD_OBJS = tgtd.o tgtif.o mgmt.o target.o scsi.o log.o driver.o util.o mmapio.o
 
 ifneq ($(IBMVIO),)
 CFLAGS += -DIBMVIO
