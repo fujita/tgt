@@ -385,13 +385,9 @@ static int sevice_action(struct tgt_device *dev, uint8_t *scb, uint8_t *p, int *
 	return SAM_STAT_GOOD;
 }
 
-static int mmap_device(uint8_t *scb, int *len, int fd, uint32_t datalen, unsigned long *uaddr,
-		       uint64_t *offset)
+static uint64_t scsi_cmd_data_offset(uint8_t *scb)
 {
-	void *p;
 	uint64_t off;
-	*len = 0;
-	int err = SAM_STAT_GOOD;
 
 	switch (scb[0]) {
 	case READ_6:
@@ -412,31 +408,38 @@ static int mmap_device(uint8_t *scb, int *len, int fd, uint32_t datalen, unsigne
 		break;
 	}
 
-	off <<= BLK_SHIFT;
+	return off << BLK_SHIFT;
+}
+
+static int mmap_device(struct tgt_device *dev, uint32_t datalen,
+		       unsigned long *uaddr, uint64_t offset)
+{
+	int fd = dev->fd;
+	void *p;
+	int err = SAM_STAT_GOOD;
 
 	if (*uaddr)
-		*uaddr = *uaddr + off;
+		*uaddr = *uaddr + offset;
 	else {
-		p = mmap64(NULL, pgcnt(datalen, off) << PAGE_SHIFT,
+		p = mmap64(NULL, pgcnt(datalen, offset) << PAGE_SHIFT,
 			   PROT_READ | PROT_WRITE, MAP_SHARED, fd,
-			   off & ~((1ULL << PAGE_SHIFT) - 1));
+			   offset & ~((1ULL << PAGE_SHIFT) - 1));
 
-		*uaddr = (unsigned long) p + (off & ~PAGE_MASK);
+		*uaddr = (unsigned long) p + (offset & ~PAGE_MASK);
 		if (p == MAP_FAILED) {
 			err = SAM_STAT_CHECK_CONDITION;
-			eprintf("%lx %u %" PRIu64 "\n", *uaddr, datalen, off);
+			eprintf("%lx %u %" PRIu64 "\n", *uaddr, datalen, offset);
 		}
 	}
-	*offset = off;
-	*len = datalen;
-	printf("%lx %u %" PRIu64 "\n", *uaddr, datalen, off);
+
+	printf("%lx %u %" PRIu64 "\n", *uaddr, datalen, offset);
 
 	return err;
 }
 
-static inline int mmap_cmd_init(uint8_t *scb, uint8_t *rw)
+static int scsi_cmd_rw(uint8_t *scb, uint8_t *rw)
 {
-	int result = 1;
+	int is_data = 1;
 
 	switch (scb[0]) {
 	case READ_6:
@@ -451,9 +454,9 @@ static inline int mmap_cmd_init(uint8_t *scb, uint8_t *rw)
 		*rw = WRITE;
 		break;
 	default:
-		result = 0;
+		is_data = 0;
 	}
-	return result;
+	return is_data;
 }
 
 #define        TGT_INVALID_DEV_ID      ~0ULL
@@ -496,7 +499,7 @@ int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu, int *len,
 	dprintf("%x %u\n", scb[0], datalen);
 
 	*offset = 0;
-	if (!mmap_cmd_init(scb, rw)) {
+	if (!scsi_cmd_rw(scb, rw)) {
 		data = valloc(PAGE_SIZE);
 		memset(data, 0, PAGE_SIZE);
 	}
@@ -553,11 +556,12 @@ int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu, int *len,
 	case WRITE_10:
 	case WRITE_16:
 	case WRITE_VERIFY:
-		result = mmap_device(scb, len, dev->fd, datalen,
-				     uaddr, offset);
-		if (result == SAM_STAT_GOOD)
+		*offset = scsi_cmd_data_offset(scb);
+		result = mmap_device(dev, datalen, uaddr, *offset);
+		if (result == SAM_STAT_GOOD) {
+			*len = datalen;
 			*try_map = 1;
-		else {
+		} else {
 			*rw = READ;
 			*offset = 0;
 			if (!data)
