@@ -109,13 +109,12 @@ void kern_event_handler(int fd, void *data)
 {
 	struct tgt_event *ev;
 
-	dprintf("nl event %u\n", kuring.idx);
 retry:
 	ev = head_ring_hdr(&kuring);
 	if (ev->status == TGT_EVENT_STATUS_EMPTY)
 		return;
 
-	dprintf("event %u\n", ev->type);
+	dprintf("event %u %u\n", kuring.idx, ev->type);
 
 	switch (ev->type) {
 	case TGT_KEVENT_CMD_REQ:

@@ -23,8 +23,8 @@ static void *mmapio_cmd_buffer_alloc(int devio, uint32_t datalen)
 	return data;
 }
 
-static int mmapio_cmd_prepare(struct tgt_device *dev, uint32_t datalen,
-			      unsigned long *uaddr, uint64_t offset)
+static int mmapio_cmd_submit(struct tgt_device *dev, int rw, uint32_t datalen,
+			     unsigned long *uaddr, uint64_t offset)
 {
 	int fd = dev->fd;
 	void *p;
@@ -68,7 +68,7 @@ static int mmapio_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
 }
 
 struct backedio_operations mmapio = {
-	.cmd_prepare = mmapio_cmd_prepare,
-	.cmd_buffer_alloc = mmapio_cmd_buffer_alloc,
-	.cmd_done = mmapio_cmd_done,
+	.bd_cmd_buffer_alloc	= mmapio_cmd_buffer_alloc,
+	.bd_cmd_submit		= mmapio_cmd_submit,
+	.bd_cmd_done		= mmapio_cmd_done,
 };

@@ -311,8 +311,10 @@ int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun, uint32_t data_len,
 
 	/* TODO: preallocate cmd */
 	cmd = calloc(1, sizeof(*cmd));
-	if (!cmd)
+	if (!cmd) {
+		eprintf("out of memory");
 		return -ENOMEM;
+	}
 	cmd->hostno = host_no;
 	cmd->attribute = attribute;
 	cmd->tag = tag;
@@ -417,9 +419,9 @@ static void __cmd_done(struct target *target, struct cmd *cmd)
 		if (cmd->dev->addr)
 			do_munmap = 0;
 	}
-	err = tgt_drivers[target->lid]->io_ops->cmd_done(do_munmap,
-							 !cmd->mmapped,
-							 cmd->uaddr, cmd->len);
+	err = tgt_drivers[target->lid]->io_ops->bd_cmd_done(do_munmap,
+							    !cmd->mmapped,
+							    cmd->uaddr, cmd->len);
 
 	dprintf("%d %" PRIx64 " %u %d\n", cmd->mmapped, cmd->uaddr, cmd->len, err);
 

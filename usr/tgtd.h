@@ -25,10 +25,12 @@ struct tgt_device {
 };
 
 struct backedio_operations {
-	void * (*cmd_buffer_alloc)(int devio, uint32_t datalen);
-	int (*cmd_prepare)(struct tgt_device *dev, uint32_t datalen,
-			   unsigned long *uaddr, uint64_t offset);
-	int (*cmd_done) (int do_munmap, int do_free, uint64_t uaddr, int len);
+	void *(*bd_cmd_buffer_alloc)(int devio, uint32_t datalen);
+	int (*bd_cmd_submit)(struct tgt_device *dev, uint32_t datalen,
+			     unsigned long *uaddr, uint64_t offset);
+	int (*bd_cmd_done) (int do_munmap, int do_free, uint64_t uaddr, int len);
+	int (*bd_open)(struct tgt_device *dev);
+	void (*bd_close)(struct tgt_device *dev);
 };
 
 extern int kreq_init(int *fd);
