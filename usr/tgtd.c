@@ -73,7 +73,7 @@ Target framework daemon.\n\
   -h, --help              display this help and exit\n\
 ");
 	}
-	exit(1);
+	exit(status);
 }
 
 static void signal_catch(int signo) {
@@ -141,9 +141,9 @@ void tgt_event_del(int fd)
 	}
 }
 
-static void event_loop(int timeout)
+static void event_loop(void)
 {
-	int nevent, i;
+	int nevent, i, timeout = -1;
 	struct epoll_event events[1024];
 	struct tgt_event *tev;
 
@@ -205,7 +205,7 @@ int main(int argc, char **argv)
 {
 	struct sigaction sa_old;
 	struct sigaction sa_new;
-	int err, ch, longindex, nr_lld = 0, maxfds = MAX_FDS, timeout = -1;
+	int err, ch, longindex, nr_lld = 0, maxfds = MAX_FDS;
 	int is_daemon = 1, is_debug = 1;
 	char *modes = NULL;
 
@@ -270,7 +270,7 @@ int main(int argc, char **argv)
 	if (err)
 		exit(1);
 
-	event_loop(timeout);
+	event_loop();
 
 	return 0;
 }
