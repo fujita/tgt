@@ -35,11 +35,9 @@ struct backedio_template {
 	int (*bd_cmd_done) (int do_munmap, int do_free, uint64_t uaddr, int len);
 };
 
-extern int kreq_init(int *fd);
-extern void kern_event_handler(int, void *data);
+extern int kreq_init(void);
 
-extern int ipc_init(int *fd);
-extern void mgmt_event_handler(int accept_fd, void *data);
+extern int ipc_init(void);
 
 extern int tgt_device_create(int tid, uint64_t lun, char *path);
 extern int tgt_device_destroy(int tid, uint64_t lun);

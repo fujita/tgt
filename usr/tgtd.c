@@ -23,16 +23,13 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <inttypes.h>
-#include <sys/epoll.h>
 #include <signal.h>
-#include <string.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
-#include <asm/types.h>
-#include <sys/signal.h>
-#include <sys/stat.h>
+#include <sys/epoll.h>
 
 #include "list.h"
 #include "tgtd.h"
@@ -108,8 +105,10 @@ int tgt_event_add(int fd, int events, event_handler_t handler, void *data)
 	int err;
 
 	tev = malloc(sizeof(*tev));
-	if (!tev)
+	if (!tev) {
+		eprintf("OOM, %m\n");
 		return -ENOMEM;
+	}
 
 	tev->data = data;
 	tev->handler = handler;
@@ -118,9 +117,10 @@ int tgt_event_add(int fd, int events, event_handler_t handler, void *data)
 	ev.events = events;
 	ev.data.ptr = tev;
 	err = epoll_ctl(ep_fd, EPOLL_CTL_ADD, fd, &ev);
-	if (err)
+	if (err) {
+		eprintf("Cannot add fd, %m\n");
 		free(tev);
-	else
+	} else
 		list_add(&tev->e_list, &tgt_events_list);
 
 	return err;
@@ -205,7 +205,7 @@ int main(int argc, char **argv)
 {
 	struct sigaction sa_old;
 	struct sigaction sa_new;
-	int err, ch, longindex, fd, nr_lld = 0, maxfds = MAX_FDS, timeout = -1;
+	int err, ch, longindex, nr_lld = 0, maxfds = MAX_FDS, timeout = -1;
 	int is_daemon = 1, is_debug = 1;
 	char *modes = NULL;
 
@@ -262,17 +262,13 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	err = kreq_init(&fd);
+	err = kreq_init();
 	if (err)
 		eprintf("No kernel interface\n");
-	else
-		tgt_event_add(fd, POLL_IN, kern_event_handler, NULL);
 
-	err = ipc_init(&fd);
+	err = ipc_init();
 	if (err)
 		exit(1);
-	else
-		tgt_event_add(fd, POLL_IN, mgmt_event_handler, NULL);
 
 	event_loop(timeout);
 

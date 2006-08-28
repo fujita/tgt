@@ -28,6 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -195,7 +196,7 @@ static void ipc_send_res(int fd, struct tgtadm_res *res)
 		eprintf("can't write, %m\n");
 }
 
-void mgmt_event_handler(int accept_fd, void *data)
+static void mgmt_event_handler(int accept_fd, void *data)
 {
 	int fd, err;
 	char sbuf[BUFSIZE], rbuf[BUFSIZE];
@@ -280,7 +281,7 @@ out:
 	return;
 }
 
-int ipc_init(int *ipc_fd)
+int ipc_init(void)
 {
 	int fd, err;
 	struct sockaddr_un addr;
@@ -308,7 +309,10 @@ int ipc_init(int *ipc_fd)
 		goto out;
 	}
 
-	*ipc_fd = fd;
+	err = tgt_event_add(fd, POLL_IN, mgmt_event_handler, NULL);
+	if (err)
+		goto out;
+
 	return 0;
 out:
 	close(fd);

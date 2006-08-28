@@ -24,14 +24,15 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <inttypes.h>
+#include <signal.h>
 #include <stdint.h>
-#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
-#include <asm/types.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+
 #include <scsi/scsi_tgt_if.h>
 
 #include "list.h"
@@ -105,7 +106,7 @@ static int kspace_send_cmd_res(int host_no, int len, int result,
 	return kreq_send(&ev);
 }
 
-void kern_event_handler(int fd, void *data)
+static void kern_event_handler(int fd, void *data)
 {
 	struct tgt_event *ev;
 
@@ -181,19 +182,19 @@ out:
 	return -errno;
 }
 
-int kreq_init(int *ki_fd)
+int kreq_init(void)
 {
-	int err, fd, size = TGT_RING_SIZE;
+	int err, size = TGT_RING_SIZE;
 	char *buf;
 
-	err = tgt_miscdev_init(CHRDEV_PATH, &fd);
+	err = tgt_miscdev_init(CHRDEV_PATH, &chrfd);
 	if (err)
 		return err;
 
-	buf = mmap(NULL, size * 2, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	buf = mmap(NULL, size * 2, PROT_READ | PROT_WRITE, MAP_SHARED, chrfd, 0);
 	if (buf == MAP_FAILED) {
 		eprintf("fail to mmap, %m\n");
-		close(fd);
+		close(chrfd);
 		return -EINVAL;
 	}
 
@@ -201,7 +202,8 @@ int kreq_init(int *ki_fd)
 	kuring.buf = buf;
 	ukring.buf = buf + size;
 
-	*ki_fd = chrfd = fd;
-
-	return 0;
+	err = tgt_event_add(chrfd, POLL_IN, kern_event_handler, NULL);
+	if (err)
+		close(chrfd);
+	return err;
 }
