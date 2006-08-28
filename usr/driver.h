@@ -1,4 +1,4 @@
-extern struct backedio_operations mmap_bdops;
+extern struct backedio_template mmap_bdt;
 
 struct tgt_driver {
 	const char *name;
@@ -17,7 +17,7 @@ struct tgt_driver {
 	int enable;
 	int pfd_index;
 
-	struct backedio_operations *io_ops;
+	struct backedio_template *bdt;
 };
 
 extern struct tgt_driver *tgt_drivers[];

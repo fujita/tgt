@@ -26,11 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/ioctl.h>
 #include <sys/socket.h>
-#include <sys/stat.h>
-
-#include <linux/fs.h>
 #include <scsi/scsi.h>
 
 #include "list.h"
@@ -139,8 +135,7 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 {
 	struct target *target;
 	struct tgt_device *device;
-	struct stat64 st;
-	int err, dev_fd;
+	int dev_fd;
 	uint64_t size;
 
 	dprintf("%d %" PRIu64 " %s\n", tid, dev_id, path);
@@ -155,34 +150,9 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 		return -EINVAL;
 	}
 
-	dev_fd = open(path, O_RDWR | O_LARGEFILE);
-	if (dev_fd < 0) {
-		eprintf("Could not open %s, %m\n", path);
-		return dev_fd;
-	}
-
-	err = fstat64(dev_fd, &st);
-	if (err < 0) {
-		printf("Cannot get stat %d, %m\n", dev_fd);
-		goto close_dev_fd;
-	}
-
-	if (S_ISREG(st.st_mode))
-		size = st.st_size;
-	else if(S_ISBLK(st.st_mode)) {
-		err = ioctl(dev_fd, BLKGETSIZE64, &size);
-		if (err < 0) {
-			eprintf("Cannot get size, %m\n");
-			goto close_dev_fd;
-		}
-	} else {
-		eprintf("Cannot use this mode %x\n", st.st_mode);
-		goto close_dev_fd;
-	}
-
-	device = malloc(sizeof(*device));
+	device = tgt_drivers[target->lid]->bdt->bd_open(path, &dev_fd, &size);
 	if (!device)
-		goto close_dev_fd;
+		return -EINVAL;
 
 	device->fd = dev_fd;
 	device->addr = 0;
@@ -199,9 +169,6 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 		dev_id, tid);
 
 	return 0;
-close_dev_fd:
-	close(dev_fd);
-	return err;
 }
 
 int tgt_device_destroy(int tid, uint64_t dev_id)
@@ -228,7 +195,7 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 	device_hlist_remove(device);
 	device_list_remove(device);
 
-	free(device);
+	tgt_drivers[target->lid]->bdt->bd_close(device);
 	return 0;
 }
 
@@ -419,9 +386,9 @@ static void __cmd_done(struct target *target, struct cmd *cmd)
 		if (cmd->dev->addr)
 			do_munmap = 0;
 	}
-	err = tgt_drivers[target->lid]->io_ops->bd_cmd_done(do_munmap,
-							    !cmd->mmapped,
-							    cmd->uaddr, cmd->len);
+	err = tgt_drivers[target->lid]->bdt->bd_cmd_done(do_munmap,
+							 !cmd->mmapped,
+							 cmd->uaddr, cmd->len);
 
 	dprintf("%d %" PRIx64 " %u %d\n", cmd->mmapped, cmd->uaddr, cmd->len, err);
 

@@ -472,8 +472,8 @@ int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu, int *len,
 	dprintf("%x %u\n", scb[0], datalen);
 
 	*offset = 0;
-	data = tgt_drivers[lid]->io_ops->bd_cmd_buffer_alloc(scsi_cmd_rw(scb, rw),
-							     datalen);
+	data = tgt_drivers[lid]->bdt->bd_cmd_buffer_alloc(scsi_cmd_rw(scb, rw),
+							  datalen);
 
 	if (!dev)
 		switch (scb[0]) {
@@ -528,8 +528,8 @@ int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu, int *len,
 	case WRITE_16:
 	case WRITE_VERIFY:
 		*offset = scsi_cmd_data_offset(scb);
-		result = tgt_drivers[lid]->io_ops->bd_cmd_submit(dev, *rw, datalen,
-								 uaddr, *offset);
+		result = tgt_drivers[lid]->bdt->bd_cmd_submit(dev, *rw, datalen,
+							      uaddr, *offset);
 		if (result == SAM_STAT_GOOD) {
 			*len = datalen;
 			*try_map = 1;

@@ -11,7 +11,29 @@
 #include "util.h"
 #include "tgtd.h"
 
-static void *mmapio_cmd_buffer_alloc(int devio, uint32_t datalen)
+static struct tgt_device *bd_mmap_open(char *path, int *fd, uint64_t *size)
+{
+	struct tgt_device *dev;
+
+	dev = malloc(sizeof(*dev));
+	if (!dev)
+		return NULL;
+
+	*fd = backed_file_open(path, O_RDWR| O_LARGEFILE, size);
+	if (*fd < 0) {
+		free(dev);
+		dev = NULL;
+	}
+
+	return dev;
+}
+
+static void bd_mmap_close(struct tgt_device *dev)
+{
+	free(dev);
+}
+
+static void *bd_mmap_cmd_buffer_alloc(int devio, uint32_t datalen)
 {
 	void *data = NULL;
 	if (!devio) {
@@ -23,8 +45,8 @@ static void *mmapio_cmd_buffer_alloc(int devio, uint32_t datalen)
 	return data;
 }
 
-static int mmapio_cmd_submit(struct tgt_device *dev, int rw, uint32_t datalen,
-			     unsigned long *uaddr, uint64_t offset)
+static int bd_mmap_cmd_submit(struct tgt_device *dev, int rw, uint32_t datalen,
+			      unsigned long *uaddr, uint64_t offset)
 {
 	int fd = dev->fd;
 	void *p;
@@ -49,7 +71,7 @@ static int mmapio_cmd_submit(struct tgt_device *dev, int rw, uint32_t datalen,
 	return err;
 }
 
-static int mmapio_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
+static int bd_mmap_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
 {
 	int err = 0;
 
@@ -67,8 +89,10 @@ static int mmapio_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
 	return err;
 }
 
-struct backedio_operations mmap_bdops = {
-	.bd_cmd_buffer_alloc	= mmapio_cmd_buffer_alloc,
-	.bd_cmd_submit		= mmapio_cmd_submit,
-	.bd_cmd_done		= mmapio_cmd_done,
+struct backedio_template mmap_bdt = {
+	.bd_open		= bd_mmap_open,
+	.bd_close		= bd_mmap_close,
+	.bd_cmd_buffer_alloc	= bd_mmap_cmd_buffer_alloc,
+	.bd_cmd_submit		= bd_mmap_cmd_submit,
+	.bd_cmd_done		= bd_mmap_cmd_done,
 };

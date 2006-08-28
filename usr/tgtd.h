@@ -22,15 +22,17 @@ struct tgt_device {
 	struct list_head d_list;
 
 	struct tgt_cmd_queue cmd_queue;
+
+	unsigned long bddata[0] __attribute__ ((aligned (sizeof(unsigned long))));
 };
 
-struct backedio_operations {
+struct backedio_template {
+	struct tgt_device *(*bd_open)(char *path, int *fd, uint64_t *size);
+	void (*bd_close)(struct tgt_device *dev);
 	void *(*bd_cmd_buffer_alloc)(int devio, uint32_t datalen);
 	int (*bd_cmd_submit)(struct tgt_device *dev, int rw, uint32_t datalen,
 			     unsigned long *uaddr, uint64_t offset);
 	int (*bd_cmd_done) (int do_munmap, int do_free, uint64_t uaddr, int len);
-	int (*bd_open)(struct tgt_device *dev);
-	void (*bd_close)(struct tgt_device *dev);
 };
 
 extern int kreq_init(int *fd);

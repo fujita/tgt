@@ -6,6 +6,8 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/ioctl.h>
+#include <linux/fs.h>
 
 #include "log.h"
 
@@ -55,4 +57,42 @@ int chrdev_open(char *modname, char *devpath, uint8_t minor, int *fd)
 	}
 
 	return 0;
+}
+
+int backed_file_open(char *path, int oflag, uint64_t *size)
+{
+	int fd, err;
+	struct stat64 st;
+
+	fd = open(path, oflag);
+	if (fd < 0) {
+		eprintf("Could not open %s, %m\n", path);
+		return fd;
+	}
+
+	err = fstat64(fd, &st);
+	if (err < 0) {
+		printf("Cannot get stat %d, %m\n", fd);
+		goto close_fd;
+	}
+
+	if (S_ISREG(st.st_mode))
+		*size = st.st_size;
+	else if(S_ISBLK(st.st_mode)) {
+		err = ioctl(fd, BLKGETSIZE64, size);
+		if (err < 0) {
+			eprintf("Cannot get size, %m\n");
+			goto close_fd;
+		}
+	} else {
+		eprintf("Cannot use this mode %x\n", st.st_mode);
+		err = -EINVAL;
+		goto close_fd;
+	}
+
+	return fd;
+
+close_fd:
+	close(fd);
+	return err;
 }
