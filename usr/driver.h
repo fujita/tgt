@@ -1,4 +1,4 @@
-extern struct backedio_operations mmapio;
+extern struct backedio_operations mmap_bdops;
 
 struct tgt_driver {
 	const char *name;

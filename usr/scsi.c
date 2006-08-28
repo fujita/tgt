@@ -528,7 +528,7 @@ int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu, int *len,
 	case WRITE_16:
 	case WRITE_VERIFY:
 		*offset = scsi_cmd_data_offset(scb);
-		result = tgt_drivers[lid]->io_ops->bd_cmd_submit(dev, datalen,
+		result = tgt_drivers[lid]->io_ops->bd_cmd_submit(dev, *rw, datalen,
 								 uaddr, *offset);
 		if (result == SAM_STAT_GOOD) {
 			*len = datalen;

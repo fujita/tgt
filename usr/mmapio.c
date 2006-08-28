@@ -67,7 +67,7 @@ static int mmapio_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
 	return err;
 }
 
-struct backedio_operations mmapio = {
+struct backedio_operations mmap_bdops = {
 	.bd_cmd_buffer_alloc	= mmapio_cmd_buffer_alloc,
 	.bd_cmd_submit		= mmapio_cmd_submit,
 	.bd_cmd_done		= mmapio_cmd_done,
