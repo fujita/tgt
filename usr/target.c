@@ -199,7 +199,7 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 	return 0;
 }
 
-static int cmd_pre_perform(struct tgt_cmd_queue *q, struct cmd *cmd)
+static int cmd_enabled(struct tgt_cmd_queue *q, struct cmd *cmd)
 {
 	int enabled = 0;
 
@@ -231,8 +231,7 @@ static int cmd_pre_perform(struct tgt_cmd_queue *q, struct cmd *cmd)
 }
 
 static void cmd_post_perform(struct tgt_cmd_queue *q, struct cmd *cmd,
-			     unsigned long uaddr,
-			     int len, uint8_t mmapped)
+			     unsigned long uaddr, int len, uint8_t mmapped)
 {
 	cmd->uaddr = uaddr;
 	cmd->len = len;
@@ -260,20 +259,8 @@ int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun, uint32_t data_len,
 
 	target = host_to_target(host_no);
 	if (!target) {
-		int tid, lid = 0, err = -1;
-		if (tgt_drivers[lid]->target_bind) {
-			tid = tgt_drivers[0]->target_bind(host_no);
-			if (tid >= 0) {
-				err = tgt_target_bind(tid, host_no, lid);
-				if (!err)
-					target = host_to_target(host_no);
-			}
-		}
-
-		if (!target) {
-			eprintf("%d is not bind to any target\n", host_no);
-			return -ENOENT;
-		}
+		eprintf("%d is not bind to any target\n", host_no);
+		return -ENOENT;
 	}
 
 	/* TODO: preallocate cmd */
@@ -298,8 +285,7 @@ int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun, uint32_t data_len,
 	} else
 		q = &target->cmd_queue;
 
-	enabled = cmd_pre_perform(q, cmd);
-
+	enabled = cmd_enabled(q, cmd);
 	if (enabled) {
 		result = scsi_cmd_perform(target->lid,
 					  host_no, scb,
@@ -340,7 +326,7 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 	struct target *target;
 
 	list_for_each_entry_safe(cmd, tmp, &q->queue, qlist) {
-		enabled = cmd_pre_perform(q, cmd);
+		enabled = cmd_enabled(q, cmd);
 		if (enabled) {
 			list_del(&cmd->qlist);
 			target = host_to_target(cmd->hostno);
