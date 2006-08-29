@@ -247,7 +247,7 @@ static void cmd_post_perform(struct tgt_cmd_queue *q, struct cmd *cmd,
 }
 
 int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun, uint32_t data_len,
-		     int attribute, uint64_t tag, cmd_end_t *end_func)
+		     int attribute, uint64_t tag)
 {
 	struct target *target;
 	struct tgt_cmd_queue *q;
@@ -272,7 +272,6 @@ int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun, uint32_t data_len,
 	cmd->hostno = host_no;
 	cmd->attribute = attribute;
 	cmd->tag = tag;
-	cmd->cmd_end_func = end_func;
 	cmd_hlist_insert(target, cmd);
 
 	dev_id = scsi_get_devid(target->lid, lun);
@@ -300,7 +299,7 @@ int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun, uint32_t data_len,
 			tag, scb[0], uaddr, offset, result);
 
 		set_cmd_processed(cmd);
-		cmd->cmd_end_func(host_no, len, result, rw, uaddr, tag);
+		tgt_drivers[target->lid]->cmd_end_notify(host_no, len, result, rw, uaddr, tag);
 	} else {
 		set_cmd_queued(cmd);
 		dprintf("blocked %" PRIx64 " %x %" PRIu64 " %d\n",
@@ -342,8 +341,12 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 						  &cmd->c_target->device_list);
 			cmd_post_perform(q, cmd, uaddr, len, mmapped);
 			set_cmd_processed(cmd);
-			cmd->cmd_end_func(cmd->hostno, len, result, rw,
-					  uaddr, cmd->tag);
+			tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->hostno,
+									len,
+									result,
+									rw,
+									uaddr,
+									cmd->tag);
 		} else
 			break;
 	}
@@ -411,7 +414,8 @@ void target_cmd_done(int host_no, uint64_t tag)
 	mreq = cmd->mreq;
 	if (mreq && !--mreq->busy) {
 		int err = mreq->function == ABORT_TASK ? -EEXIST : 0;
-		mreq->mgmt_end_func(cmd->hostno, mreq->mid, err);
+		tgt_drivers[cmd->c_target->lid]->mgmt_end_notify(cmd->hostno,
+								 mreq->mid, err);
 		free(mreq);
 	}
 
@@ -435,7 +439,8 @@ static int abort_cmd(struct target* target, struct mgmt_req *mreq,
 		err = -EBUSY;
 	} else {
 		__cmd_done(target, cmd);
-		cmd->cmd_end_func(cmd->hostno, 0, TASK_ABORTED, 0, 0, cmd->tag);
+		tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->hostno, 0,
+								TASK_ABORTED, 0, 0, cmd->tag);
 	}
 	return err;
 }
@@ -466,7 +471,7 @@ static int abort_task_set(struct mgmt_req *mreq, struct target* target, int host
 }
 
 void target_mgmt_request(int host_no, int req_id, int function, uint8_t *lun,
-			 uint64_t tag, mgmt_end_t *end_func)
+			 uint64_t tag)
 {
 	struct target *target;
 	struct mgmt_req *mreq;
@@ -481,7 +486,6 @@ void target_mgmt_request(int host_no, int req_id, int function, uint8_t *lun,
 	mreq = calloc(1, sizeof(*mreq));
 	mreq->mid = req_id;
 	mreq->function = function;
-	mreq->mgmt_end_func = end_func;
 
 	switch (function) {
 	case ABORT_TASK:
@@ -512,7 +516,7 @@ void target_mgmt_request(int host_no, int req_id, int function, uint8_t *lun,
 	}
 
 	if (send) {
-		mreq->mgmt_end_func(host_no, req_id, err);
+		tgt_drivers[target->lid]->mgmt_end_notify(host_no, req_id, err);
 		free(mreq);
 	}
 }

@@ -36,6 +36,9 @@ struct backedio_template {
 };
 
 extern int kreq_init(void);
+extern int kspace_send_tsk_mgmt_res(int host_no, uint64_t mid, int result);
+extern int kspace_send_cmd_res(int host_no, int len, int result,
+			       int rw, uint64_t addr, uint64_t tag);
 
 extern int ipc_init(void);
 
@@ -49,15 +52,11 @@ typedef void (event_handler_t)(int fd, void *data);
 extern int tgt_event_add(int fd, int events, event_handler_t handler, void *data);
 extern void tgt_event_del(int fd);
 
-typedef int (cmd_end_t)(int host_no, int len, int result, int rw, uint64_t addr,
-			 uint64_t tag);
-typedef int (mgmt_end_t)(int host_no, uint64_t mid, int result);
 extern int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun,
-			    uint32_t data_len, int attribute, uint64_t tag,
-			    cmd_end_t *cmd_end);
+			    uint32_t data_len, int attribute, uint64_t tag);
 extern void target_cmd_done(int host_no, uint64_t tag);
 extern void target_mgmt_request(int host_no, int req_id, int function,
-				uint8_t *lun, uint64_t tag, mgmt_end_t *mgmt_end);
+				uint8_t *lun, uint64_t tag);
 
 extern uint64_t scsi_get_devid(int lid, uint8_t *pdu);
 extern int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu, int *len,

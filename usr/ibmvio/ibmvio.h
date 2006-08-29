@@ -10,5 +10,7 @@ struct tgt_driver ibmvio = {
 	.scsi_get_lun		= scsi_lun_to_int,
 	.scsi_report_luns	= scsi_report_luns,
 	.scsi_inquiry		= scsi_inquiry,
+	.cmd_end_notify		= kspace_send_cmd_res,
+	.mgtm_end_notify	= kspace_send_tsk_mgmt_res,
 	.bdt			= &mmap_bdt,
 };

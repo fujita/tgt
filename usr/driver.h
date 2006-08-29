@@ -13,6 +13,10 @@ struct tgt_driver {
 				uint8_t *, int *);
 	int (*scsi_inquiry)(struct tgt_device *, int, uint8_t *, uint8_t *,
 			    uint8_t *, int *);
+	int (*cmd_end_notify)(int host_no, int len, int result, int rw, uint64_t addr,
+			      uint64_t tag);
+	int (*mgmt_end_notify)(int host_no, uint64_t mid, int result);
+
 	int enable;
 	int pfd_index;
 
