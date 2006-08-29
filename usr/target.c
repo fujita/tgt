@@ -269,6 +269,7 @@ int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun, uint32_t data_len,
 		eprintf("out of memory");
 		return -ENOMEM;
 	}
+	cmd->c_target = target;
 	cmd->hostno = host_no;
 	cmd->attribute = attribute;
 	cmd->tag = tag;
@@ -323,19 +324,13 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 	uint8_t rw = 0, mmapped = 0;
 	uint64_t offset;
 	unsigned long uaddr = 0;
-	struct target *target;
 
 	list_for_each_entry_safe(cmd, tmp, &q->queue, qlist) {
 		enabled = cmd_enabled(q, cmd);
 		if (enabled) {
 			list_del(&cmd->qlist);
-			target = host_to_target(cmd->hostno);
-			if (!target) {
-				eprintf("fail to find target!\n");
-				exit(1);
-			}
 			dprintf("perform %" PRIx64 " %x\n", cmd->tag, cmd->attribute);
-			result = scsi_cmd_perform(target->lid,
+			result = scsi_cmd_perform(cmd->c_target->lid,
 						  cmd->hostno, cmd->scb,
 						  &len,
 						  cmd->len,
@@ -345,7 +340,7 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 						  &offset,
 						  cmd->lun,
 						  cmd->dev,
-						  &target->device_list);
+						  &cmd->c_target->device_list);
 			cmd_post_perform(q, cmd, uaddr, len, mmapped);
 			set_cmd_processed(cmd);
 			cmd->cmd_end_func(cmd->hostno, len, result, rw,

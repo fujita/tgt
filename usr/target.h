@@ -21,28 +21,6 @@ struct mgmt_req {
 	mgmt_end_t *mgmt_end_func;
 };
 
-struct cmd {
-	/* linked target->cmd_hash_list */
-	struct list_head c_hlist;
-	struct list_head qlist;
-
-	uint64_t uaddr;
-	uint32_t len;
-	int mmapped;
-	struct tgt_device *dev;
-	unsigned long state;
-
-	/* Kill the followings when we use shared memory instead of netlink. */
-	int hostno;
-	uint32_t data_len;
-	uint8_t scb[16];
-	uint8_t lun[8];
-	int attribute;
-	uint64_t tag;
-	struct mgmt_req *mreq;
-	cmd_end_t *cmd_end_func;
-};
-
 struct target {
 	int tid;
 	int lid;
@@ -55,6 +33,28 @@ struct target {
 	struct list_head cmd_hash_list[1 << HASH_ORDER];
 
 	struct tgt_cmd_queue cmd_queue;
+};
+
+struct cmd {
+	struct target *c_target;
+	/* linked target->cmd_hash_list */
+	struct list_head c_hlist;
+	struct list_head qlist;
+
+	uint64_t uaddr;
+	uint32_t len;
+	int mmapped;
+	struct tgt_device *dev;
+	unsigned long state;
+
+	int hostno;
+	uint32_t data_len;
+	uint8_t scb[16];
+	uint8_t lun[8];
+	int attribute;
+	uint64_t tag;
+	struct mgmt_req *mreq;
+	cmd_end_t *cmd_end_func;
 };
 
 enum {
