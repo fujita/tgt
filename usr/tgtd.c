@@ -204,7 +204,7 @@ int main(int argc, char **argv)
 	struct sigaction sa_old;
 	struct sigaction sa_new;
 	int err, ch, longindex, nr_lld = 0, maxfds = MAX_FDS;
-	int is_daemon = 1, is_debug = 1;
+	int is_daemon = 1, is_debug = 0;
 	char *modes = NULL;
 
 	/* do not allow ctrl-c for now... */

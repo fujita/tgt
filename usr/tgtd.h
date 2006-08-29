@@ -31,7 +31,8 @@ struct backedio_template {
 	void (*bd_close)(struct tgt_device *dev);
 	void *(*bd_cmd_buffer_alloc)(int devio, uint32_t datalen);
 	int (*bd_cmd_submit)(struct tgt_device *dev, int rw, uint32_t datalen,
-			     unsigned long *uaddr, uint64_t offset);
+			     unsigned long *uaddr, uint64_t offset, int *async,
+			     void *key);
 	int (*bd_cmd_done) (int do_munmap, int do_free, uint64_t uaddr, int len);
 };
 
@@ -58,11 +59,14 @@ extern void target_cmd_done(int host_no, uint64_t tag);
 extern void target_mgmt_request(int host_no, int req_id, int function,
 				uint8_t *lun, uint64_t tag);
 
+extern void target_cmd_io_done(void *key, int result);
+
 extern uint64_t scsi_get_devid(int lid, uint8_t *pdu);
 extern int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu, int *len,
 			    uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
 			    uint8_t *try_map, uint64_t *offset, uint8_t *lun,
-			    struct tgt_device *dev, struct list_head *dev_list);
+			    struct tgt_device *dev, struct list_head *dev_list,
+			    int *async, void *key);
 
 extern int sense_data_build(uint8_t *data, uint8_t res_code, uint8_t key,
 			    uint8_t ascode, uint8_t ascodeq);

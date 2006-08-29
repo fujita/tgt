@@ -52,6 +52,7 @@ struct cmd {
 	uint8_t lun[8];
 	int attribute;
 	uint64_t tag;
+	int rw;
 	struct mgmt_req *mreq;
 };
 

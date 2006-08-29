@@ -464,14 +464,15 @@ uint64_t scsi_get_devid(int lid, uint8_t *p)
 int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu, int *len,
 		     uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
 		     uint8_t *try_map, uint64_t *offset, uint8_t *lun_buf,
-		     struct tgt_device *dev, struct list_head *dev_list)
+		     struct tgt_device *dev, struct list_head *dev_list, int *async,
+		     void *key)
 {
 	int result = SAM_STAT_GOOD;
 	uint8_t *data, *scb = pdu;
 
 	dprintf("%x %u\n", scb[0], datalen);
 
-	*offset = 0;
+	*async = *offset = 0;
 	data = tgt_drivers[lid]->bdt->bd_cmd_buffer_alloc(scsi_cmd_rw(scb, rw),
 							  datalen);
 
@@ -529,7 +530,7 @@ int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu, int *len,
 	case WRITE_VERIFY:
 		*offset = scsi_cmd_data_offset(scb);
 		result = tgt_drivers[lid]->bdt->bd_cmd_submit(dev, *rw, datalen,
-							      uaddr, *offset);
+							      uaddr, *offset, async, key);
 		if (result == SAM_STAT_GOOD) {
 			*len = datalen;
 			*try_map = 1;

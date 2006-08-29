@@ -67,7 +67,8 @@ static void *bd_mmap_cmd_buffer_alloc(int devio, uint32_t datalen)
 }
 
 static int bd_mmap_cmd_submit(struct tgt_device *dev, int rw, uint32_t datalen,
-			      unsigned long *uaddr, uint64_t offset)
+			      unsigned long *uaddr, uint64_t offset, int *async,
+			      void *key)
 {
 	int fd = dev->fd;
 	void *p;

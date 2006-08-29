@@ -252,7 +252,7 @@ int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun, uint32_t data_len,
 	struct target *target;
 	struct tgt_cmd_queue *q;
 	struct cmd *cmd;
-	int result, enabled, len = 0;
+	int result, enabled, async, len = 0;
 	uint64_t offset, dev_id;
 	uint8_t rw = 0, mmapped = 0;
 	unsigned long uaddr = 0;
@@ -291,15 +291,18 @@ int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun, uint32_t data_len,
 					  &len, data_len,
 					  &uaddr, &rw, &mmapped, &offset,
 					  lun, cmd->dev,
-					  &target->device_list);
+					  &target->device_list, &async, (void *) cmd);
 
 		cmd_post_perform(q, cmd, uaddr, len, mmapped);
 
 		dprintf("%" PRIx64 " %x %lx %" PRIu64 " %d\n",
 			tag, scb[0], uaddr, offset, result);
 
+		cmd->rw = rw;
 		set_cmd_processed(cmd);
-		tgt_drivers[target->lid]->cmd_end_notify(host_no, len, result, rw, uaddr, tag);
+		if (!async)
+			tgt_drivers[target->lid]->cmd_end_notify(host_no, len, result,
+								 rw, uaddr, tag);
 	} else {
 		set_cmd_queued(cmd);
 		dprintf("blocked %" PRIx64 " %x %" PRIu64 " %d\n",
@@ -315,10 +318,22 @@ int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun, uint32_t data_len,
 	return 0;
 }
 
+void target_cmd_io_done(void *key, int result)
+{
+	struct cmd *cmd = (struct cmd *) key;
+
+	/* TODO: sense in case of error. */
+	tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->hostno,
+							cmd->len, result,
+							cmd->rw, cmd->uaddr,
+							cmd->tag);
+	return;
+}
+
 static void post_cmd_done(struct tgt_cmd_queue *q)
 {
 	struct cmd *cmd, *tmp;
-	int enabled, result, len = 0;
+	int enabled, result, async, len = 0;
 	uint8_t rw = 0, mmapped = 0;
 	uint64_t offset;
 	unsigned long uaddr = 0;
@@ -330,23 +345,21 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 			dprintf("perform %" PRIx64 " %x\n", cmd->tag, cmd->attribute);
 			result = scsi_cmd_perform(cmd->c_target->lid,
 						  cmd->hostno, cmd->scb,
-						  &len,
-						  cmd->len,
-						  &uaddr,
-						  &rw,
-						  &mmapped,
-						  &offset,
-						  cmd->lun,
-						  cmd->dev,
-						  &cmd->c_target->device_list);
+						  &len, cmd->len, &uaddr,
+						  &rw, &mmapped, &offset,
+						  cmd->lun, cmd->dev,
+						  &cmd->c_target->device_list,
+						  &async, (void *) cmd);
+			cmd->rw = rw;
 			cmd_post_perform(q, cmd, uaddr, len, mmapped);
 			set_cmd_processed(cmd);
-			tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->hostno,
-									len,
-									result,
-									rw,
-									uaddr,
-									cmd->tag);
+			if (!async)
+				tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->hostno,
+										len,
+										result,
+										rw,
+										uaddr,
+										cmd->tag);
 		} else
 			break;
 	}
