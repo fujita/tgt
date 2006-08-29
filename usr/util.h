@@ -37,4 +37,14 @@
 extern int chrdev_open(char *modname, char *devpath, uint8_t minor, int *fd);
 extern int backed_file_open(char *path, int oflag, uint64_t *size);
 
+#define zalloc(size)			\
+({					\
+	void *ptr = malloc(size);	\
+	if (ptr)			\
+		memset(ptr, 0, size);	\
+	else				\
+		eprintf("%m\n");	\
+	ptr;				\
+})
+
 #endif

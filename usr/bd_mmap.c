@@ -36,7 +36,7 @@ static struct tgt_device *bd_mmap_open(char *path, int *fd, uint64_t *size)
 {
 	struct tgt_device *dev;
 
-	dev = malloc(sizeof(*dev));
+	dev = zalloc(sizeof(*dev));
 	if (!dev)
 		return NULL;
 

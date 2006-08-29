@@ -104,11 +104,9 @@ int tgt_event_add(int fd, int events, event_handler_t handler, void *data)
 	struct tgt_event *tev;
 	int err;
 
-	tev = malloc(sizeof(*tev));
-	if (!tev) {
-		eprintf("OOM, %m\n");
+	tev = zalloc(sizeof(*tev));
+	if (!tev)
 		return -ENOMEM;
-	}
 
 	tev->data = data;
 	tev->handler = handler;

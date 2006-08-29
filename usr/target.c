@@ -264,11 +264,10 @@ int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun, uint32_t data_len,
 	}
 
 	/* TODO: preallocate cmd */
-	cmd = calloc(1, sizeof(*cmd));
-	if (!cmd) {
-		eprintf("out of memory");
+	cmd = zalloc(sizeof(*cmd));
+	if (!cmd)
 		return -ENOMEM;
-	}
+
 	cmd->c_target = target;
 	cmd->hostno = host_no;
 	cmd->attribute = attribute;
@@ -551,11 +550,9 @@ int tgt_target_create(int tid)
 		return -EINVAL;
 	}
 
-	target = malloc(sizeof(*target));
-	if (!target) {
-		eprintf("Out of memoryn\n");
+	target = zalloc(sizeof(*target));
+	if (!target)
 		return -ENOMEM;
-	}
 
 	target->tid = tid;
 	for (i = 0; i < ARRAY_SIZE(target->cmd_hash_list); i++)
