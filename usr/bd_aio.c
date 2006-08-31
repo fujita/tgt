@@ -102,7 +102,10 @@ static struct tgt_device *bd_aio_open(char *path, int *fd, uint64_t *size)
 		goto close_fd;
 	}
 
-	err = tgt_event_add(bai->aio_fd, EPOLLIN, aio_event_handler, dev);
+	/*
+	 * We use edge triggering because we want only one notification per task.
+	 */
+	err = tgt_event_add(bai->aio_fd, EPOLLIN | EPOLLET, aio_event_handler, dev);
 	if (err)
 		goto aio_cb_destroy;
 
