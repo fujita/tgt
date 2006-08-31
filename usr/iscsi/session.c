@@ -27,7 +27,7 @@ struct session *session_find_name(int tid, const char *iname, uint8_t *isid)
 	if (!(target = target_find_by_id(tid)))
 		return NULL;
 
-	log_debug("session_find_name: %s %x %x %x %x %x %x", iname,
+	dprintf("session_find_name: %s %x %x %x %x %x %x\n", iname,
 		  isid[0], isid[1], isid[2], isid[3], isid[4], isid[5]);
 	list_for_each_entry(session, &target->sessions_list, slist) {
 		if (!memcmp(isid, session->isid, sizeof(session->isid)) &&
@@ -85,7 +85,7 @@ int session_create(struct connection *conn)
 	conn_add_to_session(conn, session);
 	conn->session->initiator = strdup(conn->initiator);
 
-	log_debug("session_create: %#" PRIx64, sid64(conn->isid, session->tsih));
+	dprintf("session_create: %#" PRIx64 "\n", sid64(conn->isid, session->tsih));
 
 	list_add(&session->hlist, &sessions_list);
 

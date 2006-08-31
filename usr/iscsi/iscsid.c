@@ -386,7 +386,7 @@ static void login_start(struct connection *conn)
 
 /* 		ki->param_get(conn->tid, 0, conn->session_param); */
 		conn->exp_cmd_sn = be32_to_cpu(req->cmdsn);
-		log_debug("exp_cmd_sn: %d,%d", conn->exp_cmd_sn, req->cmdsn);
+		dprintf("exp_cmd_sn: %d,%d\n", conn->exp_cmd_sn, req->cmdsn);
 		conn->max_cmd_sn = conn->exp_cmd_sn;
 	}
 	text_key_add(conn, "TargetPortalGroupTag", "1");
@@ -420,7 +420,7 @@ static int cmnd_exec_auth(struct connection *conn)
                 res = 0;
                 break;
         default:
-                log_error("Unknown auth. method %d", conn->auth_method);
+                eprintf("Unknown auth. method %d\n", conn->auth_method);
                 res = -3;
         }
 
@@ -652,7 +652,7 @@ static void cmnd_exec_text(struct connection *conn)
 	if (!(req->opcode & ISCSI_OP_IMMEDIATE))
 		conn->exp_cmd_sn++;
 
-	log_debug("Text request: %d", conn->state);
+	dprintf("Text request: %d\n", conn->state);
 	text_scan_text(conn);
 
 	if (req->flags & ISCSI_FLAG_CMD_FINAL)

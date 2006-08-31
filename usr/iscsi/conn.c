@@ -86,7 +86,7 @@ int conn_take_fd(struct connection *conn, int fd)
 {
 	uint64_t sid = sid64(conn->isid, conn->tsih);
 
-	log_debug("conn_take_fd: %d %u %u %u %" PRIx64,
+	dprintf("conn_take_fd: %d %u %u %u %" PRIx64 "\n",
 		  fd, conn->cid, conn->stat_sn, conn->exp_stat_sn, sid);
 
 	conn->session->conn_cnt++;
