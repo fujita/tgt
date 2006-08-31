@@ -10,7 +10,7 @@ endif
 
 ifneq ($(ISCSI),)
 CFLAGS += -DISCSI
-TGTD_OBJS += $(addprefix iscsi/, istgt.o conn.o param.o session.o iscsid.o target.o chap.o)
+TGTD_OBJS += $(addprefix iscsi/, conn.o param.o session.o iscsid.o target.o chap.o)
 LIBS += -lcrypto
 BD_AIO=1
 endif
