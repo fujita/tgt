@@ -18,15 +18,12 @@
 
 #include <scsi/iscsi_proto.h>
 
-#define ISCSI_NAME_LEN 255
+#define ISCSI_NAME_LEN 256
 #define ISTGT_NAMESPACE "ISTGT_ABSTRACT_NAMESPACE"
 
 #define DIGEST_ALL	(DIGEST_NONE | DIGEST_CRC32C)
 #define DIGEST_NONE		(1 << 0)
 #define DIGEST_CRC32C           (1 << 1)
-
-extern uint64_t thandle;
-extern int nl_fd;
 
 #define sid64(isid, tsih)					\
 ({								\
@@ -57,17 +54,41 @@ struct session {
 	uint8_t isid[6];
 	uint16_t tsih;
 
-	/* workaroud */
-	uint32_t ksid;
-	uint32_t hostno;
-
 	struct list_head conn_list;
 	int conn_cnt;
+
+	struct list_head cmd_list;
+};
+
+struct iscsi_ctask {
+	struct iscsi_hdr req;
+	struct iscsi_hdr rsp;
+
+	uint64_t tag;
+	struct connection *conn;
+
+	struct list_head c_hlist;
+	struct list_head c_txlist;
+
+	uint64_t addr;
+	int result;
+	int len;
+	int rw;
+
+	int offset;
+	int data_sn;
+
+	int r2t_count;
+	int unsol_count;
+	int exp_r2tsn;
+
+	void *c_buffer;
 };
 
 struct connection {
 	int state;
-	int iostate;
+	int rx_iostate;
+	int tx_iostate;
 	int fd;
 
 	struct list_head clist;
@@ -84,9 +105,6 @@ struct connection {
 	int session_type;
 	int auth_method;
 
-	/* workaroud */
-	uint32_t kcid;
-
 	uint32_t stat_sn;
 	uint32_t exp_stat_sn;
 
@@ -98,8 +116,15 @@ struct connection {
 	void *req_buffer;
 	struct PDU rsp;
 	void *rsp_buffer;
-	unsigned char *buffer;
-	int rwsize;
+	unsigned char *rx_buffer;
+	unsigned char *tx_buffer;
+	int rx_size;
+	int tx_size;
+
+	struct iscsi_ctask *rx_ctask;
+	struct iscsi_ctask *tx_ctask;
+
+	struct list_head tx_clist;
 
 	int auth_state;
 	union {
@@ -131,6 +156,7 @@ struct connection {
 #define STATE_KERNEL		9
 #define STATE_CLOSE		10
 #define STATE_EXIT		11
+#define STATE_SCSI		12
 
 #define AUTH_STATE_START	0
 #define AUTH_STATE_CHALLENGE	1
@@ -170,65 +196,33 @@ extern int cmnd_exec_auth_chap(struct connection *conn);
 extern struct connection *conn_alloc(void);
 extern void conn_free(struct connection *conn);
 extern struct connection * conn_find(struct session *session, uint32_t cid);
-extern void conn_take_fd(struct connection *conn, int fd);
+extern int conn_take_fd(struct connection *conn, int fd);
 extern void conn_read_pdu(struct connection *conn);
 extern void conn_write_pdu(struct connection *conn);
-extern void conn_free_pdu(struct connection *conn);
 extern void conn_add_to_session(struct connection *conn, struct session *session);
 
 /* iscsid.c */
-extern int iscsi_debug;
-
 extern int cmnd_execute(struct connection *conn);
 extern void cmnd_finish(struct connection *conn);
 extern char *text_key_find(struct connection *conn, char *searchKey);
 extern void text_key_add(struct connection *conn, char *key, char *value);
 
+extern int iscsi_cmd_rx_start(struct connection *conn);
+extern int iscsi_cmd_rx_done(struct connection *conn);
+extern int iscsi_cmd_tx_start(struct connection *conn);
+extern int iscsi_cmd_tx_done(struct connection *conn);
+
 /* session.c */
 extern struct session *session_find_name(int tid, const char *iname, uint8_t *isid);
-extern struct session *session_find_id(int tid, uint64_t sid);
-extern struct session *session_find_hostno(int hostno);
-extern void session_create(struct connection *conn);
-extern void session_remove(struct session *session);
+extern int session_create(struct connection *conn);
+extern void session_destroy(struct session *session);
+extern struct session *session_lookup(uint16_t tsih);
 
 /* target.c */
 extern int target_find_by_name(const char *name, int *tid);
 struct target * target_find_by_id(int tid);
 extern void target_list_build(struct connection *, char *, char *);
 extern int target_bind(int tid, int hostno);
-
-extern void ipc_event(void);
-extern int ipc_init(void);
-
-/* netlink.c */
-struct iscsi_kernel_interface {
-	int (*set_param) (uint64_t transport_handle, uint32_t sid,
-			  uint32_t cid, enum iscsi_param param,
-			  void *value, int len, int *retcode);
-
-	int (*create_session) (uint64_t transport_handle,
-			       uint32_t initial_cmdsn,
-			       uint32_t *out_sid, uint32_t *out_hostno);
-
-	int (*destroy_session) (uint64_t transport_handle, uint32_t sid);
-
-	int (*create_conn) (uint64_t transport_handle,
-			    uint32_t sid, uint32_t cid, uint32_t *out_cid);
-	int (*destroy_conn) (uint64_t transport_handle, uint32_t sid,
-			     uint32_t cid);
-	int (*bind_conn) (uint64_t transport_handle, uint32_t sid,
-			  uint32_t cid, uint64_t transport_eph,
-			  int is_leading, int *retcode);
-	int (*start_conn) (uint64_t transport_handle, uint32_t sid,
-			   uint32_t cid, int *retcode);
-
-	int (*stop_conn) (uint64_t transport_handle, uint32_t sid,
-			  uint32_t cid, int flag);
-};
-
-extern int iscsi_nl_init(void);
-
-extern struct iscsi_kernel_interface *ki;
 
 /* param.c */
 int param_index_by_name(char *name, struct iscsi_key *keys);

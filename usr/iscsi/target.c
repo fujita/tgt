@@ -15,7 +15,6 @@
 #include <sys/un.h>
 #include <linux/netlink.h>
 #include <sys/socket.h>
-
 #include "iscsid.h"
 #include "tgtadm.h"
 

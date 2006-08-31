@@ -1,20 +1,28 @@
 /*
- * Copyright (C) 2002-2003 Ardis Technolgies <roman@ardistech.com>
+ * Software iSCSI target protocol routines
  *
- * Released under the terms of the GNU GPL v2.0.
+ * (C) 2005-2006 FUJITA Tomonori <tomof@acm.org>
+ * (C) 2005-2006 Mike Christie <michaelc@cs.wisc.edu>
+ *
+ * This code is based on Ardis's iSCSI implementation.
+ *   http://www.ardistech.com/iscsi/
+ *   Copyright (C) 2002-2003 Ardis Technolgies <roman@ardistech.com>
+ *   licensed under the terms of the GNU GPL v2.0,
  */
-
 #include <ctype.h>
 #include <errno.h>
+#include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <arpa/inet.h>
+#include <scsi/scsi.h>
+#include <sys/epoll.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-
 #include "iscsid.h"
+#include "tgtd.h"
+#include "util.h"
 
 static struct iscsi_key login_keys[] = {
 	{"InitiatorName",},
@@ -88,12 +96,10 @@ void text_key_add(struct connection *conn, char *key, char *value)
 	int len = keylen + valuelen + 2;
 	char *buffer;
 
-	if (!conn->rsp.datasize) {
-		if (!conn->rsp_buffer)
-			conn->rsp_buffer = malloc(INCOMING_BUFSIZE);
+	if (!conn->rsp.datasize)
 		conn->rsp.data = conn->rsp_buffer;
-	}
-	if (conn->rwsize + len > INCOMING_BUFSIZE) {
+
+	if (conn->tx_size + len > INCOMING_BUFSIZE) {
 		log_warning("Dropping key (%s=%s)", key, value);
 		return;
 	}
@@ -448,7 +454,7 @@ static void cmnd_exec_login(struct connection *conn)
 
 	switch (ISCSI_LOGIN_CURRENT_STAGE(req->flags)) {
 	case ISCSI_SECURITY_NEGOTIATION_STAGE:
-		log_debug("Login request (security negotiation): %d", conn->state);
+		dprintf("Login request (security negotiation): %d", conn->state);
 		rsp->flags = ISCSI_SECURITY_NEGOTIATION_STAGE << 2;
 
 		switch (conn->state) {
@@ -484,7 +490,8 @@ static void cmnd_exec_login(struct connection *conn)
 
 		break;
 	case ISCSI_OP_PARMS_NEGOTIATION_STAGE:
-		log_debug("Login request (operational negotiation): %d", conn->state);
+		dprintf("Login request (operational negotiation): %d\n",
+			conn->state);
 		rsp->flags = ISCSI_OP_PARMS_NEGOTIATION_STAGE << 2;
 
 		switch (conn->state) {
@@ -676,7 +683,7 @@ static void cmnd_exec_logout(struct connection *conn)
 
 int cmnd_execute(struct connection *conn)
 {
-	int res = 1;
+	int res = 0;
 
 	switch (conn->req.bhs.opcode & ISCSI_OPCODE_MASK) {
 	case ISCSI_OP_LOGIN:
@@ -702,7 +709,7 @@ int cmnd_execute(struct connection *conn)
 		break;
 	default:
 		//reject
-		res = 0;
+		res = 1;
 		break;
 	}
 
@@ -727,4 +734,391 @@ void cmnd_finish(struct connection *conn)
 			conn->state = STATE_FULL;
 		break;
 	}
+}
+
+static int iscsi_cmd_rsp_build(struct iscsi_ctask *ctask)
+{
+	struct connection *conn = ctask->conn;
+	struct iscsi_cmd_rsp *rsp = (struct iscsi_cmd_rsp *) &conn->rsp.bhs;
+
+	memset(rsp, 0, sizeof(*rsp));
+	rsp->opcode = ISCSI_OP_SCSI_CMD_RSP;
+	rsp->itt = ctask->tag;
+	rsp->flags = ISCSI_FLAG_CMD_FINAL;
+	rsp->response = ISCSI_STATUS_CMD_COMPLETED;
+	rsp->cmd_status = ctask->result;
+	rsp->statsn = cpu_to_be32(conn->stat_sn++);
+	rsp->exp_cmdsn = cpu_to_be32(conn->exp_cmd_sn);
+	rsp->max_cmdsn = cpu_to_be32(conn->exp_cmd_sn + 8);
+
+	return 0;
+}
+
+static int iscsi_data_rsp_build(struct iscsi_ctask *ctask)
+{
+	struct connection *conn = ctask->conn;
+	struct iscsi_data_rsp *rsp = (struct iscsi_data_rsp *) &conn->rsp.bhs;
+	struct iscsi_cmd *req = (struct iscsi_cmd *) &ctask->req;
+	int residual, datalen, exp_datalen = ntohl(req->data_length);
+	int max_burst = conn->session_param[ISCSI_PARAM_MAX_XMIT_DLENGTH].val;
+
+	memset(rsp, 0, sizeof(*rsp));
+	rsp->opcode = ISCSI_OP_SCSI_DATA_IN;
+	rsp->itt = ctask->tag;
+	rsp->ttt = cpu_to_be32(ISCSI_RESERVED_TAG);
+	rsp->cmd_status = ISCSI_STATUS_CMD_COMPLETED;
+
+	rsp->offset = cpu_to_be32(ctask->offset);
+	rsp->datasn = cpu_to_be32(ctask->data_sn++);
+	rsp->cmd_status = ctask->result;
+
+	datalen = min(exp_datalen, ctask->len);
+	datalen -= ctask->offset;
+
+	dprintf("%d %d %d %d %x\n", datalen, exp_datalen, ctask->len, max_burst, rsp->itt);
+
+	if (datalen <= max_burst) {
+		rsp->flags = ISCSI_FLAG_CMD_FINAL | ISCSI_FLAG_DATA_STATUS;
+		if (ctask->len < exp_datalen) {
+			rsp->flags |= ISCSI_FLAG_CMD_UNDERFLOW;
+			residual = exp_datalen - ctask->len;
+		} else if (ctask->len > exp_datalen) {
+			rsp->flags |= ISCSI_FLAG_CMD_OVERFLOW;
+			residual = ctask->len - exp_datalen;
+		} else
+			residual = 0;
+		rsp->residual_count = cpu_to_be32(residual);
+	} else
+		datalen = max_burst;
+
+	if (rsp->flags & ISCSI_FLAG_CMD_FINAL)
+		rsp->statsn = cpu_to_be32(conn->stat_sn++);
+	rsp->exp_cmdsn = cpu_to_be32(conn->exp_cmd_sn);
+	rsp->max_cmdsn = cpu_to_be32(conn->exp_cmd_sn + 8);
+
+	conn->rsp.datasize = datalen;
+	hton24(rsp->dlength, datalen);
+	conn->rsp.data = (void *) (unsigned long) ctask->addr;
+	conn->rsp.data += ctask->offset;
+
+	ctask->offset += datalen;
+
+	return 0;
+}
+
+static int iscsi_r2t_build(struct iscsi_ctask *ctask)
+{
+	struct connection *conn = ctask->conn;
+	struct iscsi_r2t_rsp *rsp = (struct iscsi_r2t_rsp *) &conn->rsp.bhs;
+	int length, max_burst = conn->session_param[ISCSI_PARAM_MAX_XMIT_DLENGTH].val;
+
+	memset(rsp, 0, sizeof(*rsp));
+
+	rsp->opcode = ISCSI_OP_R2T;
+	rsp->flags = ISCSI_FLAG_CMD_FINAL;
+	memcpy(rsp->lun, ctask->req.lun, sizeof(rsp->lun));
+
+	rsp->itt = ctask->req.itt;
+	rsp->r2tsn = cpu_to_be32(ctask->exp_r2tsn++);
+	rsp->data_offset = cpu_to_be32(ctask->offset);
+	rsp->ttt = (unsigned long) ctask;
+	length = min(ctask->r2t_count, max_burst);
+	rsp->data_length = cpu_to_be32(length);
+	ctask->r2t_count -= length;
+
+	return 0;
+}
+
+int iscsi_cmd_done(int host_no, int len, int result, int rw, uint64_t addr,
+		   uint64_t tag)
+{
+	struct session *session;
+	struct iscsi_ctask *ctask;
+
+	dprintf("%u %d %d %d %" PRIx64 " %" PRIx64 "\n", host_no, len, result,
+		rw, addr, tag);
+	session = session_lookup(host_no);
+	if (!session)
+		return -EINVAL;
+
+	list_for_each_entry(ctask, &session->cmd_list, c_hlist) {
+		if (ctask->tag == tag)
+			goto found;
+	}
+	eprintf("Cannot find a task %" PRIx64 "\n", tag);
+	return -EINVAL;
+
+found:
+	eprintf("found a task %" PRIx64 "\n", tag);
+	ctask->addr = addr;
+	ctask->result = result;
+	ctask->len = len;
+	ctask->rw = rw;
+
+	list_add_tail(&ctask->c_txlist, &ctask->conn->tx_clist);
+	tgt_event_modify(ctask->conn->fd, EPOLLIN|EPOLLOUT);
+
+	return 0;
+}
+
+static int iscsi_data_out_rx_start(struct connection *conn)
+{
+	struct iscsi_ctask *ctask;
+	struct iscsi_data *req = (struct iscsi_data *) &conn->req.bhs;
+
+	list_for_each_entry(ctask, &conn->session->cmd_list, c_hlist) {
+		if (ctask->tag == req->itt)
+			goto found;
+	}
+	return -EINVAL;
+found:
+	eprintf("found a task %" PRIx64 " %u %u %u\n", ctask->tag,
+		ctask->r2t_count,
+		ntoh24(req->dlength), be32_to_cpu(req->offset));
+
+/* 	conn->rx_buffer = (void *) (unsigned long) ctask->addr; */
+	conn->rx_buffer = (void *) (unsigned long) ctask->c_buffer;
+	conn->rx_buffer += be32_to_cpu(req->offset);
+	conn->rx_size = ntoh24(req->dlength);
+
+	ctask->offset += ntoh24(req->dlength);
+
+	conn->rx_ctask = ctask;
+
+	return 0;
+}
+
+static int iscsi_cmd_init(struct connection *conn)
+{
+	struct iscsi_cmd *req = (struct iscsi_cmd *) &conn->req.bhs;
+	struct iscsi_ctask *ctask;
+	int len;
+
+	ctask = zalloc(sizeof(*ctask));
+	if (!ctask)
+		return -ENOMEM;
+
+	memcpy(&ctask->req, req, sizeof(*req));
+	ctask->tag = req->itt;
+	ctask->conn = conn;
+	INIT_LIST_HEAD(&ctask->c_hlist);
+
+	list_add(&ctask->c_hlist, &conn->session->cmd_list);
+
+	dprintf("%u %x %d %d %u\n", conn->session->tsih,
+		req->cdb[0], ntohl(req->data_length),
+		req->flags & ISCSI_FLAG_CMD_ATTR_MASK, req->itt);
+
+	len = ntohl(req->data_length);
+	if (len) {
+		ctask->c_buffer = malloc(len);
+		if (!ctask->c_buffer)
+			return -ENOMEM;
+		dprintf("%p\n", ctask->c_buffer);
+	}
+
+	conn->exp_cmd_sn++;
+	conn->rx_ctask = ctask;
+
+	if (req->flags & ISCSI_FLAG_CMD_WRITE) {
+		conn->rx_size = ntoh24(req->dlength);
+		conn->rx_buffer = ctask->c_buffer;
+		ctask->r2t_count = ntohl(req->data_length) - conn->rx_size;
+		ctask->unsol_count = !(req->flags & ISCSI_FLAG_CMD_FINAL);
+		ctask->offset = conn->rx_size;
+
+		dprintf("%d %d %d %d\n", conn->rx_size, ctask->r2t_count,
+			ctask->unsol_count, ctask->offset);
+	}
+
+	return 0;
+}
+
+int cmd_attr(struct iscsi_ctask *ctask)
+{
+	int attr;
+	struct iscsi_cmd *req = (struct iscsi_cmd *) &ctask->req;
+
+	switch (req->flags & ISCSI_FLAG_CMD_ATTR_MASK) {
+	case ISCSI_ATTR_UNTAGGED:
+	case ISCSI_ATTR_SIMPLE:
+		attr = SIMPLE_QUEUE_TAG;
+		break;
+	case ISCSI_ATTR_HEAD_OF_QUEUE:
+		attr = HEAD_OF_QUEUE_TAG;
+		break;
+	case ISCSI_ATTR_ORDERED:
+	default:
+		attr = ORDERED_QUEUE_TAG;
+	}
+	return attr;
+}
+
+static int __iscsi_cmd_rx_done(struct iscsi_ctask *ctask)
+{
+	struct connection *conn = ctask->conn;
+	struct iscsi_cmd *req = (struct iscsi_cmd *) &ctask->req;
+	unsigned long uaddr = (unsigned long) ctask->c_buffer;
+	int err = 0;
+
+	if (req->flags & ISCSI_FLAG_CMD_WRITE) {
+		if (ctask->r2t_count) {
+			if (ctask->unsol_count)
+				;
+			else
+				list_add_tail(&ctask->c_txlist, &ctask->conn->tx_clist);
+		} else
+			err = target_cmd_queue(conn->session->tsih, req->cdb,
+					       uaddr, req->lun,
+					       ntohl(req->data_length),
+					       cmd_attr(ctask), req->itt);
+
+	} else
+		err = target_cmd_queue(conn->session->tsih, req->cdb,
+				       uaddr, req->lun, ntohl(req->data_length),
+				       cmd_attr(ctask), req->itt);
+
+	tgt_event_modify(conn->fd, EPOLLIN|EPOLLOUT);
+
+	return err;
+}
+
+int iscsi_cmd_rx_done(struct connection *conn)
+{
+	struct iscsi_hdr *hdr = &conn->req.bhs;
+	struct iscsi_ctask *ctask = conn->rx_ctask;
+	struct iscsi_cmd *req = (struct iscsi_cmd *) &ctask->req;
+	uint8_t op;
+	int err = 0;
+
+	op = hdr->opcode & ISCSI_OPCODE_MASK;
+	switch (op) {
+	case ISCSI_OP_SCSI_CMD:
+		__iscsi_cmd_rx_done(ctask);
+		break;
+	case ISCSI_OP_SCSI_DATA_OUT:
+		if (ctask->r2t_count) {
+			dprintf("%x %d\n", hdr->itt, ctask->r2t_count);
+			list_add_tail(&ctask->c_txlist, &ctask->conn->tx_clist);
+			tgt_event_modify(conn->fd, EPOLLIN|EPOLLOUT);
+		} else
+			err = target_cmd_queue(conn->session->tsih, req->cdb,
+					       (unsigned long) ctask->c_buffer,
+					       req->lun,
+					       ntohl(req->data_length),
+					       cmd_attr(ctask), req->itt);
+		break;
+	case ISCSI_OP_NOOP_OUT:
+	case ISCSI_OP_SCSI_TMFUNC:
+	case ISCSI_OP_LOGOUT:
+	case ISCSI_OP_TEXT:
+	case ISCSI_OP_SNACK:
+	default:
+		eprintf("Cannot handle yet %x\n", op);
+		break;
+	}
+
+	conn->rx_ctask = NULL;
+	return err;
+}
+
+int iscsi_cmd_rx_start(struct connection *conn)
+{
+	struct iscsi_hdr *hdr = &conn->req.bhs;
+	uint8_t op;
+	int err;
+
+	op = hdr->opcode & ISCSI_OPCODE_MASK;
+	dprintf("%u\n", op);
+	switch (op) {
+	case ISCSI_OP_SCSI_CMD:
+		err = iscsi_cmd_init(conn);
+		if (!err)
+			conn->exp_stat_sn = be32_to_cpu(hdr->exp_statsn);
+		break;
+	case ISCSI_OP_SCSI_DATA_OUT:
+		err = iscsi_data_out_rx_start(conn);
+		if (!err)
+			conn->exp_stat_sn = be32_to_cpu(hdr->exp_statsn);
+		break;
+	case ISCSI_OP_NOOP_OUT:
+	case ISCSI_OP_SCSI_TMFUNC:
+	case ISCSI_OP_LOGOUT:
+	case ISCSI_OP_TEXT:
+	case ISCSI_OP_SNACK:
+		eprintf("Cannot handle yet %x\n", op);
+		err = -EINVAL;
+	default:
+		eprintf("Unknown op %x\n", op);
+		err = -EINVAL;
+		break;
+	}
+
+	return 0;
+}
+
+int iscsi_cmd_tx_done(struct connection *conn)
+{
+	struct iscsi_hdr *hdr = &conn->rsp.bhs;
+	struct iscsi_ctask *ctask = conn->tx_ctask;
+
+	switch (hdr->opcode & ISCSI_OPCODE_MASK) {
+	case ISCSI_OP_R2T:
+		break;
+	case ISCSI_OP_SCSI_DATA_IN:
+		if (!(hdr->flags & ISCSI_FLAG_CMD_FINAL)) {
+			dprintf("more data %x\n", hdr->itt);
+			list_add_tail(&ctask->c_txlist, &ctask->conn->tx_clist);
+			goto out;
+		}
+	default:
+		target_cmd_done(conn->session->tsih, ctask->tag);
+		list_del(&ctask->c_hlist);
+		if (ctask->c_buffer) {
+			if ((unsigned long) ctask->c_buffer != ctask->addr)
+				free((void *) (unsigned long) ctask->addr);
+			free(ctask->c_buffer);
+		}
+		free(ctask);
+	}
+
+out:
+	conn->tx_ctask = NULL;
+	return 0;
+}
+
+int iscsi_cmd_tx_start(struct connection *conn)
+{
+	struct iscsi_ctask *ctask;
+	struct iscsi_cmd *req;
+	int err = 0;
+
+	if (list_empty(&conn->tx_clist)) {
+		dprintf("no more data\n");
+		tgt_event_modify(conn->fd, EPOLLIN);
+		return -EAGAIN;
+	}
+
+	conn_write_pdu(conn);
+
+	ctask = list_entry(conn->tx_clist.next, struct iscsi_ctask, c_txlist);
+	conn->tx_ctask = ctask;
+	list_del(&ctask->c_txlist);
+
+	req = (struct iscsi_cmd *) &ctask->req;
+
+	if (ctask->r2t_count)
+		iscsi_r2t_build(ctask);
+	else {
+		if (req->flags & ISCSI_FLAG_CMD_WRITE)
+			err = iscsi_cmd_rsp_build(ctask);
+		else {
+			if (ctask->len)
+				err = iscsi_data_rsp_build(ctask);
+			else
+				err = iscsi_cmd_rsp_build(ctask);
+		}
+	}
+
+	return err;
 }

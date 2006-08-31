@@ -13,6 +13,8 @@
 #include <sys/stat.h>
 
 #include "iscsid.h"
+#include "tgtd.h"
+#include "util.h"
 
 #define ISCSI_CONN_NEW		1
 #define ISCSI_CONN_EXIT		5
@@ -33,14 +35,28 @@ struct connection *conn_alloc(void)
 {
 	struct connection *conn;
 
-	if (!(conn = malloc(sizeof(*conn))))
+	conn = zalloc(sizeof(*conn));
+	if (!conn)
 		return NULL;
 
-	memset(conn, 0, sizeof(*conn));
+	conn->req_buffer = malloc(INCOMING_BUFSIZE);
+	if (!conn->req_buffer) {
+		free(conn);
+		return NULL;
+	}
+	conn->rsp_buffer = malloc(INCOMING_BUFSIZE);
+	if (!conn->rsp_buffer) {
+		free(conn->req_buffer);
+		free(conn);
+		return NULL;
+	}
+
+
 	conn->state = STATE_FREE;
 	param_set_defaults(conn->session_param, session_keys);
 
 	INIT_LIST_HEAD(&conn->clist);
+	INIT_LIST_HEAD(&conn->tx_clist);
 
 	return conn;
 }
@@ -48,6 +64,8 @@ struct connection *conn_alloc(void)
 void conn_free(struct connection *conn)
 {
 	list_del(&conn->clist);
+	free(conn->req_buffer);
+	free(conn->rsp_buffer);
 	free(conn->initiator);
 	free(conn);
 }
@@ -64,9 +82,8 @@ struct connection *conn_find(struct session *session, uint32_t cid)
 	return NULL;
 }
 
-void conn_take_fd(struct connection *conn, int fd)
+int conn_take_fd(struct connection *conn, int fd)
 {
-	int i, err;
 	uint64_t sid = sid64(conn->isid, conn->tsih);
 
 	log_debug("conn_take_fd: %d %u %u %u %" PRIx64,
@@ -74,69 +91,23 @@ void conn_take_fd(struct connection *conn, int fd)
 
 	conn->session->conn_cnt++;
 
-	err = ki->create_conn(thandle, conn->session->ksid, conn->kcid,
-			      &conn->kcid);
-	if (err) {
-		eprintf("%d %d %u %u %u %" PRIx64,
-			fd, err, conn->cid, conn->stat_sn, conn->exp_stat_sn, sid);
-		goto out;
-	}
+	/* FIXME */
+	tgt_target_bind(conn->session->target->tid, conn->tsih, 0);
 
-	for (i = 0; i < ISCSI_PARAM_ERL + 1; i++) {
-		/* FIXME */
-		if (i == ISCSI_PARAM_DATADGST_EN || i == ISCSI_PARAM_HDRDGST_EN)
-			continue;
-		if (ki->set_param(thandle, conn->session->ksid, conn->kcid, i,
-				  &conn->session_param[i].val,
-				  sizeof(uint32_t), &err) || err) {
-			break;
-		}
-	}
-
-	if (ki->bind_conn(thandle, conn->session->ksid, conn->kcid, fd, 1, &err) || err) {
-		eprintf("%d %d %u %u %u %" PRIx64,
-			fd, err, conn->cid, conn->stat_sn, conn->exp_stat_sn, sid);
-		goto out;
-	}
-
-	if (ki->start_conn(thandle, conn->session->ksid, conn->kcid, &err) || err) {
-		eprintf("%d %d %u %u %u %" PRIx64,
-			fd, err, conn->cid, conn->stat_sn, conn->exp_stat_sn, sid);
-		goto out;
-	}
-
-out:
-	return;
+	return 0;
 }
 
 void conn_read_pdu(struct connection *conn)
 {
-	conn->iostate = IOSTATE_READ_BHS;
-	conn->buffer = (void *)&conn->req.bhs;
-	conn->rwsize = BHS_SIZE;
+	conn->rx_iostate = IOSTATE_READ_BHS;
+	conn->rx_buffer = (void *)&conn->req.bhs;
+	conn->rx_size = BHS_SIZE;
 }
 
 void conn_write_pdu(struct connection *conn)
 {
-	conn->iostate = IOSTATE_WRITE_BHS;
+	conn->tx_iostate = IOSTATE_WRITE_BHS;
 	memset(&conn->rsp, 0, sizeof(conn->rsp));
-	conn->buffer = (void *)&conn->rsp.bhs;
-	conn->rwsize = BHS_SIZE;
-}
-
-void conn_free_pdu(struct connection *conn)
-{
-	conn->iostate = IOSTATE_FREE;
-	if (conn->req.ahs) {
-		free(conn->req.ahs);
-		conn->req.ahs = NULL;
-	}
-	if (conn->rsp.ahs) {
-		free(conn->rsp.ahs);
-		conn->rsp.ahs = NULL;
-	}
-	if (conn->rsp.data) {
-		free(conn->rsp.data);
-		conn->rsp.data = NULL;
-	}
+	conn->tx_buffer = (void *)&conn->rsp.bhs;
+	conn->tx_size = BHS_SIZE;
 }

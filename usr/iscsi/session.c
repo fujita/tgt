@@ -15,40 +15,9 @@
 #include <errno.h>
 
 #include "iscsid.h"
+#include "util.h"
 
 static LIST_HEAD(sessions_list);
-
-static struct session *session_alloc(int tid)
-{
-	struct session *session;
-	struct target *target = target_find_by_id(tid);
-
-	if (!target)
-		return NULL;
-	if (!(session = malloc(sizeof(*session))))
-		return NULL;
-	memset(session, 0, sizeof(*session));
-
-	session->target = target;
-	INIT_LIST_HEAD(&session->slist);
-	list_add(&session->slist, &target->sessions_list);
-
-	INIT_LIST_HEAD(&session->conn_list);
-
-	return session;
-}
-
-int iscsi_target_bind(int hostno)
-{
-	struct session *session;
-
-	list_for_each_entry(session, &sessions_list, hlist) {
-		if (session->hostno == hostno)
-			return session->target->tid;
-	}
-
-	return -ENOENT;
-}
 
 struct session *session_find_name(int tid, const char *iname, uint8_t *isid)
 {
@@ -69,66 +38,68 @@ struct session *session_find_name(int tid, const char *iname, uint8_t *isid)
 	return NULL;
 }
 
-struct session *session_find_id(int tid, uint64_t sid)
+struct session *session_lookup(uint16_t tsih)
 {
 	struct session *session;
-	struct target *target;
-
-	if (!(target = target_find_by_id(tid)))
-		return NULL;
-
-	log_debug("session_find_id: %#" PRIx64, sid);
-	list_for_each_entry(session, &target->sessions_list, slist) {
-		if (sid64(session->isid, session->tsih) == sid)
+	list_for_each_entry(session, &sessions_list, hlist) {
+		if (session->tsih == tsih)
 			return session;
 	}
-
 	return NULL;
 }
 
-void session_create(struct connection *conn)
+int session_create(struct connection *conn)
 {
-	struct session *session;
-	uint64_t sid;
-	static uint16_t tsih = 1;
+	struct session *session = NULL;
+	static uint16_t tsih, last_tsih = 0;
+	struct target *target;
 
-	/* First, we need to get an available sid. */
-	while (1) {
-		sid = sid64(conn->isid, tsih);
-		if (!session_find_id(conn->tid, sid))
+	target = target_find_by_id(conn->tid);
+	if (!target)
+		return -EINVAL;
+
+	for (tsih = last_tsih + 1; tsih != last_tsih; tsih++) {
+		if (!tsih)
+			continue;
+		session = session_lookup(tsih);
+		if (!session)
 			break;
-		tsih++;
 	}
+	if (session)
+		return -EINVAL;
 
-	session = session_alloc(conn->tid);
+	session = zalloc(sizeof(*session));
 	if (!session)
-		return;
+		return -ENOMEM;
+
+	session->target = target;
+	INIT_LIST_HEAD(&session->slist);
+	list_add(&session->slist, &target->sessions_list);
+
+	INIT_LIST_HEAD(&session->conn_list);
+	INIT_LIST_HEAD(&session->cmd_list);
 
 	memcpy(session->isid, conn->isid, sizeof(session->isid));
-	session->tsih = tsih++;
+	session->tsih = last_tsih = tsih;
 
 	conn_add_to_session(conn, session);
 	conn->session->initiator = strdup(conn->initiator);
 
-	log_debug("session_create: %#" PRIx64, sid);
-
-	ki->create_session(thandle, conn->exp_cmd_sn, &session->ksid,
-			   &session->hostno);
+	log_debug("session_create: %#" PRIx64, sid64(conn->isid, session->tsih));
 
 	list_add(&session->hlist, &sessions_list);
+
+	return 0;
 }
 
-void session_remove(struct session *session)
+void session_destroy(struct session *session)
 {
-	uint64_t sid = sid64(session->isid, session->tsih);
+	eprintf("%d\n", session->tsih);
 
-	eprintf("%#"  PRIx64 "\n", sid);
-
-	if (!list_empty(&session->conn_list))
-		eprintf("%" PRIx64 " conn_list is not null\n", sid);
-
-	if (!session->tsih)
-		ki->destroy_session(thandle, session->ksid);
+	if (!list_empty(&session->conn_list)) {
+		eprintf("%d conn_list is not null\n", session->tsih);
+		return;
+	}
 
 	if (session->target) {
 		list_del(&session->slist);
