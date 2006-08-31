@@ -1,0 +1,54 @@
+From 3f63e5e44b012927b6054f7025d3a5e7be6f7f09 Mon Sep 17 00:00:00 2001
+From: Mike Christie <michaelc@cs.wisc.edu>
+Date: Thu, 17 Aug 2006 23:52:17 +0900
+Subject: [PATCH 3/9] block layer: use blk_rq_bio_prep in init_request_from_bio
+
+Patch to use blk_rq_bio_prep in init_request_from_bio. And remove
+blk_rq_bio_prep's flags copying. The first three bits have not been
+the same for some time so that has been broken. The user of
+blk_rq_bio_prep will setup the request flags so if it wanted failfast
+or to be a barrier it will set the correct flag itself.
+
+Signed-off-by: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
+Signed-off-by: Mike Christie <michaelc@cs.wisc.edu>
+Signed-off-by: James Bottomley <James.Bottomley@SteelEye.com>
+---
+ block/ll_rw_blk.c |   11 ++---------
+ 1 files changed, 2 insertions(+), 9 deletions(-)
+
+diff --git a/block/ll_rw_blk.c b/block/ll_rw_blk.c
+index aee4f4b..3f46356 100644
+--- a/block/ll_rw_blk.c
++++ b/block/ll_rw_blk.c
+@@ -2838,16 +2838,12 @@ static void init_request_from_bio(struct
+ 
+ 	req->errors = 0;
+ 	req->hard_sector = req->sector = bio->bi_sector;
+-	req->hard_nr_sectors = req->nr_sectors = bio_sectors(bio);
+-	req->current_nr_sectors = req->hard_cur_sectors = bio_cur_sectors(bio);
+-	req->nr_phys_segments = bio_phys_segments(req->q, bio);
+-	req->nr_hw_segments = bio_hw_segments(req->q, bio);
+-	req->buffer = bio_data(bio);	/* see ->buffer comment above */
+ 	req->waiting = NULL;
+-	req->bio = req->biotail = bio;
+ 	req->ioprio = bio_prio(bio);
+ 	req->rq_disk = bio->bi_bdev->bd_disk;
+ 	req->start_time = jiffies;
++
++	blk_rq_bio_prep(req->q, req, bio);
+ }
+ 
+ static int __make_request(request_queue_t *q, struct bio *bio)
+@@ -3498,9 +3494,6 @@ EXPORT_SYMBOL(end_request);
+ 
+ void blk_rq_bio_prep(request_queue_t *q, struct request *rq, struct bio *bio)
+ {
+-	/* first two bits are identical in rq->flags and bio->bi_rw */
+-	rq->flags |= (bio->bi_rw & 3);
+-
+ 	rq->nr_phys_segments = bio_phys_segments(q, bio);
+ 	rq->nr_hw_segments = bio_hw_segments(q, bio);
+ 	rq->current_nr_sectors = bio_cur_sectors(bio);
+-- 
+1.4.1
+
