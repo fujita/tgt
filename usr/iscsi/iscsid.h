@@ -11,11 +11,11 @@
 #include <linux/types.h>
 
 #include "types.h"
-#include "iscsi_if.h"
 #include "list.h"
 #include "param.h"
 #include "log.h"
 
+#include <scsi/iscsi_if.h>
 #include <scsi/iscsi_proto.h>
 
 #define ISCSI_NAME_LEN 256

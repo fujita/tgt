@@ -1,4 +1,4 @@
-CFLAGS += -O2 -fno-inline -Wall -Wstrict-prototypes -fPIC -I$(KERNELSRC)/include -I../istgt/include -I../include -I. -D_LARGEFILE64_SOURCE
+CFLAGS += -O2 -fno-inline -Wall -Wstrict-prototypes -fPIC -D_LARGEFILE64_SOURCE -I$(KERNELSRC)/include -I../include -I.
 PROGRAMS = tgtd tgtadm
 TGTD_OBJS = tgtd.o tgtif.o mgmt.o target.o scsi.o log.o driver.o util.o
 
@@ -33,6 +33,4 @@ tgtadm: tgtadm.o
 	$(CC) $^ -o $@
 
 clean:
-	rm -f *.o $(PROGRAMS)
-	$(MAKE) -C iscsi clean
-	$(MAKE) -C ibmvio clean
+	rm -f *.o $(PROGRAMS) iscsi/*.o ibmvio/*.o
