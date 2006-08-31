@@ -872,7 +872,9 @@ static int iscsi_data_out_rx_start(struct connection *conn)
 	}
 	return -EINVAL;
 found:
-	eprintf("found a task %" PRIx64 " %u %u %u\n", ctask->tag,
+	eprintf("found a task %" PRIx64 " %u %u %u %u %u\n", ctask->tag,
+		ntohl(((struct iscsi_cmd *) (&ctask->req))->data_length),
+		ctask->offset,
 		ctask->r2t_count,
 		ntoh24(req->dlength), be32_to_cpu(req->offset));
 
@@ -905,7 +907,7 @@ static int iscsi_cmd_init(struct connection *conn)
 
 	list_add(&ctask->c_hlist, &conn->session->cmd_list);
 
-	dprintf("%u %x %d %d %u\n", conn->session->tsih,
+	dprintf("%u %x %d %d %x\n", conn->session->tsih,
 		req->cdb[0], ntohl(req->data_length),
 		req->flags & ISCSI_FLAG_CMD_ATTR_MASK, req->itt);
 
@@ -1029,7 +1031,6 @@ int iscsi_cmd_rx_start(struct connection *conn)
 	int err;
 
 	op = hdr->opcode & ISCSI_OPCODE_MASK;
-	dprintf("%u\n", op);
 	switch (op) {
 	case ISCSI_OP_SCSI_CMD:
 		err = iscsi_cmd_init(conn);
@@ -1103,6 +1104,11 @@ int iscsi_cmd_tx_start(struct connection *conn)
 
 	ctask = list_entry(conn->tx_clist.next, struct iscsi_ctask, c_txlist);
 	conn->tx_ctask = ctask;
+	eprintf("found a task %" PRIx64 " %u %u %u\n", ctask->tag,
+		ntohl(((struct iscsi_cmd *) (&ctask->req))->data_length),
+		ctask->offset,
+		ctask->r2t_count);
+
 	list_del(&ctask->c_txlist);
 
 	req = (struct iscsi_cmd *) &ctask->req;
