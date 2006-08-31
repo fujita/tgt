@@ -849,7 +849,7 @@ int iscsi_cmd_done(int host_no, int len, int result, int rw, uint64_t addr,
 	return -EINVAL;
 
 found:
-	eprintf("found a task %" PRIx64 "\n", tag);
+	dprintf("found a task %" PRIx64 "\n", tag);
 	ctask->addr = addr;
 	ctask->result = result;
 	ctask->len = len;
@@ -872,7 +872,7 @@ static int iscsi_data_out_rx_start(struct connection *conn)
 	}
 	return -EINVAL;
 found:
-	eprintf("found a task %" PRIx64 " %u %u %u %u %u\n", ctask->tag,
+	dprintf("found a task %" PRIx64 " %u %u %u %u %u\n", ctask->tag,
 		ntohl(((struct iscsi_cmd *) (&ctask->req))->data_length),
 		ctask->offset,
 		ctask->r2t_count,
@@ -1104,7 +1104,7 @@ int iscsi_cmd_tx_start(struct connection *conn)
 
 	ctask = list_entry(conn->tx_clist.next, struct iscsi_ctask, c_txlist);
 	conn->tx_ctask = ctask;
-	eprintf("found a task %" PRIx64 " %u %u %u\n", ctask->tag,
+	dprintf("found a task %" PRIx64 " %u %u %u\n", ctask->tag,
 		ntohl(((struct iscsi_cmd *) (&ctask->req))->data_length),
 		ctask->offset,
 		ctask->r2t_count);
