@@ -207,11 +207,6 @@ extern void cmnd_finish(struct connection *conn);
 extern char *text_key_find(struct connection *conn, char *searchKey);
 extern void text_key_add(struct connection *conn, char *key, char *value);
 
-extern int iscsi_cmd_rx_start(struct connection *conn);
-extern int iscsi_cmd_rx_done(struct connection *conn);
-extern int iscsi_cmd_tx_start(struct connection *conn);
-extern int iscsi_cmd_tx_done(struct connection *conn);
-
 /* session.c */
 extern struct session *session_find_name(int tid, const char *iname, uint8_t *isid);
 extern int session_create(struct connection *conn);
@@ -222,7 +217,6 @@ extern struct session *session_lookup(uint16_t tsih);
 extern int target_find_by_name(const char *name, int *tid);
 struct target * target_find_by_id(int tid);
 extern void target_list_build(struct connection *, char *, char *);
-extern int target_bind(int tid, int hostno);
 
 /* param.c */
 int param_index_by_name(char *name, struct iscsi_key *keys);
