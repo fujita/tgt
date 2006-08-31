@@ -1,3 +1,24 @@
+/*
+ * AIO file backed routine
+ *
+ * Copyright (C) 2006 FUJITA Tomonori <tomof@acm.org>
+ * Copyright (C) 2006 Mike Christie <michaelc@cs.wisc.edu>
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation; either version 2 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+ * 02110-1301 USA
+ */
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -5,14 +26,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <signal.h>
+#include <libaio.h>
 
 #include <linux/fs.h>
+#include <sys/epoll.h>
 
 #include "list.h"
 #include "util.h"
 #include "tgtd.h"
-#include "libaio.h"
 
 /*
  * We need an interface to wait for both synchronous and asynchronous
@@ -39,17 +60,21 @@ struct bd_aio_info {
 	struct io_event events[MAX_AIO_REQS];
 };
 
-static void aio_event_handler(int fd, void *data)
+static void aio_event_handler(int fd, int events, void *data)
 {
-	struct tgt_device *dev = (struct tgt_device *) data;
-	struct bd_aio_info *bai = (struct bd_aio_info *) dev->bddata;
+	struct tgt_device *dev;
+	struct bd_aio_info *bai;
 	int i, nr;
 	struct iocb *iocb;
+
+	dev = (struct tgt_device *) data;
+	bai = (struct bd_aio_info *) dev->bddata;
 
 	nr = io_getevents(bai->ctx, 0, MAX_AIO_REQS, bai->events, NULL);
 
 	for (i = 0; i < nr; i++) {
 		iocb = bai->events[i].obj;
+		dprintf("%p\n", iocb->data);
 		target_cmd_io_done(iocb->data, 0);
 	}
 }
@@ -60,24 +85,28 @@ static struct tgt_device *bd_aio_open(char *path, int *fd, uint64_t *size)
 	struct bd_aio_info *bai;
 	int err;
 
-	dev = malloc(sizeof(*dev) + sizeof(struct bd_aio_info));
+	dev = zalloc(sizeof(*dev) + sizeof(*bai));
 	if (!dev)
 		return NULL;
 
-	*fd = backed_file_open(path, O_RDWR| O_LARGEFILE | O_DIRECT, size);
+	*fd = backed_file_open(path, O_RDWR| O_LARGEFILE, size);
 	if (*fd < 0)
-		goto free_info;
+		goto free_dev;
 
-	bai = (struct bd_aio_info *)dev->bddata;
+	bai = (struct bd_aio_info *) dev->bddata;
 
 	bai->ctx = (io_context_t) REQUEST_ASYNC_FD;
 	bai->aio_fd = io_setup(MAX_AIO_REQS, &bai->ctx);
-	if (bai->aio_fd < 0)
+	if (bai->aio_fd < 0) {
+		eprintf("Can't setup aio fd, %m\n");
 		goto close_fd;
+	}
 
-	err = tgt_event_add(bai->aio_fd, POLL_IN, aio_event_handler, dev);
+	err = tgt_event_add(bai->aio_fd, EPOLLIN, aio_event_handler, dev);
 	if (err)
 		goto aio_cb_destroy;
+
+	dprintf("Succeeded to setup aio fd, %s\n", path);
 
 	bai->fd = *fd;
 	return dev;
@@ -86,7 +115,7 @@ aio_cb_destroy:
 	io_destroy(bai->ctx);
 close_fd:
 	close(*fd);
-free_info:
+free_dev:
 	free(dev);
 
 	return NULL;
@@ -107,19 +136,24 @@ static int bd_aio_cmd_submit(struct tgt_device *dev, int rw, uint32_t datalen,
 {
 	struct bd_aio_info *bai = (struct bd_aio_info *) dev->bddata;
 	struct iocb iocb, *io;
+	int err;
 
 	*async = 1;
 
 	io = &iocb;
 	memset(io, 0, sizeof(*io));
 
-	io->data = key;
-	if (rw == READ)
-		io_prep_pread(io, bai->fd, uaddr, datalen, offset);
-	else
-		io_prep_pwrite(io, bai->fd, uaddr, datalen, offset);
+	dprintf("%d %d %u %lx %" PRIx64 " %p\n", bai->fd, rw, datalen, *uaddr, offset, key);
 
-	return io_submit(bai->ctx, 1, &io);
+	if (rw == READ)
+		io_prep_pread(io, bai->fd, (void *) *uaddr, datalen, offset);
+	else
+		io_prep_pwrite(io, bai->fd, (void *) *uaddr, datalen, offset);
+
+	io->data = key;
+	err = io_submit(bai->ctx, 1, &io);
+
+	return 0;
 }
 
 static int bd_aio_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)

@@ -124,19 +124,47 @@ int tgt_event_add(int fd, int events, event_handler_t handler, void *data)
 	return err;
 }
 
+static struct tgt_event *tgt_event_lookup(int fd)
+{
+	struct tgt_event *tev;
+
+	list_for_each_entry(tev, &tgt_events_list, e_list) {
+		if (tev->fd == fd)
+			return tev;
+	}
+	return NULL;
+}
+
 void tgt_event_del(int fd)
 {
 	struct tgt_event *tev;
 
-	epoll_ctl(ep_fd, EPOLL_CTL_DEL, fd, NULL);
-
-	list_for_each_entry(tev, &tgt_events_list, e_list) {
-		if (tev->fd == fd) {
-			list_del(&tev->e_list);
-			free(tev);
-			break;
-		}
+	tev = tgt_event_lookup(fd);
+	if (!tev) {
+		eprintf("Cannot find event %d\n", fd);
+		return;
 	}
+
+	epoll_ctl(ep_fd, EPOLL_CTL_DEL, fd, NULL);
+	list_del(&tev->e_list);
+	free(tev);
+}
+
+int tgt_event_modify(int fd, int events)
+{
+	struct epoll_event ev;
+	struct tgt_event *tev;
+
+	tev = tgt_event_lookup(fd);
+	if (!tev) {
+		eprintf("Cannot find event %d\n", fd);
+		return -EINVAL;
+	}
+
+	ev.events = events;
+	ev.data.ptr = tev;
+
+	return epoll_ctl(ep_fd, EPOLL_CTL_MOD, fd, &ev);
 }
 
 static void event_loop(void)
@@ -162,7 +190,7 @@ retry:
 
 	for (i = 0; i < nevent; i++) {
 		tev = (struct tgt_event *) events[i].data.ptr;
-		tev->handler(tev->fd, tev->data);
+		tev->handler(tev->fd, events[i].events, tev->data);
 	}
 
 	goto retry;
@@ -171,7 +199,7 @@ retry:
 static int lld_init(char *data)
 {
 	char *list, *p, *q;
-	int index, err, np, ndriver = 0;
+	int index, err, ndriver = 0;
 
 	p = list = strdup(data);
 	if (!p)
@@ -184,9 +212,8 @@ static int lld_init(char *data)
 		index = get_driver_index(p);
 		p = q;
 		if (index >= 0) {
-			np = 0;
 			if (tgt_drivers[index]->init) {
-				err = tgt_drivers[index]->init(&np);
+				err = tgt_drivers[index]->init();
 				if (err)
 					continue;
 			}
@@ -239,7 +266,14 @@ int main(int argc, char **argv)
 		}
 	}
 
-	nr_lld = lld_init(modes);
+	ep_fd = epoll_create(maxfds);
+	if (ep_fd < 0) {
+		fprintf(stderr, "can't create epoll fd, %m\n");
+		exit(1);
+	}
+
+	if (modes)
+		nr_lld = lld_init(modes);
 	if (!nr_lld) {
 		printf("No available low level driver!\n");
 		exit(1);
@@ -253,12 +287,6 @@ int main(int argc, char **argv)
 	err = log_init(program_name, LOG_SPACE_SIZE, is_daemon, is_debug);
 	if (err)
 		exit(1);
-
-	ep_fd = epoll_create(maxfds);
-	if (ep_fd < 0) {
-		eprintf("can't create epoll fd, %m\n");
-		exit(1);
-	}
 
 	err = kreq_init();
 	if (err)

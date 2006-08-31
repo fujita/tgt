@@ -1,9 +1,9 @@
-extern struct backedio_template mmap_bdt;
+extern struct backedio_template mmap_bdt, aio_bdt;
 
 struct tgt_driver {
 	const char *name;
 
-	int (*init) (int *);
+	int (*init) (void);
 
 	int (*target_create) (int, char *);
 	int (*target_destroy) (int);

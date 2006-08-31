@@ -412,7 +412,7 @@ static uint64_t scsi_cmd_data_offset(uint8_t *scb)
 
 static int scsi_cmd_rw(uint8_t *scb, uint8_t *rw)
 {
-	int is_data = 1;
+	int is_alloc = 0;
 
 	switch (scb[0]) {
 	case READ_6:
@@ -427,9 +427,9 @@ static int scsi_cmd_rw(uint8_t *scb, uint8_t *rw)
 		*rw = WRITE;
 		break;
 	default:
-		is_data = 0;
+		is_alloc = 1;
 	}
-	return is_data;
+	return is_alloc;
 }
 
 #define        TGT_INVALID_DEV_ID      ~0ULL
@@ -461,20 +461,22 @@ uint64_t scsi_get_devid(int lid, uint8_t *p)
 	return fn(p);
 }
 
-int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu, int *len,
-		     uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
+int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu,
+		     int *len, uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
 		     uint8_t *try_map, uint64_t *offset, uint8_t *lun_buf,
 		     struct tgt_device *dev, struct list_head *dev_list, int *async,
 		     void *key)
 {
 	int result = SAM_STAT_GOOD;
-	uint8_t *data, *scb = pdu;
+	uint8_t *data = NULL, *scb = pdu;
 
 	dprintf("%x %u\n", scb[0], datalen);
 
 	*async = *offset = 0;
-	data = tgt_drivers[lid]->bdt->bd_cmd_buffer_alloc(scsi_cmd_rw(scb, rw),
-							  datalen);
+	if (scsi_cmd_rw(scb, rw)) {
+		data = valloc(PAGE_SIZE);
+		memset(data, 0, PAGE_SIZE);
+	}
 
 	if (!dev)
 		switch (scb[0]) {

@@ -246,7 +246,8 @@ static void cmd_post_perform(struct tgt_cmd_queue *q, struct cmd *cmd,
 	}
 }
 
-int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun, uint32_t data_len,
+int target_cmd_queue(int host_no, uint8_t *scb, unsigned long uaddr,
+		     uint8_t *lun, uint32_t data_len,
 		     int attribute, uint64_t tag)
 {
 	struct target *target;
@@ -255,7 +256,6 @@ int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun, uint32_t data_len,
 	int result, enabled, async, len = 0;
 	uint64_t offset, dev_id;
 	uint8_t rw = 0, mmapped = 0;
-	unsigned long uaddr = 0;
 
 	target = host_to_target(host_no);
 	if (!target) {
@@ -278,10 +278,9 @@ int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun, uint32_t data_len,
 	dprintf("%x %" PRIx64 "\n", scb[0], dev_id);
 
 	cmd->dev = device_lookup(target, dev_id);
-	if (cmd->dev) {
-		uaddr = cmd->dev->addr;
+	if (cmd->dev)
 		q = &cmd->dev->cmd_queue;
-	} else
+	else
 		q = &target->cmd_queue;
 
 	enabled = cmd_enabled(q, cmd);
@@ -295,8 +294,8 @@ int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun, uint32_t data_len,
 
 		cmd_post_perform(q, cmd, uaddr, len, mmapped);
 
-		dprintf("%" PRIx64 " %x %lx %" PRIu64 " %d\n",
-			tag, scb[0], uaddr, offset, result);
+		dprintf("%" PRIx64 " %x %lx %" PRIu64 " %d %d\n",
+			tag, scb[0], uaddr, offset, result, async);
 
 		cmd->rw = rw;
 		set_cmd_processed(cmd);
@@ -312,6 +311,7 @@ int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun, uint32_t data_len,
 		memcpy(cmd->scb, scb, sizeof(cmd->scb));
 		memcpy(cmd->lun, lun, sizeof(cmd->lun));
 		cmd->len = data_len;
+		cmd->uaddr = uaddr;
 		list_add_tail(&cmd->qlist, &q->queue);
 	}
 
@@ -336,7 +336,6 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 	int enabled, result, async, len = 0;
 	uint8_t rw = 0, mmapped = 0;
 	uint64_t offset;
-	unsigned long uaddr = 0;
 
 	list_for_each_entry_safe(cmd, tmp, &q->queue, qlist) {
 		enabled = cmd_enabled(q, cmd);
@@ -345,20 +344,21 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 			dprintf("perform %" PRIx64 " %x\n", cmd->tag, cmd->attribute);
 			result = scsi_cmd_perform(cmd->c_target->lid,
 						  cmd->hostno, cmd->scb,
-						  &len, cmd->len, &uaddr,
+						  &len, cmd->len,
+						  (unsigned long *) &cmd->uaddr,
 						  &rw, &mmapped, &offset,
 						  cmd->lun, cmd->dev,
 						  &cmd->c_target->device_list,
 						  &async, (void *) cmd);
 			cmd->rw = rw;
-			cmd_post_perform(q, cmd, uaddr, len, mmapped);
+			cmd_post_perform(q, cmd, cmd->uaddr, len, mmapped);
 			set_cmd_processed(cmd);
 			if (!async)
 				tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->hostno,
 										len,
 										result,
 										rw,
-										uaddr,
+										cmd->uaddr,
 										cmd->tag);
 		} else
 			break;

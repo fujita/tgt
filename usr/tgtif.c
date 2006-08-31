@@ -24,12 +24,12 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <inttypes.h>
-#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/epoll.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 
@@ -106,7 +106,7 @@ int kspace_send_cmd_res(int host_no, int len, int result,
 	return kreq_send(&ev);
 }
 
-static void kern_event_handler(int fd, void *data)
+static void kern_event_handler(int fd, int events, void *data)
 {
 	struct tgt_event *ev;
 
@@ -120,6 +120,8 @@ retry:
 	switch (ev->type) {
 	case TGT_KEVENT_CMD_REQ:
 		target_cmd_queue(ev->k.cmd_req.host_no, ev->k.cmd_req.scb,
+				 0,
+/* 				 ev->k.cmd_req.uaddr, */
 				 ev->k.cmd_req.lun, ev->k.cmd_req.data_len,
 				 ev->k.cmd_req.attribute, ev->k.cmd_req.tag);
 		break;
@@ -200,7 +202,7 @@ int kreq_init(void)
 	kuring.buf = buf;
 	ukring.buf = buf + size;
 
-	err = tgt_event_add(chrfd, POLL_IN, kern_event_handler, NULL);
+	err = tgt_event_add(chrfd, EPOLLIN, kern_event_handler, NULL);
 	if (err)
 		close(chrfd);
 	return err;

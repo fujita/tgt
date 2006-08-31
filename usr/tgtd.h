@@ -29,7 +29,6 @@ struct tgt_device {
 struct backedio_template {
 	struct tgt_device *(*bd_open)(char *path, int *fd, uint64_t *size);
 	void (*bd_close)(struct tgt_device *dev);
-	void *(*bd_cmd_buffer_alloc)(int devio, uint32_t datalen);
 	int (*bd_cmd_submit)(struct tgt_device *dev, int rw, uint32_t datalen,
 			     unsigned long *uaddr, uint64_t offset, int *async,
 			     void *key);
@@ -49,12 +48,14 @@ extern int tgt_target_create(int tid);
 extern int tgt_target_destroy(int tid);
 extern int tgt_target_bind(int tid, int host_no, int lid);
 
-typedef void (event_handler_t)(int fd, void *data);
+typedef void (event_handler_t)(int fd, int events, void *data);
 extern int tgt_event_add(int fd, int events, event_handler_t handler, void *data);
 extern void tgt_event_del(int fd);
+extern int tgt_event_modify(int fd, int events);
 
-extern int target_cmd_queue(int host_no, uint8_t *scb, uint8_t *lun,
-			    uint32_t data_len, int attribute, uint64_t tag);
+extern int target_cmd_queue(int host_no, uint8_t *scb, unsigned long uaddr,
+			    uint8_t *lun, uint32_t data_len,
+			    int attribute, uint64_t tag);
 extern void target_cmd_done(int host_no, uint64_t tag);
 extern void target_mgmt_request(int host_no, int req_id, int function,
 				uint8_t *lun, uint64_t tag);

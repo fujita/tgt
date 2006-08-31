@@ -28,7 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <signal.h>
+#include <sys/epoll.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -196,7 +196,7 @@ static void ipc_send_res(int fd, struct tgtadm_res *res)
 		eprintf("can't write, %m\n");
 }
 
-static void mgmt_event_handler(int accept_fd, void *data)
+static void mgmt_event_handler(int accept_fd, int events, void *data)
 {
 	int fd, err;
 	char sbuf[BUFSIZE], rbuf[BUFSIZE];
@@ -304,12 +304,12 @@ int ipc_init(void)
 	}
 
 	err = listen(fd, 32);
-	if (err < 0) {
+	if (err) {
 		eprintf("can't listen a socket, %m\n");
 		goto out;
 	}
 
-	err = tgt_event_add(fd, POLL_IN, mgmt_event_handler, NULL);
+	err = tgt_event_add(fd, EPOLLIN, mgmt_event_handler, NULL);
 	if (err)
 		goto out;
 

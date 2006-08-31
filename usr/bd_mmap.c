@@ -54,18 +54,6 @@ static void bd_mmap_close(struct tgt_device *dev)
 	free(dev);
 }
 
-static void *bd_mmap_cmd_buffer_alloc(int devio, uint32_t datalen)
-{
-	void *data = NULL;
-	if (!devio) {
-		datalen = ALIGN(datalen, PAGE_SIZE);
-		data = valloc(datalen);
-		if (data)
-			memset(data, 0, datalen);
-	}
-	return data;
-}
-
 static int bd_mmap_cmd_submit(struct tgt_device *dev, int rw, uint32_t datalen,
 			      unsigned long *uaddr, uint64_t offset, int *async,
 			      void *key)
@@ -114,7 +102,6 @@ static int bd_mmap_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
 struct backedio_template mmap_bdt = {
 	.bd_open		= bd_mmap_open,
 	.bd_close		= bd_mmap_close,
-	.bd_cmd_buffer_alloc	= bd_mmap_cmd_buffer_alloc,
 	.bd_cmd_submit		= bd_mmap_cmd_submit,
 	.bd_cmd_done		= bd_mmap_cmd_done,
 };
