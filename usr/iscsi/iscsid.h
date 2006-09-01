@@ -9,7 +9,6 @@
 
 #include <stdint.h>
 #include <inttypes.h>
-#include <sys/types.h>
 #include <linux/types.h>
 #include <asm/byteorder.h>
 
@@ -28,7 +27,7 @@
 #define ISCSI_NAME_LEN 256
 #define ISTGT_NAMESPACE "ISTGT_ABSTRACT_NAMESPACE"
 
-#define DIGEST_ALL	(DIGEST_NONE | DIGEST_CRC32C)
+#define DIGEST_ALL		(DIGEST_NONE | DIGEST_CRC32C)
 #define DIGEST_NONE		(1 << 0)
 #define DIGEST_CRC32C           (1 << 1)
 
@@ -108,7 +107,6 @@ struct connection {
 	uint8_t isid[6];
 	uint16_t tsih;
 	uint16_t cid;
-	uint16_t pad;
 	int session_type;
 	int auth_method;
 
@@ -179,7 +177,7 @@ struct connection {
 #define AUTH_CHAP		1
 #define DIGEST_UNKNOWN		-1
 
-#define BHS_SIZE		48
+#define BHS_SIZE		sizeof(struct iscsi_hdr)
 
 #define INCOMING_BUFSIZE	8192
 
@@ -227,9 +225,5 @@ extern void target_list_build(struct connection *, char *, char *);
 
 /* param.c */
 int param_index_by_name(char *name, struct iscsi_key *keys);
-
-#define log_pdu(x, y)							\
-do {									\
-} while (0)
 
 #endif	/* ISCSID_H */

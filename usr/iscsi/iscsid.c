@@ -692,19 +692,16 @@ int cmnd_execute(struct connection *conn)
 		cmnd_exec_login(conn);
 		conn->rsp.bhs.hlength = conn->rsp.ahssize / 4;
 		hton24(conn->rsp.bhs.dlength, conn->rsp.datasize);
-		log_pdu(2, &conn->rsp);
 		break;
 	case ISCSI_OP_TEXT:
 		cmnd_exec_text(conn);
 		conn->rsp.bhs.hlength = conn->rsp.ahssize / 4;
 		hton24(conn->rsp.bhs.dlength, conn->rsp.datasize);
-		log_pdu(2, &conn->rsp);
 		break;
 	case ISCSI_OP_LOGOUT:
 		cmnd_exec_logout(conn);
 		conn->rsp.bhs.hlength = conn->rsp.ahssize / 4;
 		hton24(conn->rsp.bhs.dlength, conn->rsp.datasize);
-		log_pdu(2, &conn->rsp);
 		break;
 	default:
 		/* reject */
