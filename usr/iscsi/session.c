@@ -78,6 +78,7 @@ int session_create(struct connection *conn)
 
 	INIT_LIST_HEAD(&session->conn_list);
 	INIT_LIST_HEAD(&session->cmd_list);
+	INIT_LIST_HEAD(&session->pending_cmd_list);
 
 	memcpy(session->isid, conn->isid, sizeof(session->isid));
 	session->tsih = last_tsih = tsih;
@@ -88,6 +89,7 @@ int session_create(struct connection *conn)
 	dprintf("session_create: %#" PRIx64 "\n", sid64(conn->isid, session->tsih));
 
 	list_add(&session->hlist, &sessions_list);
+	session->exp_cmd_sn = conn->exp_cmd_sn;
 
 	return 0;
 }

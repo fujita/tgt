@@ -52,7 +52,10 @@ struct PDU {
 #define KEY_STATE_DONE		2
 
 struct session {
+	/* linked to target->sessions_list */
 	struct list_head slist;
+
+	/* linked to sessions_list */
 	struct list_head hlist;
 
 	char *initiator;
@@ -60,10 +63,17 @@ struct session {
 	uint8_t isid[6];
 	uint16_t tsih;
 
+	/* links all connections (conn->clist) */
 	struct list_head conn_list;
 	int conn_cnt;
 
+	/* links all tasks (ctask->c_hlist) */
 	struct list_head cmd_list;
+
+	/* links pending tasks (ctask->c_list) */
+	struct list_head pending_cmd_list;
+
+	uint32_t exp_cmd_sn;
 };
 
 struct iscsi_ctask {
@@ -73,8 +83,13 @@ struct iscsi_ctask {
 	uint64_t tag;
 	struct connection *conn;
 
+	/* linked to session->cmd_list */
 	struct list_head c_hlist;
-	struct list_head c_txlist;
+
+	/* linked to conn->tx_clist or session->cmd_pending_list */
+	struct list_head c_list;
+
+	unsigned long flags;
 
 	uint64_t addr;
 	int result;
@@ -193,6 +208,14 @@ struct target {
 	int max_nr_sessions;
 	int nr_sessions;
 };
+
+enum task_flags {
+	TASK_pending,
+};
+
+#define set_task_pending(t)	((t)->flags |= (1 << TASK_pending))
+#define clear_task_pending(t)	((t)->flags &= ~(1 << TASK_pending))
+#define task_pending(t)		((t)->flags & (1 << TASK_pending))
 
 /* chap.c */
 extern int cmnd_exec_auth_chap(struct connection *conn);

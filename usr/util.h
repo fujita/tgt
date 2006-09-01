@@ -47,4 +47,20 @@ extern int backed_file_open(char *path, int oflag, uint64_t *size);
 	ptr;				\
 })
 
+static inline int before(uint32_t seq1, uint32_t seq2)
+{
+        return (int32_t)(seq1 - seq2) < 0;
+}
+
+static inline int after(uint32_t seq1, uint32_t seq2)
+{
+	return (int32_t)(seq2 - seq1) < 0;
+}
+
+/* is s2<=s1<=s3 ? */
+static inline int between(uint32_t seq1, uint32_t seq2, uint32_t seq3)
+{
+	return seq3 - seq2 >= seq1 - seq2;
+}
+
 #endif
