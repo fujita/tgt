@@ -822,7 +822,6 @@ static int iscsi_r2t_build(struct iscsi_ctask *ctask)
 	rsp->ttt = (unsigned long) ctask;
 	length = min(ctask->r2t_count, max_burst);
 	rsp->data_length = cpu_to_be32(length);
-	ctask->r2t_count -= length;
 
 	return 0;
 }
@@ -1010,6 +1009,7 @@ found:
 	conn->rx_size = ntoh24(req->dlength);
 
 	ctask->offset += ntoh24(req->dlength);
+	ctask->r2t_count -= ntoh24(req->dlength);
 
 	conn->rx_ctask = ctask;
 
