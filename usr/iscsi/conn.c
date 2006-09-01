@@ -16,9 +16,6 @@
 #include "tgtd.h"
 #include "util.h"
 
-#define ISCSI_CONN_NEW		1
-#define ISCSI_CONN_EXIT		5
-
 void conn_add_to_session(struct connection *conn, struct session *session)
 {
 	if (!list_empty(&conn->clist)) {
@@ -91,10 +88,8 @@ int conn_take_fd(struct connection *conn, int fd)
 
 	conn->session->conn_cnt++;
 
-	/* FIXME */
-	tgt_target_bind(conn->session->target->tid, conn->tsih, 0);
-
-	return 0;
+	/* FIXME: Use appropriate lid. */
+	return tgt_target_bind(conn->session->target->tid, conn->tsih, 0);
 }
 
 void conn_read_pdu(struct connection *conn)
