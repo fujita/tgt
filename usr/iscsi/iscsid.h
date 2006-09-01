@@ -230,8 +230,6 @@ extern void conn_write_pdu(struct connection *conn);
 extern void conn_add_to_session(struct connection *conn, struct session *session);
 
 /* iscsid.c */
-extern int cmnd_execute(struct connection *conn);
-extern void cmnd_finish(struct connection *conn);
 extern char *text_key_find(struct connection *conn, char *searchKey);
 extern void text_key_add(struct connection *conn, char *key, char *value);
 

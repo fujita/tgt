@@ -685,7 +685,7 @@ static void cmnd_exec_logout(struct connection *conn)
 	rsp->max_cmdsn = cpu_to_be32(conn->max_cmd_sn);
 }
 
-int cmnd_execute(struct connection *conn)
+static int cmnd_execute(struct connection *conn)
 {
 	int res = 0;
 
@@ -714,7 +714,7 @@ int cmnd_execute(struct connection *conn)
 	return res;
 }
 
-void cmnd_finish(struct connection *conn)
+static void cmnd_finish(struct connection *conn)
 {
 	switch (conn->state) {
 	case STATE_EXIT:
@@ -932,7 +932,7 @@ static int iscsi_cmd_init(struct connection *conn)
 	return 0;
 }
 
-int cmd_attr(struct iscsi_ctask *ctask)
+static int cmd_attr(struct iscsi_ctask *ctask)
 {
 	int attr;
 	struct iscsi_cmd *req = (struct iscsi_cmd *) &ctask->req;
@@ -952,7 +952,7 @@ int cmd_attr(struct iscsi_ctask *ctask)
 	return attr;
 }
 
-static int __iscsi_cmd_rx_done(struct iscsi_ctask *ctask)
+static int iscsi_scsi_cmd_execute(struct iscsi_ctask *ctask)
 {
 	struct connection *conn = ctask->conn;
 	struct iscsi_cmd *req = (struct iscsi_cmd *) &ctask->req;
@@ -981,16 +981,45 @@ static int __iscsi_cmd_rx_done(struct iscsi_ctask *ctask)
 	return err;
 }
 
-int iscsi_task_queue(struct iscsi_ctask *ctask)
+static int iscsi_task_execute(struct iscsi_ctask *task)
+{
+	struct iscsi_hdr *hdr = (struct iscsi_hdr *) &task->req;
+	uint8_t op = hdr->opcode & ISCSI_OPCODE_MASK;
+	int err;
+
+	switch (op) {
+	case ISCSI_OP_NOOP_OUT:
+/* 		noop_out_exec(cmnd); */
+		break;
+	case ISCSI_OP_SCSI_CMD:
+		err = iscsi_scsi_cmd_execute(task);
+		break;
+	case ISCSI_OP_SCSI_TMFUNC:
+/* 		execute_task_management(cmnd); */
+		break;
+	case ISCSI_OP_LOGOUT:
+/* 		logout_exec(cmnd); */
+		break;
+	case ISCSI_OP_TEXT:
+	case ISCSI_OP_SNACK:
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+static int iscsi_task_queue(struct iscsi_ctask *ctask)
 {
 	struct session *session = ctask->conn->session;
 	struct iscsi_hdr *req = (struct iscsi_hdr *) &ctask->req;
 	uint32_t cmd_sn;
 	struct iscsi_ctask *ent;
+	int err;
 
 	if (req->opcode & ISCSI_OP_IMMEDIATE) {
-		__iscsi_cmd_rx_done(ctask);
-		return 0;
+		return iscsi_task_execute(ctask);
 	}
 
 	dprintf("%x %x\n", be32_to_cpu(req->statsn), session->exp_cmd_sn);
@@ -999,7 +1028,8 @@ int iscsi_task_queue(struct iscsi_ctask *ctask)
 	retry:
 		session->exp_cmd_sn = ++cmd_sn;
 
-		__iscsi_cmd_rx_done(ctask);
+		/* Should we close the connection... */
+		err = iscsi_task_execute(ctask);
 
 		if (list_empty(&session->pending_cmd_list))
 			return 0;
@@ -1031,7 +1061,7 @@ int iscsi_task_queue(struct iscsi_ctask *ctask)
 	return 0;
 }
 
-int iscsi_cmd_rx_done(struct connection *conn)
+static int iscsi_cmd_rx_done(struct connection *conn)
 {
 	struct iscsi_hdr *hdr = &conn->req.bhs;
 	struct iscsi_ctask *ctask = conn->rx_ctask;
@@ -1070,7 +1100,7 @@ int iscsi_cmd_rx_done(struct connection *conn)
 	return err;
 }
 
-int iscsi_cmd_rx_start(struct connection *conn)
+static int iscsi_cmd_rx_start(struct connection *conn)
 {
 	struct iscsi_hdr *hdr = &conn->req.bhs;
 	uint8_t op;
@@ -1104,7 +1134,7 @@ int iscsi_cmd_rx_start(struct connection *conn)
 	return 0;
 }
 
-int iscsi_cmd_tx_done(struct connection *conn)
+static int iscsi_cmd_tx_done(struct connection *conn)
 {
 	struct iscsi_hdr *hdr = &conn->rsp.bhs;
 	struct iscsi_ctask *ctask = conn->tx_ctask;
@@ -1134,7 +1164,7 @@ out:
 	return 0;
 }
 
-int iscsi_cmd_tx_start(struct connection *conn)
+static int iscsi_cmd_tx_start(struct connection *conn)
 {
 	struct iscsi_ctask *ctask;
 	struct iscsi_cmd *req;
