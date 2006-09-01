@@ -67,16 +67,16 @@ struct session {
 	struct list_head conn_list;
 	int conn_cnt;
 
-	/* links all tasks (ctask->c_hlist) */
+	/* links all tasks (task->c_hlist) */
 	struct list_head cmd_list;
 
-	/* links pending tasks (ctask->c_list) */
+	/* links pending tasks (task->c_list) */
 	struct list_head pending_cmd_list;
 
 	uint32_t exp_cmd_sn;
 };
 
-struct iscsi_ctask {
+struct iscsi_task {
 	struct iscsi_hdr req;
 	struct iscsi_hdr rsp;
 
@@ -141,8 +141,8 @@ struct connection {
 	int rx_size;
 	int tx_size;
 
-	struct iscsi_ctask *rx_ctask;
-	struct iscsi_ctask *tx_ctask;
+	struct iscsi_task *rx_task;
+	struct iscsi_task *tx_task;
 
 	struct list_head tx_clist;
 
