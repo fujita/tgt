@@ -3,7 +3,7 @@
 #
 
 #IBMVIO=1
-ISCSI=1
+#ISCSI=1
 
 ifeq ($(KERNELSRC),)
 	KERNELSRC ?= /lib/modules/$(shell uname -r)/build

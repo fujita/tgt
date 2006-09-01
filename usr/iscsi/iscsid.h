@@ -7,16 +7,23 @@
 #ifndef ISCSID_H
 #define ISCSID_H
 
+#include <stdint.h>
+#include <inttypes.h>
 #include <sys/types.h>
 #include <linux/types.h>
+#include <asm/byteorder.h>
 
-#include "types.h"
 #include "list.h"
 #include "param.h"
 #include "log.h"
 
 #include <scsi/iscsi_if.h>
 #include <scsi/iscsi_proto.h>
+
+#define cpu_to_be16(x)	__cpu_to_be16(x)
+#define cpu_to_be32(x)	__cpu_to_be32(x)
+#define be16_to_cpu(x)	__be16_to_cpu(x)
+#define be32_to_cpu(x)	__be32_to_cpu(x)
 
 #define ISCSI_NAME_LEN 256
 #define ISTGT_NAMESPACE "ISTGT_ABSTRACT_NAMESPACE"
