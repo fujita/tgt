@@ -438,7 +438,7 @@ static void cmnd_exec_login(struct connection *conn)
 	memset(rsp, 0, BHS_SIZE);
 	if ((req->opcode & ISCSI_OPCODE_MASK) != ISCSI_OP_LOGIN ||
 	    !(req->opcode & ISCSI_OP_IMMEDIATE)) {
-		//reject
+		/* reject */
 	}
 
 	rsp->opcode = ISCSI_OP_LOGIN_RSP;
@@ -446,7 +446,7 @@ static void cmnd_exec_login(struct connection *conn)
 	rsp->active_version = ISCSI_DRAFT20_VERSION;
 	rsp->itt = req->itt;
 
-	if (/*req->max_version < ISCSI_VERSION ||*/
+	if (/* req->max_version < ISCSI_VERSION || */
 	    req->min_version > ISCSI_DRAFT20_VERSION) {
 		rsp->status_class = ISCSI_STATUS_CLS_INITIATOR_ERR;
 		rsp->status_detail = ISCSI_LOGIN_STATUS_NO_VERSION;
@@ -465,7 +465,7 @@ static void cmnd_exec_login(struct connection *conn)
 			login_start(conn);
 			if (rsp->status_class)
 				return;
-			//else fall through
+			/* fall through */
 		case STATE_SECURITY:
 			text_scan_security(conn);
 			if (rsp->status_class)
@@ -648,7 +648,7 @@ static void cmnd_exec_text(struct connection *conn)
 	}
 	rsp->opcode = ISCSI_OP_TEXT_RSP;
 	rsp->itt = req->itt;
-	//rsp->ttt = rsp->ttt;
+	/* rsp->ttt = rsp->ttt; */
 	rsp->ttt = 0xffffffff;
 	conn->exp_cmd_sn = be32_to_cpu(req->cmdsn);
 	if (!(req->opcode & ISCSI_OP_IMMEDIATE))
@@ -689,28 +689,25 @@ int cmnd_execute(struct connection *conn)
 
 	switch (conn->req.bhs.opcode & ISCSI_OPCODE_MASK) {
 	case ISCSI_OP_LOGIN:
-		//if conn->state == STATE_FULL -> reject
 		cmnd_exec_login(conn);
 		conn->rsp.bhs.hlength = conn->rsp.ahssize / 4;
 		hton24(conn->rsp.bhs.dlength, conn->rsp.datasize);
 		log_pdu(2, &conn->rsp);
 		break;
 	case ISCSI_OP_TEXT:
-		//if conn->state != STATE_FULL -> reject
 		cmnd_exec_text(conn);
 		conn->rsp.bhs.hlength = conn->rsp.ahssize / 4;
 		hton24(conn->rsp.bhs.dlength, conn->rsp.datasize);
 		log_pdu(2, &conn->rsp);
 		break;
 	case ISCSI_OP_LOGOUT:
-		//if conn->state != STATE_FULL -> reject
 		cmnd_exec_logout(conn);
 		conn->rsp.bhs.hlength = conn->rsp.ahssize / 4;
 		hton24(conn->rsp.bhs.dlength, conn->rsp.datasize);
 		log_pdu(2, &conn->rsp);
 		break;
 	default:
-		//reject
+		/* reject */
 		res = 1;
 		break;
 	}
@@ -728,7 +725,7 @@ void cmnd_finish(struct connection *conn)
 		conn->state = STATE_LOGIN;
 		break;
 	case STATE_SECURITY_FULL:
-		//fall through
+		/* fall through */
 	case STATE_LOGIN_FULL:
 		if (conn->session_type == SESSION_NORMAL)
 			conn->state = STATE_KERNEL;
@@ -858,7 +855,7 @@ found:
 	ctask->rw = rw;
 
 	list_add_tail(&ctask->c_txlist, &ctask->conn->tx_clist);
-	tgt_event_modify(ctask->conn->fd, EPOLLIN|EPOLLOUT);
+	tgt_event_modify(ctask->conn->fd, EPOLLIN | EPOLLOUT);
 
 	return 0;
 }
@@ -880,7 +877,6 @@ found:
 		ctask->r2t_count,
 		ntoh24(req->dlength), be32_to_cpu(req->offset));
 
-/* 	conn->rx_buffer = (void *) (unsigned long) ctask->addr; */
 	conn->rx_buffer = (void *) (unsigned long) ctask->c_buffer;
 	conn->rx_buffer += be32_to_cpu(req->offset);
 	conn->rx_size = ntoh24(req->dlength);

@@ -496,7 +496,9 @@ void target_mgmt_request(int host_no, int req_id, int function, uint8_t *lun,
 		return;
 	}
 
-	mreq = calloc(1, sizeof(*mreq));
+	mreq = zalloc(sizeof(*mreq));
+	if (!mreq)
+		return;
 	mreq->mid = req_id;
 	mreq->function = function;
 
