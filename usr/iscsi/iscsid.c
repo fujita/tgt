@@ -859,79 +859,6 @@ found:
 	return 0;
 }
 
-static int iscsi_data_out_rx_start(struct connection *conn)
-{
-	struct iscsi_ctask *ctask;
-	struct iscsi_data *req = (struct iscsi_data *) &conn->req.bhs;
-
-	list_for_each_entry(ctask, &conn->session->cmd_list, c_hlist) {
-		if (ctask->tag == req->itt)
-			goto found;
-	}
-	return -EINVAL;
-found:
-	dprintf("found a task %" PRIx64 " %u %u %u %u %u\n", ctask->tag,
-		ntohl(((struct iscsi_cmd *) (&ctask->req))->data_length),
-		ctask->offset,
-		ctask->r2t_count,
-		ntoh24(req->dlength), be32_to_cpu(req->offset));
-
-	conn->rx_buffer = (void *) (unsigned long) ctask->c_buffer;
-	conn->rx_buffer += be32_to_cpu(req->offset);
-	conn->rx_size = ntoh24(req->dlength);
-
-	ctask->offset += ntoh24(req->dlength);
-
-	conn->rx_ctask = ctask;
-
-	return 0;
-}
-
-static int iscsi_cmd_init(struct connection *conn)
-{
-	struct iscsi_cmd *req = (struct iscsi_cmd *) &conn->req.bhs;
-	struct iscsi_ctask *ctask;
-	int len;
-
-	ctask = zalloc(sizeof(*ctask));
-	if (!ctask)
-		return -ENOMEM;
-
-	memcpy(&ctask->req, req, sizeof(*req));
-	ctask->tag = req->itt;
-	ctask->conn = conn;
-	INIT_LIST_HEAD(&ctask->c_hlist);
-
-	list_add(&ctask->c_hlist, &conn->session->cmd_list);
-
-	dprintf("%u %x %d %d %x\n", conn->session->tsih,
-		req->cdb[0], ntohl(req->data_length),
-		req->flags & ISCSI_FLAG_CMD_ATTR_MASK, req->itt);
-
-	len = ntohl(req->data_length);
-	if (len) {
-		ctask->c_buffer = malloc(len);
-		if (!ctask->c_buffer)
-			return -ENOMEM;
-		dprintf("%p\n", ctask->c_buffer);
-	}
-
-	if (req->flags & ISCSI_FLAG_CMD_WRITE) {
-		conn->rx_size = ntoh24(req->dlength);
-		conn->rx_buffer = ctask->c_buffer;
-		ctask->r2t_count = ntohl(req->data_length) - conn->rx_size;
-		ctask->unsol_count = !(req->flags & ISCSI_FLAG_CMD_FINAL);
-		ctask->offset = conn->rx_size;
-
-		dprintf("%d %d %d %d\n", conn->rx_size, ctask->r2t_count,
-			ctask->unsol_count, ctask->offset);
-	}
-
-	conn->rx_ctask = ctask;
-
-	return 0;
-}
-
 static int cmd_attr(struct iscsi_ctask *ctask)
 {
 	int attr;
@@ -1061,11 +988,104 @@ static int iscsi_task_queue(struct iscsi_ctask *ctask)
 	return 0;
 }
 
+static int iscsi_data_out_rx_start(struct connection *conn)
+{
+	struct iscsi_ctask *ctask;
+	struct iscsi_data *req = (struct iscsi_data *) &conn->req.bhs;
+
+	list_for_each_entry(ctask, &conn->session->cmd_list, c_hlist) {
+		if (ctask->tag == req->itt)
+			goto found;
+	}
+	return -EINVAL;
+found:
+	dprintf("found a task %" PRIx64 " %u %u %u %u %u\n", ctask->tag,
+		ntohl(((struct iscsi_cmd *) (&ctask->req))->data_length),
+		ctask->offset,
+		ctask->r2t_count,
+		ntoh24(req->dlength), be32_to_cpu(req->offset));
+
+	conn->rx_buffer = (void *) (unsigned long) ctask->c_buffer;
+	conn->rx_buffer += be32_to_cpu(req->offset);
+	conn->rx_size = ntoh24(req->dlength);
+
+	ctask->offset += ntoh24(req->dlength);
+
+	conn->rx_ctask = ctask;
+
+	return 0;
+}
+
+static int iscsi_data_out_rx_done(struct iscsi_ctask *task)
+{
+	struct iscsi_hdr *hdr = &task->conn->req.bhs;
+	int err = 0;
+
+	if (hdr->ttt == cpu_to_be32(ISCSI_RESERVED_TAG)) {
+		if (hdr->flags & ISCSI_FLAG_CMD_FINAL) {
+			task->unsol_count = 0;
+			if (!task_pending(task))
+				err = iscsi_scsi_cmd_execute(task);
+		}
+	} else {
+		if (!(hdr->flags & ISCSI_FLAG_CMD_FINAL))
+			return err;
+
+		err = iscsi_scsi_cmd_execute(task);
+	}
+
+	return err;
+}
+
+static int iscsi_cmd_init(struct connection *conn)
+{
+	struct iscsi_cmd *req = (struct iscsi_cmd *) &conn->req.bhs;
+	struct iscsi_ctask *ctask;
+	int len;
+
+	ctask = zalloc(sizeof(*ctask));
+	if (!ctask)
+		return -ENOMEM;
+
+	memcpy(&ctask->req, req, sizeof(*req));
+	ctask->tag = req->itt;
+	ctask->conn = conn;
+	INIT_LIST_HEAD(&ctask->c_hlist);
+
+	list_add(&ctask->c_hlist, &conn->session->cmd_list);
+
+	dprintf("%u %x %d %d %x\n", conn->session->tsih,
+		req->cdb[0], ntohl(req->data_length),
+		req->flags & ISCSI_FLAG_CMD_ATTR_MASK, req->itt);
+
+	len = ntohl(req->data_length);
+	if (len) {
+		ctask->c_buffer = malloc(len);
+		if (!ctask->c_buffer)
+			return -ENOMEM;
+		dprintf("%p\n", ctask->c_buffer);
+	}
+
+	if (req->flags & ISCSI_FLAG_CMD_WRITE) {
+		conn->rx_size = ntoh24(req->dlength);
+		conn->rx_buffer = ctask->c_buffer;
+		ctask->r2t_count = ntohl(req->data_length) - conn->rx_size;
+		ctask->unsol_count = !(req->flags & ISCSI_FLAG_CMD_FINAL);
+		ctask->offset = conn->rx_size;
+
+		dprintf("%d %d %d %d\n", conn->rx_size, ctask->r2t_count,
+			ctask->unsol_count, ctask->offset);
+	}
+
+	conn->rx_ctask = ctask;
+
+	return 0;
+}
+
 static int iscsi_cmd_rx_done(struct connection *conn)
 {
 	struct iscsi_hdr *hdr = &conn->req.bhs;
 	struct iscsi_ctask *ctask = conn->rx_ctask;
-	struct iscsi_cmd *req = (struct iscsi_cmd *) &ctask->req;
 	uint8_t op;
 	int err = 0;
 
@@ -1075,16 +1095,7 @@ static int iscsi_cmd_rx_done(struct connection *conn)
 		err = iscsi_task_queue(ctask);
 		break;
 	case ISCSI_OP_SCSI_DATA_OUT:
-		if (ctask->r2t_count) {
-			dprintf("%x %d\n", hdr->itt, ctask->r2t_count);
-			list_add_tail(&ctask->c_list, &ctask->conn->tx_clist);
-			tgt_event_modify(conn->fd, EPOLLIN|EPOLLOUT);
-		} else
-			err = target_cmd_queue(conn->session->tsih, req->cdb,
-					       (unsigned long) ctask->c_buffer,
-					       req->lun,
-					       ntohl(req->data_length),
-					       cmd_attr(ctask), req->itt);
+		err = iscsi_data_out_rx_done(ctask);
 		break;
 	case ISCSI_OP_NOOP_OUT:
 	case ISCSI_OP_SCSI_TMFUNC:
@@ -1234,9 +1245,10 @@ static void iscsi_rx_handler(int fd, struct connection *conn)
 	read_again:
 		res = read(fd, conn->rx_buffer, conn->rx_size);
 		if (res <= 0) {
-			if (res == 0 || (errno != EINTR && errno != EAGAIN))
+			if (res == 0 || (errno != EINTR && errno != EAGAIN)) {
 				conn->state = STATE_CLOSE;
-			else if (errno == EINTR)
+				dprintf("%d %d, %m\n", res, errno);
+			} else if (errno == EINTR)
 				goto read_again;
 			break;
 		}
@@ -1343,6 +1355,7 @@ static void iscsi_tx_handler(int fd, struct connection *conn)
 				conn->tx_size = conn->rsp.datasize;
 				pad = conn->tx_size & (PAD_WORD_LEN - 1);
 				if (pad) {
+					pad = PAD_WORD_LEN - pad;
 					memset(conn->tx_buffer + conn->tx_size,
 					       0, pad);
 					conn->tx_size += pad;
