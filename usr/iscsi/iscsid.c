@@ -1083,6 +1083,22 @@ static int iscsi_scsi_cmd_rx_start(struct connection *conn)
 	return 0;
 }
 
+static int iscsi_logout_rx_start(struct connection *conn)
+{
+	struct iscsi_hdr *req = (struct iscsi_hdr *) &conn->req.bhs;
+	struct iscsi_task *task;
+
+	task = zalloc(sizeof(*task));
+	if (!task)
+		return -ENOMEM;
+
+	memcpy(&task->req, req, sizeof(*req));
+	task->conn = conn;
+
+	conn->rx_task = task;
+	return 0;
+}
+
 static int iscsi_noop_out_rx_start(struct connection *conn)
 {
 	struct iscsi_hdr *req = (struct iscsi_hdr *) &conn->req.bhs;
@@ -1146,13 +1162,13 @@ static int iscsi_task_rx_done(struct connection *conn)
 	switch (op) {
 	case ISCSI_OP_SCSI_CMD:
 	case ISCSI_OP_NOOP_OUT:
+	case ISCSI_OP_LOGOUT:
 		err = iscsi_task_queue(task);
 		break;
 	case ISCSI_OP_SCSI_DATA_OUT:
 		err = iscsi_data_out_rx_done(task);
 		break;
 	case ISCSI_OP_SCSI_TMFUNC:
-	case ISCSI_OP_LOGOUT:
 	case ISCSI_OP_TEXT:
 	case ISCSI_OP_SNACK:
 	default:
@@ -1187,6 +1203,7 @@ static int iscsi_task_rx_start(struct connection *conn)
 		break;
 	case ISCSI_OP_SCSI_TMFUNC:
 	case ISCSI_OP_LOGOUT:
+		err = iscsi_logout_rx_start(conn);
 	case ISCSI_OP_TEXT:
 	case ISCSI_OP_SNACK:
 		eprintf("Cannot handle yet %x\n", op);
@@ -1219,6 +1236,22 @@ static int iscsi_scsi_cmd_tx_start(struct iscsi_task *task)
 	}
 
 	return err;
+}
+
+static int iscsi_logout_tx_start(struct iscsi_task *task)
+{
+	struct connection *conn = task->conn;
+	struct iscsi_logout_rsp *rsp =
+		(struct iscsi_logout_rsp *) &conn->rsp.bhs;
+
+	rsp->opcode = ISCSI_OP_LOGOUT_RSP;
+	rsp->flags = ISCSI_FLAG_CMD_FINAL;
+	rsp->itt = task->req.itt;
+	rsp->statsn = cpu_to_be32(conn->stat_sn++);
+	rsp->exp_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn);
+	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn + MAX_QUEUE_CMD);
+
+	return 0;
 }
 
 static int iscsi_noop_out_tx_start(struct iscsi_task *task, int *is_rsp)
@@ -1291,6 +1324,7 @@ static int iscsi_task_tx_done(struct connection *conn)
 		err = iscsi_scsi_cmd_tx_done(conn);
 		break;
 	case ISCSI_OP_NOOP_OUT:
+	case ISCSI_OP_LOGOUT:
 		if (task->c_buffer)
 			free(task->c_buffer);
 		free(task);
@@ -1326,6 +1360,9 @@ static int iscsi_task_tx_start(struct connection *conn)
 		err = iscsi_noop_out_tx_start(task, &is_rsp);
 		if (!is_rsp)
 			goto nodata;
+		break;
+	case ISCSI_OP_LOGOUT:
+		err = iscsi_logout_tx_start(task);
 		break;
 	}
 
