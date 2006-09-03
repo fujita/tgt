@@ -30,9 +30,6 @@ host:~/tgt$ su
 host:~/tgt# ./usr/tgtadm -l iscsi --op new --tid 1 --params iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
 host:~/tgt# ./usr/tgtadm -l iscsi --op new --tid 1 --lun 0 --params Path=/dev/hdc1
 
-iSCSI parameters were tuned for reasonable performance (InitialR2T=No
-and MaxRecvDataSegmentLength=262144).
-
 
 Status
 -------------
