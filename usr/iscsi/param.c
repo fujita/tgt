@@ -287,7 +287,7 @@ static struct iscsi_key_ops marker_ops = {
 
 struct iscsi_key session_keys[] = {
 	{"MaxRecvDataSegmentLength", 262144, 512, 16777215, &minimum_ops},
-	{"MaxXmitDataSegmentLength", 8192, 512, 16777215, &minimum_ops},
+	{"MaxXmitDataSegmentLength", 262144, 512, 16777215, &minimum_ops},
 	{"HeaderDigest", DIGEST_NONE, DIGEST_NONE, DIGEST_ALL, &digest_ops},
 	{"DataDigest", DIGEST_NONE, DIGEST_NONE, DIGEST_ALL, &digest_ops},
 	{"InitialR2T", 0, 0, 1, &or_ops},
