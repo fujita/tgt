@@ -12,6 +12,7 @@
 #include <linux/types.h>
 #include <asm/byteorder.h>
 
+#include "transport.h"
 #include "list.h"
 #include "param.h"
 #include "log.h"
@@ -155,6 +156,8 @@ struct connection {
 			unsigned char *challenge;
 		} chap;
 	} auth;
+
+	struct iscsi_transport *tp;
 };
 
 #define IOSTATE_FREE		0
@@ -230,6 +233,7 @@ extern void conn_write_pdu(struct connection *conn);
 extern void conn_add_to_session(struct connection *conn, struct session *session);
 
 /* iscsid.c */
+extern void iscsi_event_handler(int fd, int events, void *data);
 extern char *text_key_find(struct connection *conn, char *searchKey);
 extern void text_key_add(struct connection *conn, char *key, char *value);
 
