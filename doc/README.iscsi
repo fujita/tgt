@@ -6,7 +6,7 @@ linux-2.6-target git tree. Then, apply aiopoll-2.6.18-rc4.diff in the
 patch directory, rebuild the kernel, and reboot with the new kernel.
 After the reboot, compile the source code:
 
-make KSRC=<kernel-src>
+make KSRC=<kernel-src> ISCSI=1
 
 
 Starting
