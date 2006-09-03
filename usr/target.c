@@ -483,8 +483,8 @@ static int abort_task_set(struct mgmt_req *mreq, struct target* target, int host
 	return count;
 }
 
-void target_mgmt_request(int host_no, int req_id, int function, uint8_t *lun,
-			 uint64_t tag)
+void target_mgmt_request(int host_no, uint64_t req_id, int function,
+			 uint8_t *lun, uint64_t tag)
 {
 	struct target *target;
 	struct mgmt_req *mreq;

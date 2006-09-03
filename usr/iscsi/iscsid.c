@@ -907,6 +907,58 @@ static int iscsi_scsi_cmd_execute(struct iscsi_task *task)
 	return err;
 }
 
+extern int iscsi_tm_done(int host_no, uint64_t mid, int result)
+{
+	struct iscsi_task *task = (struct iscsi_task *) (unsigned long) mid;
+
+	task->result = result;
+	list_add_tail(&task->c_list, &task->conn->tx_clist);
+	tgt_event_modify(task->conn->fd, EPOLLIN | EPOLLOUT);
+	return 0;
+}
+
+static int iscsi_tm_execute(struct iscsi_task *task)
+{
+	struct connection *conn = task->conn;
+	struct iscsi_tm *req = (struct iscsi_tm *) &task->req;
+	int fn, err = 0;
+
+	switch (req->flags & ISCSI_FLAG_TM_FUNC_MASK) {
+	case ISCSI_TM_FUNC_ABORT_TASK:
+		fn = ABORT_TASK;
+		break;
+	case ISCSI_TM_FUNC_ABORT_TASK_SET:
+		fn = ABORT_TASK_SET;
+		break;
+	case ISCSI_TM_FUNC_CLEAR_ACA:
+		fn = CLEAR_TASK_SET;
+		break;
+	case ISCSI_TM_FUNC_CLEAR_TASK_SET:
+		fn = CLEAR_ACA;
+		break;
+	case ISCSI_TM_FUNC_LOGICAL_UNIT_RESET:
+		fn = LOGICAL_UNIT_RESET;
+		break;
+	case ISCSI_TM_FUNC_TARGET_WARM_RESET:
+	case ISCSI_TM_FUNC_TARGET_COLD_RESET:
+	case ISCSI_TM_FUNC_TASK_REASSIGN:
+		err = ISCSI_TMF_RSP_NOT_SUPPORTED;
+		break;
+	default:
+		err = ISCSI_TMF_RSP_REJECTED;
+
+		eprintf("unknown task management function %d\n",
+			req->flags & ISCSI_FLAG_TM_FUNC_MASK);
+	}
+
+	if (err)
+		task->result = err;
+	else
+		target_mgmt_request(conn->session->tsih, (unsigned long) task,
+				    fn, req->lun, req->itt);
+	return err;
+}
+
 static int iscsi_task_execute(struct iscsi_task *task)
 {
 	struct iscsi_hdr *hdr = (struct iscsi_hdr *) &task->req;
@@ -915,6 +967,7 @@ static int iscsi_task_execute(struct iscsi_task *task)
 
 	switch (op) {
 	case ISCSI_OP_NOOP_OUT:
+	case ISCSI_OP_LOGOUT:
 		list_add_tail(&task->c_list, &task->conn->tx_clist);
 		tgt_event_modify(task->conn->fd, EPOLLIN | EPOLLOUT);
 		break;
@@ -922,10 +975,11 @@ static int iscsi_task_execute(struct iscsi_task *task)
 		err = iscsi_scsi_cmd_execute(task);
 		break;
 	case ISCSI_OP_SCSI_TMFUNC:
-/* 		execute_task_management(cmnd); */
-		break;
-	case ISCSI_OP_LOGOUT:
-/* 		logout_exec(cmnd); */
+		err = iscsi_tm_execute(task);
+		if (err) {
+			list_add_tail(&task->c_list, &task->conn->tx_clist);
+			tgt_event_modify(task->conn->fd, EPOLLIN | EPOLLOUT);
+		}
 		break;
 	case ISCSI_OP_TEXT:
 	case ISCSI_OP_SNACK:
@@ -1083,7 +1137,7 @@ static int iscsi_scsi_cmd_rx_start(struct connection *conn)
 	return 0;
 }
 
-static int iscsi_logout_rx_start(struct connection *conn)
+static int iscsi_common_task_rx_start(struct connection *conn)
 {
 	struct iscsi_hdr *req = (struct iscsi_hdr *) &conn->req.bhs;
 	struct iscsi_task *task;
@@ -1162,13 +1216,13 @@ static int iscsi_task_rx_done(struct connection *conn)
 	switch (op) {
 	case ISCSI_OP_SCSI_CMD:
 	case ISCSI_OP_NOOP_OUT:
+	case ISCSI_OP_SCSI_TMFUNC:
 	case ISCSI_OP_LOGOUT:
 		err = iscsi_task_queue(task);
 		break;
 	case ISCSI_OP_SCSI_DATA_OUT:
 		err = iscsi_data_out_rx_done(task);
 		break;
-	case ISCSI_OP_SCSI_TMFUNC:
 	case ISCSI_OP_TEXT:
 	case ISCSI_OP_SNACK:
 	default:
@@ -1203,11 +1257,13 @@ static int iscsi_task_rx_start(struct connection *conn)
 		break;
 	case ISCSI_OP_SCSI_TMFUNC:
 	case ISCSI_OP_LOGOUT:
-		err = iscsi_logout_rx_start(conn);
+		err = iscsi_common_task_rx_start(conn);
+		break;
 	case ISCSI_OP_TEXT:
 	case ISCSI_OP_SNACK:
 		eprintf("Cannot handle yet %x\n", op);
 		err = -EINVAL;
+		break;
 	default:
 		eprintf("Unknown op %x\n", op);
 		err = -EINVAL;
@@ -1283,6 +1339,24 @@ static int iscsi_noop_out_tx_start(struct iscsi_task *task, int *is_rsp)
 	return 0;
 }
 
+static int iscsi_tm_tx_start(struct iscsi_task *task)
+{
+	struct connection *conn = task->conn;
+	struct iscsi_tm_rsp *rsp = (struct iscsi_tm_rsp *) &conn->rsp.bhs;
+
+	memset(rsp, 0, sizeof(*rsp));
+	rsp->opcode = ISCSI_OP_SCSI_TMFUNC_RSP;
+	rsp->flags = ISCSI_FLAG_CMD_FINAL;
+	rsp->itt = task->req.itt;
+	rsp->response = task->result;
+
+	rsp->statsn = cpu_to_be32(conn->stat_sn++);
+	rsp->exp_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn);
+	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn + MAX_QUEUE_CMD);
+
+	return 0;
+}
+
 static int iscsi_scsi_cmd_tx_done(struct connection *conn)
 {
 	struct iscsi_hdr *hdr = &conn->rsp.bhs;
@@ -1325,6 +1399,7 @@ static int iscsi_task_tx_done(struct connection *conn)
 		break;
 	case ISCSI_OP_NOOP_OUT:
 	case ISCSI_OP_LOGOUT:
+	case ISCSI_OP_SCSI_TMFUNC:
 		if (task->c_buffer)
 			free(task->c_buffer);
 		free(task);
@@ -1363,6 +1438,9 @@ static int iscsi_task_tx_start(struct connection *conn)
 		break;
 	case ISCSI_OP_LOGOUT:
 		err = iscsi_logout_tx_start(task);
+		break;
+	case ISCSI_OP_SCSI_TMFUNC:
+		err = iscsi_tm_tx_start(task);
 		break;
 	}
 
