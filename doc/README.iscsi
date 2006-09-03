@@ -1,0 +1,42 @@
+Installation
+-------------
+This driver runs in user-space, however, you still need tgt header
+files and kernel modifications. So get the latest code from the
+linux-2.6-target git tree. Then, apply aiopoll-2.6.18-rc4.diff in the
+patch directory, rebuild the kernel, and reboot with the new kernel.
+After the reboot, compile the source code:
+
+make KSRC=<kernel-src>
+
+
+Starting
+-------------
+Try the following commands:
+
+host:~/tgt$ su
+host:~/tgt# ./usr/tgtd -l iscsi
+
+
+Configuration
+-------------
+Now there is no handy way for the configuration. Everyting is
+configured via the tgtadm management tool after you run tgt daemon.
+
+The following example creates a target with id 1 (the iqn is
+iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz) and adds a
+logical unit (backed by /dev/hdc1) with lun 0.
+
+host:~/tgt$ su
+host:~/tgt# ./usr/tgtadm -l iscsi --op new --tid 1 --params iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
+host:~/tgt# ./usr/tgtadm -l iscsi --op new --tid 1 --lun 0 --params Path=/dev/hdc1
+
+iSCSI parameters were tuned for reasonable performance (InitialR2T=No
+and MaxRecvDataSegmentLength=262144).
+
+
+Status
+-------------
+It should work under normal circumstances (good initiator, no network
+problem, etc). However, don't play with important data.
+
+Probabaly, the current quality is similar to the IET 0.2.x.
