@@ -33,6 +33,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 
+#define aligned_u64 unsigned long long __attribute__((aligned(8)))
 #include <scsi/scsi_tgt_if.h>
 
 #include "list.h"
