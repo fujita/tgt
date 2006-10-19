@@ -1,7 +1,12 @@
 #ifndef __UTIL_H__
 #define __UTIL_H__
 
+#include <stdint.h>
 #include <sys/user.h>
+
+typedef uint8_t u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 #define ALIGN(x,a) (((x)+(a)-1)&~((a)-1))
