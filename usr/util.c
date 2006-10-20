@@ -72,7 +72,7 @@ int backed_file_open(char *path, int oflag, uint64_t *size)
 
 	err = fstat64(fd, &st);
 	if (err < 0) {
-		printf("Cannot get stat %d, %m\n", fd);
+		eprintf("Cannot get stat %d, %m\n", fd);
 		goto close_fd;
 	}
 
