@@ -824,6 +824,50 @@ static int iscsi_r2t_build(struct iscsi_task *task)
 	return 0;
 }
 
+static inline struct iscsi_task *
+iscsi_alloc_task(struct connection *conn)
+{
+	struct iscsi_hdr *req = (struct iscsi_hdr *) &conn->req.bhs;
+	struct iscsi_task *task;
+	
+	task = zalloc(sizeof(*task));
+	if (!task)
+		return NULL;
+
+	memcpy(&task->req, req, sizeof(*req));
+	task->conn = conn;
+	INIT_LIST_HEAD(&task->c_hlist);
+	INIT_LIST_HEAD(&task->c_list);
+
+	conn_get(conn);
+	return task;
+}
+
+void iscsi_free_task(struct iscsi_task *task)
+{
+	struct connection *conn = task->conn;
+
+	if (task->c_buffer)
+		free(task->c_buffer);
+	free(task);
+
+	/* from alloc */
+	conn_put(conn);
+}
+
+static void iscsi_free_cmd_task(struct iscsi_task *task)
+{
+	struct connection *conn = task->conn;
+
+	target_cmd_done(conn->session->tsih, task->tag);
+	list_del(&task->c_hlist);
+	if (task->c_buffer) {
+		if ((unsigned long) task->c_buffer != task->addr)
+			free((void *) (unsigned long) task->addr);
+	}
+	iscsi_free_task(task);
+}
+
 int iscsi_scsi_cmd_done(int host_no, int len, int result, int rw, uint64_t addr,
 			uint64_t tag)
 {
@@ -845,6 +889,18 @@ int iscsi_scsi_cmd_done(int host_no, int len, int result, int rw, uint64_t addr,
 
 found:
 	dprintf("found a task %" PRIx64 "\n", tag);
+
+	/*
+	 * Since the connection is closed we just free the task.
+	 * We could delay the closing of the conn in some cases and send
+	 * the response with a little extra code or we can check if this
+	 * task got reassinged to another connection.
+	 */
+	if (task->conn->state == STATE_CLOSE) {
+		iscsi_free_cmd_task(task);		
+		return 0;
+	}
+
 	task->addr = addr;
 	task->result = result;
 	task->len = len;
@@ -894,7 +950,6 @@ static int iscsi_scsi_cmd_execute(struct iscsi_task *task)
 					       uaddr, req->lun,
 					       ntohl(req->data_length),
 					       cmd_attr(task), req->itt);
-
 	} else
 		err = target_cmd_queue(conn->session->tsih, req->cdb,
 				       uaddr, req->lun, ntohl(req->data_length),
@@ -1091,21 +1146,27 @@ static int iscsi_task_queue(struct iscsi_task *task)
 	return 0;
 }
 
+static struct iscsi_task *__iscsi_task_rx_start(struct connection *conn)
+{
+	struct iscsi_task *task;
+
+	task = iscsi_alloc_task(conn);
+	if (!task)
+		return NULL;
+	conn->rx_task = task;
+	return task;
+}
+
 static int iscsi_scsi_cmd_rx_start(struct connection *conn)
 {
 	struct iscsi_cmd *req = (struct iscsi_cmd *) &conn->req.bhs;
 	struct iscsi_task *task;
 	int len;
 
-	task = zalloc(sizeof(*task));
+	task = __iscsi_task_rx_start(conn);
 	if (!task)
 		return -ENOMEM;
-
-	memcpy(&task->req, req, sizeof(*req));
 	task->tag = req->itt;
-	task->conn = conn;
-	INIT_LIST_HEAD(&task->c_hlist);
-	list_add(&task->c_hlist, &conn->session->cmd_list);
 
 	dprintf("%u %x %d %d %x\n", conn->session->tsih,
 		req->cdb[0], ntohl(req->data_length),
@@ -1114,8 +1175,10 @@ static int iscsi_scsi_cmd_rx_start(struct connection *conn)
 	len = ntohl(req->data_length);
 	if (len) {
 		task->c_buffer = malloc(len);
-		if (!task->c_buffer)
+		if (!task->c_buffer) {
+			iscsi_free_task(task);
 			return -ENOMEM;
+		}
 		dprintf("%p\n", task->c_buffer);
 	}
 
@@ -1130,24 +1193,7 @@ static int iscsi_scsi_cmd_rx_start(struct connection *conn)
 			task->unsol_count, task->offset);
 	}
 
-	conn->rx_task = task;
-
-	return 0;
-}
-
-static int iscsi_common_task_rx_start(struct connection *conn)
-{
-	struct iscsi_hdr *req = (struct iscsi_hdr *) &conn->req.bhs;
-	struct iscsi_task *task;
-
-	task = zalloc(sizeof(*task));
-	if (!task)
-		return -ENOMEM;
-
-	memcpy(&task->req, req, sizeof(*req));
-	task->conn = conn;
-
-	conn->rx_task = task;
+	list_add(&task->c_hlist, &conn->session->cmd_list);
 	return 0;
 }
 
@@ -1178,12 +1224,9 @@ static int iscsi_noop_out_rx_start(struct connection *conn)
 
 	conn->exp_stat_sn = be32_to_cpu(req->exp_statsn);
 
-	task = zalloc(sizeof(*task));
+	task = __iscsi_task_rx_start(conn);
 	if (!task)
 		goto out;
-
-	memcpy(&task->req, req, sizeof(*req));
-	task->conn = conn;
 
 	len = ntoh24(req->dlength);
 	if (len) {
@@ -1191,14 +1234,12 @@ static int iscsi_noop_out_rx_start(struct connection *conn)
 		task->len = len;
 		task->c_buffer = malloc(len);
 		if (!task->c_buffer) {
-			free(task);
+			iscsi_free_task(task);
 			goto out;
 		}
 
 		conn->rx_buffer = task->c_buffer;
 	}
-
-	conn->rx_task = task;
 out:
 	return err;
 }
@@ -1236,7 +1277,7 @@ static int iscsi_task_rx_start(struct connection *conn)
 {
 	struct iscsi_hdr *hdr = &conn->req.bhs;
 	uint8_t op;
-	int err;
+	int err = 0;
 
 	op = hdr->opcode & ISCSI_OPCODE_MASK;
 	switch (op) {
@@ -1255,7 +1296,8 @@ static int iscsi_task_rx_start(struct connection *conn)
 		break;
 	case ISCSI_OP_SCSI_TMFUNC:
 	case ISCSI_OP_LOGOUT:
-		err = iscsi_common_task_rx_start(conn);
+		if (!__iscsi_task_rx_start(conn))
+			err = -ENOMEM;
 		break;
 	case ISCSI_OP_TEXT:
 	case ISCSI_OP_SNACK:
@@ -1315,7 +1357,7 @@ static int iscsi_noop_out_tx_start(struct iscsi_task *task, int *is_rsp)
 
 	if (task->req.itt == cpu_to_be32(ISCSI_RESERVED_TAG)) {
 		*is_rsp = 0;
-		free(task);
+		iscsi_free_task(task);
 	} else {
 		*is_rsp = 1;
 
@@ -1370,14 +1412,7 @@ static int iscsi_scsi_cmd_tx_done(struct connection *conn)
 			return 0;
 		}
 	case ISCSI_OP_SCSI_CMD_RSP:
-		target_cmd_done(conn->session->tsih, task->tag);
-		list_del(&task->c_hlist);
-		if (task->c_buffer) {
-			if ((unsigned long) task->c_buffer != task->addr)
-				free((void *) (unsigned long) task->addr);
-			free(task->c_buffer);
-		}
-		free(task);
+		iscsi_free_cmd_task(task);
 		break;
 	default:
 		eprintf("target bug %x\n", hdr->opcode & ISCSI_OPCODE_MASK);
@@ -1398,9 +1433,7 @@ static int iscsi_task_tx_done(struct connection *conn)
 	case ISCSI_OP_NOOP_OUT:
 	case ISCSI_OP_LOGOUT:
 	case ISCSI_OP_SCSI_TMFUNC:
-		if (task->c_buffer)
-			free(task->c_buffer);
-		free(task);
+		iscsi_free_task(task);
 	}
 
 	conn->tx_task = NULL;
@@ -1618,7 +1651,6 @@ static void iscsi_tx_handler(int fd, struct connection *conn)
 void iscsi_event_handler(int fd, int events, void *data)
 {
 	struct connection *conn = (struct connection *) data;
-	size_t (*ep_close) (int);
 
 	if (events & EPOLLIN)
 		iscsi_rx_handler(fd, conn);
@@ -1629,13 +1661,6 @@ void iscsi_event_handler(int fd, int events, void *data)
 	if (conn->state != STATE_CLOSE && events & EPOLLOUT)
 		iscsi_tx_handler(fd, conn);
 
-	if (conn->state == STATE_CLOSE) {
-		/* TODO: we cannot wait for ongoing tasks. */
-
-		dprintf("connection closed\n");
-		ep_close = conn->tp->ep_close;
-		conn_free(conn);
-		tgt_event_del(fd);
-		ep_close(fd);
-	}
+	if (conn->state == STATE_CLOSE)
+		conn_close(conn, fd);
 }
