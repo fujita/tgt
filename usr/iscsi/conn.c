@@ -48,7 +48,7 @@ struct connection *conn_alloc(void)
 		return NULL;
 	}
 
-	conn->refcount = 1;
+
 	conn->state = STATE_FREE;
 	param_set_defaults(conn->session_param, session_keys);
 
@@ -58,81 +58,13 @@ struct connection *conn_alloc(void)
 	return conn;
 }
 
-static void conn_free(struct connection *conn)
+void conn_free(struct connection *conn)
 {
-	dprintf("freeing connection\n");
 	list_del(&conn->clist);
 	free(conn->req_buffer);
 	free(conn->rsp_buffer);
 	free(conn->initiator);
 	free(conn);
-}
-
-void conn_close(struct connection *conn, int fd)
-{
-	struct iscsi_task *task, *tmp;
-
-	tgt_event_del(fd);
-	conn->tp->ep_close(fd);
-
-	dprintf("connection closed\n");
-
-	/* may not have been in FFP yet */
-	if (!conn->session)
-		goto done;
-
-	/*
-	 * We just closed the ep so we are not going to send/recv anything.
-	 * Just free these up since they are not going to complete.
-	 */
-	list_for_each_entry_safe(task, tmp, &conn->session->pending_cmd_list,
-				 c_list) {
-		if (task->conn != conn)
-			continue;
-
-		dprintf("Forcing release of pending task %" PRIx64 "\n",
-			task->tag);
-		list_del(&task->c_list);
-		iscsi_free_task(task);
-	}
-
-	list_for_each_entry_safe(task, tmp, &conn->tx_clist, c_list) {
-		dprintf("Forcing release of tx task %" PRIx64 "\n",
-			task->tag);
-		list_del(&task->c_list);
-		iscsi_free_task(task);
-	}
-
-	if (conn->rx_task) {
-		dprintf("Forcing release of rx task %" PRIx64 "\n",
-			conn->rx_task->tag);
-		iscsi_free_task(conn->rx_task);
-	}
-	conn->rx_task = NULL;
-
-	if (conn->tx_task) {
-		dprintf("Forcing release of tx task %" PRIx64 "\n",
-			conn->tx_task->tag);
-		iscsi_free_task(conn->tx_task);
-	}
-	conn->tx_task = NULL;
-
-done:
-	conn_put(conn);
-}
-
-void conn_put(struct connection *conn)
-{
-	conn->refcount--;
-	if (conn->refcount == 0)
-		conn_free(conn);
-}
-
-int conn_get(struct connection *conn)
-{
-	/* TODO: check state */
-	conn->refcount++;
-	return 0;
 }
 
 struct connection *conn_find(struct session *session, uint32_t cid)

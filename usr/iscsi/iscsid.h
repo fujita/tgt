@@ -112,7 +112,6 @@ struct connection {
 	int rx_iostate;
 	int tx_iostate;
 	int fd;
-	int refcount;
 
 	struct list_head clist;
 	struct session *session;
@@ -226,9 +225,7 @@ extern int cmnd_exec_auth_chap(struct connection *conn);
 
 /* conn.c */
 extern struct connection *conn_alloc(void);
-extern void conn_close(struct connection *conn, int fd);
-extern void conn_put(struct connection *conn);
-extern int conn_get(struct connection *conn);
+extern void conn_free(struct connection *conn);
 extern struct connection * conn_find(struct session *session, uint32_t cid);
 extern int conn_take_fd(struct connection *conn, int fd);
 extern void conn_read_pdu(struct connection *conn);
@@ -239,9 +236,6 @@ extern void conn_add_to_session(struct connection *conn, struct session *session
 extern void iscsi_event_handler(int fd, int events, void *data);
 extern char *text_key_find(struct connection *conn, char *searchKey);
 extern void text_key_add(struct connection *conn, char *key, char *value);
-
-/* iscsid.c iscsi_task */
-extern void iscsi_free_task(struct iscsi_task *task);
 
 /* session.c */
 extern struct session *session_find_name(int tid, const char *iname, uint8_t *isid);
