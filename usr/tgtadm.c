@@ -49,11 +49,16 @@ do {									\
 } while (0)
 
 #undef dprintf
-#define dprintf eprintf
+#define dprintf(fmt, args...)						\
+do {									\
+	if (debug)							\
+		eprintf(fmt, args);					\
+} while (0)
 
 #define BUFSIZE 4096
 
 static char program_name[] = "tgtadm";
+static int debug;
 
 static struct option const long_options[] =
 {
@@ -66,6 +71,7 @@ static struct option const long_options[] =
 	{"params", required_argument, NULL, 'p'},
 	{"user", no_argument, NULL, 'u'},
 	{"hostno", required_argument, NULL, 'i'},
+	{"debug", no_argument, NULL, 'd'},
 	{"version", no_argument, NULL, 'v'},
 	{"help", no_argument, NULL, 'h'},
 	{NULL, 0, NULL, 0},
@@ -257,7 +263,7 @@ int main(int argc, char **argv)
 	char buf[BUFSIZE];
 
 	optind = 1;
-	while ((ch = getopt_long(argc, argv, "n:o:t:s:c:l:p:uvh",
+	while ((ch = getopt_long(argc, argv, "n:o:t:s:c:l:p:uvdh",
 				 long_options, &longindex)) >= 0) {
 		switch (ch) {
 		case 'n':
@@ -292,6 +298,9 @@ int main(int argc, char **argv)
 			break;
 		case 'u':
 			set |= (1 << MODE_USER);
+			break;
+		case 'd':
+			debug = 1;
 			break;
 		case 'v':
 			printf("%s\n", program_name);
