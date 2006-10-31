@@ -1,7 +1,7 @@
 #ifndef __SCHED_H
 #define __SCHED_H
 
-#define SCHED_HZ 1
+#define SCHED_HZ 5
 
 struct tgt_work {
 	struct list_head entry;
