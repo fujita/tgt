@@ -113,3 +113,15 @@ void session_destroy(struct session *session)
 	free(session->initiator);
 	free(session);
 }
+
+void session_get(struct session *session)
+{
+	session->refcount++;
+}
+
+void session_put(struct session *session)
+{
+	session->refcount--;
+	if (session->refcount == 0)
+		session_destroy(session);
+}

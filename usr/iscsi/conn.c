@@ -24,6 +24,8 @@ void conn_add_to_session(struct connection *conn, struct session *session)
 		exit(0);
 	}
 
+	/* release in conn_free */
+	session_get(session);
 	conn->session = session;
 	list_add(&conn->clist, &session->conn_list);
 }
@@ -60,12 +62,17 @@ struct connection *conn_alloc(void)
 
 static void conn_free(struct connection *conn)
 {
+	struct session *session = conn->session;
+
 	dprintf("freeing connection\n");
 	list_del(&conn->clist);
 	free(conn->req_buffer);
 	free(conn->rsp_buffer);
 	free(conn->initiator);
 	free(conn);
+
+	if (session)
+		session_put(session);
 }
 
 void conn_close(struct connection *conn, int fd)

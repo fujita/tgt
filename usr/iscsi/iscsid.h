@@ -53,6 +53,8 @@ struct PDU {
 #define KEY_STATE_DONE		2
 
 struct session {
+	int refcount;
+
 	/* linked to target->sessions_list */
 	struct list_head slist;
 
@@ -248,6 +250,8 @@ extern struct session *session_find_name(int tid, const char *iname, uint8_t *is
 extern int session_create(struct connection *conn);
 extern void session_destroy(struct session *session);
 extern struct session *session_lookup(uint16_t tsih);
+extern void session_get(struct session *session);
+extern void session_put(struct session *session);
 
 /* target.c */
 extern int target_find_by_name(const char *name, int *tid);
