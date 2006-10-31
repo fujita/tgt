@@ -27,6 +27,8 @@
 #include "log.h"
 #include "sched.h"
 
+int stop_daemon;
+
 static unsigned int jiffies;
 static LIST_HEAD(active_work_list);
 static LIST_HEAD(inactive_work_list);

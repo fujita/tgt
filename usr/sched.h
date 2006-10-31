@@ -14,4 +14,6 @@ extern void schedule(void);
 extern void enqueue_work(struct tgt_work *work, unsigned int second);
 extern void dequeue_work(struct tgt_work *work);
 
+extern int stop_daemon;
+
 #endif

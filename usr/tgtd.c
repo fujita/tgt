@@ -182,7 +182,6 @@ retry:
 			eprintf("%m\n");
 			exit(1);
 		}
-		goto retry;
 	} else if (nevent) {
 		for (i = 0; i < nevent; i++) {
 			tev = (struct tgt_event *) events[i].data.ptr;
@@ -191,7 +190,8 @@ retry:
 	} else
 		schedule();
 
-	goto retry;
+	if (!stop_daemon)
+		goto retry;
 }
 
 static int lld_init(char *data)
