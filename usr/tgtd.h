@@ -17,6 +17,7 @@ struct tgt_device {
 	uint64_t size;
 	uint64_t lun;
 	char scsi_id[SCSI_ID_LEN];
+	char *path;
 
 	struct list_head d_hlist;
 	struct list_head d_list;
@@ -47,6 +48,7 @@ extern int tgt_device_destroy(int tid, uint64_t lun);
 extern int tgt_target_create(int tid);
 extern int tgt_target_destroy(int tid);
 extern int tgt_target_bind(int tid, int host_no, int lid);
+extern int tgt_target_show(char *buf, int rest);
 
 typedef void (event_handler_t)(int fd, int events, void *data);
 extern int tgt_event_add(int fd, int events, event_handler_t handler, void *data);

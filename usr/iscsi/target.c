@@ -105,3 +105,13 @@ int iscsi_target_create(int tid, char *name)
 
 	return 0;
 }
+
+int iscsi_target_show(int tid, char *buf, int rest)
+{
+	struct target* target;
+
+	if (!(target = target_find_by_id(tid)))
+		return 0;
+
+	return snprintf(buf, rest, ": %s\n", target->name);
+}

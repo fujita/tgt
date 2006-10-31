@@ -136,6 +136,7 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 {
 	struct target *target;
 	struct tgt_device *device;
+	char *p;
 	int dev_fd;
 	uint64_t size;
 
@@ -151,14 +152,21 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 		return -EINVAL;
 	}
 
+	p = strdup(path);
+	if (!p)
+		return -ENOMEM;
+
 	device = tgt_drivers[target->lid]->bdt->bd_open(path, &dev_fd, &size);
-	if (!device)
+	if (!device) {
+		free(p);
 		return -EINVAL;
+	}
 
 	device->fd = dev_fd;
 	device->addr = 0;
 	device->size = size;
 	device->lun = dev_id;
+	device->path = p;
 	snprintf(device->scsi_id, sizeof(device->scsi_id),
 		 "deadbeaf%d:%" PRIu64, tid, dev_id);
 
@@ -192,6 +200,7 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 	if (!list_empty(&device->cmd_queue.queue))
 		return -EBUSY;
 
+	free(device->path);
 	close(device->fd);
 	device_hlist_remove(device);
 	device_list_remove(device);
@@ -610,6 +619,45 @@ int tgt_target_destroy(int tid)
 	free(target);
 
 	return 0;
+}
+
+int tgt_target_show(char *buf, int rest)
+{
+	int i, len;
+	struct target *target;
+	struct tgt_device *device;
+	int (*show)(int, char *, int);
+
+	for (i = 0; i < ARRAY_SIZE(target_hash_list); i++) {
+		list_for_each_entry(target, &target_hash_list[i], t_hlist) {
+			len = snprintf(buf, rest, "tid %d: lld %s", target->tid,
+				       tgt_drivers[target->lid]->name);
+			buf += len;
+			rest -= len;
+			if (!rest)
+				goto out;
+
+			if (tgt_drivers[target->lid]->target_show) {
+				show = tgt_drivers[target->lid]->target_show;
+				len = show(target->tid, buf, rest);
+				buf += len;
+				rest -= len;
+				if (!rest)
+					goto out;
+			}
+
+			list_for_each_entry(device, &target->device_list, d_list) {
+				len = snprintf(buf, rest, "\tlun %" PRIu64 ": path %s\n",
+					       device->lun, device->path);
+				buf += len;
+				rest -= len;
+				if (!rest)
+					goto out;
+			}
+		}
+	}
+out:
+	return rest;
 }
 
 __attribute__((constructor)) static void target_init(void)

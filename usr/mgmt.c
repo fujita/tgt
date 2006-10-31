@@ -133,6 +133,14 @@ int tgt_mgmt(int lld_no, struct tgtadm_req *req, struct tgtadm_res *res,
 		req->len, lld_no, req->mode, req->op,
 		req->tid, req->sid, req->lun, params, getpid());
 
+	if (req->op == OP_SHOW) {
+		err = tgt_target_show((char *)res->data, len - sizeof(*res));
+		res->err = 0;
+		res->len = len - err;
+		dprintf("%d %d\n", len, err);
+		return 0;
+	}
+
 	switch (req->mode) {
 	case MODE_TARGET:
 		err = target_mgmt(lld_no, req, params, res, &len);
