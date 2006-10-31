@@ -295,8 +295,8 @@ int target_cmd_queue(int host_no, uint8_t *scb, unsigned long uaddr,
 
 		cmd_post_perform(q, cmd, uaddr, len, mmapped);
 
-		dprintf("%" PRIx64 " %x %lx %" PRIu64 " %d %d\n",
-			tag, scb[0], uaddr, offset, result, async);
+		dprintf("%" PRIx64 " %x %lx %" PRIu64 " %d %d %d\n",
+			tag, scb[0], uaddr, offset, len, result, async);
 
 		cmd->rw = rw;
 		set_cmd_processed(cmd);

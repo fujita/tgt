@@ -267,7 +267,7 @@ static int __report_luns(struct list_head *dev_list, uint8_t *lun_buf,
 {
 	struct tgt_device *dev;
 	uint64_t lun, *data = (uint64_t *) p;
-	int idx, alen, oalen, nr_luns, rbuflen = 4096;
+	int idx, alen, oalen, nr_luns, rbuflen = 4096, overflow;
 	int result = SAM_STAT_GOOD;
 
 	memset(data, 0, rbuflen);
@@ -287,18 +287,22 @@ static int __report_luns(struct list_head *dev_list, uint8_t *lun_buf,
 	idx = 1;
 	nr_luns = 0;
 
+	overflow = 0;
 	list_for_each_entry(dev, dev_list, d_list) {
-		lun = dev->lun;
+		nr_luns++;
 
+		if (overflow)
+			continue;
+
+		lun = dev->lun;
 		lun = ((lun > 0xff) ? (0x1 << 30) : 0) | ((0x3ff & lun) << 16);
 		data[idx++] = __cpu_to_be64(lun << 32);
 		if (!(alen -= 8))
-			break;
+			overflow = 1;
 		if (!(rbuflen -= 8)) {
 			fprintf(stderr, "FIXME: too many luns\n");
 			exit(-1);
 		}
-		nr_luns++;
 	}
 
 	*((uint32_t *) data) = __cpu_to_be32(nr_luns * 8);
@@ -502,6 +506,7 @@ int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu,
 		result = inquiry(lid, dev, host_no, lun_buf, scb, data, len);
 		break;
 	case REPORT_LUNS:
+		*len = datalen;
 		result = report_luns(lid, dev_list, lun_buf, scb, data, len);
 		break;
 	case READ_CAPACITY:
