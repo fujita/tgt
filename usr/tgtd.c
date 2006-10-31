@@ -34,6 +34,7 @@
 #include "list.h"
 #include "tgtd.h"
 #include "driver.h"
+#include "sched.h"
 #include "util.h"
 
 #define MAX_FDS	4096
@@ -169,7 +170,8 @@ int tgt_event_modify(int fd, int events)
 
 static void event_loop(void)
 {
-	int nevent, i, timeout = -1;
+	int nevent, i;
+	static int timeout = 1000 / SCHED_HZ;
 	struct epoll_event events[1024];
 	struct tgt_event *tev;
 
@@ -181,17 +183,13 @@ retry:
 			exit(1);
 		}
 		goto retry;
-	} else if (nevent == 0) {
-		/*
-		 * TODO: need kinda scheduling stuff like open-iscsi here.
-		 */
-		goto retry;
-	}
-
-	for (i = 0; i < nevent; i++) {
-		tev = (struct tgt_event *) events[i].data.ptr;
-		tev->handler(tev->fd, events[i].events, tev->data);
-	}
+	} else if (nevent) {
+		for (i = 0; i < nevent; i++) {
+			tev = (struct tgt_event *) events[i].data.ptr;
+			tev->handler(tev->fd, events[i].events, tev->data);
+		}
+	} else
+		schedule();
 
 	goto retry;
 }
