@@ -964,7 +964,24 @@ extern int iscsi_tm_done(int host_no, uint64_t mid, int result)
 {
 	struct iscsi_task *task = (struct iscsi_task *) (unsigned long) mid;
 
-	task->result = result;
+	switch (result) {
+	case 0:
+		task->result = ISCSI_TMF_RSP_COMPLETE;
+		break;
+	case -EINVAL:
+		task->result = ISCSI_TMF_RSP_NOT_SUPPORTED;
+		break;
+	case -EEXIST:
+		/*
+		 * the command completed or we could not find it so
+		 * we retrun  no task here
+		 */
+		task->result = ISCSI_TMF_RSP_NO_TASK;
+		break;
+	default:
+		task->result = ISCSI_TMF_RSP_REJECTED;
+		break;
+	}
 	list_add_tail(&task->c_list, &task->conn->tx_clist);
 	tgt_event_modify(task->conn->fd, EPOLLIN | EPOLLOUT);
 	return 0;
