@@ -74,7 +74,7 @@ static void aio_event_handler(int fd, int events, void *data)
 
 	for (i = 0; i < nr; i++) {
 		iocb = bai->events[i].obj;
-		dprintf("%p\n", iocb->data);
+		dprintf("%p %p\n", iocb, iocb->data);
 		target_cmd_io_done(iocb->data, 0);
 	}
 }
@@ -148,7 +148,8 @@ static int bd_aio_cmd_submit(struct tgt_device *dev, int rw, uint32_t datalen,
 	io = &iocb;
 	memset(io, 0, sizeof(*io));
 
-	dprintf("%d %d %u %lx %" PRIx64 " %p\n", bai->fd, rw, datalen, *uaddr, offset, key);
+	dprintf("%d %d %u %lx %" PRIx64 " %p %p\n", bai->fd, rw, datalen, *uaddr, offset,
+		io, key);
 
 	if (rw == READ)
 		io_prep_pread(io, bai->fd, (void *) *uaddr, datalen, offset);
