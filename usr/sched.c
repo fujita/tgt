@@ -21,6 +21,7 @@
  */
 
 #include <stdlib.h>
+#include <stdint.h>
 
 #include "list.h"
 #include "util.h"

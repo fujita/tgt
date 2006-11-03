@@ -16,13 +16,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <scsi/scsi.h>
 #include <sys/epoll.h>
 
 #include "iscsid.h"
 #include "tgtd.h"
 #include "util.h"
-
-#include <scsi/scsi.h>
 
 #define MAX_QUEUE_CMD	32
 

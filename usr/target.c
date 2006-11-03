@@ -27,14 +27,13 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/socket.h>
+#include <scsi/scsi.h>
 
 #include "list.h"
 #include "util.h"
 #include "tgtd.h"
 #include "driver.h"
 #include "target.h"
-
-#include <scsi/scsi.h>
 
 static struct target *hostt[MAX_NR_HOST];
 static struct list_head target_hash_list[1 << HASH_ORDER];
