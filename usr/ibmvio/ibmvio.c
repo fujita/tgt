@@ -37,7 +37,6 @@
 #include <asm/byteorder.h>
 #include <linux/fs.h>
 #include <scsi/scsi.h>
-#include <scsi/scsi_tgt_if.h>
 #include <sys/mman.h>
 
 #include "list.h"
