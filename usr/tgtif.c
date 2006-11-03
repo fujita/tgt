@@ -68,12 +68,12 @@ static int kreq_send(struct tgt_event *p)
 {
 	struct tgt_event *ev;
 	ev = head_ring_hdr(&ukring);
-	if (ev->status == TGT_EVENT_STATUS_USED)
+	if (ev->hdr.status)
 		return -ENOMEM;
 
 	memcpy(ev, p, sizeof(*p));
 	ring_index_inc(&ukring);
-	ev->status = TGT_EVENT_STATUS_USED;
+	ev->hdr.status = 1;
 
 	write(chrfd, ev, 1);
 
@@ -84,9 +84,9 @@ int kspace_send_tsk_mgmt_res(int host_no, uint64_t mid, int result)
 {
 	struct tgt_event ev;
 
-	ev.u.tsk_mgmt_rsp.host_no = host_no;
-	ev.u.tsk_mgmt_rsp.mid = mid;
-	ev.u.tsk_mgmt_rsp.result = result;
+	ev.p.tsk_mgmt_rsp.host_no = host_no;
+	ev.p.tsk_mgmt_rsp.mid = mid;
+	ev.p.tsk_mgmt_rsp.result = result;
 
 	return kreq_send(&ev);
 }
@@ -96,13 +96,13 @@ int kspace_send_cmd_res(int host_no, int len, int result,
 {
 	struct tgt_event ev;
 
-	ev.type = TGT_UEVENT_CMD_RSP;
-	ev.u.cmd_rsp.host_no = host_no;
-	ev.u.cmd_rsp.len = len;
-	ev.u.cmd_rsp.result = result;
-	ev.u.cmd_rsp.uaddr = addr;
-	ev.u.cmd_rsp.rw = rw;
-	ev.u.cmd_rsp.tag = tag;
+	ev.hdr.type = TGT_UEVENT_CMD_RSP;
+	ev.p.cmd_rsp.host_no = host_no;
+	ev.p.cmd_rsp.len = len;
+	ev.p.cmd_rsp.result = result;
+	ev.p.cmd_rsp.uaddr = addr;
+	ev.p.cmd_rsp.rw = rw;
+	ev.p.cmd_rsp.tag = tag;
 
 	return kreq_send(&ev);
 }
@@ -113,34 +113,34 @@ static void kern_event_handler(int fd, int events, void *data)
 
 retry:
 	ev = head_ring_hdr(&kuring);
-	if (ev->status == TGT_EVENT_STATUS_EMPTY)
+	if (!ev->hdr.status)
 		return;
 
-	dprintf("event %u %u\n", kuring.idx, ev->type);
+	dprintf("event %u %u\n", kuring.idx, ev->hdr.type);
 
-	switch (ev->type) {
+	switch (ev->hdr.type) {
 	case TGT_KEVENT_CMD_REQ:
-		target_cmd_queue(ev->k.cmd_req.host_no, ev->k.cmd_req.scb,
+		target_cmd_queue(ev->p.cmd_req.host_no, ev->p.cmd_req.scb,
 				 0,
 /* 				 ev->k.cmd_req.uaddr, */
-				 ev->k.cmd_req.lun, ev->k.cmd_req.data_len,
-				 ev->k.cmd_req.attribute, ev->k.cmd_req.tag);
+				 ev->p.cmd_req.lun, ev->p.cmd_req.data_len,
+				 ev->p.cmd_req.attribute, ev->p.cmd_req.tag);
 		break;
 	case TGT_KEVENT_CMD_DONE:
-		target_cmd_done(ev->k.cmd_done.host_no, ev->k.cmd_done.tag);
+		target_cmd_done(ev->p.cmd_done.host_no, ev->p.cmd_done.tag);
 		break;
 	case TGT_KEVENT_TSK_MGMT_REQ:
-		target_mgmt_request(ev->k.cmd_req.host_no,
-				    ev->k.tsk_mgmt_req.mid,
-				    ev->k.tsk_mgmt_req.function,
-				    ev->k.tsk_mgmt_req.lun,
-				    ev->k.tsk_mgmt_req.tag);
+		target_mgmt_request(ev->p.cmd_req.host_no,
+				    ev->p.tsk_mgmt_req.mid,
+				    ev->p.tsk_mgmt_req.function,
+				    ev->p.tsk_mgmt_req.lun,
+				    ev->p.tsk_mgmt_req.tag);
 		break;
 	default:
-		eprintf("unknown event %u\n", ev->type);
+		eprintf("unknown event %u\n", ev->hdr.type);
 	}
 
-	ev->status = TGT_EVENT_STATUS_EMPTY;
+	ev->hdr.status = 0;
 	ring_index_inc(&kuring);
 
 	goto retry;
