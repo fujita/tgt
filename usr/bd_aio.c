@@ -65,7 +65,7 @@ static void aio_event_handler(int fd, int events, void *data)
 	struct tgt_device *dev;
 	struct bd_aio_info *bai;
 	int i, nr;
-	struct iocb *iocb;
+/* 	struct iocb *iocb; */
 
 	dev = (struct tgt_device *) data;
 	bai = (struct bd_aio_info *) dev->bddata;
@@ -73,9 +73,11 @@ static void aio_event_handler(int fd, int events, void *data)
 	nr = io_getevents(bai->ctx, 0, MAX_AIO_REQS, bai->events, NULL);
 
 	for (i = 0; i < nr; i++) {
-		iocb = bai->events[i].obj;
-		dprintf("%p %p\n", iocb, iocb->data);
-		target_cmd_io_done(iocb->data, 0);
+/* 		iocb = bai->events[i].obj; */
+/* 		dprintf("%p %p\n", iocb, iocb->data); */
+/* 		target_cmd_io_done(iocb->data, 0); */
+		dprintf("%p\n", bai->events[i].data);
+		target_cmd_io_done(bai->events[i].data, 0);
 	}
 }
 
