@@ -44,48 +44,24 @@
  * IO_CMD_EPOLL_WAIT, looks more promising. kqueue is promising too.
  */
 
-#define REQUEST_ASYNC_FD 1
-
 /* FIXME */
 #define MAX_AIO_REQS 1024
 #define O_DIRECT 040000 /* who defines this?*/
 
 struct bd_aio_info {
 	int fd;
-	int aio_fd;
 
-	io_context_t ctx;
 	/* TODO: batch requests*/
 	struct iocb iocb[MAX_AIO_REQS];
 	struct io_event events[MAX_AIO_REQS];
 };
 
-static void aio_event_handler(int fd, int events, void *data)
-{
-	struct tgt_device *dev;
-	struct bd_aio_info *bai;
-	int i, nr;
-/* 	struct iocb *iocb; */
-
-	dev = (struct tgt_device *) data;
-	bai = (struct bd_aio_info *) dev->bddata;
-
-	nr = io_getevents(bai->ctx, 0, MAX_AIO_REQS, bai->events, NULL);
-
-	for (i = 0; i < nr; i++) {
-/* 		iocb = bai->events[i].obj; */
-/* 		dprintf("%p %p\n", iocb, iocb->data); */
-/* 		target_cmd_io_done(iocb->data, 0); */
-		dprintf("%p\n", bai->events[i].data);
-		target_cmd_io_done(bai->events[i].data, 0);
-	}
-}
+extern io_context_t ctx;
 
 static struct tgt_device *bd_aio_open(char *path, int *fd, uint64_t *size)
 {
 	struct tgt_device *dev;
 	struct bd_aio_info *bai;
-	int err;
 
 	dev = zalloc(sizeof(*dev) + sizeof(*bai));
 	if (!dev)
@@ -96,35 +72,11 @@ static struct tgt_device *bd_aio_open(char *path, int *fd, uint64_t *size)
 		goto free_dev;
 
 	bai = (struct bd_aio_info *) dev->bddata;
-
-	bai->ctx = (io_context_t) REQUEST_ASYNC_FD;
-	bai->aio_fd = io_setup(MAX_AIO_REQS, &bai->ctx);
-	if (bai->aio_fd < 0) {
-		eprintf("Can't setup aio fd, %m\n");
-		goto close_fd;
-	}
-
-	/*
-	 * We use edge triggering because we want only one
-	 * notification per task.
-	 */
-	err = tgt_event_add(bai->aio_fd, EPOLLIN | EPOLLET,
-			    aio_event_handler, dev);
-	if (err)
-		goto aio_cb_destroy;
-
-	dprintf("Succeeded to setup aio fd, %s\n", path);
-
 	bai->fd = *fd;
-	return dev;
 
-aio_cb_destroy:
-	io_destroy(bai->ctx);
-close_fd:
-	close(*fd);
+	return dev;
 free_dev:
 	free(dev);
-
 	return NULL;
 }
 
@@ -133,7 +85,6 @@ static void bd_aio_close(struct tgt_device *dev)
 	struct bd_aio_info *bai = (struct bd_aio_info *) dev->bddata;
 
 	tgt_event_del(bai->fd);
-	io_destroy(bai->ctx);
 	free(dev);
 }
 
@@ -159,7 +110,7 @@ static int bd_aio_cmd_submit(struct tgt_device *dev, int rw, uint32_t datalen,
 		io_prep_pwrite(io, bai->fd, (void *) *uaddr, datalen, offset);
 
 	io->data = key;
-	err = io_submit(bai->ctx, 1, &io);
+	err = io_submit(ctx, 1, &io);
 
 	return 0;
 }
