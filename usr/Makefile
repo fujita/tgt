@@ -1,6 +1,7 @@
 CFLAGS += -O2 -fno-inline -Wall -Wstrict-prototypes -g -D_LARGEFILE64_SOURCE -I$(KERNELSRC)/include -I../include -I.
 PROGRAMS = tgtd tgtadm
 TGTD_OBJS = tgtd.o tgtif.o mgmt.o target.o scsi.o log.o driver.o util.o sched.o
+LIBS += -laio
 
 ifneq ($(IBMVIO),)
 CFLAGS += -DIBMVIO
@@ -22,7 +23,6 @@ endif
 
 ifneq ($(BD_AIO),)
 TGTD_OBJS += bd_aio.o
-LIBS += -laio
 endif
 
 all: $(PROGRAMS)
