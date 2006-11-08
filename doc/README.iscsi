@@ -8,7 +8,7 @@ host:~/tgt# ./usr/tgtd --lld iscsi
 
 Configuration
 -------------
-Everyting is configured via the tgtadm management tool after you run tgt daemon.
+Everyting is configured via the tgtadm management tool.
 
 The following example creates a target with id 1 (the iqn is
 iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz) and adds a
