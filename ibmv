@@ -5,6 +5,6 @@
 
 PATH=/sbin:/bin:/usr/sbin:/usr/bin
 
-${PWD}/usr/tgtadm --driver ibmvstgt --op new --tid 1
-${PWD}/usr/tgtadm --driver ibmvstgt --op bind --tid 1 --bus vio,30000003
-${PWD}/usr/tgtadm --driver ibmvstgt --op new --tid 1 --lun 0 --params Path=/dev/sdb1
+${PWD}/usr/tgtadm --lld ibmvio --op new --tid 1
+${PWD}/usr/tgtadm --lld ibmvio --op new --tid 1 --lun 0 --params Path=/dev/sdb1
+${PWD}/usr/tgtadm --lld ibmvio --op bind --tid 1 --host 1
