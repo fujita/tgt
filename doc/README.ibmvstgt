@@ -1,3 +1,56 @@
+Starting
+-------------
+Try the following commands:
+
+host:~/tgt$ su
+host:~/tgt# modprobe scsi_tgt
+host:~/tgt# modprobe libsrp
+host:~/tgt# modprobe ibmvstgt
+host:~/tgt# ./usr/tgtd --lld ibmvio
+
+See /var/log/kern.log (your Linux distributions may use the different
+log file name) to make sure that the kernel modules are loaded
+properly. You should see messages like the followings:
+
+Feb 27 19:37:52 lilac kernel: IBM eServer i/pSeries Virtual SCSI Target Driver
+Feb 27 19:37:52 lilac kernel: vio_register_driver: driver ibmvscsi registering
+Feb 27 19:37:52 lilac kernel: scsi1 : ibmvstgt
+
+You need the scsi host number (it is 1 in this example) in the next
+stage (configuration).
+
+
+Configuration
+-------------
+Everyting is configured via the tgtadm management tool.
+
+The following example creates a target with id 1, adds a logical unit
+(backed by /dev/sdb1) with lun 0, and then bind the target with #1 scsi host.
+
+host:~/tgt# ./usr/tgtadm --lld ibmvio --op new --tid 1
+host:~/tgt# ./usr/tgtadm --lld ibmvio --op new --tid 1 --lun 0 --params Path=/dev/sdb1
+host:~/tgt# ./usr/tgtadm --lld ibmvio --op bind --tid 1 --host 1
+
+Please see /var/log/daemon.log (your Linux distributions may use the
+different log file name again) to make sure that everything is
+fine. You should see something like the followings:
+
+Feb 27 22:36:40 lilac tgtd: dl_init(71) istgt library is not loaded.
+Feb 27 22:36:40 lilac tgtd: dl_init(71) ibmvstgt library is not loaded.
+Feb 27 22:37:08 lilac tgtd: tgt_target_create(572) Succeed to create a new target 1
+Feb 27 22:37:08 lilac tgtd: tgt_target_bind(517) Succeed to bind the target 1 to the scsi host 1
+Feb 27 22:37:08 lilac tgtd: tgt_device_create(238) Succeed to add a logical unit 0 to the target 1
+Now you are ready. Boot up VIO clients.
+
+
+History
+-------------
+The following description was taken from the original ibmvscsis
+driver:
+
+http://lkml.org/lkml/2005/10/17/99
+
+
 This driver is a SCSI target that interoperates according to the PAPR
 (POWER Architecture Platform Requirements) document.  Currently it is
 specific to POWER logical partitioning, however in the future it would
