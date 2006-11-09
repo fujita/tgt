@@ -76,7 +76,7 @@ static int bd_mmap_cmd_submit(struct tgt_device *dev, int rw, uint32_t datalen,
 		}
 	}
 
-	printf("%lx %u %" PRIu64 "\n", *uaddr, datalen, offset);
+	dprintf("%lx %u %" PRIu64 "\n", *uaddr, datalen, offset);
 
 	return err;
 }
