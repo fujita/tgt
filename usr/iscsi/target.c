@@ -18,28 +18,6 @@
 #include "iscsid.h"
 #include "tgtadm.h"
 
-static struct param default_tgt_session_param[] = {
-	{0, 8192},
-	{0, 8192},
-	{0, DIGEST_NONE},
-	{0, DIGEST_NONE},
-	{0, 1},
-	{0, 1},
-	{0, 1},
-	{0, 65536},
-	{0, 262144},
-	{0, 1},
-	{0, 1},
-	{0, 0},
-	{0, 0},
-	{0, 0},
-	{0, 2},
-	{0, 20},
-	{0, 2048},
-	{0, 2048},
-	{0, 1},
-};
-
 static LIST_HEAD(targets_list);
 
 void target_list_build(struct connection *conn, char *addr, char *name)
@@ -106,13 +84,35 @@ int iscsi_target_destroy(int tid)
 int iscsi_target_create(int tid, char *name)
 {
 	struct target *target;
+	struct param default_tgt_session_param[] = {
+		{0, 8192},
+		{0, 8192},
+		{0, DIGEST_NONE},
+		{0, DIGEST_NONE},
+		{0, 1},
+		{0, 1},
+		{0, 1},
+		{0, 65536},
+		{0, 262144},
+		{0, 1},
+		{0, 1},
+		{0, 0},
+		{0, 0},
+		{0, 0},
+		{0, 2},
+		{0, 20},
+		{0, 2048},
+		{0, 2048},
+		{0, 1},
+	};
 
 	if (!name)
 		return -EINVAL;
 
 	dprintf("%d %s\n", tid, name);
 
-	if (!(target = malloc(sizeof(*target))))
+	target = malloc(sizeof(*target));
+	if (!target)
 		return -ENOMEM;
 
 	memset(target, 0, sizeof(*target));
