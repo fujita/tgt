@@ -27,7 +27,7 @@ struct tgtadm_req {
 	enum tgtadm_op op;
 	uint32_t len;
 
-	uint32_t tid;
+	int32_t tid;
 	uint64_t sid;
 	uint32_t cid;
 	uint64_t lun;

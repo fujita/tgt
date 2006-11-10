@@ -620,35 +620,42 @@ int tgt_target_destroy(int tid)
 	return 0;
 }
 
-int tgt_target_show(char *buf, int rest)
+int tgt_target_show(int tid, char *buf, int rest)
 {
-	int i, len;
+	int len = 0;
+	struct target *target;
+
+	target  = target_lookup(tid);
+	if (!target)
+		goto out;
+
+	if (tgt_drivers[target->lid]->target_show)
+		len = tgt_drivers[target->lid]->target_show(target->tid, buf, rest);
+out:
+	return len;
+}
+
+int tgt_target_show_all(char *buf, int rest)
+{
+	int i, len, total;
 	struct target *target;
 	struct tgt_device *device;
-	int (*show)(int, char *, int);
 
-	for (i = 0; i < ARRAY_SIZE(target_hash_list); i++) {
+	for (i = total = 0; i < ARRAY_SIZE(target_hash_list); i++) {
 		list_for_each_entry(target, &target_hash_list[i], t_hlist) {
-			len = snprintf(buf, rest, "tid %d: lld %s", target->tid,
-				       tgt_drivers[target->lid]->name);
+			len = snprintf(buf, rest, "tid %d: lld name %s\n",
+				       target->tid, tgt_drivers[target->lid]->name);
 			buf += len;
+			total += len;
 			rest -= len;
 			if (!rest)
 				goto out;
-
-			if (tgt_drivers[target->lid]->target_show) {
-				show = tgt_drivers[target->lid]->target_show;
-				len = show(target->tid, buf, rest);
-				buf += len;
-				rest -= len;
-				if (!rest)
-					goto out;
-			}
 
 			list_for_each_entry(device, &target->device_list, d_list) {
 				len = snprintf(buf, rest, "\tlun %" PRIu64 ": path %s\n",
 					       device->lun, device->path);
 				buf += len;
+				total += len;
 				rest -= len;
 				if (!rest)
 					goto out;
@@ -656,7 +663,7 @@ int tgt_target_show(char *buf, int rest)
 		}
 	}
 out:
-	return rest;
+	return total;
 }
 
 __attribute__((constructor)) static void target_init(void)

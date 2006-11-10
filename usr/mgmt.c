@@ -139,9 +139,18 @@ int tgt_mgmt(int lld_no, struct tgtadm_req *req, struct tgtadm_res *res,
 		req->tid, req->sid, req->lun, params, getpid());
 
 	if (req->op == OP_SHOW) {
-		err = tgt_target_show((char *)res->data, len - sizeof(*res));
-		res->err = 0;
-		res->len = len - err;
+		if (req->tid > 0)
+			err = tgt_target_show(req->tid, (char *)res->data,
+					      len - sizeof(*res));
+		else
+			err = tgt_target_show_all((char *)res->data,
+						  len - sizeof(*res));
+		if (err < 0)
+			res->err = err;
+		else {
+			res->err = 0;
+			res->len = err + sizeof(*res);
+		}
 		dprintf("%d %d\n", len, err);
 		return 0;
 	}

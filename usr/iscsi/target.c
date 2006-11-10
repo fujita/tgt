@@ -161,13 +161,39 @@ int iscsi_target_update(int tid, char *name)
 	return 0;
 }
 
+static int show_iscsi_param(char *buf, struct param *param, int rest)
+{
+	int i, len, total;
+	char value[64];
+	struct iscsi_key *keys = session_keys;
+
+	for (i = total = 0; session_keys[i].name; i++) {
+		param_val_to_str(keys, i, param[i].val, value);
+		len = snprintf(buf + total, rest, "%s=%s\n", keys[i].name, value);
+		total += len;
+		rest -= len;
+		if (!rest)
+			break;
+	}
+
+	return total;
+}
 
 int iscsi_target_show(int tid, char *buf, int rest)
 {
 	struct target* target;
+	int len;
 
-	if (!(target = target_find_by_id(tid)))
+	target = target_find_by_id(tid);
+	if (!target)
 		return 0;
 
-	return snprintf(buf, rest, ": %s\n", target->name);
+	len = snprintf(buf, rest, "tid: %d %s\n", target->tid, target->name);
+	rest -= len;
+	if (!rest)
+		goto out;
+
+	len += show_iscsi_param(buf + len, target->session_param, rest);
+out:
+	return len;
 }
