@@ -8,6 +8,7 @@ struct tgt_driver {
 	int (*target_create) (int, char *);
 	int (*target_destroy) (int);
 	int (*target_show) (int, char *, int);
+	int (*target_update) (int, char *);
 
 	uint64_t (*scsi_get_lun)(uint8_t *);
 	int (*scsi_report_luns)(struct list_head *, uint8_t *, uint8_t *,

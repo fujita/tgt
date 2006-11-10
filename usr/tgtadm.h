@@ -9,6 +9,7 @@ enum tgtadm_op {
 	OP_DELETE,
 	OP_SHOW,
 	OP_BIND,
+	OP_UPDATE,
 };
 
 enum tgtadm_mode {

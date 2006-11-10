@@ -71,6 +71,8 @@ static struct option const long_options[] =
 	{"params", required_argument, NULL, 'p'},
 	{"user", no_argument, NULL, 'u'},
 	{"hostno", required_argument, NULL, 'i'},
+	{"name", required_argument, NULL, 'm'},
+	{"value", required_argument, NULL, 'a'},
 	{"debug", no_argument, NULL, 'd'},
 	{"version", no_argument, NULL, 'v'},
 	{"help", no_argument, NULL, 'h'},
@@ -156,9 +158,9 @@ static int ipc_mgmt_res(int fd)
 {
 	struct tgtadm_res *res;
 	char buf[BUFSIZE];
-	int err, len = (void *) res->data - (void *) res;
+	int err, len;
 
-	err = read(fd, buf, len);
+	err = read(fd, buf, sizeof(*res));
 	if (err < 0) {
 		eprintf("Cannot read from tgtd, %m\n");
 		return -1;
@@ -172,7 +174,7 @@ static int ipc_mgmt_res(int fd)
 
 	dprintf("got the response %d %d\n", res->err, res->len);
 
-	len = res->len - len;
+	len = res->len - sizeof(*res);
 	if (!len)
 		return 0;
 
@@ -245,6 +247,8 @@ static int str_to_op(char *str)
 		op = OP_BIND;
 	else if (!strcmp("show", str))
 		op = OP_SHOW;
+	else if (!strcmp("update", str))
+		op = OP_UPDATE;
 	else
 		op = -1;
 
@@ -258,9 +262,12 @@ int main(int argc, char **argv)
 	int tid = -1;
 	uint32_t cid = 0, set = 0, hostno = 0;
 	uint64_t sid = 0, lun = 0;
-	char *params = NULL, *lldname = NULL;
+	char *params, *lldname;
 	struct tgtadm_req *req;
 	char buf[BUFSIZE];
+	char *name, *value;
+
+	params = lldname = name = value = NULL;
 
 	optind = 1;
 	while ((ch = getopt_long(argc, argv, "n:o:t:s:c:l:p:uvdh",
@@ -298,6 +305,12 @@ int main(int argc, char **argv)
 			break;
 		case 'u':
 			set |= (1 << MODE_USER);
+			break;
+		case 'a':
+			value = optarg;
+			break;
+		case 'm':
+			name = optarg;
 			break;
 		case 'd':
 			debug = 1;
@@ -341,7 +354,17 @@ int main(int argc, char **argv)
 		len = min(strlen(params), sizeof(buf) - len);
 		strncpy((char *) req->data, params, len);
 	}
-	req->len = ((char *) req->data - (char *) req) + len;
+
+	if (name && value) {
+		int rest = sizeof(buf) - sizeof(*req);
+		char *p = (char *) req->data;
+
+		len = snprintf(p, rest, "%s", name);
+		len += 1;
+		len += snprintf(p + len, rest - len, "%s", value);
+	}
+
+	req->len = sizeof(*req) + len;
 
 	err = ipc_mgmt_req(req);
 out:

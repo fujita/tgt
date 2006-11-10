@@ -85,6 +85,11 @@ static int target_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 	case OP_BIND:
 		err = tgt_target_bind(req->tid, req->host_no, lld_no);
 		break;
+	case OP_UPDATE:
+		err = -EINVAL;
+		if (tgt_drivers[lld_no]->target_update)
+			err = tgt_drivers[lld_no]->target_update(req->tid, params);
+		break;
 	default:
 		break;
 	}

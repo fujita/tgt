@@ -129,6 +129,39 @@ int iscsi_target_create(int tid, char *name)
 	return 0;
 }
 
+int iscsi_target_update(int tid, char *name)
+{
+	int idx, err;
+	unsigned int val;
+	char *str;
+	struct target* target;
+
+	target = target_find_by_id(tid);
+	if (!target)
+		return -ENOENT;
+
+	str = name + strlen(name) + 1;
+
+	idx = param_index_by_name(name, session_keys);
+	if (idx < 0)
+		return idx;
+
+	err = param_str_to_val(session_keys, idx, str, &val);
+	if (err)
+		return err;
+
+	err = param_check_val(session_keys, idx, &val);
+	if (err < 0)
+		return err;
+
+	target->session_param[idx].val = val;
+
+	dprintf("%s %s %u\n", name, str, val);
+
+	return 0;
+}
+
+
 int iscsi_target_show(int tid, char *buf, int rest)
 {
 	struct target* target;
