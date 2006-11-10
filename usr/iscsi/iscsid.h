@@ -26,7 +26,6 @@
 #define be32_to_cpu(x)	__be32_to_cpu(x)
 
 #define ISCSI_NAME_LEN 256
-#define ISTGT_NAMESPACE "ISTGT_ABSTRACT_NAMESPACE"
 
 #define DIGEST_ALL		(DIGEST_NONE | DIGEST_CRC32C)
 #define DIGEST_NONE		(1 << 0)
