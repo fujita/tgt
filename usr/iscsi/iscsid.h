@@ -206,6 +206,8 @@ struct target {
 
 	struct list_head sessions_list;
 
+	struct param session_param[ISCSI_PARAM_MAX];
+
 	int tid;
 	char name[ISCSI_NAME_LEN];
 	char *alias;
@@ -253,7 +255,7 @@ extern void session_get(struct session *session);
 extern void session_put(struct session *session);
 
 /* target.c */
-extern int target_find_by_name(const char *name, int *tid);
+struct target * target_find_by_name(const char *name);
 struct target * target_find_by_id(int tid);
 extern void target_list_build(struct connection *, char *, char *);
 

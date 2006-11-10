@@ -18,6 +18,28 @@
 #include "iscsid.h"
 #include "tgtadm.h"
 
+static struct param default_tgt_session_param[] = {
+	{0, 8192},
+	{0, 8192},
+	{0, DIGEST_NONE},
+	{0, DIGEST_NONE},
+	{0, 1},
+	{0, 1},
+	{0, 1},
+	{0, 65536},
+	{0, 262144},
+	{0, 1},
+	{0, 1},
+	{0, 0},
+	{0, 0},
+	{0, 0},
+	{0, 2},
+	{0, 20},
+	{0, 2048},
+	{0, 2048},
+	{0, 1},
+};
+
 static LIST_HEAD(targets_list);
 
 void target_list_build(struct connection *conn, char *addr, char *name)
@@ -35,18 +57,16 @@ void target_list_build(struct connection *conn, char *addr, char *name)
 	}
 }
 
-int target_find_by_name(const char *name, int *tid)
+struct target *target_find_by_name(const char *name)
 {
 	struct target *target;
 
 	list_for_each_entry(target, &targets_list, tlist) {
-		if (!strcmp(target->name, name)) {
-			*tid = target->tid;
-			return 0;
-		}
+		if (!strcmp(target->name, name))
+			return target;
 	}
 
-	return -ENOENT;
+	return NULL;
 }
 
 struct target* target_find_by_id(int tid)
@@ -97,6 +117,9 @@ int iscsi_target_create(int tid, char *name)
 
 	memset(target, 0, sizeof(*target));
 	memcpy(target->name, name, sizeof(target->name) - 1);
+
+	memcpy(target->session_param, default_tgt_session_param,
+	       sizeof(target->session_param));
 
 	INIT_LIST_HEAD(&target->tlist);
 	INIT_LIST_HEAD(&target->sessions_list);

@@ -321,6 +321,7 @@ static void login_start(struct connection *conn)
 	struct iscsi_login *req = (struct iscsi_login *)&conn->req.bhs;
 	struct iscsi_login_rsp *rsp = (struct iscsi_login_rsp *)&conn->rsp.bhs;
 	char *name, *alias, *session_type, *target_name;
+	struct target *target;
 
 	conn->cid = be16_to_cpu(req->cid);
 	memcpy(conn->isid, req->isid, sizeof(req->isid));
@@ -369,12 +370,15 @@ static void login_start(struct connection *conn)
 
 /* 		if (target_find_by_name(target_name, &conn->tid) < 0 || */
 /* 		    cops->initiator_access(conn->tid, conn->fd) < 0) { */
-		if (target_find_by_name(target_name, &conn->tid) < 0) {
+
+		target = target_find_by_name(target_name);
+		if (!target) {
 			rsp->status_class = ISCSI_STATUS_CLS_INITIATOR_ERR;
 			rsp->status_detail = ISCSI_LOGIN_STATUS_TGT_NOT_FOUND;
 			conn->state = STATE_EXIT;
 			return;
 		}
+		conn->tid = target->tid;
 
 /* 		if (conn->target->max_sessions && */
 /* 		    (++conn->target->session_cnt > conn->target->max_sessions)) { */
@@ -385,7 +389,8 @@ static void login_start(struct connection *conn)
 /* 			return; */
 /* 		} */
 
-/* 		ki->param_get(conn->tid, 0, conn->session_param); */
+		memcpy(conn->session_param, target->session_param,
+		       sizeof(conn->session_param));
 		conn->exp_cmd_sn = be32_to_cpu(req->cmdsn);
 		dprintf("exp_cmd_sn: %d,%d\n", conn->exp_cmd_sn, req->cmdsn);
 		conn->max_cmd_sn = conn->exp_cmd_sn;
