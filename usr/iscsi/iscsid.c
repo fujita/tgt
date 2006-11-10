@@ -1808,7 +1808,7 @@ again:
 		if (conn->req.ahssize)
 			crc = crc32c(crc, conn->req.ahs,
 				     roundup(conn->req.ahssize, 4));
-		crc = ~__cpu_to_le32(crc);
+		crc = ~crc;
 		if (*((uint32_t *)conn->rx_digest) != crc) {
 			eprintf("rx hdr digest error 0x%x calc 0x%x\n",
 				*((uint32_t *)conn->rx_digest), crc);
@@ -1840,7 +1840,7 @@ again:
 	case IOSTATE_RX_CHECK_DDIGEST:
 		crc = ~0;
 		crc = crc32c(crc, conn->req.data, roundup(conn->req.datasize, 4));
-		crc = ~__cpu_to_le32(crc);
+		crc = ~crc;
 		conn->rx_iostate = IOSTATE_RX_END;
 		if (*((uint32_t *)conn->rx_digest) != crc) {
 			eprintf("rx hdr digest error 0x%x calc 0x%x\n",
@@ -1946,7 +1946,7 @@ void iscsi_tx_handler(int fd, struct iscsi_connection *conn)
 	case IOSTATE_TX_INIT_HDIGEST:
 		crc = ~0;
 		crc = crc32c(crc, &conn->rsp.bhs, BHS_SIZE);
-		*(uint32_t *)conn->tx_digest = ~__cpu_to_le32(crc);
+		*(uint32_t *)conn->tx_digest = ~crc;
 		conn->tx_iostate = IOSTATE_TX_HDIGEST;
 		conn->tx_buffer = conn->tx_digest;
 		conn->tx_size = sizeof(conn->tx_digest);
@@ -1982,7 +1982,7 @@ void iscsi_tx_handler(int fd, struct iscsi_connection *conn)
 		crc = ~0;
 		crc = crc32c(crc, conn->rsp.data,
 			     roundup(conn->rsp.datasize, 4));
-		*(uint32_t *)conn->tx_digest = ~__cpu_to_le32(crc);
+		*(uint32_t *)conn->tx_digest = ~crc;
 		conn->tx_iostate = IOSTATE_TX_DDIGEST;
 		conn->tx_buffer = conn->tx_digest;
 		conn->tx_size = sizeof(conn->tx_digest);
