@@ -113,7 +113,6 @@ struct iscsi_task {
 	uint64_t addr;
 	int result;
 	int len;
-	int rw;
 
 	int offset;
 

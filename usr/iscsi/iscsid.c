@@ -1030,7 +1030,6 @@ static int iscsi_scsi_cmd_done(uint64_t nid, int result, struct scsi_cmd *scmd)
 	task->addr = scmd->uaddr;
 	task->result = result;
 	task->len = scmd->len;
-	task->rw = scmd->rw;
 
 	if (scsi_get_data_dir(scmd) == DATA_WRITE)
 		task->len = 0;  /* no read result */
