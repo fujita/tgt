@@ -3,7 +3,7 @@ Starting
 Try the following commands:
 
 host:~/tgt$ su
-host:~/tgt# ./usr/tgtd --lld iscsi
+host:~/tgt# ./usr/tgtd
 
 
 Configuration

@@ -6,7 +6,7 @@ host:~/tgt$ su
 host:~/tgt# modprobe scsi_tgt
 host:~/tgt# modprobe libsrp
 host:~/tgt# modprobe ibmvstgt
-host:~/tgt# ./usr/tgtd --lld ibmvio
+host:~/tgt# ./usr/tgtd
 
 See /var/log/kern.log (your Linux distributions may use the different
 log file name) to make sure that the kernel modules are loaded
