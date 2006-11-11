@@ -266,7 +266,7 @@ int main(int argc, char **argv)
 	sigaction(SIGPIPE, &sa_new, &sa_old );
 	sigaction(SIGTERM, &sa_new, &sa_old );
 
-	while ((ch = getopt_long(argc, argv, "l:fd:vh", long_options,
+	while ((ch = getopt_long(argc, argv, "fd:vh", long_options,
 				 &longindex)) >= 0) {
 		switch (ch) {
 		case 'f':
