@@ -55,7 +55,6 @@ static LIST_HEAD(tgt_events_list);
 
 static struct option const long_options[] =
 {
-	{"lld", required_argument, 0, 'l'},
 	{"foreground", no_argument, 0, 'f'},
 	{"debug", required_argument, 0, 'd'},
 	{"version", no_argument, 0, 'v'},
@@ -71,7 +70,6 @@ static void usage(int status)
 		printf("Usage: %s [OPTION]\n", program_name);
 		printf("\
 Target framework daemon.\n\
-  -l, --lld               specify low level drivers to run\n\
   -f, --foreground        make the program run in the foreground\n\
   -d, --debug debuglevel  print debugging information\n\
   -h, --help              display this help and exit\n\
@@ -236,34 +234,21 @@ retry:
 		goto retry;
 }
 
-static int lld_init(char *data)
+static int lld_init(void)
 {
-	char *list, *p, *q;
-	int index, err, ndriver = 0;
+	int i, err, nr;
 
-	p = list = strdup(data);
-	if (!p)
-		return 0;
-
-	while (p) {
-		q = strchr(p, ',');
-		if (q)
-			*q++ = '\0';
-		index = get_driver_index(p);
-		p = q;
-		if (index >= 0) {
-			if (tgt_drivers[index]->init) {
-				err = tgt_drivers[index]->init();
-				if (err)
-					continue;
-			}
-			tgt_drivers[index]->enable = 1;
-			ndriver++;
+	for (i = nr = 0; tgt_drivers[i]; i++) {
+		if (tgt_drivers[i]->init) {
+			err = tgt_drivers[i]->init();
+			if (err)
+				continue;
+			tgt_drivers[i]->enable = 1;
+			nr++;
 		}
 	}
-	free(list);
 
-	return ndriver;
+	return nr;
 }
 
 int main(int argc, char **argv)
@@ -272,7 +257,6 @@ int main(int argc, char **argv)
 	struct sigaction sa_new;
 	int err, ch, longindex, nr_lld = 0, maxfds = MAX_FDS;
 	int is_daemon = 1, is_debug = 0;
-	char *modes = NULL;
 
 	/* do not allow ctrl-c for now... */
 	sa_new.sa_handler = signal_catch;
@@ -285,9 +269,6 @@ int main(int argc, char **argv)
 	while ((ch = getopt_long(argc, argv, "l:fd:vh", long_options,
 				 &longindex)) >= 0) {
 		switch (ch) {
-		case 'l':
-			modes = optarg;
-			break;
 		case 'f':
 			is_daemon = 0;
 			break;
@@ -312,10 +293,10 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	if (modes)
-		nr_lld = lld_init(modes);
+
+	nr_lld = lld_init();
 	if (!nr_lld) {
-		printf("No available low level driver!\n");
+		fprintf(stderr, "No available low level driver!\n");
 		exit(1);
 	}
 
