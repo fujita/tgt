@@ -133,6 +133,13 @@ struct scsi_lu {
 	void *smc_p;
 };
 
+enum data_direction {
+	DATA_NONE = 0,
+	DATA_WRITE = 1,
+	DATA_READ = 2,
+	DATA_BIDIRECTIONAL = 3,
+};
+
 struct scsi_cmd {
 	struct target *c_target;
 	/* linked it_nexus->cmd_hash_list */
@@ -146,6 +153,8 @@ struct scsi_cmd {
 	int mmapped;
 	struct scsi_lu *dev;
 	unsigned long state;
+
+	enum data_direction data_dir;
 
 	uint64_t cmd_itn_id;
 	uint32_t data_len;
@@ -167,6 +176,17 @@ struct scsi_cmd {
 	/* workaround */
 	struct list_head bs_list;
 };
+
+static inline void scsi_set_data_dir(struct scsi_cmd *scmd,
+				     enum data_direction dir)
+{
+	scmd->data_dir = dir;
+}
+
+static inline enum data_direction scsi_get_data_dir(struct scsi_cmd *scmd)
+{
+	return scmd->data_dir;
+}
 
 struct mgmt_req {
 	uint64_t mid;

@@ -107,7 +107,6 @@ struct iscsi_task {
 	struct list_head c_list;
 
 	unsigned long flags;
-	enum { NONE, WRITE, READ, BIDIRECTIONAL } dir;
 	uint32_t write_len;  /* from command pdu, write and read lengths */
 	uint32_t read_len;
 
