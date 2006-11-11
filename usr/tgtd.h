@@ -187,6 +187,17 @@ static inline enum data_direction scsi_get_data_dir(struct scsi_cmd *scmd)
 	return scmd->data_dir;
 }
 
+static inline void scsi_set_result(struct scsi_cmd *scmd,
+				   int result)
+{
+	scmd->result = result;
+}
+
+static inline int scsi_get_result(struct scsi_cmd *scmd)
+{
+	return scmd->result;
+}
+
 struct mgmt_req {
 	uint64_t mid;
 	int busy;

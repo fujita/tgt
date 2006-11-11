@@ -156,11 +156,11 @@ static void *bs_sync_worker_fn(void *arg)
 		dprintf("io done %p %x %d %d\n", cmd, cmd->scb[0], ret, cmd->len);
 
 		if (ret == cmd->len)
-			cmd->result = SAM_STAT_GOOD;
+			scsi_set_result(cmd, SAM_STAT_GOOD);
 		else {
 			eprintf("io error %p %x %d %d %" PRIu64 ", %m\n",
 				cmd, cmd->scb[0], ret, cmd->len, cmd->offset);
-			cmd->result = SAM_STAT_CHECK_CONDITION;
+			scsi_set_result(cmd, SAM_STAT_CHECK_CONDITION);
 			sense_data_build(cmd, MEDIUM_ERROR, ASC_READ_ERROR);
 		}
 
@@ -193,7 +193,7 @@ static void bs_sync_handler(int fd, int events, void *data)
 		dprintf("back to tgtd, %p\n", cmd);
 
 		list_del(&cmd->bs_list);
-		target_cmd_io_done(cmd, cmd->result);
+		target_cmd_io_done(cmd, scsi_get_result(cmd));
 	}
 
 	write(info->command_fd[1], &nr_events, sizeof(nr_events));

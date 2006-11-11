@@ -847,7 +847,7 @@ static int iscsi_cmd_rsp_build(struct iscsi_task *task)
 	rsp->itt = task->tag;
 	rsp->flags = ISCSI_FLAG_CMD_FINAL;
 	rsp->response = ISCSI_STATUS_CMD_COMPLETED;
-	rsp->cmd_status = task->result;
+	rsp->cmd_status = scsi_get_result(&task->scmd);
 	rsp->statsn = cpu_to_be32(conn->stat_sn++);
 	rsp->exp_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn);
 	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn + MAX_QUEUE_CMD);
@@ -900,6 +900,7 @@ static int iscsi_data_rsp_build(struct iscsi_task *task)
 	struct iscsi_data_rsp *rsp = (struct iscsi_data_rsp *) &conn->rsp.bhs;
 	int datalen;
 	int max_burst = conn->session_param[ISCSI_PARAM_MAX_XMIT_DLENGTH].val;
+	int result = scsi_get_result(&task->scmd);
 
 	memset(rsp, 0, sizeof(*rsp));
 	rsp->opcode = ISCSI_OP_SCSI_DATA_IN;
@@ -918,10 +919,10 @@ static int iscsi_data_rsp_build(struct iscsi_task *task)
 		rsp->flags = ISCSI_FLAG_CMD_FINAL;
 
 		/* collapse status into final packet if successful */
-		if (task->result == 0 &&
+		if (result == SAM_STAT_GOOD &&
 		    scsi_get_data_dir(&task->scmd) != DATA_BIDIRECTIONAL) {
 			rsp->flags |= ISCSI_FLAG_DATA_STATUS;
-			rsp->cmd_status = task->result;
+			rsp->cmd_status = result;
 			rsp->statsn = cpu_to_be32(conn->stat_sn++);
 			calc_residual((struct iscsi_cmd_rsp *) rsp, task);
 		}
@@ -1028,7 +1029,6 @@ static int iscsi_scsi_cmd_done(uint64_t nid, int result, struct scsi_cmd *scmd)
 	}
 
 	task->addr = scmd->uaddr;
-	task->result = result;
 	task->len = scmd->len;
 
 	if (scsi_get_data_dir(scmd) == DATA_WRITE)
@@ -1549,7 +1549,7 @@ static int iscsi_scsi_cmd_tx_start(struct iscsi_task *task)
 		err = iscsi_r2t_build(task);
 	else if (task->offset < task->len)
 		err = iscsi_data_rsp_build(task);
-	else if (task->result)
+	else if (scsi_get_result(&task->scmd) != SAM_STAT_GOOD)
 		err = iscsi_sense_rsp_build(task);
 	else
 		err = iscsi_cmd_rsp_build(task);
@@ -1629,7 +1629,8 @@ static int iscsi_scsi_cmd_tx_done(struct iscsi_connection *conn)
 	case ISCSI_OP_R2T:
 		break;
 	case ISCSI_OP_SCSI_DATA_IN:
-		if (task->offset < task->len || task->result != 0
+		if (task->offset < task->len ||
+		    scsi_get_result(&task->scmd) != SAM_STAT_GOOD
 		    || scsi_get_data_dir(&task->scmd) == DATA_BIDIRECTIONAL) {
 			dprintf("more data or sense or bidir %x\n", hdr->itt);
 			list_add_tail(&task->c_list, &task->conn->tx_clist);

@@ -554,7 +554,7 @@ int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 
 		set_cmd_processed(cmd);
 		if (!cmd->async)
-			tgt_drivers[target->lid]->cmd_end_notify(itn_id, result, cmd);
+			target_cmd_io_done(cmd, result);
 	} else {
 		set_cmd_queued(cmd);
 		dprintf("blocked %" PRIx64 " %x %" PRIu64 " %d\n",
@@ -568,6 +568,7 @@ int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 
 void target_cmd_io_done(struct scsi_cmd *cmd, int result)
 {
+	scsi_set_result(cmd, result);
 	tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->cmd_itn_id,
 							result, cmd);
 	return;
@@ -592,10 +593,8 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 			result = scsi_cmd_perform(nexus->host_no, cmd);
 			cmd_post_perform(q, cmd);
 			set_cmd_processed(cmd);
-			if (!cmd->async) {
-				tgt_drivers[cmd->c_target->lid]->cmd_end_notify(
-					cmd->cmd_itn_id, result, cmd);
-			}
+			if (!cmd->async)
+				target_cmd_io_done(cmd, result);
 		} else
 			break;
 	}
@@ -668,8 +667,7 @@ static int abort_cmd(struct target* target, struct mgmt_req *mreq,
 		err = -EBUSY;
 	} else {
 		__cmd_done(target, cmd);
-		tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->cmd_itn_id,
-								TASK_ABORTED, cmd);
+		target_cmd_io_done(cmd, TASK_ABORTED);
 	}
 	return err;
 }
