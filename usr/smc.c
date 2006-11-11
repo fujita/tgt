@@ -343,7 +343,6 @@ static int smc_read_element_status(int host_no, struct scsi_cmd *cmd)
 
 	cmd->len = min_t(int, len, alloc_len);
 	cmd->uaddr = (unsigned long) data;
-	cmd->rw = READ;
 
 	return SAM_STAT_GOOD;
 

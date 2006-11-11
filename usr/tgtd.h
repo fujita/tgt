@@ -164,7 +164,6 @@ struct scsi_cmd {
 	uint8_t lun[8];
 	int attribute;
 	uint64_t tag;
-	uint8_t rw;
 	int async;
 	int result;
 	struct mgmt_req *mreq;

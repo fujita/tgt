@@ -188,15 +188,15 @@ static int bs_aio_cmd_submit(struct scsi_cmd *cmd)
 	io = &iocb;
 	memset(io, 0, sizeof(*io));
 
-	dprintf("%d %d %u %"  PRIx64 " %" PRIx64 " %p\n", lu->fd, cmd->rw, cmd->len,
-		cmd->uaddr, cmd->offset, cmd);
+	dprintf("%d %d %u %"  PRIx64 " %" PRIx64 " %p\n", lu->fd, cmd->data_dir,
+		cmd->len, cmd->uaddr, cmd->offset, cmd);
 
-	if (cmd->rw == READ)
-		io_prep_pread(io, lu->fd, (void *)(unsigned long)cmd->uaddr,
-			      cmd->len,	cmd->offset);
-	else
+	if (cmd->data_dir == DATA_WRITE)
 		io_prep_pwrite(io, lu->fd, (void *)(unsigned long)cmd->uaddr,
 			       cmd->len, cmd->offset);
+	else
+		io_prep_pread(io, lu->fd, (void *)(unsigned long)cmd->uaddr,
+			      cmd->len,	cmd->offset);
 
 	io->data = cmd;
 	ret = io_submit(info->ctx, 1, &io);
@@ -205,8 +205,8 @@ static int bs_aio_cmd_submit(struct scsi_cmd *cmd)
 		cmd->async = 1;
 		return 0;
 	} else {
-		dprintf("%d %d %u %"  PRIx64 " %" PRIx64 " %p\n", lu->fd, cmd->rw, cmd->len,
-			cmd->uaddr, cmd->offset, cmd);
+		dprintf("%d %d %u %"  PRIx64 " %" PRIx64 " %p\n", lu->fd,
+			cmd->data_dir, cmd->len, cmd->uaddr, cmd->offset, cmd);
 		return 1;
 	}
 }

@@ -121,7 +121,7 @@ int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *cmd)
 	memset(&ev, 0, sizeof(ev));
 
 	dprintf("%p %u %d %" PRIx64 " %u %" PRIu64 "\n", cmd,
-		cmd->len, result, cmd->uaddr, cmd->rw, cmd->tag);
+		cmd->len, result, cmd->uaddr, cmd->data_dir, cmd->tag);
 
 	kcmd = KCMD(cmd);
 
@@ -133,7 +133,7 @@ int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *cmd)
 	ev.p.cmd_rsp.sense_len = cmd->sense_len;
 	ev.p.cmd_rsp.sense_uaddr = (unsigned long) cmd->sense_buffer;
 	ev.p.cmd_rsp.result = result;
-	ev.p.cmd_rsp.rw = cmd->rw;
+	ev.p.cmd_rsp.rw = cmd->data_dir;
 	ev.p.cmd_rsp.tag = cmd->tag;
 
 	return kreq_send(&ev);

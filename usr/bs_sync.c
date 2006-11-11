@@ -148,10 +148,10 @@ static void *bs_sync_worker_fn(void *arg)
 		if (cmd->scb[0] == SYNCHRONIZE_CACHE ||
 		    cmd->scb[0] == SYNCHRONIZE_CACHE_16)
 			ret = fsync(fd);
-		else if (cmd->rw == READ)
-			ret = pread64(fd, buf, cmd->len, cmd->offset);
-		else
+		else if (cmd->data_dir == DATA_WRITE)
 			ret = pwrite64(fd, buf, cmd->len, cmd->offset);
+		else
+			ret = pread64(fd, buf, cmd->len, cmd->offset);
 
 		dprintf("io done %p %x %d %d\n", cmd, cmd->scb[0], ret, cmd->len);
 
@@ -292,7 +292,7 @@ static int bs_sync_cmd_submit(struct scsi_cmd *cmd)
 	struct bs_sync_info *info =
 		(struct bs_sync_info *)((char *)lu + sizeof(*lu));
 
-	dprintf("%d %d %u %"  PRIx64 " %" PRIx64 " %p\n", lu->fd, cmd->rw,
+	dprintf("%d %d %u %"  PRIx64 " %" PRIx64 " %p\n", lu->fd, cmd->data_dir,
 		cmd->len, cmd->uaddr, cmd->offset, cmd);
 
 	pthread_mutex_lock(&info->pending_lock);

@@ -58,7 +58,6 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 	case WRITE_10:
 	case WRITE_16:
 	case WRITE_VERIFY:
-		cmd->rw = WRITE;
 		break;
 	default:
 		break;
@@ -74,7 +73,6 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 		return SAM_STAT_GOOD;
 	}
 
-	cmd->rw = READ;
 	cmd->offset = 0;
 	cmd->len = 0;
 	sense_data_build(cmd, key, asc);

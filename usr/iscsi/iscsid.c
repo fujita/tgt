@@ -1133,7 +1133,6 @@ static int iscsi_target_cmd_queue(struct iscsi_task *task)
 	}
 
 	memcpy(scmd->lun, task->req.lun, sizeof(scmd->lun));
-	scmd->rw = req->flags & ISCSI_FLAG_CMD_WRITE;
 	scmd->len = ntohl(req->data_length);
 	scmd->attribute = cmd_attr(task);
 	scmd->tag = req->itt;
