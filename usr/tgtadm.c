@@ -342,7 +342,8 @@ int main(int argc, char **argv)
 	memset(buf, 0, sizeof(buf));
 
 	req = (struct tgtadm_req *) buf;
-	strncpy(req->lld, lldname, sizeof(req->lld));
+	if (lldname)
+		strncpy(req->lld, lldname, sizeof(req->lld));
 	req->mode = set_to_mode(set);
 	req->op = op;
 	req->tid = tid;
