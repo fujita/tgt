@@ -1145,21 +1145,19 @@ int iscsi_scsi_cmd_execute(struct iscsi_task *task)
 {
 	struct iscsi_connection *conn = task->conn;
 	struct iscsi_cmd *req = (struct iscsi_cmd *) &task->req;
-	uint8_t rw = req->flags & ISCSI_FLAG_CMD_WRITE;
-	int err = 0;
+	int ret = 0;
 
-	if (rw && task->r2t_count) {
+	if ((req->flags & ISCSI_FLAG_CMD_WRITE) && task->r2t_count) {
 		if (!task->unsol_count)
 			list_add_tail(&task->c_list, &task->conn->tx_clist);
 		goto no_queuing;
 	}
 
 	task->offset = 0;  /* for use as transmit pointer for data-ins */
-	err = iscsi_target_cmd_queue(task);
+	ret = iscsi_target_cmd_queue(task);
 no_queuing:
 	conn->tp->ep_event_modify(conn->fd, EPOLLIN | EPOLLOUT);
-
-	return err;
+	return ret;
 }
 
 static int iscsi_tm_done(struct mgmt_req *mreq)
