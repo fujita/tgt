@@ -9,6 +9,7 @@ extern int iscsi_tm_done(int host_no, uint64_t mid, int result);
 
 struct tgt_driver iscsi = {
 	.name			= "iscsi",
+	.use_kernel		= 0,
 	.init			= iscsi_init,
 	.target_create		= iscsi_target_create,
 	.target_destroy		= iscsi_target_destroy,

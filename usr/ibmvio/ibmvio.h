@@ -7,6 +7,7 @@ extern uint64_t scsi_lun_to_int(uint8_t *p);
 
 struct tgt_driver ibmvio = {
 	.name			= "ibmvio",
+	.use_kernel		= 1,
 	.scsi_get_lun		= scsi_lun_to_int,
 	.scsi_report_luns	= scsi_report_luns,
 	.scsi_inquiry		= scsi_inquiry,

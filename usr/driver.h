@@ -2,6 +2,7 @@ extern struct backedio_template mmap_bdt, aio_bdt;
 
 struct tgt_driver {
 	const char *name;
+	int use_kernel;
 
 	int (*init) (void);
 
@@ -18,9 +19,6 @@ struct tgt_driver {
 	int (*cmd_end_notify)(int host_no, int len, int result, int rw, uint64_t addr,
 			      uint64_t tag);
 	int (*mgmt_end_notify)(int host_no, uint64_t mid, int result);
-
-	int enable;
-	int pfd_index;
 
 	struct backedio_template *bdt;
 };

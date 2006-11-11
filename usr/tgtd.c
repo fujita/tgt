@@ -234,7 +234,7 @@ retry:
 		goto retry;
 }
 
-static int lld_init(void)
+static int lld_init(int *use_kernel)
 {
 	int i, err, nr;
 
@@ -243,7 +243,8 @@ static int lld_init(void)
 			err = tgt_drivers[i]->init();
 			if (err)
 				continue;
-			tgt_drivers[i]->enable = 1;
+			if (tgt_drivers[i]->use_kernel)
+				*use_kernel++;
 			nr++;
 		}
 	}
@@ -257,6 +258,7 @@ int main(int argc, char **argv)
 	struct sigaction sa_new;
 	int err, ch, longindex, nr_lld = 0, maxfds = MAX_FDS;
 	int is_daemon = 1, is_debug = 0;
+	int use_kernel = 0;
 
 	/* do not allow ctrl-c for now... */
 	sa_new.sa_handler = signal_catch;
@@ -293,8 +295,7 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-
-	nr_lld = lld_init();
+	nr_lld = lld_init(&use_kernel);
 	if (!nr_lld) {
 		fprintf(stderr, "No available low level driver!\n");
 		exit(1);
@@ -309,9 +310,13 @@ int main(int argc, char **argv)
 	if (err)
 		exit(1);
 
-	err = kreq_init();
-	if (err)
-		eprintf("No kernel interface\n");
+	if (use_kernel) {
+		err = kreq_init();
+		if (err) {
+			eprintf("No kernel interface\n");
+			exit(1);
+		}
+	}
 
 	err = ipc_init();
 	if (err)
