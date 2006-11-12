@@ -27,9 +27,9 @@ Everyting is configured via the tgtadm management tool.
 The following example creates a target with id 1, adds a logical unit
 (backed by /dev/sdb1) with lun 0, and then bind the target with #1 scsi host.
 
-host:~/tgt# ./usr/tgtadm --lld ibmvio --op new --tid 1
-host:~/tgt# ./usr/tgtadm --lld ibmvio --op new --tid 1 --lun 0 --params Path=/dev/sdb1
-host:~/tgt# ./usr/tgtadm --lld ibmvio --op bind --tid 1 --host 1
+host:~/tgt# ./usr/tgtadm --lld ibmvio --mode target --op new --tid 1
+host:~/tgt# ./usr/tgtadm --lld ibmvio --mode logicalunit --op new --tid 1 --lun 0 --params Path=/dev/sdb1
+host:~/tgt# ./usr/tgtadm --lld ibmvio --mode target --op bind --tid 1 --host 1
 
 Please see /var/log/daemon.log (your Linux distributions may use the
 different log file name again) to make sure that everything is
