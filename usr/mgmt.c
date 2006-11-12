@@ -42,27 +42,13 @@
 
 #define BUFSIZE 4096
 
-static void device_create_parser(char *args, char **path, char **devtype)
+static void set_show_results(struct tgtadm_res *res, int err)
 {
-	char *p, *q;
-
-	if (isspace(*args))
-		args++;
-	if ((p = strchr(args, '\n')))
-		*p = '\0';
-
-	while ((p = strsep(&args, ","))) {
-		if (!p)
-			continue;
-
-		if (!(q = strchr(p, '=')))
-			continue;
-		*q++ = '\0';
-
-		if (!strcmp(p, "Path"))
-			*path = q;
-		else if (!strcmp(p, "Type"))
-			*devtype = q;
+	if (err < 0)
+		res->err = err;
+	else {
+		res->err = 0;
+		res->len = err + sizeof(*res);
 	}
 }
 
@@ -96,8 +82,31 @@ static int target_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 
 	res->err = err;
 	res->len = (char *) res->data - (char *) res;
-
 	return err;
+}
+
+static void device_create_parser(char *args, char **path, char **devtype)
+{
+	char *p, *q;
+
+	if (isspace(*args))
+		args++;
+	if ((p = strchr(args, '\n')))
+		*p = '\0';
+
+	while ((p = strsep(&args, ","))) {
+		if (!p)
+			continue;
+
+		if (!(q = strchr(p, '=')))
+			continue;
+		*q++ = '\0';
+
+		if (!strcmp(p, "Path"))
+			*path = q;
+		else if (!strcmp(p, "Type"))
+			*devtype = q;
+	}
 }
 
 static int device_mgmt(int lld_no, struct tgtadm_req *req, char *params,
@@ -123,7 +132,7 @@ static int device_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 	}
 
 	res->err = err;
-	res->len = (char *) res->data - (char *) res;
+	res->len = sizeof(*res);
 
 	return err;
 }
@@ -139,23 +148,25 @@ int tgt_mgmt(int lld_no, struct tgtadm_req *req, struct tgtadm_res *res,
 		req->tid, req->sid, req->lun, params, getpid());
 
 	if (req->op == OP_SHOW) {
-		if (req->tid > 0)
-			err = tgt_target_show(req->tid, (char *)res->data,
-					      len - sizeof(*res));
-		else
+		if (req->mode == MODE_TARGET && req->tid < 0)
 			err = tgt_target_show_all((char *)res->data,
 						  len - sizeof(*res));
-		if (err < 0)
-			res->err = err;
 		else {
-			res->err = 0;
-			res->len = err + sizeof(*res);
+			if (tgt_drivers[lld_no]->show)
+			err = tgt_drivers[lld_no]->show(req->mode,
+							req->tid, req->sid,
+							req->cid, req->lun,
+							(char *)res->data,
+							len - sizeof(*res));
 		}
-		dprintf("%d %d\n", len, err);
+
+		set_show_results(res, err);
 		return 0;
 	}
 
 	switch (req->mode) {
+	case MODE_SYSTEM:
+		break;
 	case MODE_TARGET:
 		err = target_mgmt(lld_no, req, params, res, &len);
 		break;

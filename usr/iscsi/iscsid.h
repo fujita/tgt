@@ -39,6 +39,8 @@
 	(uint64_t) tsih << 48;					\
 })
 
+#define sid_to_tsih(sid) ((sid) >> 48)
+
 struct PDU {
 	struct iscsi_hdr bhs;
 	void *ahs;
@@ -76,6 +78,8 @@ struct session {
 	struct list_head pending_cmd_list;
 
 	uint32_t exp_cmd_sn;
+
+	struct param session_param[ISCSI_PARAM_MAX];
 };
 
 struct iscsi_task {

@@ -62,22 +62,24 @@ static int debug;
 
 static struct option const long_options[] =
 {
-	{"lld", required_argument, NULL, 'n'},
+	{"lld", required_argument, NULL, 'l'},
 	{"op", required_argument, NULL, 'o'},
+	{"mode", required_argument, NULL, 'm'},
 	{"tid", required_argument, NULL, 't'},
 	{"sid", required_argument, NULL, 's'},
 	{"cid", required_argument, NULL, 'c'},
-	{"lun", required_argument, NULL, 'l'},
-	{"params", required_argument, NULL, 'p'},
-	{"user", no_argument, NULL, 'u'},
+	{"lun", required_argument, NULL, 'u'},
 	{"hostno", required_argument, NULL, 'i'},
-	{"name", required_argument, NULL, 'm'},
-	{"value", required_argument, NULL, 'a'},
+	{"bus", required_argument, NULL, 'b'},
+	{"params", required_argument, NULL, 'p'},
+	{"name", required_argument, NULL, 'n'},
+	{"value", required_argument, NULL, 'v'},
 	{"debug", no_argument, NULL, 'd'},
-	{"version", no_argument, NULL, 'v'},
 	{"help", no_argument, NULL, 'h'},
 	{NULL, 0, NULL, 0},
 };
+
+static char *short_options = "l:o:m:t:s:c:u:i:b:p:n:v:dh";
 
 static void usage(int status)
 {
@@ -217,20 +219,20 @@ out:
 	return err;
 }
 
-static int set_to_mode(uint32_t set)
+static int str_to_mode(char *str)
 {
-	int mode = MODE_SYSTEM;
+	int mode = -1;
 
-	if (set & (1 << MODE_USER))
-		mode = MODE_USER;
-	else if (set & (1 << MODE_DEVICE))
-		mode = MODE_DEVICE;
-	else if (set & (1 << MODE_CONNECTION))
-		mode = MODE_CONNECTION;
-	else if (set & (1 << MODE_SESSION))
-		mode = MODE_SESSION;
-	else if (set & (1 << MODE_TARGET))
+	if (!strcmp("target", str) || !strcmp("tgt", str))
 		mode = MODE_TARGET;
+	else if (!strcmp("logicalunit", str) || !strcmp("lu", str))
+		mode = MODE_DEVICE;
+	else if (!strcmp("session", str) || !strcmp("sess", str))
+		mode = MODE_SESSION;
+	else if (!strcmp("connection", str) || !strcmp("conn", str))
+		mode = MODE_CONNECTION;
+	else if (!strcmp("user", str))
+		mode = MODE_USER;
 
 	return mode;
 }
@@ -260,40 +262,40 @@ int main(int argc, char **argv)
 	int ch, longindex;
 	int err = -EINVAL, op = -1, len = 0;
 	int tid = -1;
-	uint32_t cid = 0, set = 0, hostno = 0;
+	uint32_t cid = 0, hostno = 0;
 	uint64_t sid = 0, lun = 0;
 	char *params, *lldname;
 	struct tgtadm_req *req;
 	char buf[BUFSIZE];
 	char *name, *value;
+	int mode = MODE_SYSTEM;
 
 	params = lldname = name = value = NULL;
 
 	optind = 1;
-	while ((ch = getopt_long(argc, argv, "n:o:t:s:c:l:p:uvdh",
+	while ((ch = getopt_long(argc, argv, short_options,
 				 long_options, &longindex)) >= 0) {
 		switch (ch) {
-		case 'n':
+		case 'l':
 			lldname = optarg;
 			break;
 		case 'o':
 			op = str_to_op(optarg);
 			break;
+		case 'm':
+			mode = str_to_mode(optarg);
+			break;
 		case 't':
 			tid = strtol(optarg, NULL, 10);
-			set |= (1 << MODE_TARGET);
 			break;
 		case 's':
 			sid = strtoull(optarg, NULL, 10);
-			set |= (1 << MODE_SESSION);
 			break;
 		case 'c':
 			cid = strtoul(optarg, NULL, 10);
-			set |= (1 << MODE_CONNECTION);
 			break;
-		case 'l':
+		case 'u':
 			lun = strtoull(optarg, NULL, 10);
-			set |= (1 << MODE_DEVICE);
 			break;
 		case 'i':
 			hostno = strtol(optarg, NULL, 10);
@@ -303,21 +305,14 @@ int main(int argc, char **argv)
 		case 'p':
 			params = optarg;
 			break;
-		case 'u':
-			set |= (1 << MODE_USER);
-			break;
-		case 'a':
-			value = optarg;
-			break;
-		case 'm':
+		case 'n':
 			name = optarg;
+			break;
+		case 'v':
+			value = optarg;
 			break;
 		case 'd':
 			debug = 1;
-			break;
-		case 'v':
-			printf("%s\n", program_name);
-			exit(0);
 			break;
 		case 'h':
 			usage(0);
@@ -344,7 +339,7 @@ int main(int argc, char **argv)
 	req = (struct tgtadm_req *) buf;
 	if (lldname)
 		strncpy(req->lld, lldname, sizeof(req->lld));
-	req->mode = set_to_mode(set);
+	req->mode = mode;
 	req->op = op;
 	req->tid = tid;
 	req->sid = sid;

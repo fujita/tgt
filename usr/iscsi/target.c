@@ -161,6 +161,15 @@ int iscsi_target_update(int tid, char *name)
 	return 0;
 }
 
+#define buffer_check(buf, total, len, rest)	\
+({						\
+	buf += len;				\
+	total += len;				\
+	rest -= len;				\
+	if (!rest)				\
+		break;				\
+})
+
 static int show_iscsi_param(char *buf, struct param *param, int rest)
 {
 	int i, len, total;
@@ -169,31 +178,102 @@ static int show_iscsi_param(char *buf, struct param *param, int rest)
 
 	for (i = total = 0; session_keys[i].name; i++) {
 		param_val_to_str(keys, i, param[i].val, value);
-		len = snprintf(buf + total, rest, "%s=%s\n", keys[i].name, value);
-		total += len;
-		rest -= len;
-		if (!rest)
-			break;
+		len = snprintf(buf, rest, "%s=%s\n", keys[i].name, value);
+		buffer_check(buf, total, len, rest);
 	}
 
 	return total;
 }
 
-int iscsi_target_show(int tid, char *buf, int rest)
+static int iscsi_target_show_connection(struct target* target, uint64_t sid,
+					uint32_t cid, char *buf, int rest)
+{
+	int len, total = 0;
+	struct session *session;
+	struct connection *conn;
+
+	session = session_lookup(sid_to_tsih(sid));
+	if (!session)
+		return 0;
+
+	len = 0;
+	list_for_each_entry(conn, &session->conn_list, clist) {
+		if (conn->cid == cid || !cid) {
+			if (cid) {
+			} else {
+				len = snprintf(buf, rest, "cid:%u", conn->cid);
+				buffer_check(buf, total, len, rest);
+
+				len = 0;
+				if (conn->tp->ep_show) {
+					len = conn->tp->ep_show(conn->fd, buf, rest);
+					buffer_check(buf, total, len, rest);
+				}
+
+				if (!len) {
+					len = snprintf(buf, rest, "\n");
+					buffer_check(buf, total, len, rest);
+				}
+			}
+		}
+	}
+
+	return total;
+}
+
+static int iscsi_target_show_session(struct target* target, uint64_t sid,
+				     char *buf, int rest)
+{
+	int len, total = 0;
+	struct session *session;
+
+	list_for_each_entry(session, &target->sessions_list, slist) {
+		if (sid64(session->isid, session->tsih) == sid || !sid) {
+			if (sid)
+				len = show_iscsi_param(buf, session->session_param, rest);
+			else
+				len = snprintf(buf, rest, "sid:%" PRIu64 " initiator:%s\n",
+					       sid64(session->isid, session->tsih),
+					       session->initiator);
+			buffer_check(buf, total, len, rest);
+		}
+	}
+
+	return total;
+}
+
+int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid, uint64_t lun,
+		      char *buf, int rest)
 {
 	struct target* target;
-	int len;
+	int len, total = 0;
 
 	target = target_find_by_id(tid);
 	if (!target)
 		return 0;
 
-	len = snprintf(buf, rest, "tid: %d %s\n", target->tid, target->name);
-	rest -= len;
-	if (!rest)
-		goto out;
-
-	len += show_iscsi_param(buf + len, target->session_param, rest);
+	switch (mode) {
+	case MODE_TARGET:
+		len = snprintf(buf, rest, "iqn=%s\n", target->name);
+		buf += len;
+		total += len;
+		rest -= len;
+		if (!rest)
+			goto out;
+		len = show_iscsi_param(buf, target->session_param, rest);
+		total += len;
+		break;
+	case MODE_SESSION:
+		len = iscsi_target_show_session(target, sid, buf, rest);
+		total += len;
+		break;
+	case MODE_CONNECTION:
+		len = iscsi_target_show_connection(target, sid, cid, buf, rest);
+		total += len;
+		break;
+	default:
+		break;
+	}
 out:
-	return len;
+	return total;
 }

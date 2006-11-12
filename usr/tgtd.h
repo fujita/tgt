@@ -49,7 +49,6 @@ extern int tgt_target_create(int tid);
 extern int tgt_target_destroy(int tid);
 extern int tgt_target_bind(int tid, int host_no, int lid);
 extern int tgt_target_show_all(char *buf, int rest);
-extern int tgt_target_show(int tid, char *buf, int rest);
 
 typedef void (event_handler_t)(int fd, int events, void *data);
 extern int tgt_event_add(int fd, int events, event_handler_t handler, void *data);

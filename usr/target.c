@@ -620,21 +620,6 @@ int tgt_target_destroy(int tid)
 	return 0;
 }
 
-int tgt_target_show(int tid, char *buf, int rest)
-{
-	int len = 0;
-	struct target *target;
-
-	target  = target_lookup(tid);
-	if (!target)
-		goto out;
-
-	if (tgt_drivers[target->lid]->target_show)
-		len = tgt_drivers[target->lid]->target_show(target->tid, buf, rest);
-out:
-	return len;
-}
-
 int tgt_target_show_all(char *buf, int rest)
 {
 	int i, len, total;

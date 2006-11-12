@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/epoll.h>
@@ -188,12 +189,39 @@ static size_t iscsi_tcp_close(int ep)
 	return close(ep);
 }
 
+static int iscsi_tcp_show(int ep, char *buf, int rest)
+{
+	int err, total = 0;
+	socklen_t slen;
+	char dst[INET6_ADDRSTRLEN];
+	struct sockaddr_storage from;
+
+	slen = sizeof(from);
+	err = getpeername(ep, (struct sockaddr *) &from, &slen);
+	if (err < 0) {
+		eprintf("%m\n");
+		return 0;
+	}
+
+	err = getnameinfo((struct sockaddr *)&from, sizeof(from), dst,
+			  sizeof(dst), NULL, 0, NI_NUMERICHOST);
+	if (err < 0) {
+		eprintf("%m\n");
+		return 0;
+	}
+
+	total = snprintf(buf, rest, " ip:%s\n", dst);
+
+	return total > 0 ? total : 0;
+}
+
 struct iscsi_transport iscsi_tcp = {
 	.name		= "iscsi",
 	.rdma		= 0,
-	.init		= iscsi_tcp_init,
+	.ep_init	= iscsi_tcp_init,
 	.ep_read	= iscsi_tcp_read,
 	.ep_write_begin	= iscsi_tcp_write_begin,
 	.ep_write_end	= iscsi_tcp_write_end,
 	.ep_close	= iscsi_tcp_close,
+	.ep_show	= iscsi_tcp_show,
 };

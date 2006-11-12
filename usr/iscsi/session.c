@@ -72,6 +72,12 @@ int session_create(struct connection *conn)
 	if (!session)
 		return -ENOMEM;
 
+	session->initiator = strdup(conn->initiator);
+	if (!session->initiator) {
+		free(session);
+		return -ENOMEM;
+	}
+
 	session->target = target;
 	INIT_LIST_HEAD(&session->slist);
 	list_add(&session->slist, &target->sessions_list);
@@ -84,12 +90,14 @@ int session_create(struct connection *conn)
 	session->tsih = last_tsih = tsih;
 
 	conn_add_to_session(conn, session);
-	conn->session->initiator = strdup(conn->initiator);
 
 	dprintf("session_create: %#" PRIx64 "\n", sid64(conn->isid, session->tsih));
 
 	list_add(&session->hlist, &sessions_list);
 	session->exp_cmd_sn = conn->exp_cmd_sn;
+
+	memcpy(session->session_param, conn->session_param,
+	       sizeof(session->session_param));
 
 	return 0;
 }
