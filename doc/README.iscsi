@@ -14,16 +14,125 @@ The following example creates a target with id 1 (the iqn is
 iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz) and adds a
 logical unit (backed by /dev/hdc1) with lun 0.
 
-host:~/tgt$ su
-host:~/tgt# ./usr/tgtadm --lld iscsi --op new --tid 1 --params iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
-host:~/tgt# ./usr/tgtadm --lld iscsi --op new --tid 1 --lun 0 --params Path=/dev/hdc1
+Let's create one target devce and add a logical unit to it:
 
-iSCSI parameters are not configurable yet.
+host:~/tgt$ su
+host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode target --tid 1 --params iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
+host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 0 --params Path=/dev/hdc1
+
+
+You can get the current configuration:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --mode target --op show
+tid 1: lld name iscsi
+        lun 0: path /dev/hdc1
+
+
+You can add lots of logical units:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 1 --params Path=/var/tmp/image
+host:~/tgt# ./usr/tgtadm --lld iscsi --mode target --op show
+tid 1: lld name iscsi
+        lun 1: path /var/tmp/image
+        lun 0: path /dev/hdc1
+
+Now this target is ready to accept initiators.
+
+You can get iSCSI parameters of the target:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --mode target --op show --tid 1
+iqn=iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
+MaxRecvDataSegmentLength=8192
+MaxXmitDataSegmentLength=8192
+HeaderDigest=None
+DataDigest=None
+InitialR2T=Yes
+MaxOutstandingR2T=1
+ImmediateData=Yes
+FirstBurstLength=65536
+MaxBurstLength=262144
+DataPDUInOrder=Yes
+DataSequenceInOrder=Yes
+ErrorRecoveryLevel=0
+IFMarker=No
+OFMarker=No
+DefaultTime2Wait=2
+DefaultTime2Retain=20
+OFMarkInt=Reject
+IFMarkInt=Reject
+MaxConnections=1
+
+
+You can chage iSCSI parameters like the folloing (e.g. set
+MaxRecvDataSegmentLength to 16384):
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --mode target --op update --tid 1 --name MaxRecvDataSegmentLength --value 16384
+
+
+You can get iSCSI parameters again to see it change:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --mode target --op show --tid 1
+iqn=iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
+MaxRecvDataSegmentLength=16384
+MaxXmitDataSegmentLength=8192
+HeaderDigest=None
+DataDigest=None
+InitialR2T=Yes
+MaxOutstandingR2T=1
+ImmediateData=Yes
+FirstBurstLength=65536
+MaxBurstLength=262144
+DataPDUInOrder=Yes
+DataSequenceInOrder=Yes
+ErrorRecoveryLevel=0
+IFMarker=No
+OFMarker=No
+DefaultTime2Wait=2
+DefaultTime2Retain=20
+OFMarkInt=Reject
+IFMarkInt=Reject
+MaxConnections=1
+
+
+You can see the initiators that the target accepts:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --mode session --op show --tid 1
+sid:562950876233792 initiator:iqn.1991-05.com.microsoft:kernel
+sid:281474980708864 initiator:iqn.1987-05.com.cisco:01.4438aca09387
+
+
+You can see the negotiated iSCSI parameters between the target and the
+initiator:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --mode session --op show --tid 1 --sid  281474980708864
+MaxRecvDataSegmentLength=8192
+MaxXmitDataSegmentLength=1024
+HeaderDigest=None
+DataDigest=None
+InitialR2T=Yes
+MaxOutstandingR2T=1
+ImmediateData=Yes
+FirstBurstLength=65536
+MaxBurstLength=262144
+DataPDUInOrder=Yes
+DataSequenceInOrder=Yes
+ErrorRecoveryLevel=0
+IFMarker=No
+OFMarker=No
+DefaultTime2Wait=2
+DefaultTime2Retain=0
+OFMarkInt=Reject
+IFMarkInt=Reject
+MaxConnections=1
+
+
+You can see the initiator information:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --mode connection --op show --tid 1 --sid  281474980708864
+cid:0 ip:192.168.11.5
 
 
 Status
 -------------
 It should work under normal circumstances (good initiator, no network
 problem, etc). However, don't play with important data.
-
-Probabaly, the current quality is similar to the IET 0.2.x.
