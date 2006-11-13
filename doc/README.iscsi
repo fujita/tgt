@@ -171,6 +171,14 @@ You can assign one account to lots of targets. Each target can have 16
 accounts. We don't support removing or unbinding accounts now.
 
 
+Shutdown
+-------------
+host:~/tgt# killall -9 tgtd
+
+
+We will support better methods later.
+
+
 Status
 -------------
 It should work under normal circumstances (good initiator, no network
