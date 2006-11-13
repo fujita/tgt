@@ -161,15 +161,6 @@ int iscsi_target_update(int tid, char *name)
 	return 0;
 }
 
-#define buffer_check(buf, total, len, rest)	\
-({						\
-	buf += len;				\
-	total += len;				\
-	rest -= len;				\
-	if (!rest)				\
-		break;				\
-})
-
 static int show_iscsi_param(char *buf, struct param *param, int rest)
 {
 	int i, len, total;

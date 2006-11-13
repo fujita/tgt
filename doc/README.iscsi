@@ -132,6 +132,45 @@ host:~/tgt# ./usr/tgtadm --lld iscsi --mode connection --op show --tid 1 --sid  
 cid:0 ip:192.168.11.5
 
 
+Security
+-------------
+Let's create a new account:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode account
+
+You need to set the user, passowrd, type of the account:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --op update --mode account --aid 1 --name User --value tomo
+host:~/tgt# ./usr/tgtadm --lld iscsi --op update --mode account --aid 1 --name Password --value hoge
+host:~/tgt# ./usr/tgtadm --lld iscsi --op update --mode account --aid 1 --name Type --value Incoming
+
+
+Just make sure what we have:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode account
+aid:1 Type:Incoming User:tomo Password:hoge
+
+
+We have one account, however, this account does not be assigned to our target:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode account --tid 1
+
+
+You can assign this account to your target:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --op bind --mode account --tid 1 --aid 1
+
+
+You can see the result:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode account --tid 1
+aid:1 Type:Incoming User:tomo Password:hoge
+
+
+You can assign one account to lots of targets. Each target can have 16
+accounts. We don't support removing or unbinding accounts now.
+
+
 Status
 -------------
 It should work under normal circumstances (good initiator, no network

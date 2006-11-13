@@ -69,6 +69,7 @@ static struct option const long_options[] =
 	{"sid", required_argument, NULL, 's'},
 	{"cid", required_argument, NULL, 'c'},
 	{"lun", required_argument, NULL, 'u'},
+	{"aid", required_argument, NULL, 'a'},
 	{"hostno", required_argument, NULL, 'i'},
 	{"bus", required_argument, NULL, 'b'},
 	{"params", required_argument, NULL, 'p'},
@@ -79,7 +80,7 @@ static struct option const long_options[] =
 	{NULL, 0, NULL, 0},
 };
 
-static char *short_options = "l:o:m:t:s:c:u:i:b:p:n:v:dh";
+static char *short_options = "l:o:m:t:s:c:u:i:a:b:p:n:v:dh";
 
 static void usage(int status)
 {
@@ -231,8 +232,8 @@ static int str_to_mode(char *str)
 		mode = MODE_SESSION;
 	else if (!strcmp("connection", str) || !strcmp("conn", str))
 		mode = MODE_CONNECTION;
-	else if (!strcmp("user", str))
-		mode = MODE_USER;
+	else if (!strcmp("account", str))
+		mode = MODE_ACCOUNT;
 
 	return mode;
 }
@@ -262,14 +263,15 @@ int main(int argc, char **argv)
 	int ch, longindex;
 	int err = -EINVAL, op = -1, len = 0;
 	int tid = -1;
-	uint32_t cid = 0, hostno = 0;
-	uint64_t sid = 0, lun = 0;
+	uint32_t cid, hostno, aid;
+	uint64_t sid, lun;
 	char *params, *lldname;
 	struct tgtadm_req *req;
 	char buf[BUFSIZE];
 	char *name, *value;
 	int mode = MODE_SYSTEM;
 
+	cid = hostno = aid = sid = lun = 0;
 	params = lldname = name = value = NULL;
 
 	optind = 1;
@@ -296,6 +298,9 @@ int main(int argc, char **argv)
 			break;
 		case 'u':
 			lun = strtoull(optarg, NULL, 10);
+			break;
+		case 'a':
+			aid = strtol(optarg, NULL, 10);
 			break;
 		case 'i':
 			hostno = strtol(optarg, NULL, 10);
@@ -334,6 +339,11 @@ int main(int argc, char **argv)
 		usage(-1);
 	}
 
+	if (mode < 0) {
+		fprintf(stderr, "unknown mode\n");
+		usage(-1);
+	}
+
 	memset(buf, 0, sizeof(buf));
 
 	req = (struct tgtadm_req *) buf;
@@ -344,6 +354,7 @@ int main(int argc, char **argv)
 	req->tid = tid;
 	req->sid = sid;
 	req->lun = lun;
+	req->aid = aid;
 	req->host_no = hostno;
 
 	if (params) {

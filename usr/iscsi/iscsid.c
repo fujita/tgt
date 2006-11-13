@@ -21,6 +21,7 @@
 
 #include "iscsid.h"
 #include "tgtd.h"
+#include "account.h"
 #include "util.h"
 
 #define MAX_QUEUE_CMD	32
@@ -120,15 +121,6 @@ static void text_key_add_reject(struct connection *conn, char *key)
 	text_key_add(conn, key, "Reject");
 }
 
-static int account_empty(int tid, int dir)
-{
-	char pass[ISCSI_NAME_LEN];
-
-	memset(pass, 0, sizeof(pass));
-/* 	return cops->account_query(tid, dir, pass, pass) < 0 ? 1 : 0; */
-	return 1;
-}
-
 static void text_scan_security(struct connection *conn)
 {
 	struct iscsi_login_rsp *rsp = (struct iscsi_login_rsp *)&conn->rsp.bhs;
@@ -148,13 +140,13 @@ static void text_scan_security(struct connection *conn)
 					*nextValue++ = 0;
 
 				if (!strcmp(value, "None")) {
-					if (!account_empty(conn->tid, AUTH_DIR_INCOMING))
+					if (iscsi_account_available(conn->tid, AUTH_DIR_INCOMING))
 						continue;
 					conn->auth_method = AUTH_NONE;
 					text_key_add(conn, key, "None");
 					break;
 				} else if (!strcmp(value, "CHAP")) {
-					if (account_empty(conn->tid, AUTH_DIR_INCOMING))
+					if (!iscsi_account_available(conn->tid, AUTH_DIR_INCOMING))
 						continue;
 					conn->auth_method = AUTH_CHAP;
 					text_key_add(conn, key, "CHAP");
@@ -505,7 +497,7 @@ static void cmnd_exec_login(struct connection *conn)
 			conn->state = STATE_LOGIN;
 
 			login_start(conn);
-			if (!account_empty(conn->tid, AUTH_DIR_INCOMING))
+			if (iscsi_account_available(conn->tid, AUTH_DIR_INCOMING))
 				goto auth_err;
 			if (rsp->status_class)
 				return;

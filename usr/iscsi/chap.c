@@ -21,6 +21,7 @@
 #include <openssl/md5.h>
 
 #include "iscsid.h"
+#include "account.h"
 
 #define HEX_FORMAT    0x01
 #define BASE64_FORMAT 0x02
@@ -375,16 +376,17 @@ static int chap_initiator_auth_check_response(struct connection *conn)
 {
 	char *value;
 	uint8_t *his_digest = NULL, *our_digest = NULL;
-	int digest_len = 0, retval = 0, encoding_format;
+	int digest_len = 0, retval = 0, encoding_format, err;
 	char pass[ISCSI_NAME_LEN];
 
 	memset(pass, 0, sizeof(pass));
-/* 	if (cops->account_query(conn->tid, AUTH_DIR_INCOMING, pass, pass) < 0) { */
-/* 		log_warning("CHAP initiator auth.: " */
-/* 			    "No CHAP credentials configured"); */
-/* 		retval = CHAP_TARGET_ERROR; */
-/* 		goto out; */
-/* 	} */
+
+	err = iscsi_account_available(conn->tid, AUTH_DIR_INCOMING);
+	if (!err) {
+		eprintf("No CHAP credentials configured\n");
+		retval = CHAP_TARGET_ERROR;
+		goto out;
+	}
 
 	if (!(value = text_key_find(conn, "CHAP_N"))) {
 		retval = CHAP_INITIATOR_ERROR;
@@ -392,13 +394,13 @@ static int chap_initiator_auth_check_response(struct connection *conn)
 	}
 
 	memset(pass, 0, sizeof(pass));
-/* 	if (cops->account_query(conn->tid, AUTH_DIR_INCOMING, value, pass) < 0) { */
-/* 		log_warning("CHAP initiator auth.: " */
-/* 			    "No valid user/pass combination for initiator %s " */
-/* 			    "found", conn->initiator); */
-/* 		retval = CHAP_AUTH_ERROR; */
-/* 		goto out; */
-/* 	} */
+	err = iscsi_account_lookup(conn->tid, AUTH_DIR_INCOMING, value, pass);
+	if (err) {
+		eprintf("No valid user/pass combination for initiator %s "
+			    "found\n", conn->initiator);
+		retval = CHAP_AUTH_ERROR;
+		goto out;
+	}
 
 	if (!(value = text_key_find(conn, "CHAP_R"))) {
 		retval = CHAP_INITIATOR_ERROR;
@@ -476,7 +478,7 @@ static int chap_target_auth_create_response(struct connection *conn)
 	char chap_id, *value, *response = NULL;
 	uint8_t *challenge = NULL, *digest = NULL;
 	int encoding_format, response_len;
-	int challenge_len = 0, digest_len = 0, retval = 0;
+	int challenge_len = 0, digest_len = 0, retval = 0, err;
 	char pass[ISCSI_NAME_LEN], name[ISCSI_NAME_LEN];
 
 	if (!(value = text_key_find(conn, "CHAP_I"))) {
@@ -489,13 +491,14 @@ static int chap_target_auth_create_response(struct connection *conn)
 
 	memset(pass, 0, sizeof(pass));
 	memset(name, 0, sizeof(name));
-/* 	if (cops->account_query(conn->tid, AUTH_DIR_OUTGOING, name, pass) < 0) { */
-/* 		log_warning("CHAP target auth.: " */
-/* 			    "no outgoing credentials configured%s", */
-/* 			    conn->tid ? "." : " for discovery."); */
-/* 		retval = CHAP_AUTH_ERROR; */
-/* 		goto out; */
-/* 	} */
+	err = iscsi_account_lookup(conn->tid, AUTH_DIR_OUTGOING, name, pass);
+	if (err) {
+		log_warning("CHAP target auth.: "
+			    "no outgoing credentials configured%s",
+			    conn->tid ? "." : " for discovery.");
+		retval = CHAP_AUTH_ERROR;
+		goto out;
+	}
 
 	if (!(value = text_key_find(conn, "CHAP_C"))) {
 		log_warning("CHAP target auth.: "

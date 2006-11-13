@@ -1,4 +1,5 @@
-CFLAGS += -O2 -fno-inline -Wall -Wstrict-prototypes -g -D_LARGEFILE64_SOURCE -I$(KERNELSRC)/include -I../include -I.
+CFLAGS += -O2 -fno-inline -Wall -Wstrict-prototypes -g -D_LARGEFILE64_SOURCE \
+	-I$(KERNELSRC)/include -I../include -I.
 PROGRAMS = tgtd tgtadm
 TGTD_OBJS = tgtd.o tgtif.o mgmt.o target.o scsi.o log.o driver.o util.o sched.o
 LIBS += -laio
@@ -11,7 +12,8 @@ endif
 
 ifneq ($(ISCSI),)
 CFLAGS += -DISCSI
-TGTD_OBJS += $(addprefix iscsi/, conn.o param.o session.o iscsid.o target.o chap.o transport.o)
+TGTD_OBJS += $(addprefix iscsi/, conn.o param.o session.o iscsid.o target.o \
+	account.o chap.o transport.o)
 TGTD_OBJS += $(addprefix iscsi/, iscsi_tcp.o)
 LIBS += -lcrypto
 BD_AIO=1

@@ -11,6 +11,7 @@ struct tgt_driver {
 	int (*target_update) (int, char *);
 
 	int (*show) (int, int, uint64_t, uint32_t, uint64_t, char *, int);
+	int (*account) (uint32_t, int, uint32_t, char *, char *, int);
 
 	uint64_t (*scsi_get_lun)(uint8_t *);
 	int (*scsi_report_luns)(struct list_head *, uint8_t *, uint8_t *,

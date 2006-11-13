@@ -147,7 +147,7 @@ int tgt_mgmt(int lld_no, struct tgtadm_req *req, struct tgtadm_res *res,
 		req->len, lld_no, req->mode, req->op,
 		req->tid, req->sid, req->lun, params, getpid());
 
-	if (req->op == OP_SHOW) {
+	if (req->op == OP_SHOW && req->mode != MODE_ACCOUNT) {
 		if (req->mode == MODE_TARGET && req->tid < 0)
 			err = tgt_target_show_all((char *)res->data,
 						  len - sizeof(*res));
@@ -172,6 +172,20 @@ int tgt_mgmt(int lld_no, struct tgtadm_req *req, struct tgtadm_res *res,
 		break;
 	case MODE_DEVICE:
 		err = device_mgmt(lld_no, req, params, res, &len);
+		break;
+	case MODE_ACCOUNT:
+		if (tgt_drivers[lld_no]->account)
+			err = tgt_drivers[lld_no]->account(req->op, req->tid, req->aid,
+							   params,
+							   (char *)res->data,
+							   len - sizeof(*res));
+		if (req->op == OP_SHOW) {
+			set_show_results(res, err);
+			err = 0;
+		} else {
+			res->err = err;
+			res->len = sizeof(*res);
+		}
 		break;
 	default:
 		break;

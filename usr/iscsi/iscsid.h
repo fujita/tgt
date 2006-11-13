@@ -15,6 +15,7 @@
 #include "transport.h"
 #include "list.h"
 #include "param.h"
+#include "account.h"
 #include "log.h"
 
 #include <scsi/iscsi_if.h>
@@ -218,6 +219,10 @@ struct target {
 
 	int max_nr_sessions;
 	int nr_sessions;
+
+	/* TODO: support various account managements (like RADIUS) */
+	struct ac_node incoming[16];
+	struct ac_node outgoing;
 };
 
 enum task_flags {
@@ -265,5 +270,14 @@ extern void target_list_build(struct connection *, char *, char *);
 
 /* param.c */
 int param_index_by_name(char *name, struct iscsi_key *keys);
+
+#define buffer_check(buf, total, len, rest)	\
+({						\
+	buf += len;				\
+	total += len;				\
+	rest -= len;				\
+	if (!rest)				\
+		break;				\
+})
 
 #endif	/* ISCSID_H */
