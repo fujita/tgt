@@ -32,7 +32,6 @@
 #include <sys/epoll.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
-#include <asm/system.h>
 
 #define aligned_u64 unsigned long long __attribute__((aligned(8)))
 #include <scsi/scsi_tgt_if.h>
@@ -40,6 +39,8 @@
 #include "list.h"
 #include "util.h"
 #include "tgtd.h"
+
+#define barrier() __asm__ __volatile__("": : :"memory")
 
 struct uring {
 	uint32_t idx;
@@ -76,9 +77,8 @@ static int kreq_send(struct tgt_event *p)
 	ring_index_inc(&ukring);
 
 	memcpy(ev, p, sizeof(*p));
-	mb();
+	barrier();
 	ev->hdr.status = 1;
-
 	write(chrfd, ev, 1);
 
 	return 0;
