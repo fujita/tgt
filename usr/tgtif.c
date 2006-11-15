@@ -32,6 +32,7 @@
 #include <sys/epoll.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <asm/system.h>
 
 #define aligned_u64 unsigned long long __attribute__((aligned(8)))
 #include <scsi/scsi_tgt_if.h>
@@ -67,12 +68,15 @@ static inline struct tgt_event *head_ring_hdr(struct uring *ring)
 static int kreq_send(struct tgt_event *p)
 {
 	struct tgt_event *ev;
+
 	ev = head_ring_hdr(&ukring);
 	if (ev->hdr.status)
 		return -ENOMEM;
 
-	memcpy(ev, p, sizeof(*p));
 	ring_index_inc(&ukring);
+
+	memcpy(ev, p, sizeof(*p));
+	mb();
 	ev->hdr.status = 1;
 
 	write(chrfd, ev, 1);
@@ -84,6 +88,9 @@ int kspace_send_tsk_mgmt_res(int host_no, uint64_t mid, int result)
 {
 	struct tgt_event ev;
 
+	memset(&ev, 0, sizeof(ev));
+
+	ev.hdr.type = TGT_UEVENT_TSK_MGMT_RSP;
 	ev.p.tsk_mgmt_rsp.host_no = host_no;
 	ev.p.tsk_mgmt_rsp.mid = mid;
 	ev.p.tsk_mgmt_rsp.result = result;
@@ -95,6 +102,8 @@ int kspace_send_cmd_res(int host_no, int len, int result,
 			int rw, uint64_t addr, uint64_t tag)
 {
 	struct tgt_event ev;
+
+	memset(&ev, 0, sizeof(ev));
 
 	ev.hdr.type = TGT_UEVENT_CMD_RSP;
 	ev.p.cmd_rsp.host_no = host_no;
