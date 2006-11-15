@@ -22,7 +22,7 @@ static LIST_HEAD(sessions_list);
 struct session *session_find_name(int tid, const char *iname, uint8_t *isid)
 {
 	struct session *session;
-	struct target *target;
+	struct iscsi_target *target;
 
 	if (!(target = target_find_by_id(tid)))
 		return NULL;
@@ -52,7 +52,7 @@ int session_create(struct connection *conn)
 {
 	struct session *session = NULL;
 	static uint16_t tsih, last_tsih = 0;
-	struct target *target;
+	struct iscsi_target *target;
 
 	target = target_find_by_id(conn->tid);
 	if (!target)

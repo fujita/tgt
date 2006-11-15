@@ -64,7 +64,7 @@ struct session {
 	struct list_head hlist;
 
 	char *initiator;
-	struct target *target;
+	struct iscsi_target *target;
 	uint8_t isid[6];
 	uint16_t tsih;
 
@@ -206,7 +206,7 @@ struct connection {
 
 #define INCOMING_BUFSIZE	8192
 
-struct target {
+struct iscsi_target {
 	struct list_head tlist;
 
 	struct list_head sessions_list;
@@ -264,8 +264,8 @@ extern void session_get(struct session *session);
 extern void session_put(struct session *session);
 
 /* target.c */
-struct target * target_find_by_name(const char *name);
-struct target * target_find_by_id(int tid);
+struct iscsi_target * target_find_by_name(const char *name);
+struct iscsi_target * target_find_by_id(int tid);
 extern void target_list_build(struct connection *, char *, char *);
 
 /* param.c */

@@ -313,7 +313,7 @@ static void login_start(struct connection *conn)
 	struct iscsi_login *req = (struct iscsi_login *)&conn->req.bhs;
 	struct iscsi_login_rsp *rsp = (struct iscsi_login_rsp *)&conn->rsp.bhs;
 	char *name, *alias, *session_type, *target_name;
-	struct target *target;
+	struct iscsi_target *target;
 
 	conn->cid = be16_to_cpu(req->cid);
 	memcpy(conn->isid, req->isid, sizeof(req->isid));

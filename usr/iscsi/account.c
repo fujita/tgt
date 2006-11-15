@@ -141,7 +141,7 @@ static void __account_bind(struct iscsi_account *ac, struct ac_node *acn)
 static int iscsi_account_bind(int tid, uint32_t uid)
 {
 	int i, err;
-	struct target* target;
+	struct iscsi_target* target;
 	struct iscsi_account *ac, *tmp;
 	struct ac_node *acn;
 
@@ -208,7 +208,7 @@ static int iscsi_show_account(int tid, uint32_t uid, char *buf, int rest)
 			buffer_check(buf, total, len, rest);
 		}
 	} else {
-		struct target* target;
+		struct iscsi_target* target;
 
 		target = target_find_by_id(tid);
 		if (!target)
@@ -270,7 +270,7 @@ int iscsi_mgmt_account(uint32_t op, int tid, uint32_t uid, char *param, char *bu
 int iscsi_account_available(int tid, int dir)
 {
 	int err = 0;
-	struct target* target;
+	struct iscsi_target* target;
 	struct ac_node *acn;
 
 	target = target_find_by_id(tid);
@@ -300,7 +300,7 @@ int iscsi_account_available(int tid, int dir)
 int iscsi_account_lookup(int tid, int dir, char *user, char *pass)
 {
 	int err = ENOENT;
-	struct target* target;
+	struct iscsi_target* target;
 	struct iscsi_account *ac;
 	struct ac_node *acn;
 

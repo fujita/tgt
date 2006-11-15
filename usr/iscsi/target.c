@@ -22,7 +22,7 @@ static LIST_HEAD(targets_list);
 
 void target_list_build(struct connection *conn, char *addr, char *name)
 {
-	struct target *target;
+	struct iscsi_target *target;
 
 	list_for_each_entry(target, &targets_list, tlist) {
 		if (name && strcmp(target->name, name))
@@ -35,9 +35,9 @@ void target_list_build(struct connection *conn, char *addr, char *name)
 	}
 }
 
-struct target *target_find_by_name(const char *name)
+struct iscsi_target *target_find_by_name(const char *name)
 {
-	struct target *target;
+	struct iscsi_target *target;
 
 	list_for_each_entry(target, &targets_list, tlist) {
 		if (!strcmp(target->name, name))
@@ -47,9 +47,9 @@ struct target *target_find_by_name(const char *name)
 	return NULL;
 }
 
-struct target* target_find_by_id(int tid)
+struct iscsi_target* target_find_by_id(int tid)
 {
-	struct target *target;
+	struct iscsi_target *target;
 
 	list_for_each_entry(target, &targets_list, tlist) {
 		if (target->tid == tid)
@@ -61,7 +61,7 @@ struct target* target_find_by_id(int tid)
 
 int iscsi_target_destroy(int tid)
 {
-	struct target* target;
+	struct iscsi_target* target;
 
 	if (!(target = target_find_by_id(tid)))
 		return -ENOENT;
@@ -83,7 +83,7 @@ int iscsi_target_destroy(int tid)
 
 int iscsi_target_create(int tid, char *name)
 {
-	struct target *target;
+	struct iscsi_target *target;
 	struct param default_tgt_session_param[] = {
 		{0, 8192},
 		{0, 8192},
@@ -134,7 +134,7 @@ int iscsi_target_update(int tid, char *name)
 	int idx, err;
 	unsigned int val;
 	char *str;
-	struct target* target;
+	struct iscsi_target* target;
 
 	target = target_find_by_id(tid);
 	if (!target)
@@ -176,7 +176,7 @@ static int show_iscsi_param(char *buf, struct param *param, int rest)
 	return total;
 }
 
-static int iscsi_target_show_connection(struct target* target, uint64_t sid,
+static int iscsi_target_show_connection(struct iscsi_target* target, uint64_t sid,
 					uint32_t cid, char *buf, int rest)
 {
 	int len, total = 0;
@@ -212,7 +212,7 @@ static int iscsi_target_show_connection(struct target* target, uint64_t sid,
 	return total;
 }
 
-static int iscsi_target_show_session(struct target* target, uint64_t sid,
+static int iscsi_target_show_session(struct iscsi_target* target, uint64_t sid,
 				     char *buf, int rest)
 {
 	int len, total = 0;
@@ -236,7 +236,7 @@ static int iscsi_target_show_session(struct target* target, uint64_t sid,
 int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid, uint64_t lun,
 		      char *buf, int rest)
 {
-	struct target* target;
+	struct iscsi_target* target;
 	int len, total = 0;
 
 	target = target_find_by_id(tid);
