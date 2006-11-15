@@ -57,10 +57,11 @@ static struct option const long_options[] =
 {
 	{"foreground", no_argument, 0, 'f'},
 	{"debug", required_argument, 0, 'd'},
-	{"version", no_argument, 0, 'v'},
 	{"help", no_argument, 0, 'h'},
 	{0, 0, 0, 0},
 };
+
+static char *short_options = "fd:h";
 
 static void usage(int status)
 {
@@ -269,7 +270,7 @@ int main(int argc, char **argv)
 	sigaction(SIGPIPE, &sa_new, &sa_old );
 	sigaction(SIGTERM, &sa_new, &sa_old );
 
-	while ((ch = getopt_long(argc, argv, "fd:vh", long_options,
+	while ((ch = getopt_long(argc, argv, short_options, long_options,
 				 &longindex)) >= 0) {
 		switch (ch) {
 		case 'f':
