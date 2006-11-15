@@ -85,6 +85,7 @@ static void bd_aio_close(struct tgt_device *dev)
 	struct bd_aio_info *bai = (struct bd_aio_info *) dev->bddata;
 
 	tgt_event_del(bai->fd);
+	close(bai->fd);
 	free(dev);
 }
 

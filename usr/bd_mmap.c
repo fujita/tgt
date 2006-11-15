@@ -51,6 +51,7 @@ static struct tgt_device *bd_mmap_open(char *path, int *fd, uint64_t *size)
 
 static void bd_mmap_close(struct tgt_device *dev)
 {
+	close(dev->fd);
 	free(dev);
 }
 

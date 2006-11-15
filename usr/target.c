@@ -200,7 +200,6 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 		return -EBUSY;
 
 	free(device->path);
-	close(device->fd);
 	device_hlist_remove(device);
 	device_list_remove(device);
 
