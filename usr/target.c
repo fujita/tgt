@@ -589,6 +589,8 @@ int tgt_target_create(int tid)
 	for (i = 0; i < ARRAY_SIZE(target->device_hash_list); i++)
 		INIT_LIST_HEAD(&target->device_hash_list[i]);
 
+	target->target_state = SCSI_TARGET_SUSPENDED;
+
 	tgt_cmd_queue_init(&target->cmd_queue);
 	target_hlist_insert(target);
 
@@ -619,6 +621,58 @@ int tgt_target_destroy(int tid)
 	return 0;
 }
 
+enum scsi_target_state tgt_get_target_state(int tid)
+{
+	struct target *target;
+
+	target = target_lookup(tid);
+	if (!target)
+		return -ENOENT;
+	return target->target_state;
+}
+
+static struct {
+	enum scsi_target_state value;
+	char *name;
+} target_state[] = {
+	{SCSI_TARGET_SUSPENDED, "suspended"},
+	{SCSI_TARGET_RUNNING, "running"},
+};
+
+static char *target_state_state_name(enum scsi_target_state state)
+{
+	int i;
+	char *name = NULL;
+
+	for (i = 0; i < ARRAY_SIZE(target_state); i++) {
+		if (target_state[i].value == state) {
+			name = target_state[i].name;
+			break;
+		}
+	}
+	return name;
+}
+
+int tgt_set_target_state(int tid, char *str)
+{
+	int i, err = -EINVAL;
+	struct target *target;
+
+	target = target_lookup(tid);
+	if (!target)
+		return -ENOENT;
+
+	for (i = 0; i < ARRAY_SIZE(target_state); i++) {
+		if (!strcmp(target_state[i].name, str)) {
+			target->target_state = target_state[i].value;
+			err = 0;
+			break;
+		}
+	}
+
+	return err;
+}
+
 int tgt_target_show_all(char *buf, int rest)
 {
 	int i, len, total;
@@ -627,8 +681,9 @@ int tgt_target_show_all(char *buf, int rest)
 
 	for (i = total = 0; i < ARRAY_SIZE(target_hash_list); i++) {
 		list_for_each_entry(target, &target_hash_list[i], t_hlist) {
-			len = snprintf(buf, rest, "tid %d: lld name %s\n",
-				       target->tid, tgt_drivers[target->lid]->name);
+			len = snprintf(buf, rest, "tid %d: lld name %s: state %s\n",
+				       target->tid, tgt_drivers[target->lid]->name,
+				       target_state_state_name(target->target_state));
 			buf += len;
 			total += len;
 			rest -= len;

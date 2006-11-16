@@ -73,7 +73,10 @@ static int target_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 		break;
 	case OP_UPDATE:
 		err = -EINVAL;
-		if (tgt_drivers[lld_no]->target_update)
+		if (!strcmp(params, "state"))
+			err = tgt_set_target_state(req->tid,
+						   params + strlen(params) + 1);
+		else if (tgt_drivers[lld_no]->target_update)
 			err = tgt_drivers[lld_no]->target_update(req->tid, params);
 		break;
 	default:
@@ -153,11 +156,11 @@ int tgt_mgmt(int lld_no, struct tgtadm_req *req, struct tgtadm_res *res,
 						  len - sizeof(*res));
 		else {
 			if (tgt_drivers[lld_no]->show)
-			err = tgt_drivers[lld_no]->show(req->mode,
-							req->tid, req->sid,
-							req->cid, req->lun,
-							(char *)res->data,
-							len - sizeof(*res));
+				err = tgt_drivers[lld_no]->show(req->mode,
+								req->tid, req->sid,
+								req->cid, req->lun,
+								(char *)res->data,
+								len - sizeof(*res));
 		}
 
 		set_show_results(res, err);

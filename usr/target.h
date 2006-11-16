@@ -24,6 +24,8 @@ struct target {
 	int tid;
 	int lid;
 
+	enum scsi_target_state target_state;
+
 	struct list_head t_hlist;
 
 	struct list_head device_hash_list[1 << HASH_ORDER];

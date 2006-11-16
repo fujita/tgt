@@ -5,6 +5,11 @@
 
 #define	SCSI_ID_LEN	24
 
+enum scsi_target_state {
+	SCSI_TARGET_SUSPENDED = 1,
+	SCSI_TARGET_RUNNING,
+};
+
 struct tgt_cmd_queue {
 	int active_cmd;
 	unsigned long state;
@@ -73,5 +78,8 @@ extern int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu, int *len,
 
 extern int sense_data_build(uint8_t *data, uint8_t res_code, uint8_t key,
 			    uint8_t ascode, uint8_t ascodeq);
+
+extern enum scsi_target_state tgt_get_target_state(int tid);
+extern int tgt_set_target_state(int tid, char *str);
 
 #endif
