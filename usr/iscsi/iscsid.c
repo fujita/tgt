@@ -372,6 +372,13 @@ static void login_start(struct connection *conn)
 		}
 		conn->tid = target->tid;
 
+		if (tgt_get_target_state(target->tid) != SCSI_TARGET_RUNNING) {
+			rsp->status_class = ISCSI_STATUS_CLS_TARGET_ERR;
+			rsp->status_detail = ISCSI_LOGIN_STATUS_TARGET_ERROR;
+			conn->state = STATE_EXIT;
+			return;
+		}
+
 /* 		if (conn->target->max_sessions && */
 /* 		    (++conn->target->session_cnt > conn->target->max_sessions)) { */
 /* 			conn->target->session_cnt--; */
