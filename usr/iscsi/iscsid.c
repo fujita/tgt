@@ -170,7 +170,7 @@ static void login_security_done(struct connection *conn)
 {
 	struct iscsi_login *req = (struct iscsi_login *)&conn->req.bhs;
 	struct iscsi_login_rsp *rsp = (struct iscsi_login_rsp *) &conn->rsp.bhs;
-	struct session *session;
+	struct iscsi_session *session;
 
 	if (!conn->tid)
 		return;
@@ -874,7 +874,7 @@ static void iscsi_free_cmd_task(struct iscsi_task *task)
 int iscsi_scsi_cmd_done(int host_no, int len, int result, int rw, uint64_t addr,
 			uint64_t tag)
 {
-	struct session *session;
+	struct iscsi_session *session;
 	struct iscsi_task *task;
 
 	dprintf("%u %d %d %d %" PRIx64 " %" PRIx64 "\n", host_no, len, result,
@@ -1116,7 +1116,7 @@ found:
 
 static int iscsi_task_queue(struct iscsi_task *task)
 {
-	struct session *session = task->conn->session;
+	struct iscsi_session *session = task->conn->session;
 	struct iscsi_hdr *req = (struct iscsi_hdr *) &task->req;
 	uint32_t cmd_sn;
 	struct iscsi_task *ent;

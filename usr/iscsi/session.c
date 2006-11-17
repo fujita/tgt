@@ -19,9 +19,9 @@
 
 static LIST_HEAD(sessions_list);
 
-struct session *session_find_name(int tid, const char *iname, uint8_t *isid)
+struct iscsi_session *session_find_name(int tid, const char *iname, uint8_t *isid)
 {
-	struct session *session;
+	struct iscsi_session *session;
 	struct iscsi_target *target;
 
 	if (!(target = target_find_by_id(tid)))
@@ -38,9 +38,9 @@ struct session *session_find_name(int tid, const char *iname, uint8_t *isid)
 	return NULL;
 }
 
-struct session *session_lookup(uint16_t tsih)
+struct iscsi_session *session_lookup(uint16_t tsih)
 {
-	struct session *session;
+	struct iscsi_session *session;
 	list_for_each_entry(session, &sessions_list, hlist) {
 		if (session->tsih == tsih)
 			return session;
@@ -50,7 +50,7 @@ struct session *session_lookup(uint16_t tsih)
 
 int session_create(struct connection *conn)
 {
-	struct session *session = NULL;
+	struct iscsi_session *session = NULL;
 	static uint16_t tsih, last_tsih = 0;
 	struct iscsi_target *target;
 
@@ -102,7 +102,7 @@ int session_create(struct connection *conn)
 	return 0;
 }
 
-void session_destroy(struct session *session)
+void session_destroy(struct iscsi_session *session)
 {
 	eprintf("%d\n", session->tsih);
 
@@ -122,12 +122,12 @@ void session_destroy(struct session *session)
 	free(session);
 }
 
-void session_get(struct session *session)
+void session_get(struct iscsi_session *session)
 {
 	session->refcount++;
 }
 
-void session_put(struct session *session)
+void session_put(struct iscsi_session *session)
 {
 	session->refcount--;
 	if (session->refcount == 0)

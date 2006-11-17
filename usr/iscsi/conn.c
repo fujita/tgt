@@ -16,7 +16,7 @@
 #include "tgtd.h"
 #include "util.h"
 
-void conn_add_to_session(struct connection *conn, struct session *session)
+void conn_add_to_session(struct connection *conn, struct iscsi_session *session)
 {
 	if (!list_empty(&conn->clist)) {
 		eprintf("%" PRIx64 " %u\n",
@@ -62,7 +62,7 @@ struct connection *conn_alloc(void)
 
 static void conn_free(struct connection *conn)
 {
-	struct session *session = conn->session;
+	struct iscsi_session *session = conn->session;
 
 	dprintf("freeing connection\n");
 	list_del(&conn->clist);
@@ -142,7 +142,7 @@ int conn_get(struct connection *conn)
 	return 0;
 }
 
-struct connection *conn_find(struct session *session, uint32_t cid)
+struct connection *conn_find(struct iscsi_session *session, uint32_t cid)
 {
 	struct connection *conn;
 

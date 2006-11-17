@@ -54,7 +54,7 @@ struct iscsi_pdu {
 #define KEY_STATE_REQUEST	1
 #define KEY_STATE_DONE		2
 
-struct session {
+struct iscsi_session {
 	int refcount;
 
 	/* linked to target->sessions_list */
@@ -121,7 +121,7 @@ struct connection {
 	int refcount;
 
 	struct list_head clist;
-	struct session *session;
+	struct iscsi_session *session;
 
 	int tid;
 	struct param session_param[ISCSI_PARAM_MAX];
@@ -241,11 +241,11 @@ extern struct connection *conn_alloc(void);
 extern void conn_close(struct connection *conn, int fd);
 extern void conn_put(struct connection *conn);
 extern int conn_get(struct connection *conn);
-extern struct connection * conn_find(struct session *session, uint32_t cid);
+extern struct connection * conn_find(struct iscsi_session *session, uint32_t cid);
 extern int conn_take_fd(struct connection *conn, int fd);
 extern void conn_read_pdu(struct connection *conn);
 extern void conn_write_pdu(struct connection *conn);
-extern void conn_add_to_session(struct connection *conn, struct session *session);
+extern void conn_add_to_session(struct connection *conn, struct iscsi_session *session);
 
 /* iscsid.c */
 extern void iscsi_event_handler(int fd, int events, void *data);
@@ -256,12 +256,12 @@ extern void text_key_add(struct connection *conn, char *key, char *value);
 extern void iscsi_free_task(struct iscsi_task *task);
 
 /* session.c */
-extern struct session *session_find_name(int tid, const char *iname, uint8_t *isid);
+extern struct iscsi_session *session_find_name(int tid, const char *iname, uint8_t *isid);
 extern int session_create(struct connection *conn);
-extern void session_destroy(struct session *session);
-extern struct session *session_lookup(uint16_t tsih);
-extern void session_get(struct session *session);
-extern void session_put(struct session *session);
+extern void session_destroy(struct iscsi_session *session);
+extern struct iscsi_session *session_lookup(uint16_t tsih);
+extern void session_get(struct iscsi_session *session);
+extern void session_put(struct iscsi_session *session);
 
 /* target.c */
 struct iscsi_target * target_find_by_name(const char *name);

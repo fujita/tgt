@@ -180,7 +180,7 @@ static int iscsi_target_show_connection(struct iscsi_target* target, uint64_t si
 					uint32_t cid, char *buf, int rest)
 {
 	int len, total = 0;
-	struct session *session;
+	struct iscsi_session *session;
 	struct connection *conn;
 
 	session = session_lookup(sid_to_tsih(sid));
@@ -216,7 +216,7 @@ static int iscsi_target_show_session(struct iscsi_target* target, uint64_t sid,
 				     char *buf, int rest)
 {
 	int len, total = 0;
-	struct session *session;
+	struct iscsi_session *session;
 
 	list_for_each_entry(session, &target->sessions_list, slist) {
 		if (sid64(session->isid, session->tsih) == sid || !sid) {
