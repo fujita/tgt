@@ -42,7 +42,7 @@
 
 #define sid_to_tsih(sid) ((sid) >> 48)
 
-struct PDU {
+struct iscsi_pdu {
 	struct iscsi_hdr bhs;
 	void *ahs;
 	unsigned int ahssize;
@@ -140,9 +140,9 @@ struct connection {
 	uint32_t exp_cmd_sn;
 	uint32_t max_cmd_sn;
 
-	struct PDU req;
+	struct iscsi_pdu req;
 	void *req_buffer;
-	struct PDU rsp;
+	struct iscsi_pdu rsp;
 	void *rsp_buffer;
 	unsigned char *rx_buffer;
 	unsigned char *tx_buffer;
