@@ -241,7 +241,7 @@ static int lld_init(int *use_kernel)
 
 	for (i = nr = 0; tgt_drivers[i]; i++) {
 		if (tgt_drivers[i]->init) {
-			err = tgt_drivers[i]->init();
+			err = tgt_drivers[i]->init(i);
 			if (err)
 				continue;
 		}

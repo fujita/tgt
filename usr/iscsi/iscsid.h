@@ -233,6 +233,8 @@ enum task_flags {
 #define clear_task_pending(t)	((t)->flags &= ~(1 << TASK_pending))
 #define task_pending(t)		((t)->flags & (1 << TASK_pending))
 
+extern int lld_index;
+
 /* chap.c */
 extern int cmnd_exec_auth_chap(struct iscsi_connection *conn);
 

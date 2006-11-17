@@ -4,7 +4,7 @@ struct tgt_driver {
 	const char *name;
 	int use_kernel;
 
-	int (*init) (void);
+	int (*init) (int);
 
 	int (*target_create) (int, char *);
 	int (*target_destroy) (int);

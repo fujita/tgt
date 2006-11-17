@@ -157,14 +157,17 @@ struct iscsi_connection *conn_find(struct iscsi_session *session, uint32_t cid)
 int conn_take_fd(struct iscsi_connection *conn, int fd)
 {
 	uint64_t sid = sid64(conn->isid, conn->tsih);
+	int err;
 
 	dprintf("conn_take_fd: %d %u %u %u %" PRIx64 "\n",
 		  fd, conn->cid, conn->stat_sn, conn->exp_stat_sn, sid);
 
 	conn->session->conn_cnt++;
 
-	/* FIXME: Use appropriate lid. */
-	return tgt_target_bind(conn->session->target->tid, conn->tsih, 0);
+	err = tgt_target_bind(conn->session->target->tid, conn->tsih, lld_index);
+	if (err)
+		eprintf("fail to bind %d\n", err);
+	return err;
 }
 
 void conn_read_pdu(struct iscsi_connection *conn)

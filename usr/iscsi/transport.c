@@ -10,9 +10,13 @@ struct iscsi_transport *iscsi_transports[] = {
 	NULL,
 };
 
-int iscsi_init(void)
+int lld_index;
+
+int iscsi_init(int index)
 {
 	int i, err, nr = 0;
+
+	lld_index = index;
 
 	for (i = 0; iscsi_transports[i]; i++) {
 		err = iscsi_transports[i]->ep_init();
