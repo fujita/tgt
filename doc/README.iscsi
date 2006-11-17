@@ -1,4 +1,15 @@
-Starting
+Preface
+-------------
+This document describes how to configure the iSCSI target driver with tgtadm.
+
+tgtadm is not so handly; you can need several commands to do one thing
+mainly because it must be generic to work for all the transport protocols.
+
+We plan to implement a frontend tool, iscsitgtadm, to wrap tgtadm and
+offer considerably more user friendly interface in the future.
+
+
+Starting the daemon
 -------------
 Try the following commands:
 
@@ -24,19 +35,23 @@ host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 0
 You can get the current configuration:
 
 host:~/tgt# ./usr/tgtadm --lld iscsi --mode target --op show
-tid 1: lld name iscsi
+tid 1: lld name iscsi: state suspended
         lun 0: path /dev/hdc1
+
+
+If you don't need no more configuration (iSCSI parameters, security,
+etc), you are ready to accept initiators. In this case, you can go to
+`accepting initiators` session.
 
 
 You can add lots of logical units:
 
 host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 1 --params Path=/var/tmp/image
 host:~/tgt# ./usr/tgtadm --lld iscsi --mode target --op show
-tid 1: lld name iscsi
+tid 1: lld name iscsi: state suspended
         lun 1: path /var/tmp/image
         lun 0: path /dev/hdc1
 
-Now this target is ready to accept initiators.
 
 You can get iSCSI parameters of the target:
 
@@ -169,6 +184,30 @@ aid:1 Type:Incoming User:tomo Password:hoge
 
 You can assign one account to lots of targets. Each target can have 16
 accounts. We don't support removing or unbinding accounts now.
+
+
+Accepting initiators
+-------------
+Now this target is ready to accept initiators. Make sure what you have
+now once again:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --mode target --op show
+tid 1: lld name iscsi: state suspended
+        lun 1: path /var/tmp/image
+        lun 0: path /dev/hdc1
+
+
+If you are happy about it:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --op update --mode target --tid 1 --name state --value running
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --mode target --op show
+tid 1: lld name iscsi: state running
+        lun 1: path /var/tmp/image
+        lun 0: path /dev/hdc1
+
+
+Now your target accepts initiators.
 
 
 Shutdown
