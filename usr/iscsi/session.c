@@ -24,7 +24,8 @@ struct iscsi_session *session_find_name(int tid, const char *iname, uint8_t *isi
 	struct iscsi_session *session;
 	struct iscsi_target *target;
 
-	if (!(target = target_find_by_id(tid)))
+	target = target_find_by_id(tid);
+	if (!target)
 		return NULL;
 
 	dprintf("session_find_name: %s %x %x %x %x %x %x\n", iname,
@@ -102,10 +103,8 @@ int session_create(struct iscsi_connection *conn)
 	return 0;
 }
 
-void session_destroy(struct iscsi_session *session)
+static void session_destroy(struct iscsi_session *session)
 {
-	eprintf("%d\n", session->tsih);
-
 	if (!list_empty(&session->conn_list)) {
 		eprintf("%d conn_list is not null\n", session->tsih);
 		return;
@@ -129,7 +128,6 @@ void session_get(struct iscsi_session *session)
 
 void session_put(struct iscsi_session *session)
 {
-	session->refcount--;
-	if (session->refcount == 0)
+	if (!--session->refcount)
 		session_destroy(session);
 }
