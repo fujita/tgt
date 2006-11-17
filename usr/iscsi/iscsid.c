@@ -34,7 +34,7 @@ static struct iscsi_key login_keys[] = {
 	{NULL, 0, 0, 0, NULL},
 };
 
-char *text_key_find(struct connection *conn, char *searchKey)
+char *text_key_find(struct iscsi_connection *conn, char *searchKey)
 {
 	char *data, *key, *value;
 	int keylen, datasize;
@@ -91,7 +91,7 @@ static char *next_key(char **data, int *datasize, char **value)
 	return key;
 }
 
-void text_key_add(struct connection *conn, char *key, char *value)
+void text_key_add(struct iscsi_connection *conn, char *key, char *value)
 {
 	int keylen = strlen(key);
 	int valuelen = strlen(value);
@@ -116,12 +116,12 @@ void text_key_add(struct connection *conn, char *key, char *value)
 	strcpy(buffer, value);
 }
 
-static void text_key_add_reject(struct connection *conn, char *key)
+static void text_key_add_reject(struct iscsi_connection *conn, char *key)
 {
 	text_key_add(conn, key, "Reject");
 }
 
-static void text_scan_security(struct connection *conn)
+static void text_scan_security(struct iscsi_connection *conn)
 {
 	struct iscsi_login_rsp *rsp = (struct iscsi_login_rsp *)&conn->rsp.bhs;
 	char *key, *value, *data, *nextValue;
@@ -166,7 +166,7 @@ static void text_scan_security(struct connection *conn)
 	}
 }
 
-static void login_security_done(struct connection *conn)
+static void login_security_done(struct iscsi_connection *conn)
 {
 	struct iscsi_login *req = (struct iscsi_login *)&conn->req.bhs;
 	struct iscsi_login_rsp *rsp = (struct iscsi_login_rsp *) &conn->rsp.bhs;
@@ -208,7 +208,7 @@ static void login_security_done(struct connection *conn)
 	}
 }
 
-static void text_scan_login(struct connection *conn)
+static void text_scan_login(struct iscsi_connection *conn)
 {
 	char *key, *value, *data;
 	int datasize, idx;
@@ -280,7 +280,7 @@ out:
 	return;
 }
 
-static int text_check_param(struct connection *conn)
+static int text_check_param(struct iscsi_connection *conn)
 {
 	struct param *p = conn->session_param;
 	char buf[32];
@@ -308,7 +308,7 @@ static int text_check_param(struct connection *conn)
 	return cnt;
 }
 
-static void login_start(struct connection *conn)
+static void login_start(struct iscsi_connection *conn)
 {
 	struct iscsi_login *req = (struct iscsi_login *)&conn->req.bhs;
 	struct iscsi_login_rsp *rsp = (struct iscsi_login_rsp *)&conn->rsp.bhs;
@@ -397,7 +397,7 @@ static void login_start(struct connection *conn)
 	text_key_add(conn, "TargetPortalGroupTag", "1");
 }
 
-static void login_finish(struct connection *conn)
+static void login_finish(struct iscsi_connection *conn)
 {
 	switch (conn->session_type) {
 	case SESSION_NORMAL:
@@ -413,7 +413,7 @@ static void login_finish(struct connection *conn)
 	}
 }
 
-static int cmnd_exec_auth(struct connection *conn)
+static int cmnd_exec_auth(struct iscsi_connection *conn)
 {
        int res;
 
@@ -432,7 +432,7 @@ static int cmnd_exec_auth(struct connection *conn)
         return res;
 }
 
-static void cmnd_exec_login(struct connection *conn)
+static void cmnd_exec_login(struct iscsi_connection *conn)
 {
 	struct iscsi_login *req = (struct iscsi_login *)&conn->req.bhs;
 	struct iscsi_login_rsp *rsp = (struct iscsi_login_rsp *)&conn->rsp.bhs;
@@ -595,7 +595,7 @@ auth_err:
 	return;
 }
 
-static void text_scan_text(struct connection *conn)
+static void text_scan_text(struct iscsi_connection *conn)
 {
 	char *key, *value, *data;
 	int datasize;
@@ -639,7 +639,7 @@ static void text_scan_text(struct connection *conn)
 	}
 }
 
-static void cmnd_exec_text(struct connection *conn)
+static void cmnd_exec_text(struct iscsi_connection *conn)
 {
 	struct iscsi_text *req = (struct iscsi_text *)&conn->req.bhs;
 	struct iscsi_text_rsp *rsp = (struct iscsi_text_rsp *)&conn->rsp.bhs;
@@ -668,7 +668,7 @@ static void cmnd_exec_text(struct connection *conn)
 	rsp->max_cmdsn = cpu_to_be32(conn->max_cmd_sn);
 }
 
-static void cmnd_exec_logout(struct connection *conn)
+static void cmnd_exec_logout(struct iscsi_connection *conn)
 {
 	struct iscsi_logout *req = (struct iscsi_logout *)&conn->req.bhs;
 	struct iscsi_logout_rsp *rsp = (struct iscsi_logout_rsp *)&conn->rsp.bhs;
@@ -686,7 +686,7 @@ static void cmnd_exec_logout(struct connection *conn)
 	rsp->max_cmdsn = cpu_to_be32(conn->max_cmd_sn);
 }
 
-static int cmnd_execute(struct connection *conn)
+static int cmnd_execute(struct iscsi_connection *conn)
 {
 	int res = 0;
 
@@ -715,7 +715,7 @@ static int cmnd_execute(struct connection *conn)
 	return res;
 }
 
-static void cmnd_finish(struct connection *conn)
+static void cmnd_finish(struct iscsi_connection *conn)
 {
 	switch (conn->state) {
 	case STATE_EXIT:
@@ -737,7 +737,7 @@ static void cmnd_finish(struct connection *conn)
 
 static int iscsi_cmd_rsp_build(struct iscsi_task *task)
 {
-	struct connection *conn = task->conn;
+	struct iscsi_connection *conn = task->conn;
 	struct iscsi_cmd_rsp *rsp = (struct iscsi_cmd_rsp *) &conn->rsp.bhs;
 
 	memset(rsp, 0, sizeof(*rsp));
@@ -755,7 +755,7 @@ static int iscsi_cmd_rsp_build(struct iscsi_task *task)
 
 static int iscsi_data_rsp_build(struct iscsi_task *task)
 {
-	struct connection *conn = task->conn;
+	struct iscsi_connection *conn = task->conn;
 	struct iscsi_data_rsp *rsp = (struct iscsi_data_rsp *) &conn->rsp.bhs;
 	struct iscsi_cmd *req = (struct iscsi_cmd *) &task->req;
 	int residual, datalen, exp_datalen = ntohl(req->data_length);
@@ -807,7 +807,7 @@ static int iscsi_data_rsp_build(struct iscsi_task *task)
 
 static int iscsi_r2t_build(struct iscsi_task *task)
 {
-	struct connection *conn = task->conn;
+	struct iscsi_connection *conn = task->conn;
 	struct iscsi_r2t_rsp *rsp = (struct iscsi_r2t_rsp *) &conn->rsp.bhs;
 	int length, max_burst = conn->session_param[ISCSI_PARAM_MAX_XMIT_DLENGTH].val;
 
@@ -828,7 +828,7 @@ static int iscsi_r2t_build(struct iscsi_task *task)
 }
 
 static inline struct iscsi_task *
-iscsi_alloc_task(struct connection *conn)
+iscsi_alloc_task(struct iscsi_connection *conn)
 {
 	struct iscsi_hdr *req = (struct iscsi_hdr *) &conn->req.bhs;
 	struct iscsi_task *task;
@@ -848,7 +848,7 @@ iscsi_alloc_task(struct connection *conn)
 
 void iscsi_free_task(struct iscsi_task *task)
 {
-	struct connection *conn = task->conn;
+	struct iscsi_connection *conn = task->conn;
 
 	if (task->c_buffer)
 		free(task->c_buffer);
@@ -860,7 +860,7 @@ void iscsi_free_task(struct iscsi_task *task)
 
 static void iscsi_free_cmd_task(struct iscsi_task *task)
 {
-	struct connection *conn = task->conn;
+	struct iscsi_connection *conn = task->conn;
 
 	target_cmd_done(conn->session->tsih, task->tag);
 	list_del(&task->c_hlist);
@@ -937,7 +937,7 @@ static int cmd_attr(struct iscsi_task *task)
 
 static int iscsi_scsi_cmd_execute(struct iscsi_task *task)
 {
-	struct connection *conn = task->conn;
+	struct iscsi_connection *conn = task->conn;
 	struct iscsi_cmd *req = (struct iscsi_cmd *) &task->req;
 	unsigned long uaddr = (unsigned long) task->c_buffer;
 	int err = 0;
@@ -992,7 +992,7 @@ extern int iscsi_tm_done(int host_no, uint64_t mid, int result)
 
 static int iscsi_tm_execute(struct iscsi_task *task)
 {
-	struct connection *conn = task->conn;
+	struct iscsi_connection *conn = task->conn;
 	struct iscsi_tm *req = (struct iscsi_tm *) &task->req;
 	int fn, err = 0;
 
@@ -1085,7 +1085,7 @@ static int iscsi_data_out_rx_done(struct iscsi_task *task)
 	return err;
 }
 
-static int iscsi_data_out_rx_start(struct connection *conn)
+static int iscsi_data_out_rx_start(struct iscsi_connection *conn)
 {
 	struct iscsi_task *task;
 	struct iscsi_data *req = (struct iscsi_data *) &conn->req.bhs;
@@ -1166,7 +1166,7 @@ static int iscsi_task_queue(struct iscsi_task *task)
 	return 0;
 }
 
-static struct iscsi_task *__iscsi_task_rx_start(struct connection *conn)
+static struct iscsi_task *__iscsi_task_rx_start(struct iscsi_connection *conn)
 {
 	struct iscsi_task *task;
 
@@ -1177,7 +1177,7 @@ static struct iscsi_task *__iscsi_task_rx_start(struct connection *conn)
 	return task;
 }
 
-static int iscsi_scsi_cmd_rx_start(struct connection *conn)
+static int iscsi_scsi_cmd_rx_start(struct iscsi_connection *conn)
 {
 	struct iscsi_cmd *req = (struct iscsi_cmd *) &conn->req.bhs;
 	struct iscsi_task *task;
@@ -1217,7 +1217,7 @@ static int iscsi_scsi_cmd_rx_start(struct connection *conn)
 	return 0;
 }
 
-static int iscsi_noop_out_rx_start(struct connection *conn)
+static int iscsi_noop_out_rx_start(struct iscsi_connection *conn)
 {
 	struct iscsi_hdr *req = (struct iscsi_hdr *) &conn->req.bhs;
 	struct iscsi_task *task;
@@ -1264,7 +1264,7 @@ out:
 	return err;
 }
 
-static int iscsi_task_rx_done(struct connection *conn)
+static int iscsi_task_rx_done(struct iscsi_connection *conn)
 {
 	struct iscsi_hdr *hdr = &conn->req.bhs;
 	struct iscsi_task *task = conn->rx_task;
@@ -1293,7 +1293,7 @@ static int iscsi_task_rx_done(struct connection *conn)
 	return err;
 }
 
-static int iscsi_task_rx_start(struct connection *conn)
+static int iscsi_task_rx_start(struct iscsi_connection *conn)
 {
 	struct iscsi_hdr *hdr = &conn->req.bhs;
 	uint8_t op;
@@ -1356,7 +1356,7 @@ static int iscsi_scsi_cmd_tx_start(struct iscsi_task *task)
 
 static int iscsi_logout_tx_start(struct iscsi_task *task)
 {
-	struct connection *conn = task->conn;
+	struct iscsi_connection *conn = task->conn;
 	struct iscsi_logout_rsp *rsp =
 		(struct iscsi_logout_rsp *) &conn->rsp.bhs;
 
@@ -1372,7 +1372,7 @@ static int iscsi_logout_tx_start(struct iscsi_task *task)
 
 static int iscsi_noop_out_tx_start(struct iscsi_task *task, int *is_rsp)
 {
-	struct connection *conn = task->conn;
+	struct iscsi_connection *conn = task->conn;
 	struct iscsi_data_rsp *rsp = (struct iscsi_data_rsp *) &conn->rsp.bhs;
 
 	if (task->req.itt == cpu_to_be32(ISCSI_RESERVED_TAG)) {
@@ -1401,7 +1401,7 @@ static int iscsi_noop_out_tx_start(struct iscsi_task *task, int *is_rsp)
 
 static int iscsi_tm_tx_start(struct iscsi_task *task)
 {
-	struct connection *conn = task->conn;
+	struct iscsi_connection *conn = task->conn;
 	struct iscsi_tm_rsp *rsp = (struct iscsi_tm_rsp *) &conn->rsp.bhs;
 
 	memset(rsp, 0, sizeof(*rsp));
@@ -1417,7 +1417,7 @@ static int iscsi_tm_tx_start(struct iscsi_task *task)
 	return 0;
 }
 
-static int iscsi_scsi_cmd_tx_done(struct connection *conn)
+static int iscsi_scsi_cmd_tx_done(struct iscsi_connection *conn)
 {
 	struct iscsi_hdr *hdr = &conn->rsp.bhs;
 	struct iscsi_task *task = conn->tx_task;
@@ -1441,7 +1441,7 @@ static int iscsi_scsi_cmd_tx_done(struct connection *conn)
 	return 0;
 }
 
-static int iscsi_task_tx_done(struct connection *conn)
+static int iscsi_task_tx_done(struct iscsi_connection *conn)
 {
 	struct iscsi_task *task = conn->tx_task;
 	int err;
@@ -1460,7 +1460,7 @@ static int iscsi_task_tx_done(struct connection *conn)
 	return 0;
 }
 
-static int iscsi_task_tx_start(struct connection *conn)
+static int iscsi_task_tx_start(struct iscsi_connection *conn)
 {
 	struct iscsi_task *task;
 	int is_rsp, err = 0;
@@ -1504,7 +1504,7 @@ nodata:
 	return -EAGAIN;
 }
 
-static void iscsi_rx_handler(int fd, struct connection *conn)
+static void iscsi_rx_handler(int fd, struct iscsi_connection *conn)
 {
 	int res;
 
@@ -1576,7 +1576,7 @@ static void iscsi_rx_handler(int fd, struct connection *conn)
 	}
 }
 
-static void iscsi_tx_handler(int fd, struct connection *conn)
+static void iscsi_tx_handler(int fd, struct iscsi_connection *conn)
 {
 	int res;
 
@@ -1670,7 +1670,7 @@ static void iscsi_tx_handler(int fd, struct connection *conn)
 
 void iscsi_event_handler(int fd, int events, void *data)
 {
-	struct connection *conn = (struct connection *) data;
+	struct iscsi_connection *conn = (struct iscsi_connection *) data;
 
 	if (events & EPOLLIN)
 		iscsi_rx_handler(fd, conn);

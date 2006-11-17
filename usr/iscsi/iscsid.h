@@ -88,7 +88,7 @@ struct iscsi_task {
 	struct iscsi_hdr rsp;
 
 	uint64_t tag;
-	struct connection *conn;
+	struct iscsi_connection *conn;
 
 	/* linked to session->cmd_list */
 	struct list_head c_hlist;
@@ -113,7 +113,7 @@ struct iscsi_task {
 	void *c_buffer;
 };
 
-struct connection {
+struct iscsi_connection {
 	int state;
 	int rx_iostate;
 	int tx_iostate;
@@ -234,30 +234,30 @@ enum task_flags {
 #define task_pending(t)		((t)->flags & (1 << TASK_pending))
 
 /* chap.c */
-extern int cmnd_exec_auth_chap(struct connection *conn);
+extern int cmnd_exec_auth_chap(struct iscsi_connection *conn);
 
 /* conn.c */
-extern struct connection *conn_alloc(void);
-extern void conn_close(struct connection *conn, int fd);
-extern void conn_put(struct connection *conn);
-extern int conn_get(struct connection *conn);
-extern struct connection * conn_find(struct iscsi_session *session, uint32_t cid);
-extern int conn_take_fd(struct connection *conn, int fd);
-extern void conn_read_pdu(struct connection *conn);
-extern void conn_write_pdu(struct connection *conn);
-extern void conn_add_to_session(struct connection *conn, struct iscsi_session *session);
+extern struct iscsi_connection *conn_alloc(void);
+extern void conn_close(struct iscsi_connection *conn, int fd);
+extern void conn_put(struct iscsi_connection *conn);
+extern int conn_get(struct iscsi_connection *conn);
+extern struct iscsi_connection * conn_find(struct iscsi_session *session, uint32_t cid);
+extern int conn_take_fd(struct iscsi_connection *conn, int fd);
+extern void conn_read_pdu(struct iscsi_connection *conn);
+extern void conn_write_pdu(struct iscsi_connection *conn);
+extern void conn_add_to_session(struct iscsi_connection *conn, struct iscsi_session *session);
 
 /* iscsid.c */
 extern void iscsi_event_handler(int fd, int events, void *data);
-extern char *text_key_find(struct connection *conn, char *searchKey);
-extern void text_key_add(struct connection *conn, char *key, char *value);
+extern char *text_key_find(struct iscsi_connection *conn, char *searchKey);
+extern void text_key_add(struct iscsi_connection *conn, char *key, char *value);
 
 /* iscsid.c iscsi_task */
 extern void iscsi_free_task(struct iscsi_task *task);
 
 /* session.c */
 extern struct iscsi_session *session_find_name(int tid, const char *iname, uint8_t *isid);
-extern int session_create(struct connection *conn);
+extern int session_create(struct iscsi_connection *conn);
 extern void session_destroy(struct iscsi_session *session);
 extern struct iscsi_session *session_lookup(uint16_t tsih);
 extern void session_get(struct iscsi_session *session);
@@ -266,7 +266,7 @@ extern void session_put(struct iscsi_session *session);
 /* target.c */
 struct iscsi_target * target_find_by_name(const char *name);
 struct iscsi_target * target_find_by_id(int tid);
-extern void target_list_build(struct connection *, char *, char *);
+extern void target_list_build(struct iscsi_connection *, char *, char *);
 
 /* param.c */
 int param_index_by_name(char *name, struct iscsi_key *keys);

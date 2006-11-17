@@ -319,7 +319,7 @@ static inline void chap_calc_digest_sha1(char chap_id, char *secret, int secret_
 	SHA1_Final(digest, &ctx);
 }
 
-static int chap_initiator_auth_create_challenge(struct connection *conn)
+static int chap_initiator_auth_create_challenge(struct iscsi_connection *conn)
 {
 	char *value, *p;
 	char text[CHAP_CHALLENGE_MAX * 2 + 8];
@@ -372,7 +372,7 @@ static int chap_initiator_auth_create_challenge(struct connection *conn)
 	return 0;
 }
 
-static int chap_initiator_auth_check_response(struct connection *conn)
+static int chap_initiator_auth_check_response(struct iscsi_connection *conn)
 {
 	char *value;
 	uint8_t *his_digest = NULL, *our_digest = NULL;
@@ -473,7 +473,7 @@ static int chap_initiator_auth_check_response(struct connection *conn)
 	return retval;
 }
 
-static int chap_target_auth_create_response(struct connection *conn)
+static int chap_target_auth_create_response(struct iscsi_connection *conn)
 {
 	char chap_id, *value, *response = NULL;
 	uint8_t *challenge = NULL, *digest = NULL;
@@ -603,7 +603,7 @@ static int chap_target_auth_create_response(struct connection *conn)
 	return retval;
 }
 
-int cmnd_exec_auth_chap(struct connection *conn)
+int cmnd_exec_auth_chap(struct iscsi_connection *conn)
 {
 	int res;
 

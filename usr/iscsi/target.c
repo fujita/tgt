@@ -20,7 +20,7 @@
 
 static LIST_HEAD(targets_list);
 
-void target_list_build(struct connection *conn, char *addr, char *name)
+void target_list_build(struct iscsi_connection *conn, char *addr, char *name)
 {
 	struct iscsi_target *target;
 
@@ -181,7 +181,7 @@ static int iscsi_target_show_connection(struct iscsi_target* target, uint64_t si
 {
 	int len, total = 0;
 	struct iscsi_session *session;
-	struct connection *conn;
+	struct iscsi_connection *conn;
 
 	session = session_lookup(sid_to_tsih(sid));
 	if (!session)

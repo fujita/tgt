@@ -48,7 +48,7 @@ struct iscsi_session *session_lookup(uint16_t tsih)
 	return NULL;
 }
 
-int session_create(struct connection *conn)
+int session_create(struct iscsi_connection *conn)
 {
 	struct iscsi_session *session = NULL;
 	static uint16_t tsih, last_tsih = 0;

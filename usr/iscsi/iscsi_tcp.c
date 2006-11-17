@@ -58,7 +58,7 @@ static void accept_connection(int afd, int events, void *data)
 {
 	struct sockaddr_storage from;
 	socklen_t namesize;
-	struct connection *conn;
+	struct iscsi_connection *conn;
 	int fd, err;
 
 	eprintf("%d\n", afd);

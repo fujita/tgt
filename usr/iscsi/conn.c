@@ -16,7 +16,7 @@
 #include "tgtd.h"
 #include "util.h"
 
-void conn_add_to_session(struct connection *conn, struct iscsi_session *session)
+void conn_add_to_session(struct iscsi_connection *conn, struct iscsi_session *session)
 {
 	if (!list_empty(&conn->clist)) {
 		eprintf("%" PRIx64 " %u\n",
@@ -30,9 +30,9 @@ void conn_add_to_session(struct connection *conn, struct iscsi_session *session)
 	list_add(&conn->clist, &session->conn_list);
 }
 
-struct connection *conn_alloc(void)
+struct iscsi_connection *conn_alloc(void)
 {
-	struct connection *conn;
+	struct iscsi_connection *conn;
 
 	conn = zalloc(sizeof(*conn));
 	if (!conn)
@@ -60,7 +60,7 @@ struct connection *conn_alloc(void)
 	return conn;
 }
 
-static void conn_free(struct connection *conn)
+static void conn_free(struct iscsi_connection *conn)
 {
 	struct iscsi_session *session = conn->session;
 
@@ -75,7 +75,7 @@ static void conn_free(struct connection *conn)
 		session_put(session);
 }
 
-void conn_close(struct connection *conn, int fd)
+void conn_close(struct iscsi_connection *conn, int fd)
 {
 	struct iscsi_task *task, *tmp;
 
@@ -128,23 +128,23 @@ done:
 	conn_put(conn);
 }
 
-void conn_put(struct connection *conn)
+void conn_put(struct iscsi_connection *conn)
 {
 	conn->refcount--;
 	if (conn->refcount == 0)
 		conn_free(conn);
 }
 
-int conn_get(struct connection *conn)
+int conn_get(struct iscsi_connection *conn)
 {
 	/* TODO: check state */
 	conn->refcount++;
 	return 0;
 }
 
-struct connection *conn_find(struct iscsi_session *session, uint32_t cid)
+struct iscsi_connection *conn_find(struct iscsi_session *session, uint32_t cid)
 {
-	struct connection *conn;
+	struct iscsi_connection *conn;
 
 	list_for_each_entry(conn, &session->conn_list, clist) {
 		if (conn->cid == cid)
@@ -154,7 +154,7 @@ struct connection *conn_find(struct iscsi_session *session, uint32_t cid)
 	return NULL;
 }
 
-int conn_take_fd(struct connection *conn, int fd)
+int conn_take_fd(struct iscsi_connection *conn, int fd)
 {
 	uint64_t sid = sid64(conn->isid, conn->tsih);
 
@@ -167,14 +167,14 @@ int conn_take_fd(struct connection *conn, int fd)
 	return tgt_target_bind(conn->session->target->tid, conn->tsih, 0);
 }
 
-void conn_read_pdu(struct connection *conn)
+void conn_read_pdu(struct iscsi_connection *conn)
 {
 	conn->rx_iostate = IOSTATE_READ_BHS;
 	conn->rx_buffer = (void *)&conn->req.bhs;
 	conn->rx_size = BHS_SIZE;
 }
 
-void conn_write_pdu(struct connection *conn)
+void conn_write_pdu(struct iscsi_connection *conn)
 {
 	conn->tx_iostate = IOSTATE_WRITE_BHS;
 	memset(&conn->rsp, 0, sizeof(conn->rsp));
