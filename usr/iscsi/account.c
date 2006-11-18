@@ -269,13 +269,13 @@ int iscsi_mgmt_account(uint32_t op, int tid, uint32_t uid, char *param, char *bu
 
 int iscsi_account_available(int tid, int dir)
 {
-	int err = 0;
+	int found = 0;
 	struct iscsi_target* target;
 	struct ac_node *acn;
 
 	target = target_find_by_id(tid);
 	if (!target)
-		return ENOENT;
+		return 0;
 
 	if (dir == AUTH_DIR_INCOMING) {
 		int i;
@@ -283,7 +283,7 @@ int iscsi_account_available(int tid, int dir)
 		acn = target->incoming;
 		for (i = 0;  i < ARRAY_SIZE(target->incoming); i++, acn++) {
 			if (acn->head) {
-				err = 1;
+				found = 1;
 				break;
 			}
 		}
@@ -291,10 +291,10 @@ int iscsi_account_available(int tid, int dir)
 	} else if (dir == AUTH_DIR_OUTGOING) {
 		acn = &target->outgoing;
 		if (acn->head)
-			err = 1;
+			found = 1;
 	}
 
-	return err;
+	return found;
 }
 
 int iscsi_account_lookup(int tid, int dir, char *user, char *pass)
