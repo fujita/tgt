@@ -41,13 +41,19 @@ struct backedio_template {
 	int (*bd_cmd_done) (int do_munmap, int do_free, uint64_t uaddr, int len);
 };
 
+#ifdef USE_KERNEL
 extern int kreq_init(void);
+#else
+static inline int kreq_init(void)	\
+{					\
+	return 0;			\
+}
+#endif
+
 extern int kspace_send_tsk_mgmt_res(int host_no, uint64_t mid, int result);
 extern int kspace_send_cmd_res(int host_no, int len, int result,
 			       int rw, uint64_t addr, uint64_t tag);
-
 extern int ipc_init(void);
-
 extern int tgt_device_create(int tid, uint64_t lun, char *path);
 extern int tgt_device_destroy(int tid, uint64_t lun);
 extern int tgt_target_create(int tid);
