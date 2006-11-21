@@ -32,11 +32,11 @@ SCSI_SRP, and SCSI_IBMVSCSIS kernel options.
 Now you are ready to build target drivers. If you like to use the
 iSCSI target driver:
 
-host:~/tgt$ make KERNELSRC=<kernel-src> ISCSI=1
+host:~/tgt$ make KERNELSRC=<kernel-src-directory> ISCSI=1
 
 Or if you like to use the IBM VIO target driver:
 
-host:~/tgt$ make KERNELSRC=<kernel-src> IBMVIO=1
+host:~/tgt$ make KERNELSRC=<kernel-src-directory> IBMVIO=1
 
 Make sure that everything is built successfully.
 
