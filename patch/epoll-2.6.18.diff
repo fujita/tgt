@@ -1,0 +1,236 @@
+diff --git a/fs/aio.c b/fs/aio.c
+index 9506301..f93d639 100644
+--- a/fs/aio.c
++++ b/fs/aio.c
+@@ -29,6 +29,7 @@ #include <linux/aio.h>
+ #include <linux/highmem.h>
+ #include <linux/workqueue.h>
+ #include <linux/security.h>
++#include <linux/eventpoll.h>
+ 
+ #include <asm/kmap_types.h>
+ #include <asm/uaccess.h>
+@@ -865,7 +866,7 @@ static void aio_kick_handler(void *data)
+ 	use_mm(ctx->mm);
+ 	spin_lock_irq(&ctx->ctx_lock);
+ 	requeue =__aio_run_iocbs(ctx);
+- 	unuse_mm(ctx->mm);
++	unuse_mm(ctx->mm);
+ 	spin_unlock_irq(&ctx->ctx_lock);
+ 	set_fs(oldfs);
+ 	/*
+@@ -1434,6 +1435,9 @@ static ssize_t aio_setup_iocb(struct kio
+ 		if (file->f_op->aio_fsync)
+ 			kiocb->ki_retry = aio_fsync;
+ 		break;
++	case IOCB_CMD_EPOLL_WAIT:
++		kiocb->ki_retry = eventpoll_aio_wait;
++		break;
+ 	default:
+ 		dprintk("EINVAL: io_submit: no operation provided\n");
+ 		ret = -EINVAL;
+diff --git a/fs/eventpoll.c b/fs/eventpoll.c
+index 3a35674..e1accf1 100644
+--- a/fs/eventpoll.c
++++ b/fs/eventpoll.c
+@@ -35,6 +35,7 @@ #include <linux/eventpoll.h>
+ #include <linux/mount.h>
+ #include <linux/bitops.h>
+ #include <linux/mutex.h>
++#include <linux/aio.h>
+ #include <asm/uaccess.h>
+ #include <asm/system.h>
+ #include <asm/io.h>
+@@ -698,6 +699,145 @@ eexit_1:
+ 	return error;
+ }
+ 
++static void eventpoll_aio_timer(unsigned long data)
++{
++	struct kiocb *iocb = (struct kiocb *)data;
++	struct timer_list *timer = (struct timer_list *)iocb->private;
++	struct file *file = iocb->ki_filp;
++	struct eventpoll *ep = (struct eventpoll *)file->private_data;
++
++	(void)del_timer(timer);
++	write_lock(&ep->lock);
++	__wake_up_locked(&ep->wq, TASK_UNINTERRUPTIBLE | TASK_INTERRUPTIBLE);
++	write_unlock(&ep->lock);
++}
++
++static int aio_epoll_cancel(struct kiocb *iocb, struct io_event *event)
++{
++	struct file *file = iocb->ki_filp;
++	struct eventpoll *ep = (struct eventpoll *)file->private_data;
++	int ret = -1;
++	struct list_head *list;
++	int seen = 0;
++
++	write_lock_irq(&ep->lock);
++
++	if (iocb->private)
++		del_timer((struct timer_list *)iocb->private);
++	/*
++	 *  We duplicate the code found in remove_wait_queue, since we
++	 *  can't call that function from here.  We can only call
++	 *  __remove_wait_queue (same as remove_wait_queue_locked) which
++	 *  does not check to see if the item was actually removed from the
++	 *  queue.
++	 */
++	list = &ep->wq.task_list;
++
++	do {
++		struct list_head *next;
++		if (list == &iocb->ki_wait.task_list)
++			seen++;
++		next = list->next;
++		if (next->prev != list) {
++			seen += 2;
++			break;
++		}
++		list = next;
++	} while (list != &ep->wq.task_list);
++
++	if (seen == 1) {
++		__remove_wait_queue(&ep->wq, &iocb->ki_wait);
++		ret = 0;
++	}
++	write_unlock_irq(&ep->lock);
++
++	if (ret == 0) {
++		/* successfully cancelled request */
++		kfree(iocb->private);
++		iocb->private = NULL;
++		/* drop the i/o reference */
++		aio_put_req(iocb);
++	} else
++		ret = -EAGAIN;
++
++	event->res = event->res2 = 0;
++	/* drop the cancel reference */
++	aio_put_req(iocb);
++
++	return ret;
++}
++
++/*
++ * iocb->ki_nbytes -- number of events
++ * iocb->ki_pos    -- relative timeout in milliseconds
++ * iocb->private   -- NULL first go;  after that, it's set to the the
++ *                    absolute timeout in jiffies.
++ */
++ssize_t eventpoll_aio_wait(struct kiocb *iocb)
++{
++	struct file *file = iocb->ki_filp;
++	ssize_t ret = -EINVAL;
++	int relative_ms;
++	unsigned long expires;
++	unsigned long now;
++	struct timer_list *timer;
++
++	if (!is_file_epoll(file) || iocb->ki_nbytes > MAX_EVENTS ||
++	    iocb->ki_nbytes <= 0)
++		return -EINVAL;
++
++	if (!iocb->private) {
++		timer = kmalloc(sizeof(struct timer_list), GFP_KERNEL);
++		if (!timer)
++			return -ENOMEM;
++
++		if (iocb->ki_pos < 0 || iocb->ki_pos >= EP_MAX_MSTIMEO)
++			expires = MAX_SCHEDULE_TIMEOUT;
++		else
++			expires = jiffies + msecs_to_jiffies(iocb->ki_pos);
++
++		init_timer(timer);
++		timer->function = eventpoll_aio_timer;
++		timer->data = (unsigned long)iocb;
++		timer->expires = expires;
++	} else {
++		timer = (struct timer_list *)iocb->private;
++		expires = timer->expires;
++	}
++
++	now = jiffies;
++	if (time_before(now, expires))
++		relative_ms =
++			jiffies_to_msecs(expires) - jiffies_to_msecs(now);
++	else
++		relative_ms = 0;
++
++	iocb->ki_cancel = aio_epoll_cancel;
++	ret = ep_poll(file->private_data,
++		      (struct epoll_event __user *)iocb->ki_buf,
++		      iocb->ki_nbytes, relative_ms);
++
++	/*
++	 *  If we've added ourselves to the wait queue, there is a timeout
++	 *  specified, and we didn't setup the timer yet, then go ahead and
++	 *  add the timer.
++	 */
++	if (ret == -EIOCBRETRY && !iocb->private) {
++		iocb->private = timer;
++		if (expires != MAX_SCHEDULE_TIMEOUT)
++			add_timer(timer);
++	}
++
++	/* Perform cleanup if the poll has finished */
++	if (ret > 0 || relative_ms == 0) {
++		iocb->ki_cancel = NULL;
++		iocb->private = NULL;
++		(void)del_timer(timer);
++		kfree(timer);
++	}
++
++	return ret;
++}
+ 
+ /*
+  * Creates the file descriptor to be used by the epoll interface.
+@@ -1513,6 +1653,12 @@ retry:
+ 
+ 	res = 0;
+ 	if (list_empty(&ep->rdllist)) {
++		if (in_aio() && jtimeout) {
++			__add_wait_queue(&ep->wq, current->io_wait);
++			res = -EIOCBRETRY;
++			write_unlock_irqrestore(&ep->lock, flags);
++			goto out;
++		}
+ 		/*
+ 		 * We don't have any available event to return to the caller.
+ 		 * We need to sleep here, and we will be wake up by
+@@ -1558,6 +1704,7 @@ retry:
+ 	    !(res = ep_events_transfer(ep, events, maxevents)) && jtimeout)
+ 		goto retry;
+ 
++out:
+ 	return res;
+ }
+ 
+diff --git a/include/linux/aio_abi.h b/include/linux/aio_abi.h
+index 30fdcc8..34a7412 100644
+--- a/include/linux/aio_abi.h
++++ b/include/linux/aio_abi.h
+@@ -41,6 +41,7 @@ enum {
+ 	 * IOCB_CMD_POLL = 5,
+ 	 */
+ 	IOCB_CMD_NOOP = 6,
++  	IOCB_CMD_EPOLL_WAIT = 9,
+ };
+ 
+ /* read() from /dev/aio returns these structures. */
+diff --git a/include/linux/eventpoll.h b/include/linux/eventpoll.h
+index 84cfa8b..ed04500 100644
+--- a/include/linux/eventpoll.h
++++ b/include/linux/eventpoll.h
+@@ -62,6 +62,9 @@ static inline void eventpoll_init_file(s
+ /* Used to release the epoll bits inside the "struct file" */
+ void eventpoll_release_file(struct file *file);
+ 
++/* Used to provide epoll_wait() to sys_io_submit() */
++ssize_t eventpoll_aio_wait(struct kiocb *iocb);
++
+ /*
+  * This is called from inside fs/file_table.c:__fput() to unlink files
+  * from the eventpoll interface. We need to have this facility to cleanup
