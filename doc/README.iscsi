@@ -109,7 +109,7 @@ IFMarkInt=Reject
 MaxConnections=1
 
 
-You can see the initiators that the target accepts:
+After the target the target accepted some initiators, you can see them:
 
 host:~/tgt# ./usr/tgtadm --lld iscsi --mode session --op show --tid 1
 sid:562950876233792 initiator:iqn.1991-05.com.microsoft:kernel
