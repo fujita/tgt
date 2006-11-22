@@ -42,13 +42,14 @@
 
 #define BUFSIZE 4096
 
-static void set_show_results(struct tgtadm_res *res, int err)
+static void set_show_results(struct tgtadm_res *res, int *err)
 {
 	if (err < 0)
-		res->err = err;
+		res->err = *err;
 	else {
 		res->err = 0;
-		res->len = err + sizeof(*res);
+		res->len = *err + sizeof(*res);
+		*err = 0;
 	}
 }
 
@@ -79,12 +80,27 @@ static int target_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 		else if (tgt_drivers[lld_no]->target_update)
 			err = tgt_drivers[lld_no]->target_update(req->tid, params);
 		break;
+	case OP_SHOW:
+		if (req->tid < 0)
+			err = tgt_target_show_all((char *)res->data,
+						  *rlen - sizeof(*res));
+		else if (tgt_drivers[lld_no]->show)
+			err = tgt_drivers[lld_no]->show(req->mode,
+							req->tid, req->sid,
+							req->cid, req->lun,
+							(char *)res->data,
+							*rlen - sizeof(*res));
+		break;
 	default:
 		break;
 	}
 
-	res->err = err;
-	res->len = (char *) res->data - (char *) res;
+	if (req->op == OP_SHOW)
+		set_show_results(res, &err);
+	else {
+		res->err = err;
+		res->len = (char *) res->data - (char *) res;
+	}
 	return err;
 }
 
@@ -150,23 +166,6 @@ int tgt_mgmt(int lld_no, struct tgtadm_req *req, struct tgtadm_res *res,
 		req->len, lld_no, req->mode, req->op,
 		req->tid, req->sid, req->lun, params, getpid());
 
-	if (req->op == OP_SHOW && req->mode != MODE_ACCOUNT) {
-		if (req->mode == MODE_TARGET && req->tid < 0)
-			err = tgt_target_show_all((char *)res->data,
-						  len - sizeof(*res));
-		else {
-			if (tgt_drivers[lld_no]->show)
-				err = tgt_drivers[lld_no]->show(req->mode,
-								req->tid, req->sid,
-								req->cid, req->lun,
-								(char *)res->data,
-								len - sizeof(*res));
-		}
-
-		set_show_results(res, err);
-		return 0;
-	}
-
 	switch (req->mode) {
 	case MODE_SYSTEM:
 		break;
@@ -183,7 +182,7 @@ int tgt_mgmt(int lld_no, struct tgtadm_req *req, struct tgtadm_res *res,
 							   (char *)res->data,
 							   len - sizeof(*res));
 		if (req->op == OP_SHOW) {
-			set_show_results(res, err);
+			set_show_results(res, &err);
 			err = 0;
 		} else {
 			res->err = err;
@@ -191,6 +190,15 @@ int tgt_mgmt(int lld_no, struct tgtadm_req *req, struct tgtadm_res *res,
 		}
 		break;
 	default:
+		if (req->op == OP_SHOW && tgt_drivers[lld_no]->show) {
+			err = tgt_drivers[lld_no]->show(req->mode,
+							req->tid, req->sid,
+							req->cid, req->lun,
+							(char *)res->data,
+							len - sizeof(*res));
+
+			set_show_results(res, &err);
+		}
 		break;
 	}
 
