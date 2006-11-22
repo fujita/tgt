@@ -5,9 +5,9 @@
 
 #define	SCSI_ID_LEN	24
 
-enum scsi_target_type {
-	SCSI_TARGET_FILE = 1,
-	SCSI_TARGET_RAW,
+enum scsi_target_iotype {
+	SCSI_TARGET_FILEIO = 1,
+	SCSI_TARGET_RAWIO,
 };
 
 enum scsi_target_state {
@@ -94,5 +94,6 @@ extern int sense_data_build(uint8_t *data, uint8_t res_code, uint8_t key,
 
 extern enum scsi_target_state tgt_get_target_state(int tid);
 extern int tgt_set_target_state(int tid, char *str);
+extern int tgt_set_target_iotype(int tid, char *str);
 
 #endif

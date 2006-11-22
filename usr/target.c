@@ -590,6 +590,7 @@ int tgt_target_create(int lld, int tid)
 	for (i = 0; i < ARRAY_SIZE(target->device_hash_list); i++)
 		INIT_LIST_HEAD(&target->device_hash_list[i]);
 
+	target->target_iotype = SCSI_TARGET_FILEIO;
 	target->target_state = SCSI_TARGET_SUSPENDED;
 
 	target->bdt = tgt_drivers[lld]->default_bdt;
@@ -625,6 +626,28 @@ int tgt_target_destroy(int tid)
 	return 0;
 }
 
+static struct {
+	enum scsi_target_iotype value;
+	char *name;
+} target_iotype[] = {
+	{SCSI_TARGET_FILEIO, "fileio"},
+	{SCSI_TARGET_RAWIO, "rawio"},
+};
+
+static char *target_iotype_name(enum scsi_target_state state)
+{
+	int i;
+	char *name = NULL;
+
+	for (i = 0; i < ARRAY_SIZE(target_iotype); i++) {
+		if (target_iotype[i].value == state) {
+			name = target_iotype[i].name;
+			break;
+		}
+	}
+	return name;
+}
+
 enum scsi_target_state tgt_get_target_state(int tid)
 {
 	struct target *target;
@@ -635,6 +658,27 @@ enum scsi_target_state tgt_get_target_state(int tid)
 	return target->target_state;
 }
 
+int tgt_set_target_iotype(int tid, char *str)
+{
+	int i, err = -EINVAL;
+	struct target *target;
+
+	target = target_lookup(tid);
+	if (!target)
+		return -ENOENT;
+
+	for (i = 0; i < ARRAY_SIZE(target_iotype); i++) {
+		if (!strcmp(target_iotype[i].name, str)) {
+			target->target_iotype = target_iotype[i].value;
+			err = 0;
+			break;
+		}
+	}
+
+	return err;
+}
+
+
 static struct {
 	enum scsi_target_state value;
 	char *name;
@@ -643,7 +687,7 @@ static struct {
 	{SCSI_TARGET_RUNNING, "running"},
 };
 
-static char *target_state_state_name(enum scsi_target_state state)
+static char *target_state_name(enum scsi_target_state state)
 {
 	int i;
 	char *name = NULL;
@@ -685,9 +729,10 @@ int tgt_target_show_all(char *buf, int rest)
 
 	for (i = total = 0; i < ARRAY_SIZE(target_hash_list); i++) {
 		list_for_each_entry(target, &target_hash_list[i], t_hlist) {
-			len = snprintf(buf, rest, "tid %d: lld name %s: state %s\n",
+			len = snprintf(buf, rest, "tid %d: lld name %s: iotype %s: state %s\n",
 				       target->tid, tgt_drivers[target->lid]->name,
-				       target_state_state_name(target->target_state));
+				       target_iotype_name(target->target_iotype),
+				       target_state_name(target->target_state));
 			buf += len;
 			total += len;
 			rest -= len;

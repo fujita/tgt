@@ -77,6 +77,9 @@ static int target_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 		if (!strcmp(params, "state"))
 			err = tgt_set_target_state(req->tid,
 						   params + strlen(params) + 1);
+		else if (!strcmp(params, "iotype"))
+			err = tgt_set_target_iotype(req->tid,
+						    params + strlen(params) + 1);
 		else if (tgt_drivers[lld_no]->target_update)
 			err = tgt_drivers[lld_no]->target_update(req->tid, params);
 		break;

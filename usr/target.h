@@ -24,7 +24,7 @@ struct target {
 	int tid;
 	int lid;
 
-	enum scsi_target_type target_type;
+	enum scsi_target_iotype target_iotype;
 	enum scsi_target_state target_state;
 
 	struct list_head t_hlist;
