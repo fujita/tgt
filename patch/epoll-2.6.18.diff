@@ -1,5 +1,5 @@
 diff --git a/fs/aio.c b/fs/aio.c
-index 9506301..f93d639 100644
+index 9506301..aacb38e 100644
 --- a/fs/aio.c
 +++ b/fs/aio.c
 @@ -29,6 +29,7 @@ #include <linux/aio.h>
@@ -10,15 +10,6 @@ index 9506301..f93d639 100644
  
  #include <asm/kmap_types.h>
  #include <asm/uaccess.h>
-@@ -865,7 +866,7 @@ static void aio_kick_handler(void *data)
- 	use_mm(ctx->mm);
- 	spin_lock_irq(&ctx->ctx_lock);
- 	requeue =__aio_run_iocbs(ctx);
-- 	unuse_mm(ctx->mm);
-+	unuse_mm(ctx->mm);
- 	spin_unlock_irq(&ctx->ctx_lock);
- 	set_fs(oldfs);
- 	/*
 @@ -1434,6 +1435,9 @@ static ssize_t aio_setup_iocb(struct kio
  		if (file->f_op->aio_fsync)
  			kiocb->ki_retry = aio_fsync;
@@ -30,7 +21,7 @@ index 9506301..f93d639 100644
  		dprintk("EINVAL: io_submit: no operation provided\n");
  		ret = -EINVAL;
 diff --git a/fs/eventpoll.c b/fs/eventpoll.c
-index 3a35674..e1accf1 100644
+index 3a35674..729a753 100644
 --- a/fs/eventpoll.c
 +++ b/fs/eventpoll.c
 @@ -35,6 +35,7 @@ #include <linux/eventpoll.h>
@@ -41,7 +32,7 @@ index 3a35674..e1accf1 100644
  #include <asm/uaccess.h>
  #include <asm/system.h>
  #include <asm/io.h>
-@@ -698,6 +699,145 @@ eexit_1:
+@@ -698,6 +699,150 @@ eexit_1:
  	return error;
  }
  
@@ -51,11 +42,12 @@ index 3a35674..e1accf1 100644
 +	struct timer_list *timer = (struct timer_list *)iocb->private;
 +	struct file *file = iocb->ki_filp;
 +	struct eventpoll *ep = (struct eventpoll *)file->private_data;
++	unsigned long flags;
 +
 +	(void)del_timer(timer);
-+	write_lock(&ep->lock);
++	write_lock_irqsave(&ep->lock, flags);
 +	__wake_up_locked(&ep->wq, TASK_UNINTERRUPTIBLE | TASK_INTERRUPTIBLE);
-+	write_unlock(&ep->lock);
++	write_unlock_irqrestore(&ep->lock, flags);
 +}
 +
 +static int aio_epoll_cancel(struct kiocb *iocb, struct io_event *event)
@@ -71,11 +63,9 @@ index 3a35674..e1accf1 100644
 +	if (iocb->private)
 +		del_timer((struct timer_list *)iocb->private);
 +	/*
-+	 *  We duplicate the code found in remove_wait_queue, since we
-+	 *  can't call that function from here.  We can only call
-+	 *  __remove_wait_queue (same as remove_wait_queue_locked) which
-+	 *  does not check to see if the item was actually removed from the
-+	 *  queue.
++	 *  We need to know whether the event was removed from the wait
++	 *  queue in order to return the proper status to the cancellation
++	 *  code.
 +	 */
 +	list = &ep->wq.task_list;
 +
@@ -133,11 +123,16 @@ index 3a35674..e1accf1 100644
 +		return -EINVAL;
 +
 +	if (!iocb->private) {
++		/*
++		 *  Note that we unconditionally allocate a timer, but we
++		 *  only use it if a timeout was specified.  Otherwise, it
++		 *  is just a holder for the "infinite" value.
++		 */
 +		timer = kmalloc(sizeof(struct timer_list), GFP_KERNEL);
 +		if (!timer)
 +			return -ENOMEM;
 +
-+		if (iocb->ki_pos < 0 || iocb->ki_pos >= EP_MAX_MSTIMEO)
++		if ((long)iocb->ki_pos < 0 || iocb->ki_pos >= EP_MAX_MSTIMEO)
 +			expires = MAX_SCHEDULE_TIMEOUT;
 +		else
 +			expires = jiffies + msecs_to_jiffies(iocb->ki_pos);
@@ -152,9 +147,10 @@ index 3a35674..e1accf1 100644
 +	}
 +
 +	now = jiffies;
-+	if (time_before(now, expires))
-+		relative_ms =
-+			jiffies_to_msecs(expires) - jiffies_to_msecs(now);
++	if (timer->expires == MAX_SCHEDULE_TIMEOUT)
++		relative_ms = EP_MAX_MSTIMEO;
++	else if (time_before(now, expires))
++		relative_ms = jiffies_to_msecs(expires - now);
 +	else
 +		relative_ms = 0;
 +
@@ -164,22 +160,22 @@ index 3a35674..e1accf1 100644
 +		      iocb->ki_nbytes, relative_ms);
 +
 +	/*
-+	 *  If we've added ourselves to the wait queue, there is a timeout
-+	 *  specified, and we didn't setup the timer yet, then go ahead and
-+	 *  add the timer.
++	 *  If a timeout was specified, ep_poll returned retry, and we have
++	 *  not yet registered a timer, go ahead and register one.
 +	 */
 +	if (ret == -EIOCBRETRY && !iocb->private) {
 +		iocb->private = timer;
-+		if (expires != MAX_SCHEDULE_TIMEOUT)
-+			add_timer(timer);
++		add_timer(timer);
 +	}
 +
-+	/* Perform cleanup if the poll has finished */
-+	if (ret > 0 || relative_ms == 0) {
++	/*
++	 *  Did we get any events?
++	 */
++	if (ret >= 0) {
 +		iocb->ki_cancel = NULL;
-+		iocb->private = NULL;
 +		(void)del_timer(timer);
 +		kfree(timer);
++		iocb->private = NULL;
 +	}
 +
 +	return ret;
@@ -187,7 +183,7 @@ index 3a35674..e1accf1 100644
  
  /*
   * Creates the file descriptor to be used by the epoll interface.
-@@ -1513,6 +1653,12 @@ retry:
+@@ -1513,6 +1658,12 @@ retry:
  
  	res = 0;
  	if (list_empty(&ep->rdllist)) {
@@ -200,23 +196,24 @@ index 3a35674..e1accf1 100644
  		/*
  		 * We don't have any available event to return to the caller.
  		 * We need to sleep here, and we will be wake up by
-@@ -1558,6 +1704,7 @@ retry:
+@@ -1557,7 +1708,7 @@ retry:
+ 	if (!res && eavail &&
  	    !(res = ep_events_transfer(ep, events, maxevents)) && jtimeout)
  		goto retry;
- 
+-
 +out:
  	return res;
  }
  
 diff --git a/include/linux/aio_abi.h b/include/linux/aio_abi.h
-index 30fdcc8..34a7412 100644
+index 30fdcc8..bb67d5b 100644
 --- a/include/linux/aio_abi.h
 +++ b/include/linux/aio_abi.h
 @@ -41,6 +41,7 @@ enum {
  	 * IOCB_CMD_POLL = 5,
  	 */
  	IOCB_CMD_NOOP = 6,
-+  	IOCB_CMD_EPOLL_WAIT = 9,
++ 	IOCB_CMD_EPOLL_WAIT = 9,
  };
  
  /* read() from /dev/aio returns these structures. */
