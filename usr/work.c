@@ -26,7 +26,7 @@
 #include "list.h"
 #include "util.h"
 #include "log.h"
-#include "sched.h"
+#include "work.h"
 
 int stop_daemon;
 

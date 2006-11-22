@@ -35,7 +35,7 @@
 #include "list.h"
 #include "tgtd.h"
 #include "driver.h"
-#include "sched.h"
+#include "work.h"
 #include "util.h"
 
 #define MAX_FDS	4096
