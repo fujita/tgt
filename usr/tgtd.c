@@ -24,6 +24,7 @@
 #include <getopt.h>
 #include <inttypes.h>
 #include <libaio.h>
+#include <sched.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -82,23 +83,33 @@ Target framework daemon.\n\
 static void signal_catch(int signo) {
 }
 
-static void oom_adjust(void)
+static int set_realtime(void)
 {
-	int fd;
-	char path[64];
+	struct sched_param sp;
 
-	/* Should we use RT stuff? */
-	nice(-20);
+	sp.sched_priority = sched_get_priority_max(SCHED_FIFO);
+	return sched_setscheduler(0, SCHED_FIFO, &sp);
+}
+
+static int oom_adjust(void)
+{
+	int fd, err;
+	char path[64];
 
 	/* Avoid oom-killer */
 	sprintf(path, "/proc/%d/oom_adj", getpid());
 	fd = open(path, O_WRONLY);
 	if (fd < 0) {
-		fprintf(stderr, "can not adjust oom-killer's pardon %s\n", path);
-		return;
+		fprintf(stderr, "can't adjust oom-killer's pardon %s, %m\n", path);
+		return errno;
 	}
-	write(fd, "-17\n", 4);
+	err = write(fd, "-17\n", 4);
+	if (err < 0) {
+		fprintf(stderr, "can't adjust oom-killer's pardon %s, %m\n", path);
+		return errno;
+	}
 	close(fd);
+	return 0;
 }
 
 int tgt_event_add(int fd, int events, event_handler_t handler, void *data)
@@ -306,7 +317,13 @@ int main(int argc, char **argv)
 	if (is_daemon && daemon(0,0))
 		exit(1);
 
-	oom_adjust();
+	err = oom_adjust();
+	if (err)
+		exit(1);
+
+	err = set_realtime();
+	if (err)
+		eprintf("can't set SCHED_FIFO, %m\n");
 
 	err = log_init(program_name, LOG_SPACE_SIZE, is_daemon, is_debug);
 	if (err)
