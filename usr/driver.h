@@ -22,7 +22,7 @@ struct tgt_driver {
 			      uint64_t tag);
 	int (*mgmt_end_notify)(int host_no, uint64_t mid, int result);
 
-	struct backedio_template *bdt;
+	struct backedio_template *default_bdt;
 };
 
 extern struct tgt_driver *tgt_drivers[];

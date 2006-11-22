@@ -155,7 +155,7 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 	if (!p)
 		return -ENOMEM;
 
-	device = tgt_drivers[target->lid]->bdt->bd_open(path, &dev_fd, &size);
+	device = target->bdt->bd_open(path, &dev_fd, &size);
 	if (!device) {
 		free(p);
 		return -EINVAL;
@@ -203,7 +203,7 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 	device_hlist_remove(device);
 	device_list_remove(device);
 
-	tgt_drivers[target->lid]->bdt->bd_close(device);
+	target->bdt->bd_close(device);
 	return 0;
 }
 
@@ -298,7 +298,8 @@ int target_cmd_queue(int host_no, uint8_t *scb, unsigned long uaddr,
 					  &len, data_len,
 					  &uaddr, &rw, &mmapped, &offset,
 					  lun, cmd->dev,
-					  &target->device_list, &async, (void *) cmd);
+					  &target->device_list, &async, (void *) cmd,
+					  target->bdt->bd_cmd_submit);
 
 		cmd_post_perform(q, cmd, uaddr, len, mmapped);
 
@@ -357,7 +358,8 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 						  &rw, &mmapped, &offset,
 						  cmd->lun, cmd->dev,
 						  &cmd->c_target->device_list,
-						  &async, (void *) cmd);
+						  &async, (void *) cmd,
+						  cmd->c_target->bdt->bd_cmd_submit);
 			cmd->rw = rw;
 			cmd_post_perform(q, cmd, cmd->uaddr, len, mmapped);
 			set_cmd_processed(cmd);
@@ -390,9 +392,9 @@ static void __cmd_done(struct target *target, struct cmd *cmd)
 		if (cmd->dev->addr)
 			do_munmap = 0;
 	}
-	err = tgt_drivers[target->lid]->bdt->bd_cmd_done(do_munmap,
-							 !cmd->mmapped,
-							 cmd->uaddr, cmd->len);
+	err = target->bdt->bd_cmd_done(do_munmap,
+				       !cmd->mmapped,
+				       cmd->uaddr, cmd->len);
 
 	dprintf("%d %" PRIx64 " %u %d\n", cmd->mmapped, cmd->uaddr, cmd->len, err);
 
@@ -553,7 +555,6 @@ int tgt_target_bind(int tid, int host_no, int lid)
 		eprintf("target is not found %d\n", tid);
 		return -EINVAL;
 	}
-	target->lid = lid;
 
 	if (hostt[host_no]) {
 		eprintf("host is already binded %d %d\n", tid, host_no);
@@ -566,7 +567,7 @@ int tgt_target_bind(int tid, int host_no, int lid)
 	return 0;
 }
 
-int tgt_target_create(int tid)
+int tgt_target_create(int lld, int tid)
 {
 	int i;
 	struct target *target;
@@ -590,6 +591,9 @@ int tgt_target_create(int tid)
 		INIT_LIST_HEAD(&target->device_hash_list[i]);
 
 	target->target_state = SCSI_TARGET_SUSPENDED;
+
+	target->bdt = tgt_drivers[lld]->default_bdt;
+	target->lid = lld;
 
 	tgt_cmd_queue_init(&target->cmd_queue);
 	target_hlist_insert(target);

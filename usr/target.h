@@ -24,6 +24,7 @@ struct target {
 	int tid;
 	int lid;
 
+	enum scsi_target_type target_type;
 	enum scsi_target_state target_state;
 
 	struct list_head t_hlist;
@@ -34,6 +35,8 @@ struct target {
 	struct list_head cmd_hash_list[1 << HASH_ORDER];
 
 	struct tgt_cmd_queue cmd_queue;
+
+	struct backedio_template *bdt;
 };
 
 struct cmd {

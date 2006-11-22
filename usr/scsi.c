@@ -469,7 +469,7 @@ int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu,
 		     int *len, uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
 		     uint8_t *try_map, uint64_t *offset, uint8_t *lun_buf,
 		     struct tgt_device *dev, struct list_head *dev_list, int *async,
-		     void *key)
+		     void *key, bkio_submit_t *submit)
 {
 	int result = SAM_STAT_GOOD;
 	uint8_t *data = NULL, *scb = pdu;
@@ -536,8 +536,7 @@ int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu,
 	case WRITE_16:
 	case WRITE_VERIFY:
 		*offset = scsi_cmd_data_offset(scb);
-		result = tgt_drivers[lid]->bdt->bd_cmd_submit(dev, *rw, datalen,
-							      uaddr, *offset, async, key);
+		result = submit(dev, *rw, datalen, uaddr, *offset, async, key);
 		if (result == SAM_STAT_GOOD) {
 			*len = datalen;
 			*try_map = 1;

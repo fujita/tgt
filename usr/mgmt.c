@@ -60,7 +60,7 @@ static int target_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 
 	switch (req->op) {
 	case OP_NEW:
-		err = tgt_target_create(req->tid);
+		err = tgt_target_create(lld_no, req->tid);
 		if (!err && tgt_drivers[lld_no]->target_create)
 			tgt_drivers[lld_no]->target_create(req->tid, params);
 		break;
