@@ -1,0 +1,48 @@
+Introducation
+-------------
+This document describes how to configure the passthrough mode, which
+directly passes SCSI commands to real SCSI devices.
+
+By default, tgt provides disk devices to initiators by using a IDE,
+SATA, SCSI, Device Mapper (DM), or Multiple Device (MD) device or a
+file. That is, tgt emulates SCSI devices. This offers great
+flexibility.
+
+In some cases, you need to directly pass SCSI commands to real SCSI
+devices comming from the initiators. For example, you might want to
+use the passthrough mode to provide SCSI tape drives to the
+initiators. Another example is SAN bridge (called SAN router too), to
+bind different SAN protocols. For example, an iSCSI-FC bridge can
+connect the existing FC network with a new iSCSI network, that is,
+provides FC storages to the iSCSI initiators.
+
+The passthrough mode support is not finished yet. tgt can pass SCSI
+commands but transport-layer commands. So tgt cannot handle TMFs
+now. This is mainly because Linux kernel does not enable user space to
+send transport-layer commands to LLDs yet. The sg version 4 will
+support this. We need to wait for some time.
+
+
+Starting
+-------------
+The passthrough mode uses the bsg feature, which is supposed to
+implement sg4 in the future.
+
+First, get the Jens' block tree and switch to the bsg branch:
+
+http://www.kernel.org/git/?p=linux/kernel/git/axboe/linux-2.6-block.git;a=summary
+
+
+Secondly, if you want to the passthrough mode with the ibmvio driver,
+pick up the tgt patches in the tgt tree, and apply them. If you use
+the iscsi driver, you can skip this.
+
+Thirdly, apply the IOCB_CMD_EPOLL_WAIT patch in the patch directory.
+
+You are ready. The following example is to export /dev/sda via the
+iscsi driver. Good luck.
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode target --tid 1 --params iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
+host:~/tgt# ./usr/tgtadm --lld iscsi --op update --mode target --tid 1 --name iotype --value rawio
+host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 0 --params Path=/dev/sda
+host:~/tgt# ./usr/tgtadm --lld iscsi --op update --mode target --tid 1 --name state --value running
