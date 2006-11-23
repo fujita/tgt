@@ -254,16 +254,17 @@ static void cmd_post_perform(struct tgt_cmd_queue *q, struct cmd *cmd,
 	}
 }
 
-int target_cmd_queue(int host_no, uint8_t *scb, unsigned long uaddr,
+int target_cmd_queue(int host_no, uint8_t *scb, uint8_t rw,
+		     unsigned long uaddr,
 		     uint8_t *lun, uint32_t data_len,
 		     int attribute, uint64_t tag)
 {
 	struct target *target;
 	struct tgt_cmd_queue *q;
 	struct cmd *cmd;
-	int result, enabled, async, len = 0;
+	int result, enabled = 0, async, len = 0;
 	uint64_t offset, dev_id;
-	uint8_t rw = 0, mmapped = 0;
+	uint8_t mmapped = 0;
 
 	target = host_to_target(host_no);
 	if (!target) {
@@ -286,12 +287,32 @@ int target_cmd_queue(int host_no, uint8_t *scb, unsigned long uaddr,
 	dprintf("%x %" PRIx64 "\n", scb[0], dev_id);
 
 	cmd->dev = device_lookup(target, dev_id);
+
+	/* FIXME */
+	if (target->target_iotype == SCSI_TARGET_RAWIO) {
+		memcpy(cmd->scb, scb, sizeof(cmd->scb));
+		dprintf("%u %s\n", scb[0], cmd->dev ? "do sg" : "fake");
+
+		/* we can't pass through REPORT_LUNS. */
+		if (cmd->dev && scb[0] != REPORT_LUNS) {
+			target->bdt->bd_cmd_submit(cmd->dev, cmd->scb, rw,
+						   data_len, &uaddr, offset,
+						   &async, (void *) cmd);
+			cmd->len = data_len;
+			cmd->uaddr = uaddr;
+			goto out;
+		} else
+			enabled = 1;
+	}
+
 	if (cmd->dev)
 		q = &cmd->dev->cmd_queue;
 	else
 		q = &target->cmd_queue;
 
-	enabled = cmd_enabled(q, cmd);
+	if (!enabled)
+		enabled = cmd_enabled(q, cmd);
+
 	if (enabled) {
 		result = scsi_cmd_perform(target->lid,
 					  host_no, scb,
@@ -323,7 +344,7 @@ int target_cmd_queue(int host_no, uint8_t *scb, unsigned long uaddr,
 		cmd->uaddr = uaddr;
 		list_add_tail(&cmd->qlist, &q->queue);
 	}
-
+out:
 	return 0;
 }
 
@@ -648,16 +669,6 @@ static char *target_iotype_name(enum scsi_target_state state)
 	return name;
 }
 
-enum scsi_target_state tgt_get_target_state(int tid)
-{
-	struct target *target;
-
-	target = target_lookup(tid);
-	if (!target)
-		return -ENOENT;
-	return target->target_state;
-}
-
 int tgt_set_target_iotype(int tid, char *str)
 {
 	int i, err = -EINVAL;
@@ -671,6 +682,10 @@ int tgt_set_target_iotype(int tid, char *str)
 		if (!strcmp(target_iotype[i].name, str)) {
 			target->target_iotype = target_iotype[i].value;
 			err = 0;
+
+			/* FIXME */
+			if (target->target_iotype == SCSI_TARGET_RAWIO)
+				target->bdt = &sg_bdt;
 			break;
 		}
 	}
@@ -678,6 +693,15 @@ int tgt_set_target_iotype(int tid, char *str)
 	return err;
 }
 
+enum scsi_target_state tgt_get_target_state(int tid)
+{
+	struct target *target;
+
+	target = target_lookup(tid);
+	if (!target)
+		return -ENOENT;
+	return target->target_state;
+}
 
 static struct {
 	enum scsi_target_state value;

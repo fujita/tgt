@@ -950,11 +950,13 @@ static int iscsi_scsi_cmd_execute(struct iscsi_task *task)
 				list_add_tail(&task->c_list, &task->conn->tx_clist);
 		} else
 			err = target_cmd_queue(conn->session->tsih, req->cdb,
+					       req->flags & ISCSI_FLAG_CMD_WRITE,
 					       uaddr, req->lun,
 					       ntohl(req->data_length),
 					       cmd_attr(task), req->itt);
 	} else
 		err = target_cmd_queue(conn->session->tsih, req->cdb,
+				       req->flags & ISCSI_FLAG_CMD_WRITE,
 				       uaddr, req->lun, ntohl(req->data_length),
 				       cmd_attr(task), req->itt);
 
@@ -1194,7 +1196,7 @@ static int iscsi_scsi_cmd_rx_start(struct iscsi_connection *conn)
 
 	len = ntohl(req->data_length);
 	if (len) {
-		task->c_buffer = malloc(len);
+		task->c_buffer = valloc(len);
 		if (!task->c_buffer) {
 			iscsi_free_task(task);
 			return -ENOMEM;

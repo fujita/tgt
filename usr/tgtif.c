@@ -130,7 +130,7 @@ retry:
 	switch (ev->hdr.type) {
 	case TGT_KEVENT_CMD_REQ:
 		target_cmd_queue(ev->p.cmd_req.host_no, ev->p.cmd_req.scb,
-				 0,
+				 0, 0,
 /* 				 ev->k.cmd_req.uaddr, */
 				 ev->p.cmd_req.lun, ev->p.cmd_req.data_len,
 				 ev->p.cmd_req.attribute, ev->p.cmd_req.tag);

@@ -37,9 +37,9 @@ struct tgt_device {
 	unsigned long bddata[0] __attribute__ ((aligned (sizeof(unsigned long))));
 };
 
-typedef int (bkio_submit_t) (struct tgt_device *dev, int rw, uint32_t datalen,
-			     unsigned long *uaddr, uint64_t offset, int *async,
-			     void *key);
+typedef int (bkio_submit_t) (struct tgt_device *dev, uint8_t *scb,
+			     int rw, uint32_t datalen, unsigned long *uaddr,
+			     uint64_t offset, int *async, void *key);
 
 struct backedio_template {
 	struct tgt_device *(*bd_open)(char *path, int *fd, uint64_t *size);
@@ -73,7 +73,8 @@ extern int tgt_event_add(int fd, int events, event_handler_t handler, void *data
 extern void tgt_event_del(int fd);
 extern int tgt_event_modify(int fd, int events);
 
-extern int target_cmd_queue(int host_no, uint8_t *scb, unsigned long uaddr,
+extern int target_cmd_queue(int host_no, uint8_t *scb, uint8_t rw,
+			    unsigned long uaddr,
 			    uint8_t *lun, uint32_t data_len,
 			    int attribute, uint64_t tag);
 extern void target_cmd_done(int host_no, uint64_t tag);

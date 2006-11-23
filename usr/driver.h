@@ -1,4 +1,4 @@
-extern struct backedio_template mmap_bdt, aio_bdt;
+extern struct backedio_template mmap_bdt, aio_bdt, sg_bdt;
 
 struct tgt_driver {
 	const char *name;

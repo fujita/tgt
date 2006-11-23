@@ -536,7 +536,7 @@ int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu,
 	case WRITE_16:
 	case WRITE_VERIFY:
 		*offset = scsi_cmd_data_offset(scb);
-		result = submit(dev, *rw, datalen, uaddr, *offset, async, key);
+		result = submit(dev, scb, *rw, datalen, uaddr, *offset, async, key);
 		if (result == SAM_STAT_GOOD) {
 			*len = datalen;
 			*try_map = 1;

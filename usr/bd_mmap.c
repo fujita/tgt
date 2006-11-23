@@ -55,9 +55,9 @@ static void bd_mmap_close(struct tgt_device *dev)
 	free(dev);
 }
 
-static int bd_mmap_cmd_submit(struct tgt_device *dev, int rw, uint32_t datalen,
-			      unsigned long *uaddr, uint64_t offset, int *async,
-			      void *key)
+static int bd_mmap_cmd_submit(struct tgt_device *dev, uint8_t *scb, int rw,
+			      uint32_t datalen, unsigned long *uaddr,
+			      uint64_t offset, int *async, void *key)
 {
 	int fd = dev->fd;
 	void *p;
