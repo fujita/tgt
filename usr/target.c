@@ -152,6 +152,8 @@ int tgt_device_create(int tid, uint64_t lun)
 	if (!device)
 		return -ENOMEM;
 
+	device->lun = lun;
+
 	snprintf(device->scsi_id, sizeof(device->scsi_id),
 		 "deadbeaf%d:%" PRIu64, tid, lun);
 	memset(device->scsi_sn, 0, sizeof(device->scsi_sn));
