@@ -44,7 +44,8 @@ typedef int (bkio_submit_t) (struct tgt_device *dev, uint8_t *scb,
 			     uint64_t offset, int *async, void *key);
 
 struct backedio_template {
-	struct tgt_device *(*bd_open)(char *path, int *fd, uint64_t *size);
+	int bd_datasize;
+	int (*bd_open)(struct tgt_device *dev, char *path, int *fd, uint64_t *size);
 	void (*bd_close)(struct tgt_device *dev);
 	bkio_submit_t *bd_cmd_submit;
 	int (*bd_cmd_done) (int do_munmap, int do_free, uint64_t uaddr, int len);
@@ -63,7 +64,7 @@ extern int kspace_send_tsk_mgmt_res(int host_no, uint64_t mid, int result);
 extern int kspace_send_cmd_res(int host_no, int len, int result,
 			       int rw, uint64_t addr, uint64_t tag);
 extern int ipc_init(void);
-extern int tgt_device_create(int tid, uint64_t lun, char *path);
+extern int tgt_device_create(int tid, uint64_t lun);
 extern int tgt_device_destroy(int tid, uint64_t lun);
 extern int tgt_device_show(int tid, uint64_t dev_id, char *buf, int rest);
 extern int tgt_device_update(int tid, uint64_t dev_id, char *name);

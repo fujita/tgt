@@ -19,6 +19,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  */
+#include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -61,18 +62,18 @@ static void sg_handler(int fd, int events, void *data)
 	}
 }
 
-static struct tgt_device *bd_sg_open(char *path, int *fd, uint64_t *size)
+static int bd_sg_open(struct tgt_device *dev,
+		      char *path, int *fd, uint64_t *size)
 {
 	int err, maj, min;
 	char *sd, *bsgdev, buf[128];
 	struct stat64 st;
-	struct tgt_device *dev;
 
 	/* we assume something like /dev/sda */
 
 	*fd = backed_file_open(path, 0, size);
 	if (*fd < 0)
-		return NULL;
+		return *fd;
 
 	err = fstat64(*fd, &st);
 	if (err < 0) {
@@ -90,14 +91,14 @@ static struct tgt_device *bd_sg_open(char *path, int *fd, uint64_t *size)
 	sd = strrchr(path, '/');
 	if (!sd) {
 		eprintf("invalid path %s\n", path);
-		return NULL;
+		return -EINVAL;
 	}
 
 	snprintf(buf, sizeof(buf), "/sys/class/bsg%s/dev", sd);
 	*fd = open(buf, O_RDONLY);
 	if (*fd < 0) {
 		eprintf("can't open %s, %m\n", buf);
-		return NULL;
+		return -errno;
 	}
 
 	err = read(*fd, buf, sizeof(buf));
@@ -118,14 +119,14 @@ static struct tgt_device *bd_sg_open(char *path, int *fd, uint64_t *size)
 	bsgdev = tempnam("/tmp", NULL);
 	if (!bsgdev) {
 		eprintf("can't get temporary name for bsg device, %m\n");
-		return NULL;
+		return -errno;
 	}
 
 	err = mknod(bsgdev, S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH,
 		    maj << 8 | min);
 	if (err < 0) {
 		eprintf("can't create the bsg device %s, %m\n", bsgdev);
-		return NULL;
+		return -errno;
 	}
 
 	*fd = open(bsgdev, O_RDWR | O_NONBLOCK);
@@ -136,12 +137,8 @@ static struct tgt_device *bd_sg_open(char *path, int *fd, uint64_t *size)
 
 	if (*fd < 0) {
 		eprintf("can't open the bsg device %s, %m\n", bsgdev);
-		return NULL;
+		return -errno;
 	}
-
-	dev = zalloc(sizeof(*dev));
-	if (!dev)
-		goto close_fd;
 
 	err = tgt_event_add(*fd, EPOLLIN, sg_handler, dev);
 	if (err) {
@@ -149,17 +146,16 @@ static struct tgt_device *bd_sg_open(char *path, int *fd, uint64_t *size)
 		goto close_fd;
 	}
 
-	return dev;
+	return 0;
 close_fd:
 	close(*fd);
-	return NULL;
+	return err;
 }
 
 static void bd_sg_close(struct tgt_device *dev)
 {
 	tgt_event_del(dev->fd);
 	close(dev->fd);
-	free(dev);
 }
 
 static int bd_sg_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)

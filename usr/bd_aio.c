@@ -49,51 +49,30 @@
 #define O_DIRECT 040000 /* who defines this?*/
 
 struct bd_aio_info {
-	int fd;
-
-	/* TODO: batch requests*/
+	/* TODO: batch requests */
 	struct iocb iocb[MAX_AIO_REQS];
 	struct io_event events[MAX_AIO_REQS];
 };
 
 extern io_context_t ctx;
 
-static struct tgt_device *bd_aio_open(char *path, int *fd, uint64_t *size)
+static int bd_aio_open(struct tgt_device *dev, char *path, int *fd, uint64_t *size)
 {
-	struct tgt_device *dev;
-	struct bd_aio_info *bai;
-
-	dev = zalloc(sizeof(*dev) + sizeof(*bai));
-	if (!dev)
-		return NULL;
-
 	*fd = backed_file_open(path, O_RDWR| O_LARGEFILE, size);
-	if (*fd < 0)
-		goto free_dev;
 
-	bai = (struct bd_aio_info *) dev->bddata;
-	bai->fd = *fd;
-
-	return dev;
-free_dev:
-	free(dev);
-	return NULL;
+	return *fd >= 0 ? 0 : *fd;
 }
 
 static void bd_aio_close(struct tgt_device *dev)
 {
-	struct bd_aio_info *bai = (struct bd_aio_info *) dev->bddata;
-
-	tgt_event_del(bai->fd);
-	close(bai->fd);
-	free(dev);
+	tgt_event_del(dev->fd);
+	close(dev->fd);
 }
 
 static int bd_aio_cmd_submit(struct tgt_device *dev, uint8_t *scb, int rw,
 			     uint32_t datalen, unsigned long *uaddr,
 			     uint64_t offset, int *async, void *key)
 {
-	struct bd_aio_info *bai = (struct bd_aio_info *) dev->bddata;
 	struct iocb iocb, *io;
 	int err;
 
@@ -102,13 +81,13 @@ static int bd_aio_cmd_submit(struct tgt_device *dev, uint8_t *scb, int rw,
 	io = &iocb;
 	memset(io, 0, sizeof(*io));
 
-	dprintf("%d %d %u %lx %" PRIx64 " %p %p\n", bai->fd, rw, datalen, *uaddr, offset,
+	dprintf("%d %d %u %lx %" PRIx64 " %p %p\n", dev->fd, rw, datalen, *uaddr, offset,
 		io, key);
 
 	if (rw == READ)
-		io_prep_pread(io, bai->fd, (void *) *uaddr, datalen, offset);
+		io_prep_pread(io, dev->fd, (void *) *uaddr, datalen, offset);
 	else
-		io_prep_pwrite(io, bai->fd, (void *) *uaddr, datalen, offset);
+		io_prep_pwrite(io, dev->fd, (void *) *uaddr, datalen, offset);
 
 	io->data = key;
 	err = io_submit(ctx, 1, &io);
@@ -122,8 +101,9 @@ static int bd_aio_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
 }
 
 struct backedio_template aio_bdt = {
-	.bd_open	= bd_aio_open,
-	.bd_close	= bd_aio_close,
-	.bd_cmd_submit	= bd_aio_cmd_submit,
-	.bd_cmd_done	= bd_aio_cmd_done,
+	.bd_datasize		= sizeof(struct bd_aio_info),
+	.bd_open		= bd_aio_open,
+	.bd_close		= bd_aio_close,
+	.bd_cmd_submit		= bd_aio_cmd_submit,
+	.bd_cmd_done		= bd_aio_cmd_done,
 };

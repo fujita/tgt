@@ -32,27 +32,16 @@
 #include "util.h"
 #include "tgtd.h"
 
-static struct tgt_device *bd_mmap_open(char *path, int *fd, uint64_t *size)
+static int bd_mmap_open(struct tgt_device *dev, char *path, int *fd, uint64_t *size)
 {
-	struct tgt_device *dev;
-
-	dev = zalloc(sizeof(*dev));
-	if (!dev)
-		return NULL;
-
 	*fd = backed_file_open(path, O_RDWR| O_LARGEFILE, size);
-	if (*fd < 0) {
-		free(dev);
-		dev = NULL;
-	}
 
-	return dev;
+	return *fd >= 0 ? 0 : *fd;
 }
 
 static void bd_mmap_close(struct tgt_device *dev)
 {
 	close(dev->fd);
-	free(dev);
 }
 
 static int bd_mmap_cmd_submit(struct tgt_device *dev, uint8_t *scb, int rw,

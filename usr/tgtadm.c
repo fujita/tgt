@@ -72,7 +72,6 @@ static struct option const long_options[] =
 	{"aid", required_argument, NULL, 'a'},
 	{"hostno", required_argument, NULL, 'i'},
 	{"bus", required_argument, NULL, 'b'},
-	{"params", required_argument, NULL, 'p'},
 	{"name", required_argument, NULL, 'n'},
 	{"value", required_argument, NULL, 'v'},
 	{"debug", no_argument, NULL, 'd'},
@@ -80,7 +79,7 @@ static struct option const long_options[] =
 	{NULL, 0, NULL, 0},
 };
 
-static char *short_options = "l:o:m:t:s:c:u:i:a:b:p:n:v:dh";
+static char *short_options = "l:o:m:t:s:c:u:i:a:b:n:v:dh";
 
 static void usage(int status)
 {
@@ -301,14 +300,14 @@ int main(int argc, char **argv)
 	int tid = -1;
 	uint32_t cid, hostno, aid;
 	uint64_t sid, lun;
-	char *params, *lldname;
+	char *lldname;
 	struct tgtadm_req *req;
 	char buf[BUFSIZE];
 	char *name, *value;
 	int mode = MODE_SYSTEM;
 
 	cid = hostno = aid = sid = lun = 0;
-	params = lldname = name = value = NULL;
+	lldname = name = value = NULL;
 
 	optind = 1;
 	while ((ch = getopt_long(argc, argv, short_options,
@@ -343,9 +342,6 @@ int main(int argc, char **argv)
 			break;
 		case 'b':
 			hostno = bus_to_host(optarg);
-			break;
-		case 'p':
-			params = optarg;
 			break;
 		case 'n':
 			name = optarg;
@@ -393,11 +389,6 @@ int main(int argc, char **argv)
 	req->lun = lun;
 	req->aid = aid;
 	req->host_no = hostno;
-
-	if (params) {
-		len = min(strlen(params), sizeof(buf) - len);
-		strncpy((char *) req->data, params, len);
-	}
 
 	if (name && value) {
 		int rest = sizeof(buf) - sizeof(*req);

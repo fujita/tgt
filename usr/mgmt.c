@@ -107,44 +107,14 @@ static int target_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 	return err;
 }
 
-static void device_create_parser(char *args, char **path, char **devtype)
-{
-	char *p, *q;
-
-	if (isspace(*args))
-		args++;
-	if ((p = strchr(args, '\n')))
-		*p = '\0';
-
-	while ((p = strsep(&args, ","))) {
-		if (!p)
-			continue;
-
-		if (!(q = strchr(p, '=')))
-			continue;
-		*q++ = '\0';
-
-		if (!strcmp(p, "Path"))
-			*path = q;
-		else if (!strcmp(p, "Type"))
-			*devtype = q;
-	}
-}
-
 static int device_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 		       struct tgtadm_res *res, int *rlen)
 {
 	int err = -EINVAL;
-	char *path, *devtype;
 
 	switch (req->op) {
 	case OP_NEW:
-		path = devtype = NULL;
-		device_create_parser(params, &path, &devtype);
-		if (!path)
-			eprintf("Invalid path\n");
-		else
-			err = tgt_device_create(req->tid, req->lun, path);
+		err = tgt_device_create(req->tid, req->lun);
 		break;
 	case OP_DELETE:
 		err = tgt_device_destroy(req->tid, req->lun);

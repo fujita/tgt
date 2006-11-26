@@ -131,52 +131,36 @@ static void tgt_cmd_queue_init(struct tgt_cmd_queue *q)
 	INIT_LIST_HEAD(&q->queue);
 }
 
-int tgt_device_create(int tid, uint64_t dev_id, char *path)
+int tgt_device_create(int tid, uint64_t lun)
 {
 	struct target *target;
 	struct tgt_device *device;
-	char *p;
-	int dev_fd;
-	uint64_t size;
 
-	dprintf("%d %" PRIu64 " %s\n", tid, dev_id, path);
+	dprintf("%d %" PRIu64 "\n", tid, lun);
 
 	target = target_lookup(tid);
 	if (!target)
 		return -ENOENT;
 
-	device = device_lookup(target, dev_id);
+	device = device_lookup(target, lun);
 	if (device) {
-		eprintf("device %" PRIu64 " already exists\n", dev_id);
+		eprintf("device %" PRIu64 " already exists\n", lun);
 		return -EINVAL;
 	}
 
-	p = strdup(path);
-	if (!p)
+	device = zalloc(sizeof(*device) + target->bdt->bd_datasize);
+	if (!device)
 		return -ENOMEM;
 
-	device = target->bdt->bd_open(path, &dev_fd, &size);
-	if (!device) {
-		free(p);
-		return -EINVAL;
-	}
-
-	device->fd = dev_fd;
-	device->addr = 0;
-	device->size = size;
-	device->lun = dev_id;
-	device->path = p;
 	snprintf(device->scsi_id, sizeof(device->scsi_id),
-		 "deadbeaf%d:%" PRIu64, tid, dev_id);
+		 "deadbeaf%d:%" PRIu64, tid, lun);
 	memset(device->scsi_sn, 0, sizeof(device->scsi_sn));
 
 	tgt_cmd_queue_init(&device->cmd_queue);
 	device_hlist_insert(target, device);
 	device_list_insert(target, device);
 
-	eprintf("Succeed to add a logical unit %" PRIu64 " to the target %d\n",
-		dev_id, tid);
-
+	eprintf("Add a logical unit %" PRIu64 " to the target %d\n", lun, tid);
 	return 0;
 }
 
@@ -205,6 +189,7 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 	device_list_remove(device);
 
 	target->bdt->bd_close(device);
+	free(device);
 	return 0;
 }
 
@@ -245,6 +230,36 @@ out:
 	return rest;
 }
 
+static int tgt_device_path_update(struct target *target,
+				  struct tgt_device *device, char *path)
+{
+	char *p;
+	int err, dev_fd;
+	uint64_t size;
+
+	if (device->path) {
+		eprintf("path is already set %p\n", device->path);
+		return -EINVAL;
+	}
+
+	p = strdup(path);
+	if (!p)
+		return -ENOMEM;
+
+	err = target->bdt->bd_open(device, path, &dev_fd, &size);
+	if (err) {
+		free(p);
+		return -EINVAL;
+	}
+
+	device->fd = dev_fd;
+	device->addr = 0;
+	device->size = size;
+	device->path = p;
+
+	return 0;
+}
+
 int tgt_device_update(int tid, uint64_t dev_id, char *name)
 {
 	int err = 0;
@@ -262,9 +277,11 @@ int tgt_device_update(int tid, uint64_t dev_id, char *name)
 		return -EINVAL;
 	}
 
-	if (!strcmp(name, "scsi_id"))
+	if (!strcmp(name, "path"))
+		err = tgt_device_path_update(target, device, val);
+	else if (!strcmp(name, "scsi_id"))
 		memcpy(device->scsi_id, val, sizeof(device->scsi_id) - 1);
-	if (!strcmp(name, "scsi_sn"))
+	else if (!strcmp(name, "scsi_sn"))
 		memcpy(device->scsi_sn, val, sizeof(device->scsi_sn) - 1);
 	else
 		err = -EINVAL;

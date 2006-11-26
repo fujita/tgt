@@ -30,7 +30,8 @@ Let's create one target devce and add a logical unit to it:
 host:~/tgt$ su
 host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode target --tid 1
 host:~/tgt# ./usr/tgtadm --lld iscsi --op update --mode target --tid 1 --name iqn --value iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
-host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 0 --params Path=/dev/hdc1
+host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 0
+host:~/tgt# ./usr/tgtadm --lld iscsi --op new --update logicalunit --tid 1 --lun 0 --name path --value /dev/hdc1
 
 
 You can get the current configuration:
