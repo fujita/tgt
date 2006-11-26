@@ -59,17 +59,12 @@ static struct iscsi_account *iscsi_lookup_account(uint32_t id)
 	return NULL;
 }
 
-static int iscsi_create_account(void)
+static int iscsi_create_account(uint32_t uid)
 {
-	static uint32_t id;
-	uint32_t new_id;
 	struct iscsi_account *ac;
 
-	for (new_id = id + 1; iscsi_lookup_account(new_id) && new_id == id;
-	     new_id++)
-		;
-	if (new_id == id) {
-		eprintf("Too many accounts\n");
+	if (iscsi_lookup_account(uid)) {
+		eprintf("aid %u already exists\n", uid);
 		return EINVAL;
 	}
 
@@ -77,7 +72,7 @@ static int iscsi_create_account(void)
 	if (!ac)
 		return ENOMEM;
 
-	ac->id = id = new_id;
+	ac->id = uid;
 	ac->type = ACCOUNT_INVALID;
 	ac->ach.first = NULL;
 
@@ -241,7 +236,7 @@ int iscsi_mgmt_account(uint32_t op, int tid, uint32_t uid, char *param, char *bu
 
 	switch (op) {
 	case OP_NEW:
-		err = iscsi_create_account();
+		err = iscsi_create_account(uid);
 		break;
 	case OP_DELETE:
 		eprintf("Not implemented yet\n");

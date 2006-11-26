@@ -1,6 +1,7 @@
 CFLAGS += -O2 -fno-inline -Wall -Wstrict-prototypes -g -D_LARGEFILE64_SOURCE \
 	-I$(KERNELSRC)/include -I../include -I.
-PROGRAMS = tgtd tgtadm
+
+PROGRAMS = tgtd tgtadm tgtadm-iscsi
 TGTD_OBJS = tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o bd_sg.o
 LIBS += -laio
 
@@ -33,6 +34,9 @@ tgtd: $(TGTD_OBJS)
 	$(CC) $^ -g -o $@ $(LIBS)
 
 tgtadm: tgtadm.o
+	$(CC) $^ -o $@
+
+tgtadm-iscsi: tgtadm-iscsi.o
 	$(CC) $^ -o $@
 
 clean:
