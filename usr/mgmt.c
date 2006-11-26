@@ -149,6 +149,9 @@ static int device_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 	case OP_DELETE:
 		err = tgt_device_destroy(req->tid, req->lun);
 		break;
+	case OP_UPDATE:
+		err = tgt_device_update(req->tid, req->lun, params);
+		break;
 	case OP_SHOW:
 		err = tgt_device_show(req->tid, req->lun, (char *) res->data,
 				      *rlen - sizeof(*res));

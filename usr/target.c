@@ -224,12 +224,12 @@ int tgt_device_show(int tid, uint64_t dev_id, char *buf, int rest)
 
 	target = target_lookup(tid);
 	if (!target)
-		return -ENOENT;
+		return rest;
 
 	device = device_lookup(target, dev_id);
 	if (!device) {
 		eprintf("device %" PRIu64 " not found\n", dev_id);
-		return -EINVAL;
+		return rest;
 	}
 
 	len = snprintf(buf, rest, "path=%s\n", device->path);
@@ -243,6 +243,33 @@ int tgt_device_show(int tid, uint64_t dev_id, char *buf, int rest)
 		goto out;
 out:
 	return rest;
+}
+
+int tgt_device_update(int tid, uint64_t dev_id, char *name)
+{
+	int err = 0;
+	char *val = name + strlen(name) + 1;
+	struct target *target;
+	struct tgt_device *device;
+
+	target = target_lookup(tid);
+	if (!target)
+		return -ENOENT;
+
+	device = device_lookup(target, dev_id);
+	if (!device) {
+		eprintf("device %" PRIu64 " not found\n", dev_id);
+		return -EINVAL;
+	}
+
+	if (!strcmp(name, "scsi_id"))
+		memcpy(device->scsi_id, val, sizeof(device->scsi_id) - 1);
+	if (!strcmp(name, "scsi_sn"))
+		memcpy(device->scsi_sn, val, sizeof(device->scsi_sn) - 1);
+	else
+		err = -EINVAL;
+
+	return err;
 }
 
 static int cmd_enabled(struct tgt_cmd_queue *q, struct cmd *cmd)
