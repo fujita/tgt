@@ -42,7 +42,8 @@
  * to implement this program by using Python or Perl.
  */
 
-static char cmdstr[] = "tgtadm --lld iscsi";
+/* static char cmdstr[] = "tgtadm --lld iscsi"; */
+static char cmdstr[256];
 static char cmdline[2048];
 
 static struct option const long_options[] =
@@ -399,6 +400,20 @@ int main(int argc, char **argv)
 
 	start = stop = in = out = 0;
 	name = value = iqn = path = user = password = NULL;
+
+	/* workaround */
+	{
+		char *p;
+
+		if (*argv[0] == '.') {
+			getcwd(cmdstr, sizeof(cmdstr));
+			sprintf(cmdstr + strlen(cmdstr), "/%s", argv[0] + 1);
+		} else
+			strcpy(cmdstr, argv[0]);
+
+		p = strstr(cmdstr, "tgtadm-iscsi");
+		sprintf(p, "tgtadm --lld iscsi");
+	}
 
 	while ((ch = getopt_long(argc, argv, short_options,
 				 long_options, &longindex)) >= 0) {
