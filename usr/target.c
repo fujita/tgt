@@ -208,6 +208,43 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 	return 0;
 }
 
+#define buffer_check(buf, total, len, rest)	\
+({						\
+	buf += len;				\
+	total += len;				\
+	rest -= len;				\
+	!rest;					\
+})
+
+int tgt_device_show(int tid, uint64_t dev_id, char *buf, int rest)
+{
+	int len, total = 0;
+	struct target *target;
+	struct tgt_device *device;
+
+	target = target_lookup(tid);
+	if (!target)
+		return -ENOENT;
+
+	device = device_lookup(target, dev_id);
+	if (!device) {
+		eprintf("device %" PRIu64 " not found\n", dev_id);
+		return -EINVAL;
+	}
+
+	len = snprintf(buf, rest, "path=%s\n", device->path);
+	if (buffer_check(buf, total, len, rest))
+		goto out;
+	len = snprintf(buf, rest, "scsi_id=%s\n", device->scsi_id);
+	if (buffer_check(buf, total, len, rest))
+		goto out;
+	len = snprintf(buf, rest, "scsi_sn=%s\n", device->scsi_sn);
+	if (buffer_check(buf, total, len, rest))
+		goto out;
+out:
+	return rest;
+}
+
 static int cmd_enabled(struct tgt_cmd_queue *q, struct cmd *cmd)
 {
 	int enabled = 0;
