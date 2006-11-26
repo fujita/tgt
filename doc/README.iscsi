@@ -28,7 +28,8 @@ logical unit (backed by /dev/hdc1) with lun 0.
 Let's create one target devce and add a logical unit to it:
 
 host:~/tgt$ su
-host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode target --tid 1 --params iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
+host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode target --tid 1
+host:~/tgt# ./usr/tgtadm --lld iscsi --op update --mode target --tid 1 --name iqn --value iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
 host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 0 --params Path=/dev/hdc1
 
 

@@ -106,17 +106,11 @@ int iscsi_target_create(int tid, char *name)
 		{0, 1},
 	};
 
-	if (!name)
-		return -EINVAL;
-
-	dprintf("%d %s\n", tid, name);
-
 	target = malloc(sizeof(*target));
 	if (!target)
 		return -ENOMEM;
 
 	memset(target, 0, sizeof(*target));
-	memcpy(target->name, name, sizeof(target->name) - 1);
 
 	memcpy(target->session_param, default_tgt_session_param,
 	       sizeof(target->session_param));
@@ -129,22 +123,10 @@ int iscsi_target_create(int tid, char *name)
 	return 0;
 }
 
-int iscsi_target_update(int tid, char *name)
+static int iscsi_session_param_update(struct iscsi_target* target, int idx, char *str)
 {
-	int idx, err;
+	int err;
 	unsigned int val;
-	char *str;
-	struct iscsi_target* target;
-
-	target = target_find_by_id(tid);
-	if (!target)
-		return -ENOENT;
-
-	str = name + strlen(name) + 1;
-
-	idx = param_index_by_name(name, session_keys);
-	if (idx < 0)
-		return idx;
 
 	err = param_str_to_val(session_keys, idx, str, &val);
 	if (err)
@@ -156,9 +138,34 @@ int iscsi_target_update(int tid, char *name)
 
 	target->session_param[idx].val = val;
 
-	dprintf("%s %s %u\n", name, str, val);
+	dprintf("%s %s %u\n", session_keys[idx].name, str, val);
 
 	return 0;
+}
+
+int iscsi_target_update(int tid, char *name)
+{
+	int idx, err = -EINVAL;
+	char *str;
+	struct iscsi_target* target;
+
+	target = target_find_by_id(tid);
+	if (!target)
+		return -ENOENT;
+
+	str = name + strlen(name) + 1;
+
+	idx = param_index_by_name(name, session_keys);
+	if (idx >= 0)
+		err = iscsi_session_param_update(target, idx, str);
+	else {
+		if (!strcmp(name, "iqn")) {
+			memcpy(target->name, str, sizeof(target->name) - 1);
+			err = 0;
+		}
+	}
+
+	return err;
 }
 
 static int show_iscsi_param(char *buf, struct param *param, int rest)
