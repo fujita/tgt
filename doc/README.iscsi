@@ -1,12 +1,11 @@
 Preface
 -------------
-This document describes how to configure the iSCSI target driver with tgtadm.
+This document describes how to configure the iSCSI target driver with
+tgtadm-iscsi, which is a wrapper of tgtadm, protocol-independent
+management tool.
 
-tgtadm is not so handly; you can need several commands to do one thing
-mainly because it must be generic to work for all the transport protocols.
-
-We plan to implement a frontend tool, iscsitgtadm, to wrap tgtadm and
-offer considerably more user friendly interface in the future.
+If you are interested in management with tgtadm, refer to
+README.iscsi.advance.
 
 
 Starting the daemon
@@ -28,15 +27,13 @@ logical unit (backed by /dev/hdc1) with lun 0.
 Let's create one target devce and add a logical unit to it:
 
 host:~/tgt$ su
-host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode target --tid 1
-host:~/tgt# ./usr/tgtadm --lld iscsi --op update --mode target --tid 1 --name iqn --value iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
-host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 0
-host:~/tgt# ./usr/tgtadm --lld iscsi --op new --update logicalunit --tid 1 --lun 0 --name path --value /dev/hdc1
+host:~/tgt# ./usr/tgtadm-iscsi --op new --tid 1 --iqn iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
+host:~/tgt# ./usr/tgtadm-iscsi --op new --tid 1 --lun 0 --path /dev/hdc1
 
 
 You can get the current configuration:
 
-host:~/tgt# ./usr/tgtadm --lld iscsi --mode target --op show
+host:~/tgt# ./usr/tgtadm-iscsi --op show
 tid 1: lld name iscsi: state suspended
         lun 0: path /dev/hdc1
 
@@ -48,8 +45,8 @@ etc), you are ready to accept initiators. In this case, you can go to
 
 You can add lots of logical units:
 
-host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 1 --params Path=/var/tmp/image
-host:~/tgt# ./usr/tgtadm --lld iscsi --mode target --op show
+host:~/tgt# ./usr/tgtadm-iscsi --op new --tid 1 --lun 1 --path /var/tmp/image
+host:~/tgt# ./usr/tgtadm-iscsi --op show
 tid 1: lld name iscsi: state suspended
         lun 1: path /var/tmp/image
         lun 0: path /dev/hdc1
@@ -57,7 +54,7 @@ tid 1: lld name iscsi: state suspended
 
 You can get iSCSI parameters of the target:
 
-host:~/tgt# ./usr/tgtadm --lld iscsi --mode target --op show --tid 1
+host:~/tgt# ./usr/tgtadm-iscsi --op show --tid 1
 iqn=iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
 MaxRecvDataSegmentLength=8192
 MaxXmitDataSegmentLength=8192
@@ -83,12 +80,11 @@ MaxConnections=1
 You can chage iSCSI parameters like the folloing (e.g. set
 MaxRecvDataSegmentLength to 16384):
 
-host:~/tgt# ./usr/tgtadm --lld iscsi --mode target --op update --tid 1 --name MaxRecvDataSegmentLength --value 16384
-
+host:~/tgt# ./usr/tgtadm-iscsi --op update --tid 1 --name MaxRecvDataSegmentLength --value 16384
 
 You can get iSCSI parameters again to see it change:
 
-host:~/tgt# ./usr/tgtadm --lld iscsi --mode target --op show --tid 1
+host:~/tgt# ./usr/tgtadm-iscsi --op show --tid 1
 iqn=iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
 MaxRecvDataSegmentLength=16384
 MaxXmitDataSegmentLength=8192
@@ -111,17 +107,65 @@ IFMarkInt=Reject
 MaxConnections=1
 
 
+Security
+-------------
+Let's create a new incoming account:
+
+host:~/tgt# ./usr/tgtadm-iscsi --op new --tid 1 --aid 0 --user tomo --password jfeo --in
+
+Make another one:
+
+host:~/tgt# ./usr/tgtadm-iscsi --op new --tid 1 --aid 1 --user apple --password orange --in
+
+
+You can see the result:
+
+host:~/tgt# ./usr/tgtadm-iscsi --op show --tid 1 --aid 0
+aid:0 Type:Incoming User:tomo Password:jfeo
+aid:1 Type:Incoming User:apple Password:orange
+
+
+Specifying aid (account id) to see all the accounts is a bit
+strange. Probably, this will be changed later on.
+
+You can assign one account to lots of targets. Each target can have 16
+accounts. We don't support removing or unbinding accounts now.
+
+
+Accepting initiators
+-------------
+Now this target is ready to accept initiators. Make sure what you have
+now once again:
+
+host:~/tgt# ./usr/tgtadm-iscsi --op show
+tid 1: lld name iscsi: state suspended
+        lun 1: path /var/tmp/image
+        lun 0: path /dev/hdc1
+
+
+If you've done the configuration:
+
+host:~/tgt# ./usr/tgtadm-iscsi --tid 1 --start
+host:~/tgt# ./usr/tgtadm-iscsi --op show
+tid 1: lld name iscsi: state running
+        lun 1: path /var/tmp/image
+        lun 0: path /dev/hdc1
+
+
+Now your target accepts initiators.
+
+
 After the target the target accepted some initiators, you can see them:
 
-host:~/tgt# ./usr/tgtadm --lld iscsi --mode session --op show --tid 1
+host:~/tgt# ./usr/tgtadm-iscsi --tid 1 --sid 0
 sid:562950876233792 initiator:iqn.1991-05.com.microsoft:kernel
 sid:281474980708864 initiator:iqn.1987-05.com.cisco:01.4438aca09387
 
 
 You can see the negotiated iSCSI parameters between the target and the
-initiator:
+initiator by specifying sid:
 
-host:~/tgt# ./usr/tgtadm --lld iscsi --mode session --op show --tid 1 --sid  281474980708864
+host:~/tgt# ./usr/tgtadm-iscsi --tid 1 --sid  281474980708864
 MaxRecvDataSegmentLength=8192
 MaxXmitDataSegmentLength=1024
 HeaderDigest=None
@@ -141,75 +185,6 @@ DefaultTime2Retain=0
 OFMarkInt=Reject
 IFMarkInt=Reject
 MaxConnections=1
-
-
-You can see the initiator information:
-
-host:~/tgt# ./usr/tgtadm --lld iscsi --mode connection --op show --tid 1 --sid  281474980708864
-cid:0 ip:192.168.11.5
-
-
-Security
--------------
-Let's create a new account:
-
-host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode account
-
-You need to set the user, passowrd, type of the account:
-
-host:~/tgt# ./usr/tgtadm --lld iscsi --op update --mode account --aid 1 --name User --value tomo
-host:~/tgt# ./usr/tgtadm --lld iscsi --op update --mode account --aid 1 --name Password --value hoge
-host:~/tgt# ./usr/tgtadm --lld iscsi --op update --mode account --aid 1 --name Type --value Incoming
-
-
-Just make sure what we have:
-
-host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode account
-aid:1 Type:Incoming User:tomo Password:hoge
-
-
-We have one account, however, this account does not be assigned to our target:
-
-host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode account --tid 1
-
-
-You can assign this account to your target:
-
-host:~/tgt# ./usr/tgtadm --lld iscsi --op bind --mode account --tid 1 --aid 1
-
-
-You can see the result:
-
-host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode account --tid 1
-aid:1 Type:Incoming User:tomo Password:hoge
-
-
-You can assign one account to lots of targets. Each target can have 16
-accounts. We don't support removing or unbinding accounts now.
-
-
-Accepting initiators
--------------
-Now this target is ready to accept initiators. Make sure what you have
-now once again:
-
-host:~/tgt# ./usr/tgtadm --lld iscsi --mode target --op show
-tid 1: lld name iscsi: state suspended
-        lun 1: path /var/tmp/image
-        lun 0: path /dev/hdc1
-
-
-If you are happy about it:
-
-host:~/tgt# ./usr/tgtadm --lld iscsi --op update --mode target --tid 1 --name state --value running
-
-host:~/tgt# ./usr/tgtadm --lld iscsi --mode target --op show
-tid 1: lld name iscsi: state running
-        lun 1: path /var/tmp/image
-        lun 0: path /dev/hdc1
-
-
-Now your target accepts initiators.
 
 
 Shutdown
