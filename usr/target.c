@@ -168,6 +168,7 @@ int tgt_device_create(int tid, uint64_t dev_id, char *path)
 	device->path = p;
 	snprintf(device->scsi_id, sizeof(device->scsi_id),
 		 "deadbeaf%d:%" PRIu64, tid, dev_id);
+	memset(device->scsi_sn, 0, sizeof(device->scsi_sn));
 
 	tgt_cmd_queue_init(&device->cmd_queue);
 	device_hlist_insert(target, device);

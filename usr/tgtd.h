@@ -3,7 +3,8 @@
 
 #include "log.h"
 
-#define	SCSI_ID_LEN	24
+#define SCSI_ID_LEN	24
+#define SCSI_SN_LEN	8
 
 enum scsi_target_iotype {
 	SCSI_TARGET_FILEIO = 1,
@@ -27,6 +28,7 @@ struct tgt_device {
 	uint64_t size;
 	uint64_t lun;
 	char scsi_id[SCSI_ID_LEN];
+	char scsi_sn[SCSI_SN_LEN];
 	char *path;
 
 	struct list_head d_hlist;

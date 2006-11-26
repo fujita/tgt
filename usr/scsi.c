@@ -216,13 +216,25 @@ static int __inquiry(struct tgt_device *dev, int host_no, uint8_t *lun_buf,
 			*len = 7;
 			result = SAM_STAT_GOOD;
 		} else if (scb[2] == 0x80) {
+			int tmp = SCSI_SN_LEN;
+
 			data[1] = 0x80;
-			data[3] = 4;
+			data[3] = SCSI_SN_LEN;
 			memset(data + 4, 0x20, 4);
-			*len = 8;
+			*len = 4 + SCSI_SN_LEN;
 			result = SAM_STAT_GOOD;
+
+			if (dev && strlen(dev->scsi_sn)) {
+				char *p, *q;
+
+				p = data + 4 + tmp - 1;
+				q = dev->scsi_sn + SCSI_SN_LEN - 1;
+
+				for (; tmp > 0; tmp--, q)
+					*(p--) = *q;
+			}
 		} else if (scb[2] == 0x83) {
-			uint32_t tmp = SCSI_ID_LEN * sizeof(uint8_t);
+			int tmp = SCSI_ID_LEN;
 
 			data[1] = 0x83;
 			data[3] = tmp + 4;
