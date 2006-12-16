@@ -1,43 +1,59 @@
-CFLAGS += -O2 -fno-inline -Wall -Wstrict-prototypes -g -D_LARGEFILE64_SOURCE \
-	-I$(KERNELSRC)/include -I../include -I.
-
-PROGRAMS = tgtd tgtadm tgtadm-iscsi
-TGTD_OBJS = tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o bd_sg.o
+ifneq ($(XEN),)
+XEN_ROOT = ../..
+include $(XEN_ROOT)/tools/Rules.mk
+LINUX_ROOT := $(wildcard $(XEN_ROOT)/linux-2.6.*-xen)
+INCLUDES += -I$(XEN_LIBXC) -I$(XEN_XENSTORE) -I$(XEN_ROOT)/xen/include
+INCLUDES += -I$(LINUX_ROOT)/include -I.
+LIBAIO_DIR = ../libaio/src
+AIOLIBS := $(LIBAIO_DIR)/libaio.a
+CFLAGS += -I$(XEN_LIBXC) -I$(LIBAIO_DIR)
+CFLAGS += $(INCLUDES) -I. -I../../xenstore 
+CFLAGS += -DXEN -DUSE_KERNEL
+LIBS := -L. -L.. -L../lib
+LIBS += -L$(XEN_LIBXC)
+LIBS += -lxenctrl
+LIBS += -L$(XEN_XENSTORE) -lxenstore $(AIOLIBS)
+TGTD_OBJS += $(addprefix xen/, xen.o xs_api.o xenbus.o)
+TGTD_OBJS += tgtif.o bd_xen.o
+else
+INCLUDES += -I../include -I$(KERNELSRC)/include
 LIBS += -laio
+endif
 
 ifneq ($(IBMVIO),)
 CFLAGS += -DIBMVIO -DUSE_KERNEL
 TGTD_OBJS += $(addprefix ibmvio/, ibmvio.o)
+TGTD_OBJS += bd_mmap.o tgtif.o
 BD_MMAP=1
 endif
 
 ifneq ($(ISCSI),)
 CFLAGS += -DISCSI
 TGTD_OBJS += $(addprefix iscsi/, conn.o param.o session.o iscsid.o target.o \
-	account.o chap.o transport.o)
-TGTD_OBJS += $(addprefix iscsi/, iscsi_tcp.o)
+	account.o chap.o transport.o iscsi_tcp.o)
+TGTD_OBJS += bd_aio.o
 LIBS += -lcrypto
 BD_AIO=1
 endif
 
-ifneq ($(BD_MMAP),)
-TGTD_OBJS += bd_mmap.o tgtif.o
-endif
+INCLUDES += -I.
+CFLAGS += -Wall -O2 -Wstrict-prototypes -fPIC -D_LARGEFILE64_SOURCE $(INCLUDES)
 
-ifneq ($(BD_AIO),)
-TGTD_OBJS += bd_aio.o
-endif
+PROGRAMS += tgtd tgtadm
+TGTD_OBJS += tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o bd_sg.o
 
 all: $(PROGRAMS)
 
 tgtd: $(TGTD_OBJS)
-	$(CC) $^ -g -o $@ $(LIBS)
+	$(CC) $^ -o $@ $(LIBS)
 
 tgtadm: tgtadm.o
 	$(CC) $^ -o $@
 
-tgtadm-iscsi: tgtadm-iscsi.o
-	$(CC) $^ -o $@
+ifneq ($(XEN),)
+install: $(PROGRAMS)
+	install -m0755 $(PROGRAMS) $(DESTDIR)/usr/sbin
+endif
 
 clean:
-	rm -f *.o $(PROGRAMS) iscsi/*.o ibmvio/*.o
+	rm -f *.o $(PROGRAMS) iscsi/*.o ibmvio/*.o xen/*.o
