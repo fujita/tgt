@@ -19,15 +19,14 @@ data.
 
 Preparation
 -------------
-First, get kernel sources from linux-2.6-target git tree:
+First, get kernel sources from 2.6.20-rc1.
 
-master.kernel.org:/pub/scm/linux/kernel/git/tomo/linux-2.6-target.git
+Second, apply aioepoll-2.6.20-rc1.diff in the patches directory.
 
-Second, apply epoll-git.diff in the patchset directory.
+Third, rebuild the kernel and reboot with the new kernel. Note you
+need to enable SCSI_TGT, SCSI_SRP, and SCSI_IBMVSCSIS kernel options
+in order to use the IBM VIO target driver, 
 
-Third, rebuild the kernel and reboot with the new kernel. Note if you
-plan to use the IBM VIO target driver, please enable SCSI_TGT,
-SCSI_SRP, and SCSI_IBMVSCSIS kernel options.
 
 Now you are ready to build target drivers. If you like to use the
 iSCSI target driver:

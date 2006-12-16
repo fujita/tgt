@@ -1,8 +1,8 @@
 diff --git a/fs/aio.c b/fs/aio.c
-index 9506301..aacb38e 100644
+index 5f577a6..236c94a 100644
 --- a/fs/aio.c
 +++ b/fs/aio.c
-@@ -29,6 +29,7 @@ #include <linux/aio.h>
+@@ -30,6 +30,7 @@ #include <linux/aio.h>
  #include <linux/highmem.h>
  #include <linux/workqueue.h>
  #include <linux/security.h>
@@ -10,7 +10,7 @@ index 9506301..aacb38e 100644
  
  #include <asm/kmap_types.h>
  #include <asm/uaccess.h>
-@@ -1434,6 +1435,9 @@ static ssize_t aio_setup_iocb(struct kio
+@@ -1487,6 +1488,9 @@ static ssize_t aio_setup_iocb(struct kio
  		if (file->f_op->aio_fsync)
  			kiocb->ki_retry = aio_fsync;
  		break;
@@ -21,7 +21,7 @@ index 9506301..aacb38e 100644
  		dprintk("EINVAL: io_submit: no operation provided\n");
  		ret = -EINVAL;
 diff --git a/fs/eventpoll.c b/fs/eventpoll.c
-index 3a35674..729a753 100644
+index 3ae644e..6b78ada 100644
 --- a/fs/eventpoll.c
 +++ b/fs/eventpoll.c
 @@ -35,6 +35,7 @@ #include <linux/eventpoll.h>
@@ -32,7 +32,7 @@ index 3a35674..729a753 100644
  #include <asm/uaccess.h>
  #include <asm/system.h>
  #include <asm/io.h>
-@@ -698,6 +699,150 @@ eexit_1:
+@@ -642,6 +643,150 @@ eexit_1:
  	return error;
  }
  
@@ -118,7 +118,7 @@ index 3a35674..729a753 100644
 +	unsigned long now;
 +	struct timer_list *timer;
 +
-+	if (!is_file_epoll(file) || iocb->ki_nbytes > MAX_EVENTS ||
++	if (!is_file_epoll(file) || iocb->ki_nbytes > EP_MAX_EVENTS ||
 +	    iocb->ki_nbytes <= 0)
 +		return -EINVAL;
 +
@@ -182,8 +182,8 @@ index 3a35674..729a753 100644
 +}
  
  /*
-  * Creates the file descriptor to be used by the epoll interface.
-@@ -1513,6 +1658,12 @@ retry:
+  * Implement the event wait interface for the eventpoll file. It is the kernel
+@@ -1564,6 +1709,12 @@ retry:
  
  	res = 0;
  	if (list_empty(&ep->rdllist)) {
@@ -196,7 +196,7 @@ index 3a35674..729a753 100644
  		/*
  		 * We don't have any available event to return to the caller.
  		 * We need to sleep here, and we will be wake up by
-@@ -1557,7 +1708,7 @@ retry:
+@@ -1608,7 +1759,7 @@ retry:
  	if (!res && eavail &&
  	    !(res = ep_events_transfer(ep, events, maxevents)) && jtimeout)
  		goto retry;
@@ -206,14 +206,14 @@ index 3a35674..729a753 100644
  }
  
 diff --git a/include/linux/aio_abi.h b/include/linux/aio_abi.h
-index 30fdcc8..bb67d5b 100644
+index e3ca0a4..292c811 100644
 --- a/include/linux/aio_abi.h
 +++ b/include/linux/aio_abi.h
-@@ -41,6 +41,7 @@ enum {
- 	 * IOCB_CMD_POLL = 5,
- 	 */
+@@ -43,6 +43,7 @@ enum {
  	IOCB_CMD_NOOP = 6,
-+ 	IOCB_CMD_EPOLL_WAIT = 9,
+ 	IOCB_CMD_PREADV = 7,
+ 	IOCB_CMD_PWRITEV = 8,
++  	IOCB_CMD_EPOLL_WAIT = 9,
  };
  
  /* read() from /dev/aio returns these structures. */
