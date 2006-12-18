@@ -863,7 +863,7 @@ int tgt_target_show_all(char *buf, int rest)
 		list_for_each_entry(target, &target_hash_list[i], t_hlist) {
 			len = snprintf(buf, rest, "Target: %d\n"
 				       TAB1 "System information:\n"
-				       TAB2 "Driver name: %s\n"
+				       TAB2 "Driver: %s\n"
 				       TAB2 "Status: %s\n",
 				       target->tid, tgt_drivers[target->lid]->name,
 				       target_state_name(target->target_state));

@@ -267,6 +267,20 @@ static int backing_store_type(char *str)
 		return -1;
 }
 
+static int target_type(char *str)
+{
+	if (!strcmp(str, "disk"))
+		return TARGET_SBC;
+	else if (!strcmp(str, "tape"))
+		return TARGET_SSC;
+	else if (!strcmp(str, "cd"))
+		return TARGET_MMC;
+	else if (!strcmp(str, "osd"))
+		return TARGET_OSD;
+	else
+		return -1;
+}
+
 static int str_to_mode(char *str)
 {
 	int mode;
