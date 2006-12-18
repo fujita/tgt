@@ -741,8 +741,8 @@ static struct {
 	enum scsi_target_iotype value;
 	char *name;
 } target_iotype[] = {
-	{SCSI_TARGET_FILEIO, "fileio"},
-	{SCSI_TARGET_RAWIO, "rawio"},
+	{SCSI_TARGET_FILEIO, "file"},
+	{SCSI_TARGET_RAWIO, "raw"},
 };
 
 static char *target_iotype_name(enum scsi_target_state state)
@@ -835,6 +835,24 @@ int tgt_set_target_state(int tid, char *str)
 	return err;
 }
 
+static char *print_disksize(uint64_t size)
+{
+	static char buf[64];
+	char *format[] = {"", "K", "M", "G", "T"};
+	int i;
+
+	memset(buf, 0, sizeof(buf));
+	for (i = 1; size >= (1ULL << (i * 10)) && i < ARRAY_SIZE(format); i++)
+		;
+	i--;
+	sprintf(buf, "%" PRIu64 "%s", size >> (i * 10), format[i]);
+	return buf;
+}
+
+#define TAB1 "    "
+#define TAB2 TAB1 TAB1
+#define TAB3 TAB1 TAB1 TAB1
+
 int tgt_target_show_all(char *buf, int rest)
 {
 	int i, len, total;
@@ -843,9 +861,11 @@ int tgt_target_show_all(char *buf, int rest)
 
 	for (i = total = 0; i < ARRAY_SIZE(target_hash_list); i++) {
 		list_for_each_entry(target, &target_hash_list[i], t_hlist) {
-			len = snprintf(buf, rest, "tid %d: lld name %s: iotype %s: state %s\n",
+			len = snprintf(buf, rest, "Target: %d\n"
+				       TAB1 "System information:\n"
+				       TAB2 "Driver name: %s\n"
+				       TAB2 "Status: %s\n",
 				       target->tid, tgt_drivers[target->lid]->name,
-				       target_iotype_name(target->target_iotype),
 				       target_state_name(target->target_state));
 			buf += len;
 			total += len;
@@ -853,9 +873,27 @@ int tgt_target_show_all(char *buf, int rest)
 			if (!rest)
 				goto out;
 
+			len = snprintf(buf, rest, TAB1 "LUN information:\n");
+			buf += len;
+			total += len;
+			rest -= len;
+			if (!rest)
+				goto out;
+
 			list_for_each_entry(device, &target->device_list, d_list) {
-				len = snprintf(buf, rest, "\tlun %" PRIu64 ": path %s\n",
-					       device->lun, device->path);
+				len = snprintf(buf, rest,
+					       TAB2 "LUN: %" PRIu64 "\n"
+					       TAB3 "SCSI ID: %s\n"
+					       TAB3 "SCSI SN: %s\n"
+					       TAB3 "Size: %s\n"
+					       TAB3 "Backing store: %s\n"
+					       TAB3 "Backing store type: %s\n",
+					       device->lun,
+					       device->scsi_id,
+					       device->scsi_sn,
+					       print_disksize(device->size),
+					       device->path,
+					       target_iotype_name(target->target_iotype));
 				buf += len;
 				total += len;
 				rest -= len;
