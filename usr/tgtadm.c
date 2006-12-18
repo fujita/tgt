@@ -89,9 +89,9 @@ static void usage(int status)
 	else {
 		printf("Usage: %s [OPTION]\n", program_name);
 		printf("\
-Linux Target Framework Administration Utility.\n\
+Linux SCSI Target Framework Administration Utility.\n\
 \n\
-  --op new --tid=[id] --params [name]\n\
+  --op create --tid=[id] --params [name]\n\
                         add a new target with [id]. [id] must not be zero.\n\
   --op delete --tid=[id]\n\
                         delete specific target with [id]. The target must\n\
@@ -397,18 +397,14 @@ int main(int argc, char **argv)
 	/* FIXME */
 	if ((name && value) || path) {
 		int rest;
-		char *p = (char *) req->data;
 
 		if (path) {
 			name = "path";
 			value = path;
 		}
 		rest = sizeof(buf) - sizeof(*req);
-		p = (char *) req->data;
 
-		len = snprintf(p, rest, "%s", name);
-		len += 1;
-		len += snprintf(p + len, rest - len, "%s", value);
+		len = snprintf((char *)req->data, rest, "%s=%s", name, value);
 	}
 
 	req->len = sizeof(*req) + len;

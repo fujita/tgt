@@ -155,6 +155,8 @@ int iscsi_target_update(int tid, char *name)
 
 	str = name + strlen(name) + 1;
 
+	dprintf("%s:%s\n", name, str);
+
 	idx = param_index_by_name(name, session_keys);
 	if (idx >= 0)
 		err = iscsi_session_param_update(target, idx, str);

@@ -91,7 +91,11 @@ static int iscsi_account_update(uint32_t uid, char *name)
 	if (!ac)
 		return ENOENT;
 
-	str = name + strlen(name) + 1;
+	str = strchr(name, '=');
+	if (!str)
+		return EINVAL;
+
+	*str++ = '\0';
 
 	if (!strcmp(name, "Type")) {
 		if (ac->type != ACCOUNT_INVALID)

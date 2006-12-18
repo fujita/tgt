@@ -73,16 +73,21 @@ static int target_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 		err = tgt_target_bind(req->tid, req->host_no, lld_no);
 		break;
 	case OP_UPDATE:
+	{
+		char *p;
 		err = -EINVAL;
+
+		p = strchr(params, '=');
+		if (!p)
+			break;
+		*p++ = '\0';
+
 		if (!strcmp(params, "state"))
-			err = tgt_set_target_state(req->tid,
-						   params + strlen(params) + 1);
-		else if (!strcmp(params, "iotype"))
-			err = tgt_set_target_iotype(req->tid,
-						    params + strlen(params) + 1);
+			err = tgt_set_target_state(req->tid, p);
 		else if (tgt_drivers[lld_no]->target_update)
 			err = tgt_drivers[lld_no]->target_update(req->tid, params);
 		break;
+	}
 	case OP_SHOW:
 		if (req->tid < 0)
 			err = tgt_target_show_all((char *)res->data,

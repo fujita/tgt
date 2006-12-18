@@ -134,24 +134,23 @@ static void tgt_cmd_queue_init(struct tgt_cmd_queue *q)
 static int tgt_device_path_update(struct target *target,
 				  struct tgt_device *device, char *path)
 {
-	char *p;
 	int err, dev_fd;
 	uint64_t size;
 
-	p = strdup(path);
-	if (!p)
+	path = strdup(path);
+	if (!path)
 		return -ENOMEM;
 
 	err = target->bdt->bd_open(device, path, &dev_fd, &size);
 	if (err) {
-		free(p);
+		free(path);
 		return -EINVAL;
 	}
 
 	device->fd = dev_fd;
 	device->addr = 0;
 	device->size = size;
-	device->path = p;
+	device->path = path;
 
 	return 0;
 }
@@ -160,7 +159,7 @@ int tgt_device_create(int tid, uint64_t lun, char *args)
 {
 	struct target *target;
 	struct tgt_device *device;
-	char *val = args + strlen(args) + 1;
+	char *p;
 	int err;
 
 	dprintf("%d %" PRIu64 "\n", tid, lun);
@@ -178,17 +177,17 @@ int tgt_device_create(int tid, uint64_t lun, char *args)
 	if (!*args)
 		return -EINVAL;
 
+	p = strchr(args, '=');
+	if (!p)
+		return -EINVAL;
+	p++;
+
 	device = zalloc(sizeof(*device) + target->bdt->bd_datasize);
 	if (!device)
 		return -ENOMEM;
 
-	if (!strcmp(args, "path")) {
-		err = tgt_device_path_update(target, device, val);
-		if (err) {
-			free(device);
-			return -EINVAL;
-		}
-	} else {
+	err = tgt_device_path_update(target, device, p);
+	if (err) {
 		free(device);
 		return -EINVAL;
 	}
@@ -275,7 +274,6 @@ out:
 int tgt_device_update(int tid, uint64_t dev_id, char *name)
 {
 	int err = 0;
-	char *val = name + strlen(name) + 1;
 	struct target *target;
 	struct tgt_device *device;
 
@@ -289,10 +287,10 @@ int tgt_device_update(int tid, uint64_t dev_id, char *name)
 		return -EINVAL;
 	}
 
-	if (!strcmp(name, "scsi_id"))
-		memcpy(device->scsi_id, val, sizeof(device->scsi_id) - 1);
-	else if (!strcmp(name, "scsi_sn"))
-		memcpy(device->scsi_sn, val, sizeof(device->scsi_sn) - 1);
+	if (!strcmp(name, "scsi_id="))
+		memcpy(device->scsi_id, name + 8, sizeof(device->scsi_id) - 1);
+	else if (!strcmp(name, "scsi_sn="))
+		memcpy(device->scsi_sn, name + 8, sizeof(device->scsi_sn) - 1);
 	else
 		err = -EINVAL;
 
