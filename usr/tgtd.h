@@ -68,9 +68,10 @@ extern int tgt_device_create(int tid, uint64_t lun, char *args);
 extern int tgt_device_destroy(int tid, uint64_t lun);
 extern int tgt_device_show(int tid, uint64_t dev_id, char *buf, int rest);
 extern int tgt_device_update(int tid, uint64_t dev_id, char *name);
-extern int tgt_target_create(int lld, int tid);
+extern int tgt_target_create(int lld, int tid, char *targetname);
 extern int tgt_target_destroy(int tid);
 extern int tgt_target_bind(int tid, int host_no, int lld);
+extern char *tgt_targetname(int tid);
 extern int tgt_target_show_all(char *buf, int rest);
 
 typedef void (event_handler_t)(int fd, int events, void *data);

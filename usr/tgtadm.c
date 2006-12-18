@@ -74,6 +74,7 @@ static struct option const long_options[] =
 	{"bus", required_argument, NULL, 'B'},
 	{"name", required_argument, NULL, 'n'},
 	{"value", required_argument, NULL, 'v'},
+	{"targetname", required_argument, NULL, 'T'},
 	{"backing-store", required_argument, NULL, 'b'},
 	{"backing-store-type", required_argument, NULL, 'S'},
 	{"debug", no_argument, NULL, 'd'},
@@ -81,7 +82,7 @@ static struct option const long_options[] =
 	{NULL, 0, NULL, 0},
 };
 
-static char *short_options = "l:o:m:t:s:c:u:i:a:B:b:S:n:v:dh";
+static char *short_options = "l:o:m:t:s:c:u:i:a:B:T:b:S:n:v:dh";
 
 static void usage(int status)
 {
@@ -331,11 +332,11 @@ int main(int argc, char **argv)
 	char *lldname;
 	struct tgtadm_req *req;
 	char buf[BUFSIZE];
-	char *name, *value, *path;
+	char *name, *value, *path, *targetname;
 	int mode = MODE_SYSTEM;
 
 	cid = hostno = aid = sid = lun = 0;
-	lldname = name = value = path = NULL;
+	lldname = name = value = path = targetname = NULL;
 
 	optind = 1;
 	while ((ch = getopt_long(argc, argv, short_options,
@@ -370,6 +371,9 @@ int main(int argc, char **argv)
 			break;
 		case 'B':
 			hostno = bus_to_host(optarg);
+			break;
+		case 'T':
+			targetname = optarg;
 			break;
 		case 'b':
 			path = optarg;
@@ -426,13 +430,19 @@ int main(int argc, char **argv)
 	req->bs_type = bs_type;
 
 	/* FIXME */
-	if ((name && value) || path) {
+	if ((name && value) || path || targetname) {
 		int rest;
 
 		if (path) {
 			name = "path";
 			value = path;
 		}
+
+		if (targetname) {
+			name = "targetname";
+			value = targetname;
+		}
+
 		rest = sizeof(buf) - sizeof(*req);
 
 		len = snprintf((char *)req->data, rest, "%s=%s", name, value);

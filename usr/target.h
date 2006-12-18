@@ -21,6 +21,8 @@ struct mgmt_req {
 };
 
 struct target {
+	char *name;
+
 	int tid;
 	int lid;
 

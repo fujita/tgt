@@ -678,10 +678,16 @@ int tgt_target_bind(int tid, int host_no, int lid)
 	return 0;
 }
 
-int tgt_target_create(int lld, int tid)
+int tgt_target_create(int lld, int tid, char *args)
 {
 	int i;
 	struct target *target;
+	char *targetname;
+
+	targetname = strchr(args, '=');
+	if (!targetname)
+		return -EINVAL;
+	targetname++;
 
 	target = target_lookup(tid);
 	if (target) {
@@ -692,6 +698,12 @@ int tgt_target_create(int lld, int tid)
 	target = zalloc(sizeof(*target));
 	if (!target)
 		return -ENOMEM;
+
+	target->name = strdup(targetname);
+	if (!target->name) {
+		free(target);
+		return -ENOMEM;
+	}
 
 	target->tid = tid;
 	for (i = 0; i < ARRAY_SIZE(target->cmd_hash_list); i++)
@@ -861,11 +873,13 @@ int tgt_target_show_all(char *buf, int rest)
 
 	for (i = total = 0; i < ARRAY_SIZE(target_hash_list); i++) {
 		list_for_each_entry(target, &target_hash_list[i], t_hlist) {
-			len = snprintf(buf, rest, "Target: %d\n"
+			len = snprintf(buf, rest, "Target %d: %s\n"
 				       TAB1 "System information:\n"
 				       TAB2 "Driver: %s\n"
 				       TAB2 "Status: %s\n",
-				       target->tid, tgt_drivers[target->lid]->name,
+				       target->tid,
+				       target->name,
+				       tgt_drivers[target->lid]->name,
 				       target_state_name(target->target_state));
 			buf += len;
 			total += len;
@@ -904,6 +918,17 @@ int tgt_target_show_all(char *buf, int rest)
 	}
 out:
 	return total;
+}
+
+char *tgt_targetname(int tid)
+{
+	struct target *target;
+
+	target = target_lookup(tid);
+	if (!target)
+		return NULL;
+
+	return target->name;
 }
 
 __attribute__((constructor)) static void target_init(void)

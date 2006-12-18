@@ -17,6 +17,7 @@
 #include <sys/socket.h>
 #include "iscsid.h"
 #include "tgtadm.h"
+#include "tgtd.h"
 
 static LIST_HEAD(targets_list);
 
@@ -25,12 +26,12 @@ void target_list_build(struct iscsi_connection *conn, char *addr, char *name)
 	struct iscsi_target *target;
 
 	list_for_each_entry(target, &targets_list, tlist) {
-		if (name && strcmp(target->name, name))
+		if (name && strcmp(tgt_targetname(target->tid), name))
 			continue;
 /* 		if (cops->initiator_access(target->tid, conn->fd) < 0) */
 /* 			continue; */
 
-		text_key_add(conn, "TargetName", target->name);
+		text_key_add(conn, "TargetName", tgt_targetname(target->tid));
 		text_key_add(conn, "TargetAddress", addr);
 	}
 }
@@ -40,7 +41,7 @@ struct iscsi_target *target_find_by_name(const char *name)
 	struct iscsi_target *target;
 
 	list_for_each_entry(target, &targets_list, tlist) {
-		if (!strcmp(target->name, name))
+		if (!strcmp(tgt_targetname(target->tid), name))
 			return target;
 	}
 
@@ -160,13 +161,6 @@ int iscsi_target_update(int tid, char *name)
 	idx = param_index_by_name(name, session_keys);
 	if (idx >= 0)
 		err = iscsi_session_param_update(target, idx, str);
-	else {
-		if (!strcmp(name, "iqn")) {
-			memcpy(target->name, str, sizeof(target->name) - 1);
-			err = 0;
-		}
-	}
-
 	return err;
 }
 
@@ -254,12 +248,6 @@ int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid, uint64_t lu
 
 	switch (mode) {
 	case MODE_TARGET:
-		len = snprintf(buf, rest, "iqn=%s\n", target->name);
-		buf += len;
-		total += len;
-		rest -= len;
-		if (!rest)
-			goto out;
 		len = show_iscsi_param(buf, target->session_param, rest);
 		total += len;
 		break;
@@ -274,6 +262,6 @@ int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid, uint64_t lu
 	default:
 		break;
 	}
-out:
+
 	return total;
 }

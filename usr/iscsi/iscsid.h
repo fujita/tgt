@@ -214,7 +214,6 @@ struct iscsi_target {
 	struct param session_param[ISCSI_PARAM_MAX];
 
 	int tid;
-	char name[ISCSI_NAME_LEN];
 	char *alias;
 
 	int max_nr_sessions;

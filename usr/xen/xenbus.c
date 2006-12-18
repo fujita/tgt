@@ -265,6 +265,7 @@ static void tgt_probe(struct xs_handle *h, struct xenbus_watch *w,
 	int err, len, fd, msize = (SRP_RING_PAGES + SRP_MAPPED_PAGES) * PAGE_SIZE;
 	void *addr;
 	uint32_t hostno;
+	char targetname[16];
 
 	bepath = strdup(bepath_im);
 	if (!bepath) {
@@ -331,7 +332,8 @@ static void tgt_probe(struct xs_handle *h, struct xenbus_watch *w,
 	}
 	dprintf("addr: %p size: %d\n", addr, msize);
 
-	err = tgt_target_create(0, be->frontend_id);
+	snprintf(targetname, sizeof(targetname), "xen %d", be->frontend_id);
+	err = tgt_target_create(0, be->frontend_id, targetname);
 	if (err && err != -EEXIST)
 		goto close_fd;
 
