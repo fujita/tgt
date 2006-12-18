@@ -86,7 +86,7 @@ static void device_list_insert(struct target *target, struct tgt_device *device)
 		if (device->lun < pos->lun)
 			break;
 	}
-	list_add(&device->d_list, &pos->d_list);
+	list_add_tail(&device->d_list, &pos->d_list);
 }
 
 static void device_list_remove(struct tgt_device *device)
