@@ -64,7 +64,7 @@ extern int kspace_send_tsk_mgmt_res(int host_no, uint64_t mid, int result);
 extern int kspace_send_cmd_res(int host_no, int len, int result,
 			       int rw, uint64_t addr, uint64_t tag);
 extern int ipc_init(void);
-extern int tgt_device_create(int tid, uint64_t lun);
+extern int tgt_device_create(int tid, uint64_t lun, char *args);
 extern int tgt_device_destroy(int tid, uint64_t lun);
 extern int tgt_device_show(int tid, uint64_t dev_id, char *buf, int rest);
 extern int tgt_device_update(int tid, uint64_t dev_id, char *name);

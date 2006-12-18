@@ -23,6 +23,19 @@ enum tgtadm_mode {
 	MODE_ACCOUNT,
 };
 
+enum tgtadm_target_type {
+	TARGET_SBC, /* disk */
+	TARGET_SSC, /* tape */
+	TARGET_MMC, /* cdrom */
+	TARGET_OSD, /* object storage device */
+};
+
+/* backing store type */
+enum tgtadm_lu_bs_type {
+	LU_BS_FILE,
+	LU_BS_RAW, /* pass through */
+};
+
 struct tgtadm_req {
 	enum tgtadm_mode mode;
 	enum tgtadm_op op;
@@ -36,12 +49,12 @@ struct tgtadm_req {
 	char lld[TGT_LLD_NAME_LEN];
 	uint32_t host_no;
 	uint64_t data[0];
-} __attribute__ ((aligned (sizeof(uint64_t))));
+};
 
 struct tgtadm_res {
 	uint32_t err;
 	uint32_t len;
 	uint64_t data[0];
-} __attribute__ ((aligned (sizeof(uint64_t))));;
+};
 
 #endif

@@ -71,9 +71,10 @@ static struct option const long_options[] =
 	{"lun", required_argument, NULL, 'u'},
 	{"aid", required_argument, NULL, 'a'},
 	{"hostno", required_argument, NULL, 'i'},
-	{"bus", required_argument, NULL, 'b'},
+	{"bus", required_argument, NULL, 'B'},
 	{"name", required_argument, NULL, 'n'},
 	{"value", required_argument, NULL, 'v'},
+	{"backing-store", required_argument, NULL, 'b'},
 	{"debug", no_argument, NULL, 'd'},
 	{"help", no_argument, NULL, 'h'},
 	{NULL, 0, NULL, 0},
@@ -303,11 +304,11 @@ int main(int argc, char **argv)
 	char *lldname;
 	struct tgtadm_req *req;
 	char buf[BUFSIZE];
-	char *name, *value;
+	char *name, *value, *path;
 	int mode = MODE_SYSTEM;
 
 	cid = hostno = aid = sid = lun = 0;
-	lldname = name = value = NULL;
+	lldname = name = value = path = NULL;
 
 	optind = 1;
 	while ((ch = getopt_long(argc, argv, short_options,
@@ -340,8 +341,11 @@ int main(int argc, char **argv)
 		case 'i':
 			hostno = strtol(optarg, NULL, 10);
 			break;
-		case 'b':
+		case 'B':
 			hostno = bus_to_host(optarg);
+			break;
+		case 'b':
+			path = optarg;
 			break;
 		case 'n':
 			name = optarg;
@@ -356,7 +360,7 @@ int main(int argc, char **argv)
 			usage(0);
 			break;
 		default:
-			usage(-1);
+			usage(1);
 		}
 	}
 	if (op < 0) {
@@ -369,12 +373,12 @@ int main(int argc, char **argv)
 		while (optind < argc)
 			fprintf(stderr, "%s", argv[optind++]);
 		fprintf(stderr, "\n");
-		usage(-1);
+		usage(1);
 	}
 
 	if (mode < 0) {
 		fprintf(stderr, "unknown mode\n");
-		usage(-1);
+		usage(1);
 	}
 
 	memset(buf, 0, sizeof(buf));
@@ -390,9 +394,17 @@ int main(int argc, char **argv)
 	req->aid = aid;
 	req->host_no = hostno;
 
-	if (name && value) {
-		int rest = sizeof(buf) - sizeof(*req);
+	/* FIXME */
+	if ((name && value) || path) {
+		int rest;
 		char *p = (char *) req->data;
+
+		if (path) {
+			name = "path";
+			value = path;
+		}
+		rest = sizeof(buf) - sizeof(*req);
+		p = (char *) req->data;
 
 		len = snprintf(p, rest, "%s", name);
 		len += 1;

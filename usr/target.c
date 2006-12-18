@@ -131,10 +131,37 @@ static void tgt_cmd_queue_init(struct tgt_cmd_queue *q)
 	INIT_LIST_HEAD(&q->queue);
 }
 
-int tgt_device_create(int tid, uint64_t lun)
+static int tgt_device_path_update(struct target *target,
+				  struct tgt_device *device, char *path)
+{
+	char *p;
+	int err, dev_fd;
+	uint64_t size;
+
+	p = strdup(path);
+	if (!p)
+		return -ENOMEM;
+
+	err = target->bdt->bd_open(device, path, &dev_fd, &size);
+	if (err) {
+		free(p);
+		return -EINVAL;
+	}
+
+	device->fd = dev_fd;
+	device->addr = 0;
+	device->size = size;
+	device->path = p;
+
+	return 0;
+}
+
+int tgt_device_create(int tid, uint64_t lun, char *args)
 {
 	struct target *target;
 	struct tgt_device *device;
+	char *val = args + strlen(args) + 1;
+	int err;
 
 	dprintf("%d %" PRIu64 "\n", tid, lun);
 
@@ -148,15 +175,28 @@ int tgt_device_create(int tid, uint64_t lun)
 		return -EINVAL;
 	}
 
+	if (!*args)
+		return -EINVAL;
+
 	device = zalloc(sizeof(*device) + target->bdt->bd_datasize);
 	if (!device)
 		return -ENOMEM;
+
+	if (!strcmp(args, "path")) {
+		err = tgt_device_path_update(target, device, val);
+		if (err) {
+			free(device);
+			return -EINVAL;
+		}
+	} else {
+		free(device);
+		return -EINVAL;
+	}
 
 	device->lun = lun;
 
 	snprintf(device->scsi_id, sizeof(device->scsi_id),
 		 "deadbeaf%d:%" PRIu64, tid, lun);
-	memset(device->scsi_sn, 0, sizeof(device->scsi_sn));
 
 	tgt_cmd_queue_init(&device->cmd_queue);
 	device_hlist_insert(target, device);
@@ -232,36 +272,6 @@ out:
 	return rest;
 }
 
-static int tgt_device_path_update(struct target *target,
-				  struct tgt_device *device, char *path)
-{
-	char *p;
-	int err, dev_fd;
-	uint64_t size;
-
-	if (device->path) {
-		eprintf("path is already set %p\n", device->path);
-		return -EINVAL;
-	}
-
-	p = strdup(path);
-	if (!p)
-		return -ENOMEM;
-
-	err = target->bdt->bd_open(device, path, &dev_fd, &size);
-	if (err) {
-		free(p);
-		return -EINVAL;
-	}
-
-	device->fd = dev_fd;
-	device->addr = 0;
-	device->size = size;
-	device->path = p;
-
-	return 0;
-}
-
 int tgt_device_update(int tid, uint64_t dev_id, char *name)
 {
 	int err = 0;
@@ -279,9 +289,7 @@ int tgt_device_update(int tid, uint64_t dev_id, char *name)
 		return -EINVAL;
 	}
 
-	if (!strcmp(name, "path"))
-		err = tgt_device_path_update(target, device, val);
-	else if (!strcmp(name, "scsi_id"))
+	if (!strcmp(name, "scsi_id"))
 		memcpy(device->scsi_id, val, sizeof(device->scsi_id) - 1);
 	else if (!strcmp(name, "scsi_sn"))
 		memcpy(device->scsi_sn, val, sizeof(device->scsi_sn) - 1);
