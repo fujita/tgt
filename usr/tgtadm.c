@@ -75,12 +75,13 @@ static struct option const long_options[] =
 	{"name", required_argument, NULL, 'n'},
 	{"value", required_argument, NULL, 'v'},
 	{"backing-store", required_argument, NULL, 'b'},
+	{"backing-store-type", required_argument, NULL, 'S'},
 	{"debug", no_argument, NULL, 'd'},
 	{"help", no_argument, NULL, 'h'},
 	{NULL, 0, NULL, 0},
 };
 
-static char *short_options = "l:o:m:t:s:c:u:i:a:b:n:v:dh";
+static char *short_options = "l:o:m:t:s:c:u:i:a:B:b:S:n:v:dh";
 
 static void usage(int status)
 {
@@ -256,9 +257,19 @@ static int bus_to_host(char *bus)
 	return host;
 }
 
+static int backing_store_type(char *str)
+{
+	if (!strcmp(str, "file"))
+		return LU_BS_FILE;
+	else if (!strcmp(str, "raw"))
+		return LU_BS_RAW;
+	else
+		return -1;
+}
+
 static int str_to_mode(char *str)
 {
-	int mode = -1;
+	int mode;
 
 	if (!strcmp("target", str) || !strcmp("tgt", str))
 		mode = MODE_TARGET;
@@ -270,6 +281,8 @@ static int str_to_mode(char *str)
 		mode = MODE_CONNECTION;
 	else if (!strcmp("account", str))
 		mode = MODE_ACCOUNT;
+	else
+		mode = -1;
 
 	return mode;
 }
@@ -298,7 +311,7 @@ int main(int argc, char **argv)
 {
 	int ch, longindex;
 	int err = -EINVAL, op = -1, len = 0;
-	int tid = -1;
+	int tid = -1, bs_type = LU_BS_FILE;
 	uint32_t cid, hostno, aid;
 	uint64_t sid, lun;
 	char *lldname;
@@ -347,6 +360,9 @@ int main(int argc, char **argv)
 		case 'b':
 			path = optarg;
 			break;
+		case 'S':
+			bs_type = backing_store_type(optarg);
+			break;
 		case 'n':
 			name = optarg;
 			break;
@@ -393,6 +409,7 @@ int main(int argc, char **argv)
 	req->lun = lun;
 	req->aid = aid;
 	req->host_no = hostno;
+	req->bs_type = bs_type;
 
 	/* FIXME */
 	if ((name && value) || path) {

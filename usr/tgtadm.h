@@ -45,6 +45,7 @@ struct tgtadm_req {
 	uint64_t sid;
 	uint32_t cid;
 	uint64_t lun;
+	uint32_t bs_type;
 	uint32_t aid;
 	char lld[TGT_LLD_NAME_LEN];
 	uint32_t host_no;
