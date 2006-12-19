@@ -83,6 +83,7 @@ static int bd_sg_open(struct tgt_device *dev,
 
 	if(!S_ISBLK(st.st_mode)) {
 		eprintf("only scsi devices are supported %s\n", path);
+		err = -EINVAL;
 		goto close_fd;
 	}
 
