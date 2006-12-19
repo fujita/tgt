@@ -124,31 +124,6 @@ IFMarkInt=Reject
 MaxConnections=1
 
 
-Security
--------------
-Let's create a new incoming account:
-
-host:~/tgt# ./usr/tgtadm-iscsi --op new --tid 1 --aid 0 --user tomo --password jfeo --in
-
-Make another one:
-
-host:~/tgt# ./usr/tgtadm-iscsi --op new --tid 1 --aid 1 --user apple --password orange --in
-
-
-You can see the result:
-
-host:~/tgt# ./usr/tgtadm-iscsi --op show --tid 1 --aid 0
-aid:0 Type:Incoming User:tomo Password:jfeo
-aid:1 Type:Incoming User:apple Password:orange
-
-
-Specifying aid (account id) to see all the accounts is a bit
-strange. Probably, this will be changed later on.
-
-You can assign one account to lots of targets. Each target can have 16
-accounts. We don't support removing or unbinding accounts now.
-
-
 Accepting initiators
 -------------
 Now this target is ready to accept initiators. If you've done the configuration:
@@ -175,39 +150,6 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
 
 
 Now your target is ready to accept initiators.
-
-
-After the target the target accepted some initiators, you can see them:
-
-host:~/tgt# ./usr/tgtadm-iscsi --tid 1 --sid 0
-sid:562950876233792 initiator:iqn.1991-05.com.microsoft:kernel
-sid:281474980708864 initiator:iqn.1987-05.com.cisco:01.4438aca09387
-
-
-You can see the negotiated iSCSI parameters between the target and the
-initiator by specifying sid:
-
-host:~/tgt# ./usr/tgtadm-iscsi --tid 1 --sid  281474980708864
-MaxRecvDataSegmentLength=8192
-MaxXmitDataSegmentLength=1024
-HeaderDigest=None
-DataDigest=None
-InitialR2T=Yes
-MaxOutstandingR2T=1
-ImmediateData=Yes
-FirstBurstLength=65536
-MaxBurstLength=262144
-DataPDUInOrder=Yes
-DataSequenceInOrder=Yes
-ErrorRecoveryLevel=0
-IFMarker=No
-OFMarker=No
-DefaultTime2Wait=2
-DefaultTime2Retain=0
-OFMarkInt=Reject
-IFMarkInt=Reject
-MaxConnections=1
-
 
 Shutdown
 -------------
