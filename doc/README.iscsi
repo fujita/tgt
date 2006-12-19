@@ -1,10 +1,7 @@
 Preface
 -------------
-This document describes how to configure the iSCSI target driver with
-tgtadm-iscsi, which is a wrapper of tgtadm, protocol-independent
-management tool.
-
-If you are interested in management with tgtadm, refer to
+This show a simple example to set up some targets. If you are
+interested in advanced management, please refer to
 README.iscsi.advance.
 
 
@@ -27,35 +24,56 @@ logical unit (backed by /dev/hdc1) with lun 0.
 Let's create one target devce and add a logical unit to it:
 
 host:~/tgt$ su
-host:~/tgt# ./usr/tgtadm-iscsi --op new --tid 1 --iqn iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
-host:~/tgt# ./usr/tgtadm-iscsi --op new --tid 1 --lun 0 --path /dev/hdc1
+host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode target --tid 1 -T iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
+host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 0 -b /dev/hdc1
 
 
 You can get the current configuration:
 
-host:~/tgt# ./usr/tgtadm-iscsi --op show
-tid 1: lld name iscsi: state suspended
-        lun 0: path /dev/hdc1
+host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target
+Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
+    System information:
+        Driver: iscsi
+        Status: suspended
+    LUN information:
+        LUN: 0
+            SCSI ID: deadbeaf1:0
+            SCSI SN: 
+            Size: 1G
+            Backing store: /dev/hdc1
+            Backing store type: file
 
 
 If you don't need no more configuration (iSCSI parameters, security,
 etc), you are ready to accept initiators. In this case, you can go to
 `accepting initiators` session.
 
-
 You can add lots of logical units:
 
-host:~/tgt# ./usr/tgtadm-iscsi --op new --tid 1 --lun 1 --path /var/tmp/image
-host:~/tgt# ./usr/tgtadm-iscsi --op show
-tid 1: lld name iscsi: state suspended
-        lun 1: path /var/tmp/image
-        lun 0: path /dev/hdc1
+host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 1 -b /dev/hdd1
+host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target
+Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
+    System information:
+        Driver: iscsi
+        Status: suspended
+    LUN information:
+        LUN: 0
+            SCSI ID: deadbeaf1:0
+            SCSI SN: 
+            Size: 1G
+            Backing store: /dev/hdc1
+            Backing store type: file
+        LUN: 1
+            SCSI ID: deadbeaf1:1
+            SCSI SN: 
+            Size: 20G
+            Backing store: /dev/hdd1
+            Backing store type: file
 
 
 You can get iSCSI parameters of the target:
 
-host:~/tgt# ./usr/tgtadm-iscsi --op show --tid 1
-iqn=iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
+host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target --tid 1
 MaxRecvDataSegmentLength=8192
 MaxXmitDataSegmentLength=8192
 HeaderDigest=None
@@ -80,12 +98,11 @@ MaxConnections=1
 You can chage iSCSI parameters like the folloing (e.g. set
 MaxRecvDataSegmentLength to 16384):
 
-host:~/tgt# ./usr/tgtadm-iscsi --op update --tid 1 --name MaxRecvDataSegmentLength --value 16384
+host:~/tgt# ./usr/tgtadm --lld iscsi --mode target --op update --tid 1 --name MaxRecvDataSegmentLength --value 16384
 
 You can get iSCSI parameters again to see it change:
 
-host:~/tgt# ./usr/tgtadm-iscsi --op show --tid 1
-iqn=iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
+host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target --tid 1
 MaxRecvDataSegmentLength=16384
 MaxXmitDataSegmentLength=8192
 HeaderDigest=None
@@ -134,25 +151,30 @@ accounts. We don't support removing or unbinding accounts now.
 
 Accepting initiators
 -------------
-Now this target is ready to accept initiators. Make sure what you have
-now once again:
+Now this target is ready to accept initiators. If you've done the configuration:
 
-host:~/tgt# ./usr/tgtadm-iscsi --op show
-tid 1: lld name iscsi: state suspended
-        lun 1: path /var/tmp/image
-        lun 0: path /dev/hdc1
+host:~/tgt# ./usr/tgtadm --lld iscsi --op update --mode target --tid 1 --name state --value running
+host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target
+Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
+    System information:
+        Driver: iscsi
+        Status: running
+    LUN information:
+        LUN: 0
+            SCSI ID: deadbeaf1:0
+            SCSI SN: 
+            Size: 42M
+            Backing store: /dev/hdc1
+            Backing store type: file
+        LUN: 1
+            SCSI ID: deadbeaf1:1
+            SCSI SN: 
+            Size: 40M
+            Backing store: /dev/hdd1
+            Backing store type: file
 
 
-If you've done the configuration:
-
-host:~/tgt# ./usr/tgtadm-iscsi --tid 1 --start
-host:~/tgt# ./usr/tgtadm-iscsi --op show
-tid 1: lld name iscsi: state running
-        lun 1: path /var/tmp/image
-        lun 0: path /dev/hdc1
-
-
-Now your target accepts initiators.
+Now your target is ready to accept initiators.
 
 
 After the target the target accepted some initiators, you can see them:
