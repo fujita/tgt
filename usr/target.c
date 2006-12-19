@@ -34,6 +34,7 @@
 #include "tgtd.h"
 #include "driver.h"
 #include "target.h"
+#include "tgtadm.h"
 
 static struct target *hostt[MAX_NR_HOST];
 static struct list_head target_hash_list[1 << HASH_ORDER];
@@ -678,77 +679,6 @@ int tgt_target_bind(int tid, int host_no, int lid)
 	return 0;
 }
 
-int tgt_target_create(int lld, int tid, char *args)
-{
-	int i;
-	struct target *target;
-	char *targetname;
-
-	targetname = strchr(args, '=');
-	if (!targetname)
-		return -EINVAL;
-	targetname++;
-
-	target = target_lookup(tid);
-	if (target) {
-		eprintf("Target id %d already exists\n", tid);
-		return -EINVAL;
-	}
-
-	target = zalloc(sizeof(*target));
-	if (!target)
-		return -ENOMEM;
-
-	target->name = strdup(targetname);
-	if (!target->name) {
-		free(target);
-		return -ENOMEM;
-	}
-
-	target->tid = tid;
-	for (i = 0; i < ARRAY_SIZE(target->cmd_hash_list); i++)
-		INIT_LIST_HEAD(&target->cmd_hash_list[i]);
-
-	INIT_LIST_HEAD(&target->device_list);
-	for (i = 0; i < ARRAY_SIZE(target->device_hash_list); i++)
-		INIT_LIST_HEAD(&target->device_hash_list[i]);
-
-	target->target_iotype = SCSI_TARGET_FILEIO;
-	target->target_state = SCSI_TARGET_SUSPENDED;
-
-	target->bdt = tgt_drivers[lld]->default_bdt;
-	target->lid = lld;
-
-	tgt_cmd_queue_init(&target->cmd_queue);
-	target_hlist_insert(target);
-
-	eprintf("Succeed to create a new target %d\n", tid);
-
-	return 0;
-}
-
-int tgt_target_destroy(int tid)
-{
-	struct target *target;
-
-	target = target_lookup(tid);
-	if (!target)
-		return -ENOENT;
-
-	if (!list_empty(&target->device_list)) {
-		eprintf("target %d still has devices\n", tid);
-		return -EBUSY;
-	}
-
-	if (!list_empty(&target->cmd_queue.queue))
-		return -EBUSY;
-
-	target_hlist_remove(target);
-	free(target);
-
-	return 0;
-}
-
 static struct {
 	enum scsi_target_iotype value;
 	char *name;
@@ -769,30 +699,6 @@ static char *target_iotype_name(enum scsi_target_state state)
 		}
 	}
 	return name;
-}
-
-int tgt_set_target_iotype(int tid, char *str)
-{
-	int i, err = -EINVAL;
-	struct target *target;
-
-	target = target_lookup(tid);
-	if (!target)
-		return -ENOENT;
-
-	for (i = 0; i < ARRAY_SIZE(target_iotype); i++) {
-		if (!strcmp(target_iotype[i].name, str)) {
-			target->target_iotype = target_iotype[i].value;
-			err = 0;
-
-			/* FIXME */
-			if (target->target_iotype == SCSI_TARGET_RAWIO)
-				target->bdt = &sg_bdt;
-			break;
-		}
-	}
-
-	return err;
 }
 
 enum scsi_target_state tgt_get_target_state(int tid)
@@ -929,6 +835,100 @@ char *tgt_targetname(int tid)
 		return NULL;
 
 	return target->name;
+}
+
+int tgt_target_create(int lld, int tid, char *args)
+{
+	int i, t_type = TARGET_SBC, bs_type = LU_BS_FILE;
+	struct target *target;
+	char *p, *q, *targetname = NULL;
+
+	p = args;
+	while ((q = strsep(&p, ","))) {
+		char *str;
+
+		str = strchr(q, '=');
+		if (str) {
+			*str++ = '\0';
+
+			if (!strcmp("targetname", q))
+				targetname = str;
+			else if (!strcmp("target-type", q))
+				t_type = strtol(str, NULL, 10);
+			else if (!strcmp("backing-store-type", q))
+				bs_type = strtol(str, NULL, 10);
+			else
+				eprintf("Unknow option %s\n", q);
+		}
+	};
+
+	if (!targetname)
+		return -EINVAL;
+
+	target = target_lookup(tid);
+	if (target) {
+		eprintf("Target id %d already exists\n", tid);
+		return -EINVAL;
+	}
+
+	target = zalloc(sizeof(*target));
+	if (!target)
+		return -ENOMEM;
+
+	target->name = strdup(targetname);
+	if (!target->name) {
+		free(target);
+		return -ENOMEM;
+	}
+
+	target->tid = tid;
+	for (i = 0; i < ARRAY_SIZE(target->cmd_hash_list); i++)
+		INIT_LIST_HEAD(&target->cmd_hash_list[i]);
+
+	INIT_LIST_HEAD(&target->device_list);
+	for (i = 0; i < ARRAY_SIZE(target->device_hash_list); i++)
+          		INIT_LIST_HEAD(&target->device_hash_list[i]);
+
+	/* FIXME */
+	if (bs_type == LU_BS_RAW) {
+		target->target_iotype = SCSI_TARGET_RAWIO;
+		target->bdt = &sg_bdt;
+	} else {
+		target->target_iotype = SCSI_TARGET_FILEIO;
+		target->bdt = tgt_drivers[lld]->default_bdt;
+	}
+
+	target->target_state = SCSI_TARGET_SUSPENDED;
+	target->lid = lld;
+
+	tgt_cmd_queue_init(&target->cmd_queue);
+	target_hlist_insert(target);
+
+	eprintf("Succeed to create a new target %d\n", tid);
+
+	return 0;
+}
+
+int tgt_target_destroy(int tid)
+{
+	struct target *target;
+
+	target = target_lookup(tid);
+	if (!target)
+		return -ENOENT;
+
+	if (!list_empty(&target->device_list)) {
+		eprintf("target %d still has devices\n", tid);
+		return -EBUSY;
+	}
+
+	if (!list_empty(&target->cmd_queue.queue))
+		return -EBUSY;
+
+	target_hlist_remove(target);
+	free(target);
+
+	return 0;
 }
 
 __attribute__((constructor)) static void target_init(void)

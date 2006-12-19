@@ -75,6 +75,7 @@ static struct option const long_options[] =
 	{"name", required_argument, NULL, 'n'},
 	{"value", required_argument, NULL, 'v'},
 	{"targetname", required_argument, NULL, 'T'},
+	{"target-type", required_argument, NULL, 'p'},
 	{"backing-store", required_argument, NULL, 'b'},
 	{"backing-store-type", required_argument, NULL, 'S'},
 	{"debug", no_argument, NULL, 'd'},
@@ -82,7 +83,7 @@ static struct option const long_options[] =
 	{NULL, 0, NULL, 0},
 };
 
-static char *short_options = "l:o:m:t:s:c:u:i:a:B:T:b:S:n:v:dh";
+static char *short_options = "l:o:m:t:s:c:u:i:a:B:T:p:b:S:n:v:dh";
 
 static void usage(int status)
 {
@@ -326,12 +327,13 @@ int main(int argc, char **argv)
 {
 	int ch, longindex;
 	int err = -EINVAL, op = -1, len = 0;
-	int tid = -1, bs_type = LU_BS_FILE;
+	int tid = -1, rest = BUFSIZE;
+	int t_type = TARGET_SBC, bs_type = LU_BS_FILE;
 	uint32_t cid, hostno, aid;
 	uint64_t sid, lun;
 	char *lldname;
 	struct tgtadm_req *req;
-	char buf[BUFSIZE];
+	char buf[BUFSIZE + sizeof(*req)];
 	char *name, *value, *path, *targetname;
 	int mode = MODE_SYSTEM;
 
@@ -374,6 +376,9 @@ int main(int argc, char **argv)
 			break;
 		case 'T':
 			targetname = optarg;
+			break;
+		case 'p':
+			t_type = target_type(optarg);
 			break;
 		case 'b':
 			path = optarg;
@@ -427,12 +432,9 @@ int main(int argc, char **argv)
 	req->lun = lun;
 	req->aid = aid;
 	req->host_no = hostno;
-	req->bs_type = bs_type;
 
 	/* FIXME */
 	if ((name && value) || path || targetname) {
-		int rest;
-
 		if (path) {
 			name = "path";
 			value = path;
@@ -443,10 +445,16 @@ int main(int argc, char **argv)
 			value = targetname;
 		}
 
-		rest = sizeof(buf) - sizeof(*req);
-
 		len = snprintf((char *)req->data, rest, "%s=%s", name, value);
 	}
+
+	if (t_type != TARGET_SBC)
+		len += snprintf((char *)req->data + len, rest - len,
+				"%starget-type=%d", len ? "," : "", t_type);
+
+	if (bs_type != LU_BS_FILE)
+		len += snprintf((char *)req->data + len, rest - len,
+				"%sbacking-store-type=%d", len ? "," : "", bs_type);
 
 	req->len = sizeof(*req) + len;
 
