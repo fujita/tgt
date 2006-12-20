@@ -65,7 +65,6 @@ static int bd_aio_open(struct tgt_device *dev, char *path, int *fd, uint64_t *si
 
 static void bd_aio_close(struct tgt_device *dev)
 {
-	tgt_event_del(dev->fd);
 	close(dev->fd);
 }
 
