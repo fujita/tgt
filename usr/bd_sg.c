@@ -31,6 +31,7 @@
 #include <limits.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 
 #include "list.h"
 #include "util.h"
@@ -66,8 +67,9 @@ static int bd_sg_open(struct tgt_device *dev,
 		      char *path, int *fd, uint64_t *size)
 {
 	int err, maj, min;
-	char *sd, *bsgdev, buf[128];
+	char *sd, buf[256];
 	struct stat64 st;
+	struct timeval t;
 
 	/* we assume something like /dev/sda */
 
@@ -117,27 +119,28 @@ static int bd_sg_open(struct tgt_device *dev,
 	dprintf("%s's bsg device number: %d %d\n", path, maj, min);
 	close(*fd);
 
-	bsgdev = tempnam("/tmp", NULL);
-	if (!bsgdev) {
+	err = gettimeofday(&t, NULL);
+	if (err) {
 		eprintf("can't get temporary name for bsg device, %m\n");
 		return -errno;
 	}
 
-	err = mknod(bsgdev, S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH,
+	memset(buf, 0, sizeof(buf));
+	snprintf(buf, sizeof(buf), "/tmp/%lx%lx", t.tv_sec, t.tv_usec);
+	err = mknod(buf, S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH,
 		    maj << 8 | min);
 	if (err < 0) {
-		eprintf("can't create the bsg device %s, %m\n", bsgdev);
+		eprintf("can't create the bsg device %s, %m\n", buf);
 		return -errno;
 	}
 
-	*fd = open(bsgdev, O_RDWR | O_NONBLOCK);
+	*fd = open(buf, O_RDWR | O_NONBLOCK);
 
-	dprintf("%d %s\n", *fd, bsgdev);
-	unlink(bsgdev);
-	free(bsgdev);
+	dprintf("%d %s\n", *fd, buf);
+	unlink(buf);
 
 	if (*fd < 0) {
-		eprintf("can't open the bsg device %s, %m\n", bsgdev);
+		eprintf("can't open the bsg device %s, %m\n", buf);
 		return -errno;
 	}
 
