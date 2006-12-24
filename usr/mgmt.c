@@ -39,8 +39,25 @@
 #include "log.h"
 #include "tgtadm.h"
 #include "driver.h"
+#include "util.h"
 
 #define BUFSIZE 4096
+
+enum mgmt_task_state {
+	MTASK_STATE_HDR_RECV,
+	MTASK_STATE_PDU_RECV,
+	MTASK_STATE_RSP_SEND,
+};
+
+struct mgmt_task {
+	enum mgmt_task_state mtask_state;
+	int retry;
+	int done;
+	char *buf;
+/* 	struct tgt_work work; */
+	struct tgtadm_req *req;
+	struct tgtadm_res *rsp;
+};
 
 static void set_show_results(struct tgtadm_res *res, int *err)
 {
@@ -145,11 +162,18 @@ static int device_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 	return err;
 }
 
-int tgt_mgmt(int lld_no, struct tgtadm_req *req, struct tgtadm_res *res,
-	     int len)
+static int tgt_mgmt(struct tgtadm_req *req, struct tgtadm_res *res, int len)
 {
-	int err = -EINVAL;
+	int lld_no, err = -EINVAL;
 	char *params = (char *) req->data;
+
+	lld_no = get_driver_index(req->lld);
+	if (lld_no < 0) {
+		eprintf("can't find the driver\n");
+		res->err = ENOENT;
+		res->len = sizeof(*res);
+		return 0;
+	}
 
 	dprintf("%d %d %d %d %d %" PRIx64 " %" PRIx64 " %s %d\n",
 		req->len, lld_no, req->mode, req->op,
@@ -226,35 +250,82 @@ static int ipc_perm(int fd)
 	return 0;
 }
 
-static void ipc_send_res(int fd, struct tgtadm_res *res)
+static void mtask_handler(int fd, int events, void *data)
 {
-	struct iovec iov;
-	struct msghdr msg;
-	int err;
+	int err, len;
+	char *pdu;
+	struct mgmt_task *mtask = data;
+	struct tgtadm_req *req = (struct tgtadm_req *) mtask->buf;
+	struct tgtadm_res *rsp = (struct tgtadm_res *) mtask->buf;
 
-	iov.iov_base = res;
-	iov.iov_len = res->len;
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
+	switch (mtask->mtask_state) {
+	case MTASK_STATE_HDR_RECV:
+		len = sizeof(*req) - mtask->done;
+		err = read(fd, mtask->buf + mtask->done, len);
+		if (err > 0) {
+			mtask->done += err;
+			if (mtask->done == sizeof(*req)) {
+				if (req->len == sizeof(*req)) {
+					tgt_mgmt(req, rsp, BUFSIZE);
+					mtask->mtask_state =
+						MTASK_STATE_RSP_SEND;
+					tgt_event_modify(fd, EPOLLOUT);
+					mtask->done = 0;
+				} else {
+					mtask->mtask_state =
+						MTASK_STATE_PDU_RECV;
+					mtask->done = 0;
+				}
+			}
+		} else
+			if (errno != EAGAIN)
+				goto out;
 
-	err = sendmsg(fd, &msg, MSG_DONTWAIT);
-	if (err != res->len)
-		eprintf("can't write, %m\n");
+		break;
+	case MTASK_STATE_PDU_RECV:
+		len = req->len - (sizeof(*req) + mtask->done);
+		pdu = mtask->buf + sizeof(*req);
+		err = read(fd, pdu + mtask->done, len);
+		if (err > 0) {
+			mtask->done += err;
+			if (mtask->done == req->len - (sizeof(*req))) {
+				tgt_mgmt(req, rsp, BUFSIZE);
+				mtask->mtask_state = MTASK_STATE_RSP_SEND;
+				tgt_event_modify(fd, EPOLLOUT);
+				mtask->done = 0;
+			}
+		} else
+			if (errno != EAGAIN)
+				goto out;
+
+		break;
+	case MTASK_STATE_RSP_SEND:
+		len = rsp->len - mtask->done;
+		err = write(fd, mtask->buf + mtask->done, len);
+		if (err > 0) {
+			mtask->done += err;
+
+			if (mtask->done == rsp->len)
+				goto out;
+		} else
+			if (errno != EAGAIN)
+				goto out;
+		break;
+	default:
+		eprintf("unknown state %d\n", mtask->mtask_state);
+	}
+
+	return;
+out:
+	tgt_event_del(fd);
+	free(mtask);
+	close(fd);
 }
 
 static void mgmt_event_handler(int accept_fd, int events, void *data)
 {
 	int fd, err;
-	char sbuf[BUFSIZE], rbuf[BUFSIZE];
-	struct iovec iov;
-	struct msghdr msg;
-	struct tgtadm_req *req;
-	struct tgtadm_res *res;
-	int lld_no, len;
-
-	req = (struct tgtadm_req *) sbuf;
-	memset(sbuf, 0, sizeof(sbuf));
+	struct mgmt_task *mtask;
 
 	fd = ipc_accept(accept_fd);
 	if (fd < 0)
@@ -264,63 +335,25 @@ static void mgmt_event_handler(int accept_fd, int events, void *data)
 	if (err < 0)
 		goto out;
 
-	len = (char *) req->data - (char *) req;
-	iov.iov_base = req;
-	iov.iov_len = len;
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-
-retry:
-	err = recvmsg(fd, &msg, MSG_PEEK | MSG_DONTWAIT);
-	if (err != len) {
-		/*
-		 * workaround. We need to put this request to
-		 * scheduler and wait for timeout or data.
-		 */
-		if (errno == EAGAIN)
-			goto retry;
-
-		eprintf("can't read, %m\n");
-		goto out;
-	}
-
-	if (req->len > sizeof(sbuf) - len) {
-		eprintf("too long data %d\n", req->len);
-		goto out;
-	}
-
-	iov.iov_base = req;
-	iov.iov_len = req->len;
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-
-	err = recvmsg(fd, &msg, MSG_DONTWAIT);
-	if (err != req->len) {
-		eprintf("can't read, %m\n");
-		err = -EIO;
-		goto out;
-	}
-
-	dprintf("%d %s %d %d %d\n", req->mode, req->lld, err, req->len, fd);
-	res = (struct tgtadm_res *) rbuf;
-	memset(rbuf, 0, sizeof(rbuf));
-
-	lld_no = get_driver_index(req->lld);
-	if (lld_no < 0) {
-		eprintf("can't find the driver\n");
-		res->err = ENOENT;
-		res->len = (char *) res->data - (char *) res;
-		goto send;
-	}
-
-	err = tgt_mgmt(lld_no, req, res, sizeof(rbuf));
+	err = set_non_blocking(fd);
 	if (err)
-		eprintf("%d %d %d %d\n", req->mode, lld_no, err, res->len);
+		goto out;
 
-send:
-	ipc_send_res(fd, res);
+	mtask = zalloc(sizeof(*mtask) + sizeof(struct tgtadm_req) + BUFSIZE);
+	if (!mtask) {
+		eprintf("can't allocate mtask\n");
+		goto out;
+	}
+
+	mtask->mtask_state = MTASK_STATE_HDR_RECV;
+	mtask->buf = (char *) mtask + sizeof(*mtask);
+	err = tgt_event_add(fd, EPOLLIN, mtask_handler, mtask);
+	if (err) {
+		free(mtask);
+		goto out;
+	}
+
+	return;
 out:
 	if (fd > 0)
 		close(fd);
