@@ -36,6 +36,7 @@
 
 extern int chrdev_open(char *modname, char *devpath, uint8_t minor, int *fd);
 extern int backed_file_open(char *path, int oflag, uint64_t *size);
+extern int set_non_blocking(int fd);
 
 #define zalloc(size)			\
 ({					\

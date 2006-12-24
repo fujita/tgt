@@ -97,3 +97,19 @@ close_fd:
 	return err;
 }
 
+int set_non_blocking(int fd)
+{
+	int err;
+
+	err = fcntl(fd, F_GETFL);
+	if (err < 0) {
+		eprintf("unable to get fd flags, %m\n");
+	} else {
+		err = fcntl(fd, F_SETFL, err | O_NONBLOCK);
+		if (err == -1)
+			eprintf("unable to set fd flags, %m\n");
+		else
+			err = 0;
+	}
+	return err;
+}
