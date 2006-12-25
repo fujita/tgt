@@ -60,6 +60,22 @@ do {									\
 static char program_name[] = "tgtadm";
 static int debug;
 
+static char *tgtadm_error_msg[] = {
+	"",
+	"unknown error",
+	"out of memory"
+	"can't find the driver"
+	"can't find the target"
+
+	"can't find the logical unit",
+	"can't find the session",
+	"can't find the connection",
+	"the target already exists",
+	"the logical unit already exists",
+
+	"unknown parameter",
+};
+
 static struct option const long_options[] =
 {
 	{"lld", required_argument, NULL, 'l'},
