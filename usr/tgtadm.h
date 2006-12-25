@@ -44,17 +44,16 @@ struct tgtadm_req {
 	int32_t tid;
 	uint64_t sid;
 	uint32_t cid;
-	uint64_t lun;
 	uint32_t aid;
+	uint64_t lun;
 	char lld[TGT_LLD_NAME_LEN];
 	uint32_t host_no;
-	uint64_t data[0];
+	uint32_t pack;
 };
 
 struct tgtadm_rsp {
 	uint32_t err;
 	uint32_t len;
-	uint64_t data[0];
 };
 
 #endif

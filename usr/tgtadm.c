@@ -162,25 +162,25 @@ static int ipc_mgmt_connect(int *fd)
 
 static int ipc_mgmt_res(int fd)
 {
-	struct tgtadm_rsp *res;
+	struct tgtadm_rsp *rsp;
 	char buf[BUFSIZE];
 	int err, len;
 
-	err = read(fd, buf, sizeof(*res));
+	err = read(fd, buf, sizeof(*rsp));
 	if (err < 0) {
 		eprintf("Cannot read from tgtd, %m\n");
 		return -1;
 	}
 
-	res = (struct tgtadm_rsp *) buf;
-	if (res->err) {
-		eprintf("Error %d\n", res->err);
+	rsp = (struct tgtadm_rsp *) buf;
+	if (rsp->err) {
+		eprintf("Error %d\n", rsp->err);
 		return -1;
 	}
 
-	dprintf("got the response %d %d\n", res->err, res->len);
+	dprintf("got the response %d %d\n", rsp->err, rsp->len);
 
-	len = res->len - sizeof(*res);
+	len = rsp->len - sizeof(*rsp);
 	if (!len)
 		return 0;
 
@@ -334,7 +334,7 @@ int main(int argc, char **argv)
 	char *lldname;
 	struct tgtadm_req *req;
 	char buf[BUFSIZE + sizeof(*req)];
-	char *name, *value, *path, *targetname;
+	char *name, *value, *path, *targetname, *params;
 	int mode = MODE_SYSTEM;
 
 	cid = hostno = aid = sid = lun = 0;
@@ -433,6 +433,10 @@ int main(int argc, char **argv)
 	req->aid = aid;
 	req->host_no = hostno;
 
+	params = buf + sizeof(*req);
+
+	printf("size %d\n", sizeof(*req));
+
 	/* FIXME */
 	if ((name && value) || path || targetname) {
 		if (path) {
@@ -445,15 +449,15 @@ int main(int argc, char **argv)
 			value = targetname;
 		}
 
-		len = snprintf((char *)req->data, rest, "%s=%s", name, value);
+		len = snprintf(params, rest, "%s=%s", name, value);
 	}
 
 	if (t_type != TARGET_SBC)
-		len += snprintf((char *)req->data + len, rest - len,
+		len += snprintf(params + len, rest - len,
 				"%starget-type=%d", len ? "," : "", t_type);
 
 	if (bs_type != LU_BS_FILE)
-		len += snprintf((char *)req->data + len, rest - len,
+		len += snprintf(params + len, rest - len,
 				"%sbacking-store-type=%d", len ? "," : "", bs_type);
 
 	req->len = sizeof(*req) + len;

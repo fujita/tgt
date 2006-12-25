@@ -59,21 +59,22 @@ struct mgmt_task {
 	struct tgtadm_rsp *rsp;
 };
 
-static void set_show_results(struct tgtadm_rsp *res, int *err)
+static void set_show_results(struct tgtadm_rsp *rsp, int *err)
 {
 	if (err < 0)
-		res->err = *err;
+		rsp->err = *err;
 	else {
-		res->err = 0;
-		res->len = *err + sizeof(*res);
+		rsp->err = 0;
+		rsp->len = *err + sizeof(*rsp);
 		*err = 0;
 	}
 }
 
 static int target_mgmt(int lld_no, struct tgtadm_req *req, char *params,
-		       struct tgtadm_rsp *res, int *rlen)
+		       struct tgtadm_rsp *rsp, int *rlen)
 {
 	int err = -EINVAL;
+	char *pdu = (char *)rsp + sizeof(*rsp);
 
 	switch (req->op) {
 	case OP_NEW:
@@ -107,32 +108,32 @@ static int target_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 	}
 	case OP_SHOW:
 		if (req->tid < 0)
-			err = tgt_target_show_all((char *)res->data,
-						  *rlen - sizeof(*res));
+			err = tgt_target_show_all(pdu, *rlen - sizeof(*rsp));
 		else if (tgt_drivers[lld_no]->show)
 			err = tgt_drivers[lld_no]->show(req->mode,
 							req->tid, req->sid,
 							req->cid, req->lun,
-							(char *)res->data,
-							*rlen - sizeof(*res));
+							pdu,
+							*rlen - sizeof(*rsp));
 		break;
 	default:
 		break;
 	}
 
 	if (req->op == OP_SHOW)
-		set_show_results(res, &err);
+		set_show_results(rsp, &err);
 	else {
-		res->err = err;
-		res->len = (char *) res->data - (char *) res;
+		rsp->err = err;
+		rsp->len = sizeof(*rsp);
 	}
 	return err;
 }
 
 static int device_mgmt(int lld_no, struct tgtadm_req *req, char *params,
-		       struct tgtadm_rsp *res, int *rlen)
+		       struct tgtadm_rsp *rsp, int *rlen)
 {
 	int err = -EINVAL;
+	char *pdu = (char *)rsp + sizeof(*rsp);
 
 	switch (req->op) {
 	case OP_NEW:
@@ -145,33 +146,34 @@ static int device_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 		err = tgt_device_update(req->tid, req->lun, params);
 		break;
 	case OP_SHOW:
-		err = tgt_device_show(req->tid, req->lun, (char *) res->data,
-				      *rlen - sizeof(*res));
+		err = tgt_device_show(req->tid, req->lun, pdu,
+				      *rlen - sizeof(*rsp));
 		break;
 	default:
 		break;
 	}
 
 	if (req->op == OP_SHOW)
-		set_show_results(res, &err);
+		set_show_results(rsp, &err);
 	else {
-		res->err = err;
-		res->len = sizeof(*res);
+		rsp->err = err;
+		rsp->len = sizeof(*rsp);
 	}
 
 	return err;
 }
 
-static int tgt_mgmt(struct tgtadm_req *req, struct tgtadm_rsp *res, int len)
+static int tgt_mgmt(struct tgtadm_req *req, struct tgtadm_rsp *rsp, int len)
 {
 	int lld_no, err = -EINVAL;
-	char *params = (char *) req->data;
+	char *params = (char *) req + sizeof(*req);
+	char *pdu = (char *) rsp + sizeof(*rsp);
 
 	lld_no = get_driver_index(req->lld);
 	if (lld_no < 0) {
 		eprintf("can't find the driver\n");
-		res->err = ENOENT;
-		res->len = sizeof(*res);
+		rsp->err = ENOENT;
+		rsp->len = sizeof(*rsp);
 		return 0;
 	}
 
@@ -183,23 +185,22 @@ static int tgt_mgmt(struct tgtadm_req *req, struct tgtadm_rsp *res, int len)
 	case MODE_SYSTEM:
 		break;
 	case MODE_TARGET:
-		err = target_mgmt(lld_no, req, params, res, &len);
+		err = target_mgmt(lld_no, req, params, rsp, &len);
 		break;
 	case MODE_DEVICE:
-		err = device_mgmt(lld_no, req, params, res, &len);
+		err = device_mgmt(lld_no, req, params, rsp, &len);
 		break;
 	case MODE_ACCOUNT:
 		if (tgt_drivers[lld_no]->account)
 			err = tgt_drivers[lld_no]->account(req->op, req->tid, req->aid,
-							   params,
-							   (char *)res->data,
-							   len - sizeof(*res));
+							   params, pdu,
+							   len - sizeof(*rsp));
 		if (req->op == OP_SHOW) {
-			set_show_results(res, &err);
+			set_show_results(rsp, &err);
 			err = 0;
 		} else {
-			res->err = err;
-			res->len = sizeof(*res);
+			rsp->err = err;
+			rsp->len = sizeof(*rsp);
 		}
 		break;
 	default:
@@ -207,10 +208,10 @@ static int tgt_mgmt(struct tgtadm_req *req, struct tgtadm_rsp *res, int len)
 			err = tgt_drivers[lld_no]->show(req->mode,
 							req->tid, req->sid,
 							req->cid, req->lun,
-							(char *)res->data,
-							len - sizeof(*res));
+							pdu,
+							len - sizeof(*rsp));
 
-			set_show_results(res, &err);
+			set_show_results(rsp, &err);
 		}
 		break;
 	}
