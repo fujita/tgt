@@ -203,7 +203,7 @@ static int ipc_mgmt_rsp(int fd)
 		len = min_t(int, sizeof(buf) - 1, rest);
 		err = read(fd, buf, len);
 		if (err <= 0) {
-			eprintf("can't get the response, %m\n");
+			eprintf("can't get the full response, %m\n");
 			return -1;
 		}
 		fputs(buf, stdout);
