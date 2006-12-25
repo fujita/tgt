@@ -60,7 +60,7 @@ do {									\
 static char program_name[] = "tgtadm";
 static int debug;
 
-static char *tgtadm_error_msg[] = {
+static char *tgtadm_err_msg[] = {
 	"",
 	"unknown error",
 	"out of memory"
@@ -165,7 +165,8 @@ static int ipc_mgmt_connect(int *fd)
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_LOCAL;
-	memcpy((char *) &addr.sun_path + 1, TGT_IPC_NAMESPACE, strlen(TGT_IPC_NAMESPACE));
+	memcpy((char *) &addr.sun_path + 1, TGT_IPC_NAMESPACE,
+	       strlen(TGT_IPC_NAMESPACE));
 
 	err = connect(*fd, (struct sockaddr *) &addr, sizeof(addr));
 	if (err < 0) {
@@ -176,41 +177,37 @@ static int ipc_mgmt_connect(int *fd)
 	return 0;
 }
 
-static int ipc_mgmt_res(int fd)
+static int ipc_mgmt_rsp(int fd)
 {
-	struct tgtadm_rsp *rsp;
-	char buf[BUFSIZE];
-	int err, len;
+	struct tgtadm_rsp rsp;
+	int err, rest, len;
 
-	err = read(fd, buf, sizeof(*rsp));
+	err = read(fd, &rsp, sizeof(rsp));
 	if (err < 0) {
-		eprintf("Cannot read from tgtd, %m\n");
+		eprintf("Can't get the response, %m\n");
 		return -1;
 	}
 
-	rsp = (struct tgtadm_rsp *) buf;
-	if (rsp->err) {
-		eprintf("Error %d\n", rsp->err);
+	if (rsp.err != TGTADM_SUCCESS) {
+		eprintf("%s\n", tgtadm_err_msg[rsp.err]);
 		return -1;
 	}
 
-	dprintf("got the response %d %d\n", rsp->err, rsp->len);
-
-	len = rsp->len - sizeof(*rsp);
-	if (!len)
+	rest = rsp.len - sizeof(rsp);
+	if (!rest)
 		return 0;
 
-	while (len) {
-		int t;
+	while (rest) {
+		char buf[BUFSIZE];
 		memset(buf, 0, sizeof(buf));
-		t = min_t(int, sizeof(buf), len);
-		err = read(fd, buf, t);
-		if (err < 0) {
-			eprintf("Cannot read from tgtd, %m\n");
+		len = min_t(int, sizeof(buf) - 1, rest);
+		err = read(fd, buf, len);
+		if (err <= 0) {
+			eprintf("Can't get the response, %m\n");
 			return -1;
 		}
-		printf("%s", buf);
-		len -= t;
+		fputs(buf, stdout);
+		rest -= len;
 	}
 
 	return 0;
@@ -232,7 +229,7 @@ static int ipc_mgmt_req(struct tgtadm_req *req)
 
 	dprintf("sent to tgtd %d\n", err);
 
-	err = ipc_mgmt_res(fd);
+	err = ipc_mgmt_rsp(fd);
 out:
 	if (fd > 0)
 		close(fd);
@@ -450,8 +447,6 @@ int main(int argc, char **argv)
 	req->host_no = hostno;
 
 	params = buf + sizeof(*req);
-
-	printf("size %d\n", sizeof(*req));
 
 	/* FIXME */
 	if ((name && value) || path || targetname) {
