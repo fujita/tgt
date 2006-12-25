@@ -55,8 +55,6 @@ struct mgmt_task {
 	int done;
 	char *buf;
 /* 	struct tgt_work work; */
-	struct tgtadm_req *req;
-	struct tgtadm_rsp *rsp;
 };
 
 static void set_show_results(struct tgtadm_rsp *rsp, int *err)
