@@ -773,7 +773,7 @@ static char *print_disksize(uint64_t size)
 
 int tgt_target_show_all(char *buf, int rest)
 {
-	int i, len, total;
+	int i, len, total, max = rest;
 	struct target *target;
 	struct tgt_device *device;
 
@@ -787,18 +787,24 @@ int tgt_target_show_all(char *buf, int rest)
 				       target->name,
 				       tgt_drivers[target->lid]->name,
 				       target_state_name(target->target_state));
+			if (len > rest) {
+				total = max;
+				goto out;
+			}
+
 			buf += len;
 			total += len;
 			rest -= len;
-			if (!rest)
-				goto out;
 
 			len = snprintf(buf, rest, TAB1 "LUN information:\n");
+			if (len > rest) {
+				total = max;
+				goto out;
+			}
+
 			buf += len;
 			total += len;
 			rest -= len;
-			if (!rest)
-				goto out;
 
 			list_for_each_entry(device, &target->device_list, d_list) {
 				len = snprintf(buf, rest,
@@ -814,11 +820,14 @@ int tgt_target_show_all(char *buf, int rest)
 					       print_disksize(device->size),
 					       device->path,
 					       target_iotype_name(target->target_iotype));
+				if (len > rest) {
+					total = max;
+					goto out;
+				}
+
 				buf += len;
 				total += len;
 				rest -= len;
-				if (!rest)
-					goto out;
 			}
 		}
 	}

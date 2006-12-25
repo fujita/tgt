@@ -41,8 +41,6 @@
 #include "driver.h"
 #include "util.h"
 
-#define BUFSIZE 4096
-
 enum mgmt_task_state {
 	MTASK_STATE_HDR_RECV,
 	MTASK_STATE_PDU_RECV,
@@ -54,6 +52,9 @@ struct mgmt_task {
 	int retry;
 	int done;
 	char *buf;
+	int bsize;
+	struct tgtadm_req req;
+	struct tgtadm_rsp rsp;
 /* 	struct tgt_work work; */
 };
 
@@ -68,17 +69,17 @@ static void set_show_results(struct tgtadm_rsp *rsp, int *err)
 	}
 }
 
-static int target_mgmt(int lld_no, struct tgtadm_req *req, char *params,
-		       struct tgtadm_rsp *rsp, int *rlen)
+static int target_mgmt(int lld_no, struct mgmt_task *mtask)
 {
+	struct tgtadm_req *req = &mtask->req;
+	struct tgtadm_rsp *rsp = &mtask->rsp;
 	int err = -EINVAL;
-	char *pdu = (char *)rsp + sizeof(*rsp);
 
 	switch (req->op) {
 	case OP_NEW:
-		err = tgt_target_create(lld_no, req->tid, params);
+		err = tgt_target_create(lld_no, req->tid, mtask->buf);
 		if (!err && tgt_drivers[lld_no]->target_create)
-			tgt_drivers[lld_no]->target_create(req->tid, params);
+			tgt_drivers[lld_no]->target_create(req->tid, mtask->buf);
 		break;
 	case OP_DELETE:
 		err = tgt_target_destroy(req->tid);
@@ -93,26 +94,36 @@ static int target_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 		char *p;
 		err = -EINVAL;
 
-		p = strchr(params, '=');
+		p = strchr(mtask->buf, '=');
 		if (!p)
 			break;
 		*p++ = '\0';
 
-		if (!strcmp(params, "state"))
+		if (!strcmp(mtask->buf, "state"))
 			err = tgt_set_target_state(req->tid, p);
 		else if (tgt_drivers[lld_no]->target_update)
-			err = tgt_drivers[lld_no]->target_update(req->tid, params);
+			err = tgt_drivers[lld_no]->target_update(req->tid, mtask->buf);
 		break;
 	}
 	case OP_SHOW:
-		if (req->tid < 0)
-			err = tgt_target_show_all(pdu, *rlen - sizeof(*rsp));
-		else if (tgt_drivers[lld_no]->show)
+		if (req->tid < 0) {
+			retry:
+			err = tgt_target_show_all(mtask->buf, mtask->bsize);
+			if (err == mtask->bsize) {
+				char *p;
+				mtask->bsize <<= 1;
+				p = realloc(mtask->buf, mtask->bsize);
+				if (p) {
+					mtask->buf = p;
+					goto retry;
+				} else
+					err = TGTADM_NOMEM;
+			}
+		} else if (tgt_drivers[lld_no]->show)
 			err = tgt_drivers[lld_no]->show(req->mode,
 							req->tid, req->sid,
 							req->cid, req->lun,
-							pdu,
-							*rlen - sizeof(*rsp));
+							mtask->buf, mtask->bsize);
 		break;
 	default:
 		break;
@@ -161,11 +172,11 @@ static int device_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 	return err;
 }
 
-static int tgt_mgmt(struct tgtadm_req *req, struct tgtadm_rsp *rsp, int len)
+static int tgt_mgmt(struct mgmt_task *mtask)
 {
-	int lld_no, err = -EINVAL;
-	char *params = (char *) req + sizeof(*req);
-	char *pdu = (char *) rsp + sizeof(*rsp);
+	struct tgtadm_req *req = &mtask->req;
+	struct tgtadm_rsp *rsp = &mtask->rsp;
+	int lld_no, err = -EINVAL, len = mtask->bsize;
 
 	lld_no = get_driver_index(req->lld);
 	if (lld_no < 0) {
@@ -177,22 +188,21 @@ static int tgt_mgmt(struct tgtadm_req *req, struct tgtadm_rsp *rsp, int len)
 
 	dprintf("%d %d %d %d %d %" PRIx64 " %" PRIx64 " %s %d\n",
 		req->len, lld_no, req->mode, req->op,
-		req->tid, req->sid, req->lun, params, getpid());
+		req->tid, req->sid, req->lun, mtask->buf, getpid());
 
 	switch (req->mode) {
 	case MODE_SYSTEM:
 		break;
 	case MODE_TARGET:
-		err = target_mgmt(lld_no, req, params, rsp, &len);
+		err = target_mgmt(lld_no, mtask);
 		break;
 	case MODE_DEVICE:
-		err = device_mgmt(lld_no, req, params, rsp, &len);
+		err = device_mgmt(lld_no, req, mtask->buf, rsp, &len);
 		break;
 	case MODE_ACCOUNT:
 		if (tgt_drivers[lld_no]->account)
 			err = tgt_drivers[lld_no]->account(req->op, req->tid, req->aid,
-							   params, pdu,
-							   len - sizeof(*rsp));
+							   mtask->buf, mtask->buf, len);
 		if (req->op == OP_SHOW) {
 			set_show_results(rsp, &err);
 			err = 0;
@@ -206,8 +216,7 @@ static int tgt_mgmt(struct tgtadm_req *req, struct tgtadm_rsp *rsp, int len)
 			err = tgt_drivers[lld_no]->show(req->mode,
 							req->tid, req->sid,
 							req->cid, req->lun,
-							pdu,
-							len - sizeof(*rsp));
+							mtask->buf, len);
 
 			set_show_results(rsp, &err);
 		}
@@ -252,28 +261,34 @@ static int ipc_perm(int fd)
 static void mtask_handler(int fd, int events, void *data)
 {
 	int err, len;
-	char *pdu;
+	char *p;
 	struct mgmt_task *mtask = data;
-	struct tgtadm_req *req = (struct tgtadm_req *) mtask->buf;
-	struct tgtadm_rsp *rsp = (struct tgtadm_rsp *) mtask->buf;
+	struct tgtadm_req *req = &mtask->req;
+	struct tgtadm_rsp *rsp = &mtask->rsp;
 
 	switch (mtask->mtask_state) {
 	case MTASK_STATE_HDR_RECV:
 		len = sizeof(*req) - mtask->done;
-		err = read(fd, mtask->buf + mtask->done, len);
+		err = read(fd, (char *)req + mtask->done, len);
 		if (err > 0) {
 			mtask->done += err;
 			if (mtask->done == sizeof(*req)) {
 				if (req->len == sizeof(*req)) {
-					tgt_mgmt(req, rsp, BUFSIZE);
+					tgt_mgmt(mtask);
 					mtask->mtask_state =
 						MTASK_STATE_RSP_SEND;
 					tgt_event_modify(fd, EPOLLOUT);
 					mtask->done = 0;
 				} else {
+					/* the pdu exists */
+					mtask->done = 0;
 					mtask->mtask_state =
 						MTASK_STATE_PDU_RECV;
-					mtask->done = 0;
+
+					if (mtask->bsize < req->len) {
+						eprintf("FIXME: %d\n", req->len);
+						goto out;
+					}
 				}
 			}
 		} else
@@ -283,12 +298,11 @@ static void mtask_handler(int fd, int events, void *data)
 		break;
 	case MTASK_STATE_PDU_RECV:
 		len = req->len - (sizeof(*req) + mtask->done);
-		pdu = mtask->buf + sizeof(*req);
-		err = read(fd, pdu + mtask->done, len);
+		err = read(fd, mtask->buf + mtask->done, len);
 		if (err > 0) {
 			mtask->done += err;
 			if (mtask->done == req->len - (sizeof(*req))) {
-				tgt_mgmt(req, rsp, BUFSIZE);
+				tgt_mgmt(mtask);
 				mtask->mtask_state = MTASK_STATE_RSP_SEND;
 				tgt_event_modify(fd, EPOLLOUT);
 				mtask->done = 0;
@@ -299,8 +313,15 @@ static void mtask_handler(int fd, int events, void *data)
 
 		break;
 	case MTASK_STATE_RSP_SEND:
-		len = rsp->len - mtask->done;
-		err = write(fd, mtask->buf + mtask->done, len);
+		if (mtask->done < sizeof(*rsp)) {
+			p = (char *)rsp + mtask->done;
+			len = sizeof(*rsp) - mtask->done;
+		} else {
+			p = mtask->buf + (mtask->done - sizeof(*rsp));
+			len = rsp->len - mtask->done;
+		}
+
+		err = write(fd, p, len);
 		if (err > 0) {
 			mtask->done += err;
 
@@ -317,9 +338,12 @@ static void mtask_handler(int fd, int events, void *data)
 	return;
 out:
 	tgt_event_del(fd);
+	free(mtask->buf);
 	free(mtask);
 	close(fd);
 }
+
+#define BUFSIZE 1024
 
 static void mgmt_event_handler(int accept_fd, int events, void *data)
 {
@@ -338,14 +362,20 @@ static void mgmt_event_handler(int accept_fd, int events, void *data)
 	if (err)
 		goto out;
 
-	mtask = zalloc(sizeof(*mtask) + sizeof(struct tgtadm_req) + BUFSIZE);
+	mtask = zalloc(sizeof(*mtask));
 	if (!mtask) {
 		eprintf("can't allocate mtask\n");
 		goto out;
 	}
 
+	mtask->buf = zalloc(BUFSIZE);
+	if (!mtask->buf) {
+		free(mtask);
+		goto out;
+	}
+
+	mtask->bsize = BUFSIZE;
 	mtask->mtask_state = MTASK_STATE_HDR_RECV;
-	mtask->buf = (char *) mtask + sizeof(*mtask);
 	err = tgt_event_add(fd, EPOLLIN, mtask_handler, mtask);
 	if (err) {
 		free(mtask);
