@@ -162,7 +162,7 @@ static int ipc_mgmt_connect(int *fd)
 
 static int ipc_mgmt_res(int fd)
 {
-	struct tgtadm_res *res;
+	struct tgtadm_rsp *res;
 	char buf[BUFSIZE];
 	int err, len;
 
@@ -172,7 +172,7 @@ static int ipc_mgmt_res(int fd)
 		return -1;
 	}
 
-	res = (struct tgtadm_res *) buf;
+	res = (struct tgtadm_rsp *) buf;
 	if (res->err) {
 		eprintf("Error %d\n", res->err);
 		return -1;

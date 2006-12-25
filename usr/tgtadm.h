@@ -51,7 +51,7 @@ struct tgtadm_req {
 	uint64_t data[0];
 };
 
-struct tgtadm_res {
+struct tgtadm_rsp {
 	uint32_t err;
 	uint32_t len;
 	uint64_t data[0];

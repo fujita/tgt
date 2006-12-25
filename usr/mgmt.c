@@ -56,10 +56,10 @@ struct mgmt_task {
 	char *buf;
 /* 	struct tgt_work work; */
 	struct tgtadm_req *req;
-	struct tgtadm_res *rsp;
+	struct tgtadm_rsp *rsp;
 };
 
-static void set_show_results(struct tgtadm_res *res, int *err)
+static void set_show_results(struct tgtadm_rsp *res, int *err)
 {
 	if (err < 0)
 		res->err = *err;
@@ -71,7 +71,7 @@ static void set_show_results(struct tgtadm_res *res, int *err)
 }
 
 static int target_mgmt(int lld_no, struct tgtadm_req *req, char *params,
-		       struct tgtadm_res *res, int *rlen)
+		       struct tgtadm_rsp *res, int *rlen)
 {
 	int err = -EINVAL;
 
@@ -130,7 +130,7 @@ static int target_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 }
 
 static int device_mgmt(int lld_no, struct tgtadm_req *req, char *params,
-		       struct tgtadm_res *res, int *rlen)
+		       struct tgtadm_rsp *res, int *rlen)
 {
 	int err = -EINVAL;
 
@@ -162,7 +162,7 @@ static int device_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 	return err;
 }
 
-static int tgt_mgmt(struct tgtadm_req *req, struct tgtadm_res *res, int len)
+static int tgt_mgmt(struct tgtadm_req *req, struct tgtadm_rsp *res, int len)
 {
 	int lld_no, err = -EINVAL;
 	char *params = (char *) req->data;
@@ -256,7 +256,7 @@ static void mtask_handler(int fd, int events, void *data)
 	char *pdu;
 	struct mgmt_task *mtask = data;
 	struct tgtadm_req *req = (struct tgtadm_req *) mtask->buf;
-	struct tgtadm_res *rsp = (struct tgtadm_res *) mtask->buf;
+	struct tgtadm_rsp *rsp = (struct tgtadm_rsp *) mtask->buf;
 
 	switch (mtask->mtask_state) {
 	case MTASK_STATE_HDR_RECV:
