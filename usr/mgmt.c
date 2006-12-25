@@ -378,6 +378,7 @@ static void mgmt_event_handler(int accept_fd, int events, void *data)
 	mtask->mtask_state = MTASK_STATE_HDR_RECV;
 	err = tgt_event_add(fd, EPOLLIN, mtask_handler, mtask);
 	if (err) {
+		free(mtask->buf);
 		free(mtask);
 		goto out;
 	}
