@@ -60,12 +60,12 @@ do {									\
 static char program_name[] = "tgtadm";
 static int debug;
 
-static char *tgtadm_err_msg[] = {
+static char *tgtadm_emsg[] = {
 	"",
 	"unknown error",
-	"out of memory"
-	"can't find the driver"
-	"can't find the target"
+	"out of memory",
+	"can't find the driver",
+	"can't find the target",
 
 	"can't find the logical unit",
 	"can't find the session",
@@ -189,7 +189,7 @@ static int ipc_mgmt_rsp(int fd)
 	}
 
 	if (rsp.err != TGTADM_SUCCESS) {
-		eprintf("%s\n", tgtadm_err_msg[rsp.err]);
+		fprintf(stderr, "%s: %s\n", program_name, tgtadm_emsg[rsp.err]);
 		return -1;
 	}
 

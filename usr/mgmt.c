@@ -172,7 +172,7 @@ static int tgt_mgmt(struct tgtadm_req *req, struct tgtadm_rsp *rsp, int len)
 	lld_no = get_driver_index(req->lld);
 	if (lld_no < 0) {
 		eprintf("can't find the driver\n");
-		rsp->err = ENOENT;
+		rsp->err = TGTADM_NO_DRIVER;
 		rsp->len = sizeof(*rsp);
 		return 0;
 	}
