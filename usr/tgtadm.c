@@ -159,7 +159,7 @@ static int ipc_mgmt_connect(int *fd)
 
 	*fd = socket(AF_LOCAL, SOCK_STREAM, 0);
 	if (*fd < 0) {
-		eprintf("Cannot create a socket, %m\n");
+		eprintf("can't create a socket, %m\n");
 		return -1;
 	}
 
@@ -170,7 +170,7 @@ static int ipc_mgmt_connect(int *fd)
 
 	err = connect(*fd, (struct sockaddr *) &addr, sizeof(addr));
 	if (err < 0) {
-		eprintf("Cannot connect to tgtd, %m\n");
+		eprintf("can't connect to tgtd, %m\n");
 		return -1;
 	}
 
@@ -184,7 +184,7 @@ static int ipc_mgmt_rsp(int fd)
 
 	err = read(fd, &rsp, sizeof(rsp));
 	if (err < 0) {
-		eprintf("Can't get the response, %m\n");
+		eprintf("can't get the response, %m\n");
 		return -1;
 	}
 
@@ -203,7 +203,7 @@ static int ipc_mgmt_rsp(int fd)
 		len = min_t(int, sizeof(buf) - 1, rest);
 		err = read(fd, buf, len);
 		if (err <= 0) {
-			eprintf("Can't get the response, %m\n");
+			eprintf("can't get the response, %m\n");
 			return -1;
 		}
 		fputs(buf, stdout);
@@ -223,7 +223,7 @@ static int ipc_mgmt_req(struct tgtadm_req *req)
 
 	err = write(fd, (char *) req, req->len);
 	if (err < 0) {
-		eprintf("Cannot send to tgtd, %m\n");
+		eprintf("can't send to tgtd, %m\n");
 		goto out;
 	}
 
@@ -421,7 +421,7 @@ int main(int argc, char **argv)
 	}
 
 	if (optind < argc) {
-		fprintf(stderr, "unrecognized: ");
+		fprintf(stderr, "unrecognized options: ");
 		while (optind < argc)
 			fprintf(stderr, "%s", argv[optind++]);
 		fprintf(stderr, "\n");
