@@ -40,7 +40,8 @@ INCLUDES += -I.
 CFLAGS += -Wall -O2 -Wstrict-prototypes -fPIC -D_LARGEFILE64_SOURCE $(INCLUDES)
 
 PROGRAMS += tgtd tgtadm
-TGTD_OBJS += tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o bd_sg.o
+TGTD_OBJS += tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o
+#TGTD_OBJS += bd_sg.o
 
 all: $(PROGRAMS)
 

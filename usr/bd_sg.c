@@ -26,26 +26,23 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <scsi/sg.h>
 #include <sys/epoll.h>
 #include <limits.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <linux/types.h>
+#include <linux/bsg.h>
 
 #include "list.h"
 #include "util.h"
 #include "tgtd.h"
 #include "target.h"
 
-/*
- * this uses sg4, so you need to Jens' bsg tree now.
- */
-
 static void sg_handler(int fd, int events, void *data)
 {
 	int i, err;
-	struct sg_io_hdr hdrs[64];
+	struct sg_io_v4 hdrs[64];
 	struct tgt_device *dev = data;
 
 	err = read(dev->fd, hdrs, sizeof(hdrs));
@@ -53,13 +50,10 @@ static void sg_handler(int fd, int events, void *data)
 		return;
 
 	for (i = 0; i < err / sizeof(hdrs[0]); i++) {
-		struct cmd *cmd = (void *) hdrs[i].usr_ptr;
-		dprintf("%d %p %u %u %x\n", i, hdrs[i].usr_ptr,
-			hdrs[i].status, hdrs[i].resid,
-			hdrs[i].info);
-		if (hdrs[i].resid)
-			cmd->len = hdrs[i].resid;
-		target_cmd_io_done(hdrs[i].usr_ptr, 0);
+		struct cmd *cmd = (void *) (unsigned long) hdrs[i].usr_ptr;
+		if (hdrs[i].din_resid)
+			cmd->len = hdrs[i].din_resid;
+		target_cmd_io_done(cmd, 0);
 	}
 }
 
@@ -70,8 +64,10 @@ static int bd_sg_open(struct tgt_device *dev,
 	char *sd, buf[256];
 	struct stat64 st;
 	struct timeval t;
+	struct sg_io_v4 hdr, *h;
 
 	/* we assume something like /dev/sda */
+	eprintf("%Zd %Zd %Zd\n", sizeof(hdr), sizeof(*h), sizeof(struct sg_io_v4));
 
 	*fd = backed_file_open(path, 0, size);
 	if (*fd < 0)
@@ -172,22 +168,28 @@ static int bd_sg_cmd_submit(struct tgt_device *dev, uint8_t *scb,
 			    uint64_t offset, int *async, void *key)
 {
 	int err;
-	struct sg_io_hdr hdr;
+	struct sg_io_v4 hdr;
 
 	/* TODO sense */
 
 	dprintf("%x %d %u %lx\n", scb[0], rw, datalen, *uaddr);
 	memset(&hdr, 0, sizeof(hdr));
-	hdr.interface_id = 'S';
-	hdr.cmd_len = 16;
-	hdr.cmdp = scb;
-	hdr.dxfer_direction = rw ? SG_DXFER_TO_DEV : SG_DXFER_FROM_DEV;
-	hdr.dxfer_len = datalen;
-	hdr.dxferp = (void *) *uaddr;
-/* 	hdr.mx_sb_len = sizeof(sense); */
-/* 	hdr.sbp = sense; */
-	hdr.timeout = 30000;
-	hdr.usr_ptr = key;
+	hdr.guard = 'Q';
+	hdr.request_len = 16;
+	hdr.request = (unsigned long) scb;
+
+	if (rw) {
+		hdr.dout_xfer_len = datalen;
+		hdr.dout_xferp = *uaddr;
+	} else {
+		hdr.din_xfer_len = datalen;
+		hdr.din_xferp = *uaddr;
+	}
+
+/* 	hdr.max_response_len = sizeof(sense); */
+/* 	hdr.response = (unsigned long) sense; */
+
+	hdr.usr_ptr = (unsigned long) key;
 
 	*async = 1;
 

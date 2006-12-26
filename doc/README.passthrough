@@ -18,9 +18,9 @@ provides FC storages to the iSCSI initiators.
 
 The passthrough mode support is not finished yet. tgt can pass SCSI
 commands but transport-layer commands. So tgt cannot handle TMFs
-now. This is mainly because Linux kernel does not enable user space to
-send transport-layer commands to LLDs yet. The sg version 4 will
-support this. We need to wait for some time.
+now. This is because Linux kernel does not enable user space to send
+transport-layer commands to LLDs yet. The sg version 4 will support
+this. We need to wait for some time.
 
 
 Starting
@@ -32,17 +32,13 @@ First, get the Jens' block tree and switch to the bsg branch:
 
 http://www.kernel.org/git/?p=linux/kernel/git/axboe/linux-2.6-block.git;a=summary
 
+Second, apply the IOCB_CMD_EPOLL_WAIT patch in the patch directory,
+rebuild the kernel and reboot with the new kernel.
 
-Secondly, if you want to the passthrough mode with the ibmvio driver,
-pick up the tgt patches in the tgt tree, and apply them. If you use
-the iscsi driver, you can skip this.
+Third, modify usr/Makefile to complile bd_sg.c.
 
-Thirdly, apply the IOCB_CMD_EPOLL_WAIT patch in the patch directory.
+The following example is to export /dev/sdb via the iscsi driver.
 
-You are ready. The following example is to export /dev/sda via the
-iscsi driver. Good luck.
-
-host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode target --tid 1 --params iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
-host:~/tgt# ./usr/tgtadm --lld iscsi --op update --mode target --tid 1 --name iotype --value rawio
-host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 0 --params Path=/dev/sda
+host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode target --tid 1 --backing-store-type raw -T iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
+host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 0 -b /dev/sdb
 host:~/tgt# ./usr/tgtadm --lld iscsi --op update --mode target --tid 1 --name state --value running
