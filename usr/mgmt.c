@@ -116,8 +116,10 @@ static int target_mgmt(int lld_no, struct mgmt_task *mtask)
 				if (p) {
 					mtask->buf = p;
 					goto retry;
-				} else
+				} else {
+					eprintf("out of memory\n");
 					err = TGTADM_NOMEM;
+				}
 			}
 		} else if (tgt_drivers[lld_no]->show)
 			err = tgt_drivers[lld_no]->show(req->mode,

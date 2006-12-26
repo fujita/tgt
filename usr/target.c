@@ -38,6 +38,7 @@
 
 static struct target *hostt[MAX_NR_HOST];
 static struct list_head target_hash_list[1 << HASH_ORDER];
+static LIST_HEAD(target_list);
 
 static struct target *target_lookup(int tid)
 {
@@ -773,20 +774,53 @@ static char *print_disksize(uint64_t size)
 
 int tgt_target_show_all(char *buf, int rest)
 {
-	int i, len, total, max = rest;
+	int len, total, max = rest;
 	struct target *target;
 	struct tgt_device *device;
 
-	for (i = total = 0; i < ARRAY_SIZE(target_hash_list); i++) {
-		list_for_each_entry(target, &target_hash_list[i], t_hlist) {
-			len = snprintf(buf, rest, "Target %d: %s\n"
-				       TAB1 "System information:\n"
-				       TAB2 "Driver: %s\n"
-				       TAB2 "Status: %s\n",
-				       target->tid,
-				       target->name,
-				       tgt_drivers[target->lid]->name,
-				       target_state_name(target->target_state));
+	total = 0;
+	list_for_each_entry(target, &target_list, t_list) {
+		len = snprintf(buf, rest, "Target %d: %s\n"
+			       TAB1 "System information:\n"
+			       TAB2 "Driver: %s\n"
+			       TAB2 "Status: %s\n",
+			       target->tid,
+			       target->name,
+			       tgt_drivers[target->lid]->name,
+			       target_state_name(target->target_state));
+		if (len > rest) {
+			total = max;
+			goto out;
+		}
+
+		buf += len;
+		total += len;
+		rest -= len;
+
+		len = snprintf(buf, rest, TAB1 "LUN information:\n");
+		if (len > rest) {
+			total = max;
+			goto out;
+		}
+
+		buf += len;
+		total += len;
+		rest -= len;
+
+		list_for_each_entry(device, &target->device_list, d_list) {
+			len = snprintf(buf, rest,
+				       TAB2 "LUN: %" PRIu64 "\n"
+				       TAB3 "SCSI ID: %s\n"
+				       TAB3 "SCSI SN: %s\n"
+				       TAB3 "Size: %s\n"
+				       TAB3 "Backing store: %s\n"
+				       TAB3 "Backing store type: %s\n",
+				       device->lun,
+				       device->scsi_id,
+				       device->scsi_sn,
+				       print_disksize(device->size),
+				       device->path,
+				       target_iotype_name(target->target_iotype));
 			if (len > rest) {
 				total = max;
 				goto out;
@@ -795,40 +829,6 @@ int tgt_target_show_all(char *buf, int rest)
 			buf += len;
 			total += len;
 			rest -= len;
-
-			len = snprintf(buf, rest, TAB1 "LUN information:\n");
-			if (len > rest) {
-				total = max;
-				goto out;
-			}
-
-			buf += len;
-			total += len;
-			rest -= len;
-
-			list_for_each_entry(device, &target->device_list, d_list) {
-				len = snprintf(buf, rest,
-					       TAB2 "LUN: %" PRIu64 "\n"
-					       TAB3 "SCSI ID: %s\n"
-					       TAB3 "SCSI SN: %s\n"
-					       TAB3 "Size: %s\n"
-					       TAB3 "Backing store: %s\n"
-					       TAB3 "Backing store type: %s\n",
-					       device->lun,
-					       device->scsi_id,
-					       device->scsi_sn,
-					       print_disksize(device->size),
-					       device->path,
-					       target_iotype_name(target->target_iotype));
-				if (len > rest) {
-					total = max;
-					goto out;
-				}
-
-				buf += len;
-				total += len;
-				rest -= len;
-			}
 		}
 	}
 out:
@@ -849,7 +849,7 @@ char *tgt_targetname(int tid)
 int tgt_target_create(int lld, int tid, char *args)
 {
 	int i, t_type = TARGET_SBC, bs_type = LU_BS_FILE;
-	struct target *target;
+	struct target *target, *pos;
 	char *p, *q, *targetname = NULL;
 
 	p = args;
@@ -913,6 +913,12 @@ int tgt_target_create(int lld, int tid, char *args)
 	tgt_cmd_queue_init(&target->cmd_queue);
 	target_hlist_insert(target);
 
+	list_for_each_entry(pos, &target_list, t_list) {
+		if (target->tid < pos->tid)
+			break;
+	}
+	list_add_tail(&target->t_list, &pos->t_list);
+
 	eprintf("Succeed to create a new target %d\n", tid);
 
 	return 0;
@@ -935,6 +941,7 @@ int tgt_target_destroy(int tid)
 		return -EBUSY;
 
 	target_hlist_remove(target);
+	list_del(&target->t_list);
 	free(target);
 
 	return 0;
