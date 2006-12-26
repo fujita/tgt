@@ -32,8 +32,8 @@ First, get the Jens' block tree and switch to the bsg branch:
 
 http://www.kernel.org/git/?p=linux/kernel/git/axboe/linux-2.6-block.git;a=summary
 
-Second, apply the IOCB_CMD_EPOLL_WAIT patch in the patch directory,
-rebuild the kernel and reboot with the new kernel.
+Second, apply aioepoll and bsg_large_queue patches in the patch
+directory, rebuild the kernel and reboot with the new kernel.
 
 Third, modify usr/Makefile to complile bd_sg.c.
 

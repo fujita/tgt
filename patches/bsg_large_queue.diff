@@ -1,0 +1,13 @@
+diff --git a/block/bsg.c b/block/bsg.c
+index 9d77a0c..f915cb6 100644
+--- a/block/bsg.c
++++ b/block/bsg.c
+@@ -63,7 +63,7 @@ enum {
+ /*
+  * command allocation bitmap defines
+  */
+-#define BSG_CMDS_PAGE_ORDER	(1)
++#define BSG_CMDS_PAGE_ORDER	(3)
+ #define BSG_CMDS_PER_LONG	(sizeof(unsigned long) * 8)
+ #define BSG_CMDS_MASK		(BSG_CMDS_PER_LONG - 1)
+ #define BSG_CMDS_BYTES		(PAGE_SIZE * (1 << BSG_CMDS_PAGE_ORDER))
