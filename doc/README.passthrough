@@ -35,7 +35,10 @@ http://www.kernel.org/git/?p=linux/kernel/git/axboe/linux-2.6-block.git;a=summar
 Second, apply aioepoll and bsg_large_queue patches in the patch
 directory, rebuild the kernel and reboot with the new kernel.
 
-Third, modify usr/Makefile to complile bd_sg.c.
+Third, compile the code with RAW option enabled like the following
+example (for the case you use iSCSI the target driver):
+
+host:~/tgt/usr$ make KERNELSRC=<kernel-src-directory> ISCSI=1 RAW=1
 
 The following example is to export /dev/sdb via the iscsi driver.
 

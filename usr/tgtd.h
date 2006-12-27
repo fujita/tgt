@@ -60,6 +60,10 @@ static inline int kreq_init(void)	\
 }
 #endif
 
+#ifndef USE_RAW
+struct backedio_template sg_bdt;
+#endif
+
 extern int kspace_send_tsk_mgmt_res(int host_no, uint64_t mid, int result);
 extern int kspace_send_cmd_res(int host_no, int len, int result,
 			       int rw, uint64_t addr, uint64_t tag);
