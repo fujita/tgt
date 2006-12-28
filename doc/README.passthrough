@@ -10,7 +10,7 @@ flexibility.
 
 In some cases, you need to directly pass SCSI commands to real SCSI
 devices comming from the initiators. For example, you might want to
-use the passthrough mode to provide SCSI tape drives to the
+use the passthrough mode to provide SCSI cdrom or tape drives to the
 initiators. Another example is SAN bridge (called SAN router too), to
 bind different SAN protocols. For example, an iSCSI-FC bridge can
 connect the existing FC network with a new iSCSI network, that is,
