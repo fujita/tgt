@@ -244,35 +244,6 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 	!rest;					\
 })
 
-int tgt_device_show(int tid, uint64_t dev_id, char *buf, int rest)
-{
-	int len, total = 0;
-	struct target *target;
-	struct tgt_device *device;
-
-	target = target_lookup(tid);
-	if (!target)
-		return rest;
-
-	device = device_lookup(target, dev_id);
-	if (!device) {
-		eprintf("device %" PRIu64 " not found\n", dev_id);
-		return rest;
-	}
-
-	len = snprintf(buf, rest, "path=%s\n", device->path);
-	if (buffer_check(buf, total, len, rest))
-		goto out;
-	len = snprintf(buf, rest, "scsi_id=%s\n", device->scsi_id);
-	if (buffer_check(buf, total, len, rest))
-		goto out;
-	len = snprintf(buf, rest, "scsi_sn=%s\n", device->scsi_sn);
-	if (buffer_check(buf, total, len, rest))
-		goto out;
-out:
-	return rest;
-}
-
 int tgt_device_update(int tid, uint64_t dev_id, char *name)
 {
 	int err = 0;

@@ -144,7 +144,6 @@ static int device_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 		       struct tgtadm_rsp *rsp, int *rlen)
 {
 	int err = -EINVAL;
-	char *pdu = (char *)rsp + sizeof(*rsp);
 
 	switch (req->op) {
 	case OP_NEW:
@@ -156,20 +155,12 @@ static int device_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 	case OP_UPDATE:
 		err = tgt_device_update(req->tid, req->lun, params);
 		break;
-	case OP_SHOW:
-		err = tgt_device_show(req->tid, req->lun, pdu,
-				      *rlen - sizeof(*rsp));
-		break;
 	default:
 		break;
 	}
 
-	if (req->op == OP_SHOW)
-		set_show_results(rsp, &err);
-	else {
-		rsp->err = err;
-		rsp->len = sizeof(*rsp);
-	}
+	rsp->err = err;
+	rsp->len = sizeof(*rsp);
 
 	return err;
 }
