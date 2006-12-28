@@ -40,8 +40,11 @@ example (for the case you use iSCSI the target driver):
 
 host:~/tgt/usr$ make KERNELSRC=<kernel-src-directory> ISCSI=1 RAW=1
 
-The following example is to export /dev/sdb via the iscsi driver.
+The following example is to export /dev/sdb via the iscsi driver:
 
 host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode target --tid 1 --backing-store-type raw -T iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
 host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 0 -b /dev/sdb
 host:~/tgt# ./usr/tgtadm --lld iscsi --op update --mode target --tid 1 --name state --value running
+
+If you want to export a cdrom drive, use /dev/sr0 instead of /dev/sdb
+in the above example.
