@@ -662,8 +662,8 @@ int acl_add(int tid, char *address)
 
 void acl_del(int tid, char *address)
 {
-	struct acl_entry *acl, *tmp;
 	struct target *target;
+	struct acl_entry *acl, *tmp;
 
 	target = target_lookup(tid);
 	if (!target)
@@ -959,6 +959,7 @@ int tgt_target_create(int lld, int tid, char *args)
 int tgt_target_destroy(int tid)
 {
 	struct target *target;
+	struct acl_entry *acl, *tmp;
 
 	target = target_lookup(tid);
 	if (!target)
@@ -974,6 +975,13 @@ int tgt_target_destroy(int tid)
 
 	target_hlist_remove(target);
 	list_del(&target->t_list);
+
+	list_for_each_entry_safe(acl, tmp, &target->acl_list, aclent_list) {
+		list_del(&acl->aclent_list);
+		free(acl->address);
+		free(acl);
+	}
+
 	free(target);
 
 	return 0;
