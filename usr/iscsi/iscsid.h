@@ -267,6 +267,7 @@ extern void session_put(struct iscsi_session *session);
 struct iscsi_target * target_find_by_name(const char *name);
 struct iscsi_target * target_find_by_id(int tid);
 extern void target_list_build(struct iscsi_connection *, char *, char *);
+extern int ip_acl(int tid, int fd);
 
 /* param.c */
 int param_index_by_name(char *name, struct iscsi_key *keys);

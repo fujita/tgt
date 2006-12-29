@@ -360,9 +360,6 @@ static void login_start(struct iscsi_connection *conn)
 			return;
 		}
 
-/* 		if (target_find_by_name(target_name, &conn->tid) < 0 || */
-/* 		    cops->initiator_access(conn->tid, conn->fd) < 0) { */
-
 		target = target_find_by_name(target_name);
 		if (!target) {
 			rsp->status_class = ISCSI_STATUS_CLS_INITIATOR_ERR;
@@ -375,6 +372,13 @@ static void login_start(struct iscsi_connection *conn)
 		if (tgt_get_target_state(target->tid) != SCSI_TARGET_RUNNING) {
 			rsp->status_class = ISCSI_STATUS_CLS_TARGET_ERR;
 			rsp->status_detail = ISCSI_LOGIN_STATUS_TARGET_ERROR;
+			conn->state = STATE_EXIT;
+			return;
+		}
+
+		if (ip_acl(conn->tid, conn->fd)) {
+			rsp->status_class = ISCSI_STATUS_CLS_INITIATOR_ERR;
+			rsp->status_detail = ISCSI_LOGIN_STATUS_TGT_NOT_FOUND;
 			conn->state = STATE_EXIT;
 			return;
 		}

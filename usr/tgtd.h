@@ -108,5 +108,6 @@ extern int tgt_set_target_state(int tid, char *str);
 
 extern int acl_add(int tid, char *address);
 extern void acl_del(int tid, char *address);
+extern char *acl_get(int tid, int idx);
 
 #endif

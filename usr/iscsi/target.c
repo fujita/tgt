@@ -11,15 +11,172 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <netdb.h>
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <linux/netlink.h>
+#include <netinet/in.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <netinet/ip.h>
+#include <arpa/inet.h>
 #include "iscsid.h"
 #include "tgtadm.h"
 #include "tgtd.h"
 
 static LIST_HEAD(targets_list);
+
+static int netmask_match_v6(struct sockaddr *sa1, struct sockaddr *sa2, uint32_t mbit)
+{
+	uint16_t mask, a1[8], a2[8];
+	int i;
+
+	for (i = 0; i < 8; i++) {
+		a1[i] = ntohs(((struct sockaddr_in6 *) sa1)->sin6_addr.s6_addr16[i]);
+		a2[i] = ntohs(((struct sockaddr_in6 *) sa2)->sin6_addr.s6_addr16[i]);
+	}
+
+	for (i = 0; i < mbit / 16; i++)
+		if (a1[i] ^ a2[i])
+			return 0;
+
+	if (mbit % 16) {
+		mask = ~((1 << (16 - (mbit % 16))) - 1);
+		if ((mask & a1[mbit / 16]) ^ (mask & a2[mbit / 16]))
+			return 0;
+	}
+
+	return 1;
+}
+
+static int netmask_match_v4(struct sockaddr *sa1, struct sockaddr *sa2, uint32_t mbit)
+{
+	uint32_t s1, s2, mask = ~((1 << (32 - mbit)) - 1);
+
+	s1 = htonl(((struct sockaddr_in *) sa1)->sin_addr.s_addr);
+	s2 = htonl(((struct sockaddr_in *) sa2)->sin_addr.s_addr);
+
+	if (~mask & s1)
+		return 0;
+
+	if (!((mask & s2) ^ (mask & s1)))
+		return 1;
+
+	return 0;
+}
+
+static int netmask_match(struct sockaddr *sa1, struct sockaddr *sa2, char *buf)
+{
+	uint32_t mbit;
+	uint8_t family = sa1->sa_family;
+
+	mbit = strtoul(buf, NULL, 0);
+	if (mbit < 0 ||
+	    (family == AF_INET && mbit > 31) ||
+	    (family == AF_INET6 && mbit > 127))
+		return 0;
+
+	if (family == AF_INET)
+		return netmask_match_v4(sa1, sa2, mbit);
+
+	return netmask_match_v6(sa1, sa2, mbit);
+}
+
+static int address_match(struct sockaddr *sa1, struct sockaddr *sa2)
+{
+	if (sa1->sa_family == AF_INET)
+		return ((struct sockaddr_in *) sa1)->sin_addr.s_addr ==
+			((struct sockaddr_in *) sa2)->sin_addr.s_addr;
+	else {
+		struct in6_addr *a1, *a2;
+
+		a1 = &((struct sockaddr_in6 *) sa1)->sin6_addr;
+		a2 = &((struct sockaddr_in6 *) sa2)->sin6_addr;
+
+		return (a1->s6_addr32[0] == a2->s6_addr32[0] &&
+			a1->s6_addr32[1] == a2->s6_addr32[1] &&
+			a1->s6_addr32[2] == a2->s6_addr32[2] &&
+			a1->s6_addr32[3] == a2->s6_addr32[3]);
+	}
+
+	return 0;
+}
+
+static int ip_match(int fd, char *address)
+{
+	struct sockaddr_storage from;
+	struct addrinfo hints, *res;
+	socklen_t len;
+	char *str, *p, *q;
+	int err;
+
+	len = sizeof(from);
+	err = getpeername(fd, (struct sockaddr *) &from, &len);
+	if (err < 0)
+		return -EPERM;
+
+	str = p = strdup(address);
+	if (!p)
+		return -EPERM;
+
+	if (!strcmp(p, "ALL")) {
+		err = 0;
+		goto out;
+	}
+
+	if (*p == '[') {
+		p++;
+		if (!(q = strchr(p, ']'))) {
+			err = -EPERM;
+			goto out;
+		}
+		*(q++) = '\0';
+	} else
+		q = p;
+
+	if ((q = strchr(q, '/')))
+		*(q++) = '\0';
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_NUMERICHOST;
+
+	err = getaddrinfo(p, NULL, &hints, &res);
+	if (err < 0) {
+		err = -EPERM;
+		goto out;
+	}
+
+	if (q)
+		err = netmask_match(res->ai_addr, (struct sockaddr *) &from, q);
+	else
+		err = address_match(res->ai_addr, (struct sockaddr *) &from);
+
+	err = !err;
+
+	freeaddrinfo(res);
+out:
+	free(str);
+	return err;
+}
+
+int ip_acl(int tid, int fd)
+{
+	int idx, err;
+	char *addr;
+
+	for (idx = 0;; idx++) {
+		addr = acl_get(tid, idx);
+		if (!addr)
+			break;
+
+		err = ip_match(fd, addr);
+		if (!err)
+			return 0;
+	}
+	return -EPERM;
+}
 
 void target_list_build(struct iscsi_connection *conn, char *addr, char *name)
 {
@@ -28,8 +185,9 @@ void target_list_build(struct iscsi_connection *conn, char *addr, char *name)
 	list_for_each_entry(target, &targets_list, tlist) {
 		if (name && strcmp(tgt_targetname(target->tid), name))
 			continue;
-/* 		if (cops->initiator_access(target->tid, conn->fd) < 0) */
-/* 			continue; */
+
+		if (ip_acl(target->tid, conn->fd))
+			continue;
 
 		text_key_add(conn, "TargetName", tgt_targetname(target->tid));
 		text_key_add(conn, "TargetAddress", addr);

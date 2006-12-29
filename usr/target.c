@@ -679,6 +679,24 @@ void acl_del(int tid, char *address)
 	}
 }
 
+char *acl_get(int tid, int idx)
+{
+	int i = 0;
+	struct target *target;
+	struct acl_entry *acl;
+
+	target = target_lookup(tid);
+	if (!target)
+		return NULL;
+
+	list_for_each_entry(acl, &target->acl_list, aclent_list) {
+		if (idx == i++)
+			return acl->address;
+	}
+
+	return NULL;
+}
+
 int tgt_target_bind(int tid, int host_no, int lid)
 {
 	struct target *target;
