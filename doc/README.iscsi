@@ -34,19 +34,79 @@ host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target
 Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
     System information:
         Driver: iscsi
-        Status: suspended
+        Status: running
+    ACL information:
     LUN information:
         LUN: 0
             SCSI ID: deadbeaf1:0
-            SCSI SN: 
-            Size: 1G
+            SCSI SN:
+            Size: 55G
             Backing store: /dev/hdc1
             Backing store type: file
 
 
-If you don't need no more configuration (iSCSI parameters, security,
-etc), you are ready to accept initiators. In this case, you can go to
-`accepting initiators` session.
+If you don't need to configure this target any more, enable the target
+to accept any initiators:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --op bind --mode target --tid 1 -I ALL
+host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target
+Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
+    System information:
+        Driver: iscsi
+        Status: running
+    ACL information:
+        ALL
+    LUN information:
+        LUN: 0
+            SCSI ID: deadbeaf1:0
+            SCSI SN:
+            Size: 55G
+            Backing store: /dev/hdc1
+            Backing store type: file
+
+
+Note "ACL information" section. "ALL" means that this target accepts
+any initiators. The ACL feature also provides the access control based
+on initiators' addresses.
+
+First, let's remove "ALL" options:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --op unbind --mode target --tid 1 -I ALL
+host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target
+Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
+    System information:
+        Driver: iscsi
+        Status: running
+    ACL information:
+    LUN information:
+        LUN: 0
+            SCSI ID: deadbeaf1:0
+            SCSI SN:
+            Size: 55G
+            Backing store: /dev/hdc1
+            Backing store type: file
+
+
+Here are some examples:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --op bind --mode target --tid 1 -I 192.168.2.29
+host:~/tgt# ./usr/tgtadm --lld iscsi --op bind --mode target --tid 1 -I 192.168.11.0/24
+host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target
+Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
+    System information:
+        Driver: iscsi
+        Status: running
+    ACL information:
+        192.168.2.29
+        192.168.11.0/24
+    LUN information:
+        LUN: 0
+            SCSI ID: deadbeaf1:0
+            SCSI SN:
+            Size: 55G
+            Backing store: /dev/hdc1
+            Backing store type: file
+
 
 You can add lots of logical units:
 
@@ -123,33 +183,6 @@ OFMarkInt=Reject
 IFMarkInt=Reject
 MaxConnections=1
 
-
-Accepting initiators
--------------
-Now this target is ready to accept initiators. If you've done the configuration:
-
-host:~/tgt# ./usr/tgtadm --lld iscsi --op update --mode target --tid 1 --name state --value running
-host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target
-Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
-    System information:
-        Driver: iscsi
-        Status: running
-    LUN information:
-        LUN: 0
-            SCSI ID: deadbeaf1:0
-            SCSI SN: 
-            Size: 42M
-            Backing store: /dev/hdc1
-            Backing store type: file
-        LUN: 1
-            SCSI ID: deadbeaf1:1
-            SCSI SN: 
-            Size: 40M
-            Backing store: /dev/hdd1
-            Backing store type: file
-
-
-Now your target is ready to accept initiators.
 
 Shutdown
 -------------
