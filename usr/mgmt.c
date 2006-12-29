@@ -87,7 +87,29 @@ static int target_mgmt(int lld_no, struct mgmt_task *mtask)
 			tgt_drivers[lld_no]->target_destroy(req->tid);
 		break;
 	case OP_BIND:
-		err = tgt_target_bind(req->tid, req->host_no, lld_no);
+		/* FIXME */
+		if (req->len == sizeof(*req))
+			err = tgt_target_bind(req->tid, req->host_no, lld_no);
+		else {
+			char *p;
+
+			p = strchr(mtask->buf, '=');
+			if (p)
+				err = acl_add(req->tid, p + 1);
+		}
+		break;
+	case OP_UNBIND:
+		if (req->len == sizeof(*req))
+			;
+		else {
+			char *p;
+
+			p = strchr(mtask->buf, '=');
+			if (p) {
+				err = 0;
+				acl_del(req->tid, p + 1);
+			}
+		}
 		break;
 	case OP_UPDATE:
 	{

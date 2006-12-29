@@ -14,6 +14,11 @@
 #define	HASH_ORDER	4
 #define	hashfn(val)	hash_long((unsigned long) (val), HASH_ORDER)
 
+struct acl_entry {
+	char *address;
+	struct list_head aclent_list;
+};
+
 struct mgmt_req {
 	uint64_t mid;
 	int busy;
@@ -40,6 +45,8 @@ struct target {
 	struct tgt_cmd_queue cmd_queue;
 
 	struct backedio_template *bdt;
+
+	struct list_head acl_list;
 };
 
 struct cmd {

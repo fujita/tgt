@@ -106,4 +106,7 @@ extern int sense_data_build(uint8_t *data, uint8_t res_code, uint8_t key,
 extern enum scsi_target_state tgt_get_target_state(int tid);
 extern int tgt_set_target_state(int tid, char *str);
 
+extern int acl_add(int tid, char *address);
+extern void acl_del(int tid, char *address);
+
 #endif

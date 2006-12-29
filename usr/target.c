@@ -630,6 +630,55 @@ void target_mgmt_request(int host_no, uint64_t req_id, int function,
 	}
 }
 
+int acl_add(int tid, char *address)
+{
+	char *str;
+	struct target *target;
+	struct acl_entry *acl, *tmp;
+
+	target = target_lookup(tid);
+	if (!target)
+		return TGTADM_NO_TARGET;
+
+	list_for_each_entry_safe(acl, tmp, &target->acl_list, aclent_list)
+		if (!strcmp(address, acl->address))
+			return TGTADM_ACL_EXIST;
+
+	acl = zalloc(sizeof(*acl));
+	if (!acl)
+		return TGTADM_NOMEM;
+
+	str = strdup(address);
+	if (!str) {
+		free(acl);
+		return TGTADM_NOMEM;
+	}
+
+	acl->address = str;
+	list_add_tail(&acl->aclent_list, &target->acl_list);
+
+	return 0;
+}
+
+void acl_del(int tid, char *address)
+{
+	struct acl_entry *acl, *tmp;
+	struct target *target;
+
+	target = target_lookup(tid);
+	if (!target)
+		return;
+
+	list_for_each_entry_safe(acl, tmp, &target->acl_list, aclent_list) {
+		if (!strcmp(address, acl->address)) {
+			list_del(&acl->aclent_list);
+			free(acl->address);
+			free(acl);
+			break;
+		}
+	}
+}
+
 int tgt_target_bind(int tid, int host_no, int lid)
 {
 	struct target *target;
@@ -743,67 +792,59 @@ static char *print_disksize(uint64_t size)
 #define TAB2 TAB1 TAB1
 #define TAB3 TAB1 TAB1 TAB1
 
+#define shprintf(total, buf, rest, fmt, args...)			\
+do {									\
+	int len;							\
+	len = snprintf(buf, rest, fmt, ##args);				\
+	if (len > rest)							\
+		goto overflow;						\
+	buf += len;							\
+	total += len;							\
+	rest -= len;							\
+} while (0)
+
 int tgt_target_show_all(char *buf, int rest)
 {
-	int len, total, max = rest;
+	int total, max = rest;
 	struct target *target;
 	struct tgt_device *device;
+	struct acl_entry *acl;
 
 	total = 0;
 	list_for_each_entry(target, &target_list, t_list) {
-		len = snprintf(buf, rest, "Target %d: %s\n"
-			       TAB1 "System information:\n"
-			       TAB2 "Driver: %s\n"
-			       TAB2 "Status: %s\n",
-			       target->tid,
-			       target->name,
-			       tgt_drivers[target->lid]->name,
-			       target_state_name(target->target_state));
-		if (len > rest) {
-			total = max;
-			goto out;
-		}
+		shprintf(total, buf, rest,
+			 "Target %d: %s\n"
+			 TAB1 "System information:\n"
+			 TAB2 "Driver: %s\n"
+			 TAB2 "Status: %s\n",
+			 target->tid,
+			 target->name,
+			 tgt_drivers[target->lid]->name,
+			 target_state_name(target->target_state));
 
-		buf += len;
-		total += len;
-		rest -= len;
+		shprintf(total, buf, rest, TAB1 "ACL information:\n");
+		list_for_each_entry(acl, &target->acl_list, aclent_list)
+			shprintf(total, buf, rest, TAB2 "%s\n", acl->address);
 
-		len = snprintf(buf, rest, TAB1 "LUN information:\n");
-		if (len > rest) {
-			total = max;
-			goto out;
-		}
-
-		buf += len;
-		total += len;
-		rest -= len;
-
-		list_for_each_entry(device, &target->device_list, d_list) {
-			len = snprintf(buf, rest,
-				       TAB2 "LUN: %" PRIu64 "\n"
-				       TAB3 "SCSI ID: %s\n"
-				       TAB3 "SCSI SN: %s\n"
-				       TAB3 "Size: %s\n"
-				       TAB3 "Backing store: %s\n"
-				       TAB3 "Backing store type: %s\n",
-				       device->lun,
-				       device->scsi_id,
-				       device->scsi_sn,
-				       print_disksize(device->size),
-				       device->path,
-				       target_iotype_name(target->target_iotype));
-			if (len > rest) {
-				total = max;
-				goto out;
-			}
-
-			buf += len;
-			total += len;
-			rest -= len;
-		}
+		shprintf(total, buf, rest, TAB1 "LUN information:\n");
+		list_for_each_entry(device, &target->device_list, d_list)
+			shprintf(total, buf, rest,
+				 TAB2 "LUN: %" PRIu64 "\n"
+				 TAB3 "SCSI ID: %s\n"
+				 TAB3 "SCSI SN: %s\n"
+				 TAB3 "Size: %s\n"
+				 TAB3 "Backing store: %s\n"
+				 TAB3 "Backing store type: %s\n",
+				 device->lun,
+				 device->scsi_id,
+				 device->scsi_sn,
+				 print_disksize(device->size),
+				 device->path,
+				 target_iotype_name(target->target_iotype));
 	}
-out:
 	return total;
+overflow:
+	return max;
 }
 
 char *tgt_targetname(int tid)
@@ -889,6 +930,8 @@ int tgt_target_create(int lld, int tid, char *args)
 			break;
 	}
 	list_add_tail(&target->t_list, &pos->t_list);
+
+	INIT_LIST_HEAD(&target->acl_list);
 
 	eprintf("Succeed to create a new target %d\n", tid);
 

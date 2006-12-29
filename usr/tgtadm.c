@@ -65,14 +65,15 @@ static char *tgtadm_emsg[] = {
 	"unknown error",
 	"out of memory",
 	"can't find the driver",
-	"can't find the target",
+	"can't find the target", /* 5 */
 
 	"can't find the logical unit",
 	"can't find the session",
 	"can't find the connection",
-	"the target already exists",
-	"the logical unit already exists",
+	"this target already exists",
+	"this logical unit already exists",  /* 10 */
 
+	"this access control rule already exists",
 	"unknown parameter",
 };
 
@@ -91,6 +92,7 @@ static struct option const long_options[] =
 	{"name", required_argument, NULL, 'n'},
 	{"value", required_argument, NULL, 'v'},
 	{"targetname", required_argument, NULL, 'T'},
+	{"initiator-address", required_argument, NULL, 'I'},
 	{"target-type", required_argument, NULL, 'p'},
 	{"backing-store", required_argument, NULL, 'b'},
 	{"backing-store-type", required_argument, NULL, 'S'},
@@ -99,7 +101,7 @@ static struct option const long_options[] =
 	{NULL, 0, NULL, 0},
 };
 
-static char *short_options = "l:o:m:t:s:c:u:i:a:B:T:p:b:S:n:v:dh";
+static char *short_options = "l:o:m:t:s:c:u:i:a:B:T:I:p:b:S:n:v:dh";
 
 static void usage(int status)
 {
@@ -326,6 +328,8 @@ static int str_to_op(char *str)
 		op = OP_DELETE;
 	else if (!strcmp("bind", str))
 		op = OP_BIND;
+	else if (!strcmp("unbind", str))
+		op = OP_UNBIND;
 	else if (!strcmp("show", str))
 		op = OP_SHOW;
 	else if (!strcmp("update", str))
@@ -347,11 +351,11 @@ int main(int argc, char **argv)
 	char *lldname;
 	struct tgtadm_req *req;
 	char buf[BUFSIZE + sizeof(*req)];
-	char *name, *value, *path, *targetname, *params;
+	char *name, *value, *path, *targetname, *params, *address;
 	int mode = MODE_SYSTEM;
 
 	cid = hostno = aid = sid = lun = 0;
-	lldname = name = value = path = targetname = NULL;
+	lldname = name = value = path = targetname = address = NULL;
 
 	optind = 1;
 	while ((ch = getopt_long(argc, argv, short_options,
@@ -389,6 +393,9 @@ int main(int argc, char **argv)
 			break;
 		case 'T':
 			targetname = optarg;
+			break;
+		case 'I':
+			address = optarg;
 			break;
 		case 'p':
 			t_type = target_type(optarg);
@@ -449,7 +456,7 @@ int main(int argc, char **argv)
 	params = buf + sizeof(*req);
 
 	/* FIXME */
-	if ((name && value) || path || targetname) {
+	if ((name && value) || path || targetname || address) {
 		if (path) {
 			name = "path";
 			value = path;
@@ -458,6 +465,11 @@ int main(int argc, char **argv)
 		if (targetname) {
 			name = "targetname";
 			value = targetname;
+		}
+
+		if (address) {
+			name = "initiator-address";
+			value = address;
 		}
 
 		len = snprintf(params, rest, "%s=%s", name, value);
