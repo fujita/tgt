@@ -96,12 +96,14 @@ static struct option const long_options[] =
 	{"target-type", required_argument, NULL, 'p'},
 	{"backing-store", required_argument, NULL, 'b'},
 	{"backing-store-type", required_argument, NULL, 'S'},
+	{"user", required_argument, NULL, 'y'},
+	{"password", required_argument, NULL, 'Y'},
 	{"debug", no_argument, NULL, 'd'},
 	{"help", no_argument, NULL, 'h'},
 	{NULL, 0, NULL, 0},
 };
 
-static char *short_options = "l:o:m:t:s:c:u:i:a:B:T:I:p:b:S:n:v:dh";
+static char *short_options = "l:o:m:t:s:c:u:i:a:B:T:I:p:b:S:n:v:y:Y:dh";
 
 static void usage(int status)
 {
@@ -352,10 +354,12 @@ int main(int argc, char **argv)
 	struct tgtadm_req *req;
 	char buf[BUFSIZE + sizeof(*req)];
 	char *name, *value, *path, *targetname, *params, *address;
+	char *user, *password;
 	int mode = MODE_SYSTEM;
 
 	cid = hostno = aid = sid = lun = 0;
 	lldname = name = value = path = targetname = address = NULL;
+	user = password = NULL;
 
 	optind = 1;
 	while ((ch = getopt_long(argc, argv, short_options,
@@ -411,6 +415,12 @@ int main(int argc, char **argv)
 			break;
 		case 'v':
 			value = optarg;
+			break;
+		case 'y':
+			user = optarg;
+			break;
+		case 'Y':
+			password = optarg;
 			break;
 		case 'd':
 			debug = 1;
@@ -482,6 +492,10 @@ int main(int argc, char **argv)
 	if (bs_type != LU_BS_FILE)
 		len += snprintf(params + len, rest - len,
 				"%sbacking-store-type=%d", len ? "," : "", bs_type);
+
+	if (password && user)
+		len += snprintf(params + len, rest - len, "user=%s,password=%s",
+				user, password);
 
 	req->len = sizeof(*req) + len;
 
