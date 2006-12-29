@@ -937,7 +937,7 @@ int tgt_target_create(int lld, int tid, char *args)
 		target->bdt = tgt_drivers[lld]->default_bdt;
 	}
 
-	target->target_state = SCSI_TARGET_SUSPENDED;
+	target->target_state = SCSI_TARGET_RUNNING;
 	target->lid = lld;
 
 	tgt_cmd_queue_init(&target->cmd_queue);
