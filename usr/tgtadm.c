@@ -38,9 +38,7 @@
 
 #include "util.h"
 #include "list.h"
-#include "tgtd.h"
 #include "tgtadm.h"
-#include "driver.h"
 
 #undef eprintf
 #define eprintf(fmt, args...)						\
