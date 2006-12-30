@@ -477,27 +477,50 @@ int main(int argc, char **argv)
 	}
 
 	if ((!name && value) || (name && !value)) {
-		eprintf("both 'name' and 'value' options must be set\n");
+		eprintf("'name' and 'value' options are necessary\n");
 		exit(EINVAL);
 	}
 
-	if ((mode == MODE_TARGET && op == OP_NEW) && !targetname) {
-		eprintf("creating a new target needs the name\n");
-		exit(EINVAL);
+	if (mode == MODE_TARGET) {
+		switch (op) {
+		case OP_NEW:
+		case OP_DELETE:
+		case OP_BIND:
+		case OP_UNBIND:
+		case OP_UPDATE:
+			if (op == OP_NEW && !targetname) {
+				eprintf("creating a new target needs the name\n");
+				exit(EINVAL);
+			}
+
+			if (tid < 0) {
+				eprintf("'tid' option is necessary\n");
+				exit(EINVAL);
+			}
+			break;
+		default:
+			break;
+		}
 	}
 
-	if ((mode == MODE_DEVICE && op == OP_NEW) && !path) {
-		eprintf("creating a new logical unit needs"
-			" the backing store path\n");
-		exit(EINVAL);
+	if (mode == MODE_DEVICE) {
+		switch (op) {
+		case OP_NEW:
+			if (!path) {
+				eprintf("the backing store path is necessary\n");
+				exit(EINVAL);
+			}
+			break;
+		default:
+			break;
+		}
 	}
 
 	if (mode == MODE_ACCOUNT) {
 		switch (op) {
 		case OP_NEW:
 			if (!user || !password) {
-				eprintf("creating a new account needs"
-					" user and password options\n");
+				eprintf("'user' and 'password' options is necessary\n");
 				exit(EINVAL);
 			}
 			break;
@@ -507,8 +530,12 @@ int main(int argc, char **argv)
 		case OP_BIND:
 		case OP_UNBIND:
 			if (!user) {
-				eprintf("delete/bind/unbind the account"
-					" needs user option\n");
+				eprintf("'user' option is necessary\n");
+				exit(EINVAL);
+			}
+
+			if ((op == OP_BIND || op == OP_UNBIND) && tid < 0) {
+				eprintf("'tid' option is necessary\n");
 				exit(EINVAL);
 			}
 			break;
