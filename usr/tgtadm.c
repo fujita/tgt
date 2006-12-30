@@ -80,7 +80,7 @@ static char *tgtadm_emsg[] = {
 	"invalid request", /* 15 */
 
 	"this target already has an outgoing account",
-	"unknown parameter", /* 15 */
+	"unknown parameter",
 };
 
 static struct option const long_options[] =
