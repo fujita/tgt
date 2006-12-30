@@ -630,6 +630,202 @@ void target_mgmt_request(int host_no, uint64_t req_id, int function,
 	}
 }
 
+struct account_entry {
+	int aid;
+	char *user;
+	char *password;
+	struct list_head ac_list;
+};
+
+static LIST_HEAD(accounts_list);
+
+static struct account_entry *__account_lookup_id(int aid)
+{
+	struct account_entry *ac;
+
+	list_for_each_entry(ac, &accounts_list, ac_list)
+		if (ac->aid == aid)
+			return ac;
+	return NULL;
+}
+
+static struct account_entry *__account_lookup_user(char *user)
+{
+	struct account_entry *ac;
+
+	list_for_each_entry(ac, &accounts_list, ac_list)
+		if (!strcmp(ac->user, user))
+			return ac;
+	return NULL;
+}
+
+int account_lookup(int tid, int type, char *user, int ulen,
+		   char *password, int plen)
+{
+	int i;
+	struct target *target;
+	struct account_entry *ac;
+
+	target = target_lookup(tid);
+	if (!target)
+		return -ENOENT;
+
+	if (type == ACCOUNT_TYPE_INCOMING) {
+		for (i = 0; target->account.nr_inaccount; i++) {
+			ac = __account_lookup_id(target->account.in_aids[i]);
+			if (ac)
+				goto found;
+		}
+	} else {
+		ac = __account_lookup_id(target->account.out_aid);
+		if (ac)
+			goto found;
+	}
+
+	return -ENOENT;
+found:
+	strncpy(user, ac->user, ulen);
+	strncpy(password, ac->password, plen);
+	return 0;
+}
+
+int account_add(char *user, char *password)
+{
+	int aid;
+	struct account_entry *ac;
+
+	ac = __account_lookup_user(user);
+	if (ac)
+		return TGTADM_USER_EXIST;
+
+	for (aid = 1; __account_lookup_id(aid) && aid < INT_MAX; aid++)
+		;
+	if (aid == INT_MAX)
+		return TGTADM_TOO_MANY_USER;
+
+	ac = zalloc(sizeof(*ac));
+	if (!ac)
+		return TGTADM_NOMEM;
+
+	ac->aid = aid;
+	ac->user = strdup(user);
+	if (!ac->user)
+		goto free_account;
+
+	ac->password = strdup(password);
+	if (!ac->password)
+		goto free_username;
+
+	list_add(&ac->ac_list, &accounts_list);
+	return 0;
+free_username:
+	free(ac->user);
+free_account:
+	free(ac);
+	return TGTADM_NOMEM;
+}
+
+static int __inaccount_bind(struct target *target, int aid)
+{
+	int i;
+
+	/* first, check whether we already have this account. */
+	for (i = 0; i < target->account.max_inaccount; i++)
+		if (target->account.in_aids[i] == aid)
+			return TGTADM_USER_EXIST;
+
+	if (target->account.nr_inaccount < target->account.max_inaccount) {
+		for (i = 0; i < target->account.max_inaccount; i++)
+			if (!target->account.in_aids[i])
+				break;
+		if (i == target->account.max_inaccount) {
+			eprintf("bug %d\n", target->account.max_inaccount);
+			return TGTADM_UNKNOWN_ERR;
+		}
+
+		target->account.in_aids[i] = aid;
+		target->account.nr_inaccount++;
+	} else {
+		int new_max = target->account.max_inaccount << 1;
+		int *buf;
+
+		buf = zalloc(new_max * sizeof(int));
+		if (!buf)
+			return TGTADM_NOMEM;
+
+		memcpy(buf, target->account.in_aids,
+		       target->account.max_inaccount * sizeof(int));
+		free(target->account.in_aids);
+		target->account.in_aids = buf;
+		target->account.in_aids[target->account.max_inaccount] = aid;
+		target->account.max_inaccount = new_max;
+	}
+
+	return 0;
+}
+
+int account_ctl(int tid, int type, char *user, int bind)
+{
+	struct target *target;
+	struct account_entry *ac;
+	int i, err = 0;
+
+	target = target_lookup(tid);
+	if (!target)
+		return TGTADM_NO_TARGET;
+
+	ac = __account_lookup_user(user);
+	if (!ac)
+		return TGTADM_NO_USER;
+
+	if (bind) {
+		if (type == ACCOUNT_TYPE_INCOMING)
+			err = __inaccount_bind(target, ac->aid);
+		else {
+			if (target->account.out_aid)
+				err = TGTADM_OUTACCOUNT_EXIST;
+			else
+				target->account.out_aid = ac->aid;
+		}
+	} else
+		if (type == ACCOUNT_TYPE_INCOMING) {
+			for (i = 0; i < target->account.max_inaccount; i++)
+				if (target->account.in_aids[i] == ac->aid) {
+					target->account.in_aids[i] = 0;
+					target->account.nr_inaccount--;
+				}
+
+			if (i == target->account.max_inaccount)
+				err = TGTADM_NO_USER;
+		} else
+			if (target->account.out_aid)
+				target->account.out_aid = 0;
+			else
+				err = TGTADM_NO_USER;
+
+	return err;
+}
+
+void account_del(char *user)
+{
+	struct account_entry *ac;
+	struct target *target;
+
+	ac = __account_lookup_user(user);
+	if (!ac)
+		return;
+
+	list_for_each_entry(target, &target_list, t_list) {
+		account_ctl(target->tid, ACCOUNT_TYPE_INCOMING, ac->user, 0);
+		account_ctl(target->tid, ACCOUNT_TYPE_OUTGOING, ac->user, 0);
+	}
+
+	list_del(&ac->ac_list);
+	free(ac->user);
+	free(ac->password);
+	free(ac);
+}
+
 int acl_add(int tid, char *address)
 {
 	char *str;
@@ -823,12 +1019,11 @@ do {									\
 
 int tgt_target_show_all(char *buf, int rest)
 {
-	int total, max = rest;
+	int total = 0, max = rest;
 	struct target *target;
 	struct tgt_device *device;
 	struct acl_entry *acl;
 
-	total = 0;
 	list_for_each_entry(target, &target_list, t_list) {
 		shprintf(total, buf, rest,
 			 "Target %d: %s\n"
@@ -839,6 +1034,24 @@ int tgt_target_show_all(char *buf, int rest)
 			 target->name,
 			 tgt_drivers[target->lid]->name,
 			 target_state_name(target->target_state));
+
+		if (tgt_drivers[target->lid]->account) {
+			int i, aid;
+
+			shprintf(total, buf, rest, TAB1
+				 "Account information:\n");
+			for (i = 0; i < target->account.nr_inaccount; i++) {
+				aid = target->account.in_aids[i];
+				shprintf(total, buf, rest, TAB2 "%s\n",
+					 __account_lookup_id(aid)->user);
+			}
+			if (target->account.out_aid) {
+				aid = target->account.out_aid;
+				shprintf(total, buf, rest,
+					 TAB2 "%s (outgoing)\n",
+					 __account_lookup_id(aid)->user);
+			}
+		}
 
 		shprintf(total, buf, rest, TAB1 "ACL information:\n");
 		list_for_each_entry(acl, &target->acl_list, aclent_list)
@@ -875,6 +1088,8 @@ char *tgt_targetname(int tid)
 
 	return target->name;
 }
+
+#define DEFAULT_NR_ACCOUNT 16
 
 int tgt_target_create(int lld, int tid, char *args)
 {
@@ -919,6 +1134,14 @@ int tgt_target_create(int lld, int tid, char *args)
 		free(target);
 		return -ENOMEM;
 	}
+
+	target->account.in_aids = zalloc(DEFAULT_NR_ACCOUNT * sizeof(int));
+	if (!target->account.in_aids) {
+		free(target->name);
+		free(target);
+		return -ENOMEM;
+	}
+	target->account.max_inaccount = DEFAULT_NR_ACCOUNT;
 
 	target->tid = tid;
 	for (i = 0; i < ARRAY_SIZE(target->cmd_hash_list); i++)
@@ -982,9 +1205,27 @@ int tgt_target_destroy(int tid)
 		free(acl);
 	}
 
+	free(target->account.in_aids);
+
 	free(target);
 
 	return 0;
+}
+
+int account_show(char *buf, int rest)
+{
+	int total = 0, max = rest;
+	struct account_entry *ac;
+
+	if (!list_empty(&accounts_list))
+		shprintf(total, buf, rest, "Account list:\n");
+
+	list_for_each_entry(ac, &accounts_list, ac_list)
+		shprintf(total, buf, rest, TAB1 "%s\n", ac->user);
+
+	return total;
+overflow:
+	return max;
 }
 
 __attribute__((constructor)) static void target_init(void)

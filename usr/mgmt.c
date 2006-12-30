@@ -187,6 +187,68 @@ static int device_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 	return err;
 }
 
+static int account_mgmt(int lld_no,  struct mgmt_task *mtask)
+{
+	struct tgtadm_req *req = &mtask->req;
+	struct tgtadm_rsp *rsp = &mtask->rsp;
+	int err = TGTADM_INVALID_REQUEST;
+	char *user, *password;
+
+	switch (req->op) {
+	case OP_NEW:
+	case OP_DELETE:
+	case OP_BIND:
+	case OP_UNBIND:
+		user = strstr(mtask->buf, "user=");
+		if (!user)
+			goto out;
+		user += 5;
+
+		if (req->op == OP_NEW) {
+			password = strchr(user, ',');
+			if (!password)
+				goto out;
+
+			*password = '\0';
+			password += strlen("password=");
+
+			err = account_add(user, password);
+		} else {
+			if (req->op == OP_DELETE) {
+				account_del(user);
+				err = 0;
+			} else
+				err = account_ctl(req->tid, req->aid,
+						  user, req->op == OP_BIND);
+		}
+		break;
+	case OP_SHOW:
+	retry:
+		err = account_show(mtask->buf, mtask->bsize);
+		if (err == mtask->bsize) {
+			char *p;
+			mtask->bsize <<= 1;
+			p = realloc(mtask->buf, mtask->bsize);
+			if (p) {
+				mtask->buf = p;
+				goto retry;
+			} else
+				err = TGTADM_NOMEM;
+		}
+		break;
+	default:
+		break;
+	}
+out:
+	if (req->op == OP_SHOW)
+		set_show_results(rsp, &err);
+	else {
+		rsp->err = err;
+		rsp->len = sizeof(*rsp);
+	}
+	return err;
+}
+
 static int tgt_mgmt(struct mgmt_task *mtask)
 {
 	struct tgtadm_req *req = &mtask->req;
@@ -215,16 +277,7 @@ static int tgt_mgmt(struct mgmt_task *mtask)
 		err = device_mgmt(lld_no, req, mtask->buf, rsp, &len);
 		break;
 	case MODE_ACCOUNT:
-		if (tgt_drivers[lld_no]->account)
-			err = tgt_drivers[lld_no]->account(req->op, req->tid, req->aid,
-							   mtask->buf, mtask->buf, len);
-		if (req->op == OP_SHOW) {
-			set_show_results(rsp, &err);
-			err = 0;
-		} else {
-			rsp->err = err;
-			rsp->len = sizeof(*rsp);
-		}
+		err = account_mgmt(lld_no, mtask);
 		break;
 	default:
 		if (req->op == OP_SHOW && tgt_drivers[lld_no]->show) {

@@ -74,7 +74,13 @@ static char *tgtadm_emsg[] = {
 	"this logical unit already exists",  /* 10 */
 
 	"this access control rule already exists",
-	"unknown parameter",
+	"this account already exists",
+	"can't find the account",
+	"Too many accounts",
+	"invalid request", /* 15 */
+
+	"this target already has an outgoing account",
+	"unknown parameter", /* 15 */
 };
 
 static struct option const long_options[] =
@@ -86,7 +92,6 @@ static struct option const long_options[] =
 	{"sid", required_argument, NULL, 's'},
 	{"cid", required_argument, NULL, 'c'},
 	{"lun", required_argument, NULL, 'u'},
-	{"aid", required_argument, NULL, 'a'},
 	{"hostno", required_argument, NULL, 'i'},
 	{"bus", required_argument, NULL, 'B'},
 	{"name", required_argument, NULL, 'n'},
@@ -98,12 +103,13 @@ static struct option const long_options[] =
 	{"backing-store-type", required_argument, NULL, 'S'},
 	{"user", required_argument, NULL, 'y'},
 	{"password", required_argument, NULL, 'Y'},
+	{"outgoing", no_argument, NULL, 'O'},
 	{"debug", no_argument, NULL, 'd'},
 	{"help", no_argument, NULL, 'h'},
 	{NULL, 0, NULL, 0},
 };
 
-static char *short_options = "l:o:m:t:s:c:u:i:a:B:T:I:p:b:S:n:v:y:Y:dh";
+static char *short_options = "l:o:m:t:s:c:u:i:B:T:I:p:b:S:n:v:y:Y:dh";
 
 static void usage(int status)
 {
@@ -386,8 +392,8 @@ int main(int argc, char **argv)
 		case 'u':
 			lun = strtoull(optarg, NULL, 10);
 			break;
-		case 'a':
-			aid = strtol(optarg, NULL, 10);
+		case 'O':
+			aid = 1;
 			break;
 		case 'i':
 			hostno = strtol(optarg, NULL, 10);
@@ -493,9 +499,11 @@ int main(int argc, char **argv)
 		len += snprintf(params + len, rest - len,
 				"%sbacking-store-type=%d", len ? "," : "", bs_type);
 
-	if (password && user)
-		len += snprintf(params + len, rest - len, "user=%s,password=%s",
-				user, password);
+	if (user)
+		len += snprintf(params + len, rest - len, "user=%s", user);
+
+	if (password)
+		len += snprintf(params + len, rest - len, ",password=%s", password);
 
 	req->len = sizeof(*req) + len;
 

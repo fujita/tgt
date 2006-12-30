@@ -19,6 +19,18 @@ struct acl_entry {
 	struct list_head aclent_list;
 };
 
+enum {
+	ACCOUNT_TYPE_INCOMING,
+	ACCOUNT_TYPE_OUTGOING,
+};
+
+struct tgt_account {
+	int out_aid;
+	int nr_inaccount;
+	int max_inaccount;
+	int *in_aids;
+};
+
 struct mgmt_req {
 	uint64_t mid;
 	int busy;
@@ -47,6 +59,8 @@ struct target {
 	struct backedio_template *bdt;
 
 	struct list_head acl_list;
+
+	struct tgt_account account;
 };
 
 struct cmd {
