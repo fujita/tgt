@@ -184,6 +184,65 @@ IFMarkInt=Reject
 MaxConnections=1
 
 
+Authentication
+-------------
+Let's create a new account:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode account --user fujita --password tomo
+host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode account
+Account list:
+    fujita
+
+You can assign this account to any targets:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --op bind --mode account --tid 1
+ --user fujita
+host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target
+Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
+    System information:
+        Driver: iscsi
+        Status: running
+    Account information:
+        fujita
+    ACL information:
+        ALL
+    LUN information:
+        LUN: 0
+            SCSI ID: deadbeaf1:0
+            SCSI SN:
+            Size: 1G
+            Backing store: /var/tmp/image
+            Backing store type: file
+
+
+You can set up an outgoing account. First, you need to create a new
+account like the previous example:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode account --user hoge --password deadbeaf
+host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode account
+Account list:
+    hoge
+    fujita
+host:~/tgt# ./usr/tgtadm --lld iscsi --op bind --mode account --tid 1 --user hoge --outgoing
+host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target
+Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
+    System information:
+        Driver: iscsi
+        Status: running
+    Account information:
+        fujita
+        hoge (outgoing)
+    ACL information:
+        ALL
+    LUN information:
+        LUN: 0
+            SCSI ID: deadbeaf1:0
+            SCSI SN:
+            Size: 1G
+            Backing store: /var/tmp/image
+            Backing store type: file
+
+
 Shutdown
 -------------
 host:~/tgt# killall -9 tgtd
