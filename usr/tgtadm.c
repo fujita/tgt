@@ -118,41 +118,43 @@ static void usage(int status)
 		printf("\
 Linux SCSI Target Framework Administration Utility.\n\
 \n\
-  --op create --tid=[id] --params [name]\n\
-                        add a new target with [id]. [id] must not be zero.\n\
-  --op delete --tid=[id]\n\
-                        delete specific target with [id]. The target must\n\
-                        have no active sessions.\n\
-  --op new --tid=[id] --lun=[lun] --params Path=[path]\n\
-                        add a new logical unit with [lun] to specific\n\
+  --lld [driver] --mode target --op new --tid=[id] --targetname [name]\n\
+                        add a new target with [id] and [name]. [id] must not be zero.\n\
+  --lld [driver] --mode target --op delete --tid=[id]\n\
+                        delete the specific target with [id]. The target must\n\
+                        have no activity.\n\
+  --lld [driver] --mode target --op show\n\
+                        show all the targets.\n\
+  --lld [driver] --mode target --op show --tid=[id]\n\
+                        show the specific target's parameters.\n\
+  --lld [driver] --mode target --op update --tid=[id] --name=[param] --value=[value]\n\
+                        change the target parameters of the specific\n\
+                        target with [id].\n\
+  --lld [driver] --mode target --op bind --tid=[id] --initiator-address=[src]\n\
+                        enable the target to accept the specific initiators.\n\
+  --lld [driver] --mode target --op unbind --tid=[id] --initiator-address=[src]\n\
+                        disable the specific permitted initiators.\n\
+  --lld [driver] --mode logicalunit --op new --tid=[id] --lun=[lun] --backing-store=[path]\n\
+                        add a new logical unit with [lun] to the specific\n\
                         target with [id]. The logical unit is offered\n\
                         to the initiators. [path] must be block device files\n\
                         (including LVM and RAID devices) or regular files.\n\
-  --op delete --tid=[id] --lun=[lun]\n\
-                        delete specific logical unit with [lun] that\n\
+  --lld [driver] --mode logicalunit --op delete --tid=[id] --lun=[lun]\n\
+                        delete the specific logical unit with [lun] that\n\
                         the target with [id] has.\n\
-  --op delete --tid=[id] --sid=[sid] --cid=[cid]\n\
-                        delete specific connection with [cid] in a session\n\
-                        with [sid] that the target with [id] has.\n\
-                        If the session has no connections after\n\
-                        the operation, the session will be deleted\n\
-                        automatically.\n\
-  --op delete           stop all activity.\n\
-  --op update --tid=[id] --params=key1=value1,key2=value2,...\n\
-                        change the target parameters of specific\n\
-                        target with [id].\n\
-  --op new --tid=[id] --user --params=[user]=[name],Password=[pass]\n\
-                        add a new account with [pass] for specific target.\n\
+  --lld [driver] --mode account --op new --user=[name] --password=[pass]\n\
+                        add a new account with [name] and [pass].\n\
+  --lld [driver] --mode account --op delete --user=[name]\n\
+                        delete the specific account having [name].\n\
+  --lld [driver] --mode account --op bind --tid=[id] --user=[name] [--outgoing]\n\
+                        add the specific account having [name] to\n\
+                        the specific target with [id].\n\
                         [user] could be [IncomingUser] or [OutgoingUser].\n\
-                        If you don't specify a target (omit --tid option),\n\
-                        you add a new account for discovery sessions.\n\
-  --op delete --tid=[id] --user --params=[user]=[name]\n\
-                        delete specific account having [name] of specific\n\
-                        target. [user] could be [IncomingUser] or\n\
-                        [OutgoingUser].\n\
-                        If you don't specify a target (omit --tid option),\n\
-                        you delete the account for discovery sessions.\n\
-  --version             display version and exit\n\
+                        If you use --outgoing option, the account will\n\
+                        be added as an outgoing account.\n\
+  --lld [driver] --mode account --op unbind --tid=[id] --user=[name]\n\
+                        delete the specific account having [name] from specific\n\
+                        target.\n\
   --help                display this help and exit\n\
 \n\
 Report bugs to <stgt-devel@lists.berlios.de>.\n");
