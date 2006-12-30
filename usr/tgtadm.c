@@ -52,7 +52,8 @@ do {									\
 #define dprintf(fmt, args...)						\
 do {									\
 	if (debug)							\
-		eprintf(fmt, args);					\
+		fprintf(stderr, "%s %d: " fmt,				\
+			__FUNCTION__, __LINE__, ##args);		\
 } while (0)
 
 #define BUFSIZE 4096
