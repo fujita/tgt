@@ -665,8 +665,6 @@ int account_lookup(int tid, int type, char *user, char *password, int plen)
 	struct target *target;
 	struct account_entry *ac;
 
-	eprintf("%d %s\n", tid, user);
-
 	target = target_lookup(tid);
 	if (!target)
 		return -ENOENT;
@@ -675,7 +673,6 @@ int account_lookup(int tid, int type, char *user, char *password, int plen)
 		for (i = 0; target->account.nr_inaccount; i++) {
 			ac = __account_lookup_id(target->account.in_aids[i]);
 			if (ac) {
-				eprintf("%s %s\n", ac->user, user);
 				if (!strcmp(ac->user, user))
 					goto found;
 			}
@@ -688,7 +685,6 @@ int account_lookup(int tid, int type, char *user, char *password, int plen)
 
 	return -ENOENT;
 found:
-	eprintf("%s\n", ac->password);
 	strncpy(password, ac->password, plen);
 	return 0;
 }
@@ -926,7 +922,7 @@ int tgt_target_bind(int tid, int host_no, int lid)
 		return -EINVAL;
 	}
 
-	eprintf("Succeed to bind the target %d to the scsi host %d\n",
+	dprintf("Succeed to bind the target %d to the scsi host %d\n",
 		tid, host_no);
 	hostt[host_no] = target;
 	return 0;

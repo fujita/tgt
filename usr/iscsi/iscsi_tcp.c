@@ -47,7 +47,7 @@ static void accept_connection(int afd, int events, void *data)
 	struct iscsi_connection *conn;
 	int fd, err;
 
-	eprintf("%d\n", afd);
+	dprintf("%d\n", afd);
 
 	namesize = sizeof(from);
 	fd = accept(afd, (struct sockaddr *) &from, &namesize);
