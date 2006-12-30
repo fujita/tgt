@@ -73,7 +73,7 @@ static int target_mgmt(int lld_no, struct mgmt_task *mtask)
 {
 	struct tgtadm_req *req = &mtask->req;
 	struct tgtadm_rsp *rsp = &mtask->rsp;
-	int err = -EINVAL;
+	int err = TGTADM_INVALID_REQUEST;
 
 	switch (req->op) {
 	case OP_NEW:
@@ -166,7 +166,7 @@ static int target_mgmt(int lld_no, struct mgmt_task *mtask)
 static int device_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 		       struct tgtadm_rsp *rsp, int *rlen)
 {
-	int err = -EINVAL;
+	int err = TGTADM_UNSUPPORTED_OPERATION;
 
 	switch (req->op) {
 	case OP_NEW:
@@ -192,7 +192,7 @@ static int account_mgmt(int lld_no,  struct mgmt_task *mtask)
 {
 	struct tgtadm_req *req = &mtask->req;
 	struct tgtadm_rsp *rsp = &mtask->rsp;
-	int err = TGTADM_INVALID_REQUEST;
+	int err = TGTADM_UNSUPPORTED_OPERATION;
 	char *user, *password;
 
 	switch (req->op) {
@@ -254,7 +254,7 @@ static int tgt_mgmt(struct mgmt_task *mtask)
 {
 	struct tgtadm_req *req = &mtask->req;
 	struct tgtadm_rsp *rsp = &mtask->rsp;
-	int lld_no, err = -EINVAL, len = mtask->bsize;
+	int lld_no, err = TGTADM_INVALID_REQUEST, len = mtask->bsize;
 
 	lld_no = get_driver_index(req->lld);
 	if (lld_no < 0) {

@@ -70,7 +70,7 @@ static char *tgtadm_emsg[] = {
 	"can't find the session",
 	"can't find the connection",
 	"this target already exists",
-	"this logical unit already exists",  /* 10 */
+	"this logical unit number already exists",  /* 10 */
 
 	"this access control rule already exists",
 	"this account already exists",
@@ -79,7 +79,10 @@ static char *tgtadm_emsg[] = {
 	"invalid request", /* 15 */
 
 	"this target already has an outgoing account",
-	"unknown parameter",
+	"this target unit is still active",
+	"this logical unit is still active",
+	"this operation isn't supported",
+	"unknown parameter", /* 20 */
 };
 
 struct option const long_options[] = {

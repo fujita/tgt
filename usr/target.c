@@ -141,12 +141,12 @@ static int tgt_device_path_update(struct target *target,
 
 	path = strdup(path);
 	if (!path)
-		return -ENOMEM;
+		return TGTADM_NOMEM;
 
 	err = target->bdt->bd_open(device, path, &dev_fd, &size);
 	if (err) {
 		free(path);
-		return -EINVAL;
+		return TGTADM_INVALID_REQUEST;
 	}
 
 	device->fd = dev_fd;
@@ -186,30 +186,30 @@ int tgt_device_create(int tid, uint64_t lun, char *args)
 
 	target = target_lookup(tid);
 	if (!target)
-		return -ENOENT;
+		return TGTADM_NO_TARGET;
 
 	device = device_lookup(target, lun);
 	if (device) {
 		eprintf("device %" PRIu64 " already exists\n", lun);
-		return -EINVAL;
+		return TGTADM_LUN_EXIST;
 	}
 
 	if (!*args)
-		return -EINVAL;
+		return TGTADM_INVALID_REQUEST;
 
 	p = strchr(args, '=');
 	if (!p)
-		return -EINVAL;
+		return TGTADM_INVALID_REQUEST;
 	p++;
 
 	device = zalloc(sizeof(*device) + target->bdt->bd_datasize);
 	if (!device)
-		return -ENOMEM;
+		return TGTADM_NOMEM;
 
 	err = tgt_device_path_update(target, device, p);
 	if (err) {
 		free(device);
-		return -EINVAL;
+		return err;
 	}
 
 	device->lun = lun;
@@ -235,11 +235,11 @@ int tgt_device_destroy(int tid, uint64_t lun)
 	device = __device_lookup(tid, lun, &target);
 	if (!device) {
 		eprintf("device %" PRIu64 " not found\n", lun);
-		return -EINVAL;
+		return TGTADM_NO_LUN;
 	}
 
 	if (!list_empty(&device->cmd_queue.queue))
-		return -EBUSY;
+		return TGTADM_LUN_ACTIVE;
 
 	free(device->path);
 	device_hlist_remove(device);
@@ -313,12 +313,12 @@ int tgt_device_update(int tid, uint64_t dev_id, char *name)
 
 	target = target_lookup(tid);
 	if (!target)
-		return -ENOENT;
+		return TGTADM_NO_TARGET;
 
 	device = device_lookup(target, dev_id);
 	if (!device) {
 		eprintf("device %" PRIu64 " not found\n", dev_id);
-		return -EINVAL;
+		return TGTADM_NO_LUN;
 	}
 
 	if (!strcmp(name, "scsi_id="))
@@ -326,7 +326,7 @@ int tgt_device_update(int tid, uint64_t dev_id, char *name)
 	else if (!strcmp(name, "scsi_sn="))
 		memcpy(device->scsi_sn, name + 8, sizeof(device->scsi_sn) - 1);
 	else
-		err = -EINVAL;
+		err = TGTADM_INVALID_REQUEST;
 
 	return err;
 }
@@ -979,12 +979,12 @@ int tgt_target_bind(int tid, int host_no, int lid)
 	target = target_lookup(tid);
 	if (!target) {
 		eprintf("target is not found %d\n", tid);
-		return -EINVAL;
+		return TGTADM_NO_TARGET;
 	}
 
 	if (hostt[host_no]) {
 		eprintf("host is already binded %d %d\n", tid, host_no);
-		return -EINVAL;
+		return TGTADM_INVALID_REQUEST;
 	}
 
 	dprintf("Succeed to bind the target %d to the scsi host %d\n",
@@ -1049,12 +1049,12 @@ static char *target_state_name(enum scsi_target_state state)
 
 int tgt_set_target_state(int tid, char *str)
 {
-	int i, err = -EINVAL;
+	int i, err = TGTADM_INVALID_REQUEST;
 	struct target *target;
 
 	target = target_lookup(tid);
 	if (!target)
-		return -ENOENT;
+		return TGTADM_NO_TARGET;
 
 	for (i = 0; i < ARRAY_SIZE(target_state); i++) {
 		if (!strcmp(target_state[i].name, str)) {
@@ -1181,29 +1181,29 @@ int tgt_target_create(int lld, int tid, char *args, int t_type, int bs_type)
 	};
 
 	if (!targetname)
-		return -EINVAL;
+		return TGTADM_INVALID_REQUEST;
 
 	target = target_lookup(tid);
 	if (target) {
 		eprintf("Target id %d already exists\n", tid);
-		return -EINVAL;
+		return TGTADM_TARGET_EXIST;
 	}
 
 	target = zalloc(sizeof(*target));
 	if (!target)
-		return -ENOMEM;
+		return TGTADM_NOMEM;
 
 	target->name = strdup(targetname);
 	if (!target->name) {
 		free(target);
-		return -ENOMEM;
+		return TGTADM_NOMEM;
 	}
 
 	target->account.in_aids = zalloc(DEFAULT_NR_ACCOUNT * sizeof(int));
 	if (!target->account.in_aids) {
 		free(target->name);
 		free(target);
-		return -ENOMEM;
+		return TGTADM_NOMEM;
 	}
 	target->account.max_inaccount = DEFAULT_NR_ACCOUNT;
 
@@ -1250,15 +1250,15 @@ int tgt_target_destroy(int tid)
 
 	target = target_lookup(tid);
 	if (!target)
-		return -ENOENT;
+		return TGTADM_NO_TARGET;
 
 	if (!list_empty(&target->device_list)) {
 		eprintf("target %d still has devices\n", tid);
-		return -EBUSY;
+		return TGTADM_TARGET_ACTIVE;
 	}
 
 	if (!list_empty(&target->cmd_queue.queue))
-		return -EBUSY;
+		return TGTADM_TARGET_ACTIVE;
 
 	target_hlist_remove(target);
 	list_del(&target->t_list);
