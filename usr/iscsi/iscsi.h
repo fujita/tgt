@@ -18,7 +18,6 @@ struct tgt_driver iscsi = {
 	.target_destroy		= iscsi_target_destroy,
 	.target_update		= iscsi_target_update,
 	.show			= iscsi_target_show,
-	.account		= iscsi_mgmt_account,
 	.cmd_end_notify		= iscsi_scsi_cmd_done,
 	.mgmt_end_notify	= iscsi_tm_done,
 	.default_bdt		= &aio_bdt,

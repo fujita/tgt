@@ -659,12 +659,13 @@ static struct account_entry *__account_lookup_user(char *user)
 	return NULL;
 }
 
-int account_lookup(int tid, int type, char *user, int ulen,
-		   char *password, int plen)
+int account_lookup(int tid, int type, char *user, char *password, int plen)
 {
 	int i;
 	struct target *target;
 	struct account_entry *ac;
+
+	eprintf("%d %s\n", tid, user);
 
 	target = target_lookup(tid);
 	if (!target)
@@ -673,8 +674,11 @@ int account_lookup(int tid, int type, char *user, int ulen,
 	if (type == ACCOUNT_TYPE_INCOMING) {
 		for (i = 0; target->account.nr_inaccount; i++) {
 			ac = __account_lookup_id(target->account.in_aids[i]);
-			if (ac)
-				goto found;
+			if (ac) {
+				eprintf("%s %s\n", ac->user, user);
+				if (!strcmp(ac->user, user))
+					goto found;
+			}
 		}
 	} else {
 		ac = __account_lookup_id(target->account.out_aid);
@@ -684,7 +688,7 @@ int account_lookup(int tid, int type, char *user, int ulen,
 
 	return -ENOENT;
 found:
-	strncpy(user, ac->user, ulen);
+	eprintf("%s\n", ac->password);
 	strncpy(password, ac->password, plen);
 	return 0;
 }
@@ -824,6 +828,20 @@ void account_del(char *user)
 	free(ac->user);
 	free(ac->password);
 	free(ac);
+}
+
+int account_available(int tid, int dir)
+{
+	struct target *target;
+
+	target = target_lookup(tid);
+	if (!target)
+		return 0;
+
+	if (dir == ACCOUNT_TYPE_INCOMING)
+		return target->account.nr_inaccount;
+	else
+		return target->account.out_aid;
 }
 
 int acl_add(int tid, char *address)
@@ -1035,7 +1053,7 @@ int tgt_target_show_all(char *buf, int rest)
 			 tgt_drivers[target->lid]->name,
 			 target_state_name(target->target_state));
 
-		if (tgt_drivers[target->lid]->account) {
+		if (1) {
 			int i, aid;
 
 			shprintf(total, buf, rest, TAB1

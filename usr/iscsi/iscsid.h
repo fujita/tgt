@@ -15,7 +15,6 @@
 #include "transport.h"
 #include "list.h"
 #include "param.h"
-#include "account.h"
 #include "log.h"
 
 #include <scsi/iscsi_if.h>
@@ -218,10 +217,6 @@ struct iscsi_target {
 
 	int max_nr_sessions;
 	int nr_sessions;
-
-	/* TODO: support various account managements (like RADIUS) */
-	struct ac_node incoming[16];
-	struct ac_node outgoing;
 };
 
 enum task_flags {

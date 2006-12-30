@@ -209,7 +209,7 @@ static int account_mgmt(int lld_no,  struct mgmt_task *mtask)
 			if (!password)
 				goto out;
 
-			*password = '\0';
+			*password++ = '\0';
 			password += strlen("password=");
 
 			err = account_add(user, password);

@@ -110,11 +110,11 @@ extern int acl_add(int tid, char *address);
 extern void acl_del(int tid, char *address);
 extern char *acl_get(int tid, int idx);
 
-extern int account_lookup(int tid, int type, char *user, int ulen,
-			  char *password, int plen);
+extern int account_lookup(int tid, int type, char *user, char *password, int plen);
 extern int account_add(char *user, char *password);
 extern void account_del(char *user);
 extern int account_ctl(int tid, int type, char *user, int bind);
 extern int account_show(char *buf, int rest);
+extern int account_available(int tid, int dir);
 
 #endif

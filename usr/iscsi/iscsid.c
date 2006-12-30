@@ -21,7 +21,6 @@
 
 #include "iscsid.h"
 #include "tgtd.h"
-#include "account.h"
 #include "util.h"
 
 #define MAX_QUEUE_CMD	32
@@ -140,13 +139,13 @@ static void text_scan_security(struct iscsi_connection *conn)
 					*nextValue++ = 0;
 
 				if (!strcmp(value, "None")) {
-					if (iscsi_account_available(conn->tid, AUTH_DIR_INCOMING))
+					if (account_available(conn->tid, AUTH_DIR_INCOMING))
 						continue;
 					conn->auth_method = AUTH_NONE;
 					text_key_add(conn, key, "None");
 					break;
 				} else if (!strcmp(value, "CHAP")) {
-					if (!iscsi_account_available(conn->tid, AUTH_DIR_INCOMING))
+					if (!account_available(conn->tid, AUTH_DIR_INCOMING))
 						continue;
 					conn->auth_method = AUTH_CHAP;
 					text_key_add(conn, key, "CHAP");
@@ -508,7 +507,7 @@ static void cmnd_exec_login(struct iscsi_connection *conn)
 			conn->state = STATE_LOGIN;
 
 			login_start(conn);
-			if (iscsi_account_available(conn->tid, AUTH_DIR_INCOMING))
+			if (account_available(conn->tid, AUTH_DIR_INCOMING))
 				goto auth_err;
 			if (rsp->status_class)
 				return;

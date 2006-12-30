@@ -21,7 +21,7 @@
 #include <openssl/md5.h>
 
 #include "iscsid.h"
-#include "account.h"
+#include "tgtd.h"
 
 #define HEX_FORMAT    0x01
 #define BASE64_FORMAT 0x02
@@ -381,7 +381,7 @@ static int chap_initiator_auth_check_response(struct iscsi_connection *conn)
 
 	memset(pass, 0, sizeof(pass));
 
-	err = iscsi_account_available(conn->tid, AUTH_DIR_INCOMING);
+	err = account_available(conn->tid, AUTH_DIR_INCOMING);
 	if (!err) {
 		eprintf("No CHAP credentials configured\n");
 		retval = CHAP_TARGET_ERROR;
@@ -394,7 +394,7 @@ static int chap_initiator_auth_check_response(struct iscsi_connection *conn)
 	}
 
 	memset(pass, 0, sizeof(pass));
-	err = iscsi_account_lookup(conn->tid, AUTH_DIR_INCOMING, value, pass);
+	err = account_lookup(conn->tid, AUTH_DIR_INCOMING, value, pass, ISCSI_NAME_LEN);
 	if (err) {
 		eprintf("No valid user/pass combination for initiator %s "
 			    "found\n", conn->initiator);
@@ -491,7 +491,7 @@ static int chap_target_auth_create_response(struct iscsi_connection *conn)
 
 	memset(pass, 0, sizeof(pass));
 	memset(name, 0, sizeof(name));
-	err = iscsi_account_lookup(conn->tid, AUTH_DIR_OUTGOING, name, pass);
+	err = account_lookup(conn->tid, AUTH_DIR_OUTGOING, name, pass, ISCSI_NAME_LEN);
 	if (err) {
 		log_warning("CHAP target auth.: "
 			    "no outgoing credentials configured%s",
