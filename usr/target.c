@@ -157,6 +157,24 @@ static int tgt_device_path_update(struct target *target,
 	return 0;
 }
 
+static struct tgt_device *
+__device_lookup(int tid, uint64_t lun, struct target **t)
+{
+	struct target *target;
+	struct tgt_device *device;
+
+	target = target_lookup(tid);
+	if (!target)
+		return NULL;
+
+	device = device_lookup(target, lun);
+	if (!device)
+		return NULL;
+
+	*t = target;
+	return device;
+}
+
 int tgt_device_create(int tid, uint64_t lun, char *args)
 {
 	struct target *target;
@@ -203,24 +221,20 @@ int tgt_device_create(int tid, uint64_t lun, char *args)
 	device_hlist_insert(target, device);
 	device_list_insert(target, device);
 
-	eprintf("Add a logical unit %" PRIu64 " to the target %d\n", lun, tid);
+	dprintf("Add a logical unit %" PRIu64 " to the target %d\n", lun, tid);
 	return 0;
 }
 
-int tgt_device_destroy(int tid, uint64_t dev_id)
+int tgt_device_destroy(int tid, uint64_t lun)
 {
 	struct target *target;
 	struct tgt_device *device;
 
-	dprintf("%u %" PRIu64 "\n", tid, dev_id);
+	dprintf("%u %" PRIu64 "\n", tid, lun);
 
-	target = target_lookup(tid);
-	if (!target)
-		return -ENOENT;
-
-	device = device_lookup(target, dev_id);
+	device = __device_lookup(tid, lun, &target);
 	if (!device) {
-		eprintf("device %" PRIu64 " not found\n", dev_id);
+		eprintf("device %" PRIu64 " not found\n", lun);
 		return -EINVAL;
 	}
 
@@ -234,6 +248,53 @@ int tgt_device_destroy(int tid, uint64_t dev_id)
 	target->bdt->bd_close(device);
 	free(device);
 	return 0;
+}
+
+int device_reserve(int tid, uint64_t lun, uint64_t reserve_id)
+{
+	struct target *target;
+	struct tgt_device *device;
+
+	device = __device_lookup(tid, lun, &target);
+	if (!device)
+		return -EINVAL;
+
+	if (device->reserve_id && device->reserve_id != reserve_id) {
+		dprintf("already reserved %" PRIu64 " %" PRIu64 "\n",
+			device->reserve_id, reserve_id);
+		return -EBUSY;
+	}
+
+	device->reserve_id = reserve_id;
+	return 0;
+}
+
+int device_release(int tid, uint64_t lun, uint64_t reserve_id, int force)
+{
+	struct target *target;
+	struct tgt_device *device;
+
+	device = __device_lookup(tid, lun, &target);
+	if (!device)
+		return 0;
+
+	if (force || device->reserve_id == reserve_id) {
+		device->reserve_id = 0;
+		return 0;
+	}
+
+	return -EBUSY;
+}
+
+int device_reserved(int tid, uint64_t lun, uint64_t reserve_id)
+{
+	struct target *target;
+	struct tgt_device *device;
+
+	device = __device_lookup(tid, lun, &target);
+	if (!device || !device->reserve_id || device->reserve_id == reserve_id)
+		return 0;
+	return -EBUSY;
 }
 
 #define buffer_check(buf, total, len, rest)	\
@@ -377,7 +438,7 @@ int target_cmd_queue(int host_no, uint8_t *scb, uint8_t rw,
 		enabled = cmd_enabled(q, cmd);
 
 	if (enabled) {
-		result = scsi_cmd_perform(target->lid,
+		result = scsi_cmd_perform(target->tid, target->lid,
 					  host_no, scb,
 					  &len, data_len,
 					  &uaddr, &rw, &mmapped, &offset,
@@ -435,7 +496,8 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 		if (enabled) {
 			list_del(&cmd->qlist);
 			dprintf("perform %" PRIx64 " %x\n", cmd->tag, cmd->attribute);
-			result = scsi_cmd_perform(cmd->c_target->lid,
+			result = scsi_cmd_perform(cmd->c_target->tid,
+						  cmd->c_target->lid,
 						  cmd->hostno, cmd->scb,
 						  &len, cmd->len,
 						  (unsigned long *) &cmd->uaddr,
@@ -615,6 +677,8 @@ void target_mgmt_request(int host_no, uint64_t req_id, int function,
 		err = -EINVAL;
 		break;
 	case LOGICAL_UNIT_RESET:
+		device_release(target->tid, scsi_get_devid(target->lid, lun),
+			       host_no, 1);
 		count = abort_task_set(mreq, target, host_no, 0, lun, 0);
 		if (mreq->busy)
 			send = 0;
@@ -1188,7 +1252,7 @@ int tgt_target_create(int lld, int tid, char *args)
 
 	INIT_LIST_HEAD(&target->acl_list);
 
-	eprintf("Succeed to create a new target %d\n", tid);
+	dprintf("Succeed to create a new target %d\n", tid);
 
 	return 0;
 }

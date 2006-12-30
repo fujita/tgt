@@ -36,7 +36,7 @@ struct tgt_device {
 
 	struct tgt_cmd_queue cmd_queue;
 
-	unsigned long bddata[0] __attribute__ ((aligned (sizeof(unsigned long))));
+	uint64_t reserve_id;
 };
 
 typedef int (bkio_submit_t) (struct tgt_device *dev, uint8_t *scb,
@@ -71,6 +71,9 @@ extern int ipc_init(void);
 extern int tgt_device_create(int tid, uint64_t lun, char *args);
 extern int tgt_device_destroy(int tid, uint64_t lun);
 extern int tgt_device_update(int tid, uint64_t dev_id, char *name);
+extern int device_reserve(int tid, uint64_t lun, uint64_t reserve_id);
+extern int device_release(int tid, uint64_t lun, uint64_t reserve_id, int force);
+extern int device_reserved(int tid, uint64_t lun, uint64_t reserve_id);
 
 extern int tgt_target_create(int lld, int tid, char *targetname);
 extern int tgt_target_destroy(int tid);
@@ -94,7 +97,7 @@ extern void target_mgmt_request(int host_no, uint64_t req_id, int function,
 extern void target_cmd_io_done(void *key, int result);
 
 extern uint64_t scsi_get_devid(int lid, uint8_t *pdu);
-extern int scsi_cmd_perform(int lid, int host_no, uint8_t *pdu, int *len,
+extern int scsi_cmd_perform(int tid, int lid, int host_no, uint8_t *pdu, int *len,
 			    uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
 			    uint8_t *try_map, uint64_t *offset, uint8_t *lun,
 			    struct tgt_device *dev, struct list_head *dev_list,
