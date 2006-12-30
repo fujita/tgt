@@ -64,4 +64,15 @@ static inline int between(uint32_t seq1, uint32_t seq2, uint32_t seq3)
 	return seq3 - seq2 >= seq1 - seq2;
 }
 
+#define shprintf(total, buf, rest, fmt, args...)			\
+do {									\
+	int len;							\
+	len = snprintf(buf, rest, fmt, ##args);				\
+	if (len > rest)							\
+		goto overflow;						\
+	buf += len;							\
+	total += len;							\
+	rest -= len;							\
+} while (0)
+
 #endif

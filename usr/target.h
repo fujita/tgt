@@ -19,11 +19,6 @@ struct acl_entry {
 	struct list_head aclent_list;
 };
 
-enum {
-	ACCOUNT_TYPE_INCOMING,
-	ACCOUNT_TYPE_OUTGOING,
-};
-
 struct tgt_account {
 	int out_aid;
 	int nr_inaccount;

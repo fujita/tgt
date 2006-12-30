@@ -77,7 +77,8 @@ static int target_mgmt(int lld_no, struct mgmt_task *mtask)
 
 	switch (req->op) {
 	case OP_NEW:
-		err = tgt_target_create(lld_no, req->tid, mtask->buf);
+		err = tgt_target_create(lld_no, req->tid, mtask->buf,
+					req->target_type, req->bs_type);
 		if (!err && tgt_drivers[lld_no]->target_create)
 			tgt_drivers[lld_no]->target_create(req->tid, mtask->buf);
 		break;
@@ -218,7 +219,7 @@ static int account_mgmt(int lld_no,  struct mgmt_task *mtask)
 				account_del(user);
 				err = 0;
 			} else
-				err = account_ctl(req->tid, req->aid,
+				err = account_ctl(req->tid, req->ac_dir,
 						  user, req->op == OP_BIND);
 		}
 		break;

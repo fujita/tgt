@@ -45,7 +45,7 @@
 #undef eprintf
 #define eprintf(fmt, args...)						\
 do {									\
-	fprintf(stderr, "%s(%d) " fmt, __FUNCTION__, __LINE__, ##args);	\
+	fprintf(stderr, "%s: " fmt, program_name, ##args);		\
 } while (0)
 
 #undef dprintf
@@ -83,33 +83,32 @@ static char *tgtadm_emsg[] = {
 	"unknown parameter",
 };
 
-static struct option const long_options[] =
-{
-	{"lld", required_argument, NULL, 'l'},
+struct option const long_options[] = {
+	{"debug", no_argument, NULL, 'd'},
+	{"help", no_argument, NULL, 'h'},
+	{"lld", required_argument, NULL, 'L'},
 	{"op", required_argument, NULL, 'o'},
 	{"mode", required_argument, NULL, 'm'},
 	{"tid", required_argument, NULL, 't'},
 	{"sid", required_argument, NULL, 's'},
 	{"cid", required_argument, NULL, 'c'},
-	{"lun", required_argument, NULL, 'u'},
-	{"hostno", required_argument, NULL, 'i'},
-	{"bus", required_argument, NULL, 'B'},
+	{"lun", required_argument, NULL, 'l'},
 	{"name", required_argument, NULL, 'n'},
 	{"value", required_argument, NULL, 'v'},
+	{"backing-store", required_argument, NULL, 'b'},
 	{"targetname", required_argument, NULL, 'T'},
 	{"initiator-address", required_argument, NULL, 'I'},
-	{"target-type", required_argument, NULL, 'p'},
-	{"backing-store", required_argument, NULL, 'b'},
+	{"user", required_argument, NULL, 'u'},
+	{"password", required_argument, NULL, 'p'},
+
+	{"bus", required_argument, NULL, 'B'},
+	{"target-type", required_argument, NULL, 'Y'},
 	{"backing-store-type", required_argument, NULL, 'S'},
-	{"user", required_argument, NULL, 'y'},
-	{"password", required_argument, NULL, 'Y'},
 	{"outgoing", no_argument, NULL, 'O'},
-	{"debug", no_argument, NULL, 'd'},
-	{"help", no_argument, NULL, 'h'},
 	{NULL, 0, NULL, 0},
 };
 
-static char *short_options = "l:o:m:t:s:c:u:i:B:T:I:p:b:S:n:v:y:Y:dh";
+static char *short_options = "dhL:o:m:t:s:c:l:n:v:b:T:I:u:p:";
 
 static void usage(int status)
 {
@@ -159,7 +158,7 @@ Linux SCSI Target Framework Administration Utility.\n\
 \n\
 Report bugs to <stgt-devel@lists.berlios.de>.\n");
 	}
-	exit(status == 0 ? 0 : -1);
+	exit(status == 0 ? 0 : EINVAL);
 }
 
 static int ipc_mgmt_connect(int *fd)
@@ -170,7 +169,7 @@ static int ipc_mgmt_connect(int *fd)
 	*fd = socket(AF_LOCAL, SOCK_STREAM, 0);
 	if (*fd < 0) {
 		eprintf("can't create a socket, %m\n");
-		return -1;
+		return errno;
 	}
 
 	memset(&addr, 0, sizeof(addr));
@@ -180,8 +179,8 @@ static int ipc_mgmt_connect(int *fd)
 
 	err = connect(*fd, (struct sockaddr *) &addr, sizeof(addr));
 	if (err < 0) {
-		eprintf("can't connect to tgtd, %m\n");
-		return -1;
+		eprintf("can't connect to the tgt daemon, %m\n");
+		return errno;
 	}
 
 	return 0;
@@ -195,12 +194,12 @@ static int ipc_mgmt_rsp(int fd)
 	err = read(fd, &rsp, sizeof(rsp));
 	if (err < 0) {
 		eprintf("can't get the response, %m\n");
-		return -1;
+		return errno;
 	}
 
 	if (rsp.err != TGTADM_SUCCESS) {
-		fprintf(stderr, "%s: %s\n", program_name, tgtadm_emsg[rsp.err]);
-		return -1;
+		eprintf("%s\n", tgtadm_emsg[rsp.err]);
+		return EINVAL;
 	}
 
 	rest = rsp.len - sizeof(rsp);
@@ -213,8 +212,8 @@ static int ipc_mgmt_rsp(int fd)
 		len = min_t(int, sizeof(buf) - 1, rest);
 		err = read(fd, buf, len);
 		if (err <= 0) {
-			eprintf("can't get the full response, %m\n");
-			return -1;
+			eprintf("\ncan't get the full response, %m\n");
+			return errno;
 		}
 		fputs(buf, stdout);
 		rest -= len;
@@ -233,7 +232,8 @@ static int ipc_mgmt_req(struct tgtadm_req *req)
 
 	err = write(fd, (char *) req, req->len);
 	if (err < 0) {
-		eprintf("can't send to tgtd, %m\n");
+		eprintf("can't send the request to the tgt daemon, %m\n");
+		err = errno;
 		goto out;
 	}
 
@@ -279,6 +279,10 @@ static int bus_to_host(char *bus)
 		free(namelist[i]);
 	free(namelist);
 
+	if (host == -1) {
+		eprintf("can't find bus: %s\n", bus);
+		exit(EINVAL);
+	}
 	return host;
 }
 
@@ -288,91 +292,98 @@ static int backing_store_type(char *str)
 		return LU_BS_FILE;
 	else if (!strcmp(str, "raw"))
 		return LU_BS_RAW;
-	else
-		return -1;
+	else {
+		eprintf("unknown backing store type: %s\n", str);
+		exit(EINVAL);
+	}
 }
 
 static int target_type(char *str)
 {
 	if (!strcmp(str, "disk"))
 		return TARGET_SBC;
-	else if (!strcmp(str, "tape"))
-		return TARGET_SSC;
-	else if (!strcmp(str, "cd"))
-		return TARGET_MMC;
-	else if (!strcmp(str, "osd"))
-		return TARGET_OSD;
-	else
-		return -1;
+	else if (!strcmp(str, "tape")) {
+		eprintf("type emulation isn't supported yet\n");
+		exit(EINVAL);
+	} else if (!strcmp(str, "cd")) {
+		eprintf("cdrom emulation isn't supported yet\n");
+		exit(EINVAL);
+	} else if (!strcmp(str, "osd")) {
+		eprintf("osd isn't supported yet\n");
+		exit(EINVAL);
+	} else {
+		eprintf("unknown target type: %s\n", str);
+		exit(EINVAL);
+	}
 }
 
 static int str_to_mode(char *str)
 {
-	int mode;
-
 	if (!strcmp("target", str) || !strcmp("tgt", str))
-		mode = MODE_TARGET;
+		return MODE_TARGET;
 	else if (!strcmp("logicalunit", str) || !strcmp("lu", str))
-		mode = MODE_DEVICE;
+		return MODE_DEVICE;
 	else if (!strcmp("session", str) || !strcmp("sess", str))
-		mode = MODE_SESSION;
+		return MODE_SESSION;
 	else if (!strcmp("connection", str) || !strcmp("conn", str))
-		mode = MODE_CONNECTION;
+		return MODE_CONNECTION;
 	else if (!strcmp("account", str))
-		mode = MODE_ACCOUNT;
-	else
-		mode = -1;
-
-	return mode;
+		return MODE_ACCOUNT;
+	else {
+		eprintf("unknown mode: %s\n", str);
+		exit(1);
+	}
 }
 
 static int str_to_op(char *str)
 {
-	int op;
-
 	if (!strcmp("new", str))
-		op = OP_NEW;
+		return OP_NEW;
 	else if (!strcmp("delete", str))
-		op = OP_DELETE;
+		return OP_DELETE;
 	else if (!strcmp("bind", str))
-		op = OP_BIND;
+		return OP_BIND;
 	else if (!strcmp("unbind", str))
-		op = OP_UNBIND;
+		return OP_UNBIND;
 	else if (!strcmp("show", str))
-		op = OP_SHOW;
+		return OP_SHOW;
 	else if (!strcmp("update", str))
-		op = OP_UPDATE;
-	else
-		op = -1;
-
-	return op;
+		return OP_UPDATE;
+	else {
+		eprintf("unknown operation: %s\n", str);
+		exit(1);
+	}
 }
 
 int main(int argc, char **argv)
 {
 	int ch, longindex;
-	int err = -EINVAL, op = -1, len = 0;
-	int tid = -1, rest = BUFSIZE;
-	int t_type = TARGET_SBC, bs_type = LU_BS_FILE;
-	uint32_t cid, hostno, aid;
+	int op, total, tid, rest, mode, t_type, bs_type, ac_dir;
+	uint32_t cid, hostno;
 	uint64_t sid, lun;
-	char *lldname;
-	struct tgtadm_req *req;
-	char buf[BUFSIZE + sizeof(*req)];
 	char *name, *value, *path, *targetname, *params, *address;
 	char *user, *password;
-	int mode = MODE_SYSTEM;
+	char buf[BUFSIZE + sizeof(struct tgtadm_req)];
+	struct tgtadm_req *req;
 
-	cid = hostno = aid = sid = lun = 0;
-	lldname = name = value = path = targetname = address = NULL;
+	op = tid = mode = -1;
+	total = cid = hostno = sid = lun = 0;
+	t_type = TARGET_SBC;
+	bs_type = LU_BS_FILE;
+	ac_dir = ACCOUNT_TYPE_INCOMING;
+	rest = BUFSIZE;
+	name = value = path = targetname = address = NULL;
 	user = password = NULL;
+
+	memset(buf, 0, sizeof(buf));
+	req = (struct tgtadm_req *) buf;
 
 	optind = 1;
 	while ((ch = getopt_long(argc, argv, short_options,
 				 long_options, &longindex)) >= 0) {
 		switch (ch) {
-		case 'l':
-			lldname = optarg;
+		case 'L':
+			strncpy(req->lld, optarg, sizeof(req->lld));
 			break;
 		case 'o':
 			op = str_to_op(optarg);
@@ -389,32 +400,8 @@ int main(int argc, char **argv)
 		case 'c':
 			cid = strtoul(optarg, NULL, 10);
 			break;
-		case 'u':
+		case 'l':
 			lun = strtoull(optarg, NULL, 10);
-			break;
-		case 'O':
-			aid = 1;
-			break;
-		case 'i':
-			hostno = strtol(optarg, NULL, 10);
-			break;
-		case 'B':
-			hostno = bus_to_host(optarg);
-			break;
-		case 'T':
-			targetname = optarg;
-			break;
-		case 'I':
-			address = optarg;
-			break;
-		case 'p':
-			t_type = target_type(optarg);
-			break;
-		case 'b':
-			path = optarg;
-			break;
-		case 'S':
-			bs_type = backing_store_type(optarg);
 			break;
 		case 'n':
 			name = optarg;
@@ -422,11 +409,32 @@ int main(int argc, char **argv)
 		case 'v':
 			value = optarg;
 			break;
-		case 'y':
+		case 'b':
+			path = optarg;
+			break;
+		case 'T':
+			targetname = optarg;
+			break;
+		case 'I':
+			address = optarg;
+			break;
+		case 'u':
 			user = optarg;
 			break;
-		case 'Y':
+		case 'p':
 			password = optarg;
+			break;
+		case 'B':
+			hostno = bus_to_host(optarg);
+			break;
+		case 'Y':
+			t_type = target_type(optarg);
+			break;
+		case 'S':
+			bs_type = backing_store_type(optarg);
+			break;
+		case 'O':
+			ac_dir = ACCOUNT_TYPE_OUTGOING;
 			break;
 		case 'd':
 			debug = 1;
@@ -438,76 +446,114 @@ int main(int argc, char **argv)
 			usage(1);
 		}
 	}
-	if (op < 0) {
-		eprintf("You must specify the operation type\n");
-		goto out;
-	}
 
 	if (optind < argc) {
-		fprintf(stderr, "unrecognized options: ");
+		eprintf("unrecognized options: ");
 		while (optind < argc)
-			fprintf(stderr, "%s", argv[optind++]);
-		fprintf(stderr, "\n");
+			eprintf("%s", argv[optind++]);
+		eprintf("\n");
 		usage(1);
+	}
+
+	if (op < 0) {
+		eprintf("specify the operation type\n");
+		exit(EINVAL);
 	}
 
 	if (mode < 0) {
-		fprintf(stderr, "unknown mode\n");
-		usage(1);
+		eprintf("specify the mode\n");
+		exit(EINVAL);
 	}
 
-	memset(buf, 0, sizeof(buf));
+	if (!*req->lld) {
+		eprintf("specify the low level driver name\n");
+		exit(EINVAL);
+	}
 
-	req = (struct tgtadm_req *) buf;
-	if (lldname)
-		strncpy(req->lld, lldname, sizeof(req->lld));
-	req->mode = mode;
+	if ((name || value) && op != OP_UPDATE) {
+		eprintf("only 'update' operation takes"
+			" 'name' and 'value' options\n");
+		exit(EINVAL);
+	}
+
+	if ((!name && value) || (name && !value)) {
+		eprintf("both 'name' and 'value' options must be set\n");
+		exit(EINVAL);
+	}
+
+	if ((mode == MODE_TARGET && op == OP_NEW) && !targetname) {
+		eprintf("creating a new target needs the name\n");
+		exit(EINVAL);
+	}
+
+	if ((mode == MODE_DEVICE && op == OP_NEW) && !path) {
+		eprintf("creating a new logical unit needs"
+			" the backing store path\n");
+		exit(EINVAL);
+	}
+
+	if (mode == MODE_ACCOUNT) {
+		switch (op) {
+		case OP_NEW:
+			if (!user || !password) {
+				eprintf("creating a new account needs"
+					" user and password options\n");
+				exit(EINVAL);
+			}
+			break;
+		case OP_SHOW:
+			break;
+		case OP_DELETE:
+		case OP_BIND:
+		case OP_UNBIND:
+			if (!user) {
+				eprintf("delete/bind/unbind the account"
+					" needs user option\n");
+				exit(EINVAL);
+			}
+			break;
+		default:
+			eprintf("the update operation can't"
+				" handle accounts\n");
+			exit(EINVAL);
+			break;
+		}
+	}
+
 	req->op = op;
 	req->tid = tid;
 	req->sid = sid;
 	req->lun = lun;
-	req->aid = aid;
+	req->mode = mode;
 	req->host_no = hostno;
+	req->target_type = t_type;
+	req->bs_type = bs_type;
+	req->ac_dir = ac_dir;
 
 	params = buf + sizeof(*req);
 
-	/* FIXME */
-	if ((name && value) || path || targetname || address) {
-		if (path) {
-			name = "path";
-			value = path;
-		}
-
-		if (targetname) {
-			name = "targetname";
-			value = targetname;
-		}
-
-		if (address) {
-			name = "initiator-address";
-			value = address;
-		}
-
-		len = snprintf(params, rest, "%s=%s", name, value);
-	}
-
-	if (t_type != TARGET_SBC)
-		len += snprintf(params + len, rest - len,
-				"%starget-type=%d", len ? "," : "", t_type);
-
-	if (bs_type != LU_BS_FILE)
-		len += snprintf(params + len, rest - len,
-				"%sbacking-store-type=%d", len ? "," : "", bs_type);
-
+	if (name)
+		shprintf(total, params, rest, "%s=%s", name, value);
+	if (path)
+		shprintf(total, params, rest, "%spath=%s",
+			 rest == BUFSIZE ? "" : ",", path);
+	if (targetname)
+		shprintf(total, params, rest, "%stargetname=%s",
+			 rest == BUFSIZE ? "" : ",", targetname);
+	if (address)
+		shprintf(total, params, rest, "%sinitiator-address=%s",
+			 rest == BUFSIZE ? "" : ",", address);
 	if (user)
-		len += snprintf(params + len, rest - len, "user=%s", user);
-
+		shprintf(total, params, rest, "%suser=%s",
+			 rest == BUFSIZE ? "" : ",", user);
 	if (password)
-		len += snprintf(params + len, rest - len, ",password=%s", password);
+		shprintf(total, params, rest, "%spassword=%s",
+			 rest == BUFSIZE ? "" : ",", password);
 
-	req->len = sizeof(*req) + len;
+	req->len = sizeof(*req) + total;
 
-	err = ipc_mgmt_req(req);
-out:
-	return err;
+	return ipc_mgmt_req(req);
+overflow:
+	eprintf("BUFSIZE (%d bytes) isn't long enough\n", BUFSIZE);
+	return EINVAL;
 }

@@ -59,18 +59,24 @@ enum tgtadm_lu_bs_type {
 	LU_BS_RAW, /* pass through */
 };
 
+enum tgtadm_account_dir {
+	ACCOUNT_TYPE_INCOMING,
+	ACCOUNT_TYPE_OUTGOING,
+};
+
 struct tgtadm_req {
 	enum tgtadm_mode mode;
 	enum tgtadm_op op;
+	char lld[TGT_LLD_NAME_LEN];
 	uint32_t len;
-
 	int32_t tid;
 	uint64_t sid;
-	uint32_t cid;
-	uint32_t aid;
 	uint64_t lun;
-	char lld[TGT_LLD_NAME_LEN];
+	uint32_t cid;
 	uint32_t host_no;
+	uint32_t target_type;
+	uint32_t bs_type;
+	uint32_t ac_dir;
 	uint32_t pack;
 };
 

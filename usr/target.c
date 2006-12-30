@@ -857,6 +857,7 @@ int account_ctl(int tid, int type, char *user, int bind)
 				if (target->account.in_aids[i] == ac->aid) {
 					target->account.in_aids[i] = 0;
 					target->account.nr_inaccount--;
+					break;
 				}
 
 			if (i == target->account.max_inaccount)
@@ -1084,17 +1085,6 @@ static char *print_disksize(uint64_t size)
 #define TAB2 TAB1 TAB1
 #define TAB3 TAB1 TAB1 TAB1
 
-#define shprintf(total, buf, rest, fmt, args...)			\
-do {									\
-	int len;							\
-	len = snprintf(buf, rest, fmt, ##args);				\
-	if (len > rest)							\
-		goto overflow;						\
-	buf += len;							\
-	total += len;							\
-	rest -= len;							\
-} while (0)
-
 int tgt_target_show_all(char *buf, int rest)
 {
 	int total = 0, max = rest;
@@ -1169,9 +1159,9 @@ char *tgt_targetname(int tid)
 
 #define DEFAULT_NR_ACCOUNT 16
 
-int tgt_target_create(int lld, int tid, char *args)
+int tgt_target_create(int lld, int tid, char *args, int t_type, int bs_type)
 {
-	int i, t_type = TARGET_SBC, bs_type = LU_BS_FILE;
+	int i;
 	struct target *target, *pos;
 	char *p, *q, *targetname = NULL;
 
@@ -1185,10 +1175,6 @@ int tgt_target_create(int lld, int tid, char *args)
 
 			if (!strcmp("targetname", q))
 				targetname = str;
-			else if (!strcmp("target-type", q))
-				t_type = strtol(str, NULL, 10);
-			else if (!strcmp("backing-store-type", q))
-				bs_type = strtol(str, NULL, 10);
 			else
 				eprintf("Unknow option %s\n", q);
 		}

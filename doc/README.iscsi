@@ -195,8 +195,7 @@ Account list:
 
 You can assign this account to any targets:
 
-host:~/tgt# ./usr/tgtadm --lld iscsi --op bind --mode account --tid 1
- --user fujita
+host:~/tgt# ./usr/tgtadm --lld iscsi --op bind --mode account --tid 1 --user fujita
 host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target
 Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
     System information:
