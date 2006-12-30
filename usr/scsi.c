@@ -395,7 +395,7 @@ static int sevice_action(struct tgt_device *dev, uint8_t *scb, uint8_t *p, int *
 	data64[0] = __cpu_to_be64(size - 1);
 	data[2] = __cpu_to_be32(1UL << BLK_SHIFT);
 
-	*len = 32;
+	*len = 12;
 
 	return SAM_STAT_GOOD;
 }
