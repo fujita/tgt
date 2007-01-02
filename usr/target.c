@@ -27,13 +27,13 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/socket.h>
-#include <scsi/scsi.h>
 
 #include "list.h"
 #include "util.h"
 #include "tgtd.h"
 #include "driver.h"
 #include "target.h"
+#include "scsi.h"
 #include "tgtadm.h"
 
 static struct target *hostt[MAX_NR_HOST];

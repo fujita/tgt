@@ -20,12 +20,12 @@
 #include <syscall.h>
 #include <unistd.h>
 #include <linux/fs.h>
-#include <scsi/scsi.h>
 
 #include "list.h"
 #include "util.h"
 #include "tgtd.h"
 #include "driver.h"
+#include "scsi.h"
 
 #define BLK_SHIFT	9
 
