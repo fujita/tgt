@@ -16,7 +16,7 @@ LIBS += -L$(XEN_XENSTORE) -lxenstore $(AIOLIBS)
 TGTD_OBJS += $(addprefix xen/, xen.o xs_api.o xenbus.o)
 TGTD_OBJS += tgtif.o bd_xen.o
 else
-INCLUDES += -I$(KERNELSRC)/include
+INCLUDES += -I../include -I$(KERNELSRC)/include
 LIBS += -laio
 endif
 
