@@ -166,7 +166,7 @@ static int tgt_device_setup(struct xs_handle *h, char *bepath)
 		return err;
 	}
 
-        err = xs_gather(h, bepath, "dev", NULL, &path, NULL);
+        err = xs_gather(h, bepath, "params", NULL, &path, NULL);
         if (err) {
                 eprintf("cannot get dev %d\n", err);
 		return err;
@@ -320,6 +320,7 @@ static void tgt_probe(struct xs_handle *h, struct xenbus_watch *w,
         err = xs_gather(h, bepath, "hostno", "%u", &hostno, NULL);
 	if (err)
 		goto free_be;
+	dprintf("host_no %u\n", hostno);
 
 	fd = xen_chrdev_open("scsiback", hostno);
 	if (fd < 0)
