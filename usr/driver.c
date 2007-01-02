@@ -14,12 +14,19 @@
 #include "iscsi/iscsi.h"
 #endif
 
+#ifdef XEN
+#include "xen/xen.h"
+#endif
+
 struct tgt_driver *tgt_drivers[] = {
 #ifdef IBMVIO
 	&ibmvio,
 #endif
 #ifdef ISCSI
 	&iscsi,
+#endif
+#ifdef XEN
+	&xen,
 #endif
 	NULL,
 };
