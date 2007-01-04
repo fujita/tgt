@@ -16,13 +16,17 @@
 #define pgcnt(size, offset)	((((size) + ((offset) & ~PAGE_MASK)) + PAGE_SIZE - 1) >> PAGE_SHIFT)
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
+#define __cpu_to_be16(x) bswap_16(x)
 #define __cpu_to_be32(x) bswap_32(x)
 #define __cpu_to_be64(x) bswap_64(x)
+#define __be16_to_cpu(x) bswap_16(x)
 #define __be32_to_cpu(x) bswap_32(x)
 #define __be64_to_cpu(x) bswap_64(x)
 #else
+#define __cpu_to_be16(x) (x)
 #define __cpu_to_be32(x) (x)
 #define __cpu_to_be64(x) (x)
+#define __be16_to_cpu(x) (x)
 #define __be32_to_cpu(x) (x)
 #define __be64_to_cpu(x) (x)
 #endif

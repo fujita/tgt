@@ -4,6 +4,9 @@
  * better if we include kernel's one directly.
  */
 
+#ifndef __SCSI_H
+#define __SCSI_H
+
 #define TEST_UNIT_READY       0x00
 #define REZERO_UNIT           0x01
 #define REQUEST_SENSE         0x03
@@ -143,3 +146,4 @@
 #define TASK_ABORTED         0x20
 #define SAM_STAT_TASK_ABORTED    0x40
 
+#endif

@@ -10,7 +10,6 @@
 #include <stdint.h>
 #include <inttypes.h>
 #include <linux/types.h>
-#include <asm/byteorder.h>
 
 #include "transport.h"
 #include "list.h"
