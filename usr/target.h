@@ -49,6 +49,8 @@ struct target {
 
 	struct list_head cmd_hash_list[1 << HASH_ORDER];
 
+	struct list_head it_nexus_list;
+
 	struct tgt_cmd_queue cmd_queue;
 
 	struct backedio_template *bdt;
@@ -56,6 +58,15 @@ struct target {
 	struct list_head acl_list;
 
 	struct tgt_account account;
+};
+
+struct it_nexus {
+	uint64_t nexus_id;
+
+	struct target *nexus_target;
+
+	/* the list of i_t_nexus belonging to a target */
+	struct list_head nexus_siblings;
 };
 
 struct cmd {

@@ -694,6 +694,51 @@ void target_mgmt_request(int host_no, uint64_t req_id, int function,
 	}
 }
 
+int it_nexus_create(int tid, uint64_t nid)
+{
+	struct target *target;
+	struct it_nexus *nexus;
+
+	target = target_lookup(tid);
+	if (!target)
+		return -ENOENT;
+
+	list_for_each_entry(nexus, &target->it_nexus_list, nexus_siblings) {
+		if (nexus->nexus_id == nid)
+			return -EEXIST;
+	}
+
+	nexus = zalloc(sizeof(*nexus));
+	if (!nexus)
+		return -ENOMEM;
+
+	nexus->nexus_id = nid;
+	nexus->nexus_target = target;
+	list_add_tail(&nexus->nexus_siblings, &target->it_nexus_list);
+
+	return 0;
+}
+
+int it_nexus_destroy(int tid, uint64_t nid)
+{
+	struct target *target;
+	struct it_nexus *nexus, *tmp;
+
+	target = target_lookup(tid);
+	if (!target)
+		return -ENOENT;
+
+	list_for_each_entry_safe(nexus, tmp, &target->it_nexus_list,
+				 nexus_siblings) {
+		if (nexus->nexus_id == nid) {
+			list_del(&nexus->nexus_siblings);
+			free(nexus);
+			return 0;
+		}
+	}
+	return -ENOENT;
+}
+
 struct account_entry {
 	int aid;
 	char *user;
@@ -1237,6 +1282,8 @@ int tgt_target_create(int lld, int tid, char *args, int t_type, int bs_type)
 	list_add_tail(&target->t_list, &pos->t_list);
 
 	INIT_LIST_HEAD(&target->acl_list);
+
+	INIT_LIST_HEAD(&target->it_nexus_list);
 
 	dprintf("Succeed to create a new target %d\n", tid);
 

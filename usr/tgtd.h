@@ -120,4 +120,7 @@ extern int account_ctl(int tid, int type, char *user, int bind);
 extern int account_show(char *buf, int rest);
 extern int account_available(int tid, int dir);
 
+extern int it_nexus_create(int tid, uint64_t nid);
+extern int it_nexus_destroy(int tid, uint64_t nid);
+
 #endif
