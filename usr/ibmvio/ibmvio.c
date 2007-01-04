@@ -34,7 +34,6 @@
 #include <stdint.h>
 #include <syscall.h>
 #include <unistd.h>
-#include <asm/byteorder.h>
 #include <linux/fs.h>
 #include <scsi/scsi.h>
 #include <sys/mman.h>
