@@ -31,8 +31,8 @@ struct tgt_device {
 	char scsi_sn[SCSI_SN_LEN];
 	char *path;
 
-	struct list_head d_hlist;
-	struct list_head d_list;
+	/* the list of devices belonging to a target */
+	struct list_head device_siblings;
 
 	struct tgt_cmd_queue cmd_queue;
 

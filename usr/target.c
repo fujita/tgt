@@ -60,40 +60,14 @@ static void target_hlist_remove(struct target *target)
 	list_del(&target->t_hlist);
 }
 
-static struct tgt_device *device_lookup(struct target *target, uint64_t dev_id)
+static struct tgt_device *device_lookup(struct target *target, uint64_t lun)
 {
 	struct tgt_device *device;
-	struct list_head *list = &target->device_hash_list[hashfn(dev_id)];
-	list_for_each_entry(device, list, d_hlist)
-		if (device->lun == dev_id)
+
+	list_for_each_entry(device, &target->device_list, device_siblings)
+		if (device->lun == lun)
 			return device;
 	return NULL;
-}
-
-static void device_hlist_insert(struct target *target, struct tgt_device *device)
-{
-	struct list_head *list = &target->device_hash_list[hashfn(device->lun)];
-	list_add(&device->d_hlist, list);
-}
-
-static void device_hlist_remove(struct tgt_device *device)
-{
-	list_del(&device->d_hlist);
-}
-
-static void device_list_insert(struct target *target, struct tgt_device *device)
-{
-	struct tgt_device *pos;
-	list_for_each_entry(pos, &target->device_list, d_list) {
-		if (device->lun < pos->lun)
-			break;
-	}
-	list_add_tail(&device->d_list, &pos->d_list);
-}
-
-static void device_list_remove(struct tgt_device *device)
-{
-	list_del(&device->d_list);
 }
 
 static struct cmd *cmd_lookup(struct target *target, uint64_t tag)
@@ -177,10 +151,10 @@ __device_lookup(int tid, uint64_t lun, struct target **t)
 
 int tgt_device_create(int tid, uint64_t lun, char *args)
 {
-	struct target *target;
-	struct tgt_device *device;
 	char *p;
 	int err;
+	struct target *target;
+	struct tgt_device *device, *pos;
 
 	dprintf("%d %" PRIu64 "\n", tid, lun);
 
@@ -218,8 +192,12 @@ int tgt_device_create(int tid, uint64_t lun, char *args)
 		 "deadbeaf%d:%" PRIu64, tid, lun);
 
 	tgt_cmd_queue_init(&device->cmd_queue);
-	device_hlist_insert(target, device);
-	device_list_insert(target, device);
+
+	list_for_each_entry(pos, &target->device_list, device_siblings) {
+		if (device->lun < pos->lun)
+			break;
+	}
+	list_add_tail(&device->device_siblings, &pos->device_siblings);
 
 	dprintf("Add a logical unit %" PRIu64 " to the target %d\n", lun, tid);
 	return 0;
@@ -242,8 +220,7 @@ int tgt_device_destroy(int tid, uint64_t lun)
 		return TGTADM_LUN_ACTIVE;
 
 	free(device->path);
-	device_hlist_remove(device);
-	device_list_remove(device);
+	list_del(&device->device_siblings);
 
 	target->bdt->bd_close(device);
 	free(device);
@@ -296,14 +273,6 @@ int device_reserved(int tid, uint64_t lun, uint64_t reserve_id)
 		return 0;
 	return -EBUSY;
 }
-
-#define buffer_check(buf, total, len, rest)	\
-({						\
-	buf += len;				\
-	total += len;				\
-	rest -= len;				\
-	!rest;					\
-})
 
 int tgt_device_update(int tid, uint64_t dev_id, char *name)
 {
@@ -1171,7 +1140,7 @@ int tgt_target_show_all(char *buf, int rest)
 			shprintf(total, buf, rest, TAB2 "%s\n", acl->address);
 
 		shprintf(total, buf, rest, TAB1 "LUN information:\n");
-		list_for_each_entry(device, &target->device_list, d_list)
+		list_for_each_entry(device, &target->device_list, device_siblings)
 			shprintf(total, buf, rest,
 				 TAB2 "LUN: %" PRIu64 "\n"
 				 TAB3 "SCSI ID: %s\n"
@@ -1257,8 +1226,6 @@ int tgt_target_create(int lld, int tid, char *args, int t_type, int bs_type)
 		INIT_LIST_HEAD(&target->cmd_hash_list[i]);
 
 	INIT_LIST_HEAD(&target->device_list);
-	for (i = 0; i < ARRAY_SIZE(target->device_hash_list); i++)
-          		INIT_LIST_HEAD(&target->device_hash_list[i]);
 
 	/* FIXME */
 	if (bs_type == LU_BS_RAW) {

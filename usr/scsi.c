@@ -298,7 +298,7 @@ static int __report_luns(struct list_head *dev_list, uint8_t *lun_buf,
 	nr_luns = 0;
 
 	overflow = 0;
-	list_for_each_entry(dev, dev_list, d_list) {
+	list_for_each_entry(dev, dev_list, device_siblings) {
 		nr_luns++;
 
 		if (overflow)

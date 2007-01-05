@@ -44,8 +44,7 @@ struct target {
 	struct list_head t_list;
 	struct list_head t_hlist;
 
-	struct list_head device_hash_list[1 << HASH_ORDER];
-	struct list_head device_list; /* for REPORT_LUNS */
+	struct list_head device_list;
 
 	struct list_head cmd_hash_list[1 << HASH_ORDER];
 

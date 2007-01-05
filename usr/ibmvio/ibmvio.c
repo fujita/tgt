@@ -230,7 +230,7 @@ int scsi_report_luns(struct list_head *dev_list, uint8_t *lun_buf,
 	idx = 2;
 	nr_luns = 1;
 
-	list_for_each_entry(dev, dev_list, d_list) {
+	list_for_each_entry(dev, dev_list, device_siblings) {
 		lun = dev->lun;
 		lun = make_lun(0, lun & 0x003f, 0);
 		data[idx++] = __cpu_to_be64(lun);
