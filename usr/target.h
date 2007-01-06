@@ -41,8 +41,7 @@ struct target {
 	enum scsi_target_iotype target_iotype;
 	enum scsi_target_state target_state;
 
-	struct list_head t_list;
-	struct list_head t_hlist;
+	struct list_head target_siblings;
 
 	struct list_head device_list;
 

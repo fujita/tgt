@@ -37,27 +37,15 @@
 #include "tgtadm.h"
 
 static struct target *hostt[MAX_NR_HOST];
-static struct list_head target_hash_list[1 << HASH_ORDER];
 static LIST_HEAD(target_list);
 
 static struct target *target_lookup(int tid)
 {
 	struct target *target;
-	list_for_each_entry(target, &target_hash_list[hashfn(tid)], t_hlist)
+	list_for_each_entry(target, &target_list, target_siblings)
 		if (target->tid == tid)
 			return target;
 	return NULL;
-}
-
-static void target_hlist_insert(struct target *target)
-{
-	struct list_head *list = &target_hash_list[hashfn(target->tid)];
-	list_add(&target->t_hlist, list);
-}
-
-static void target_hlist_remove(struct target *target)
-{
-	list_del(&target->t_hlist);
 }
 
 static struct tgt_device *device_lookup(struct target *target, uint64_t lun)
@@ -911,7 +899,7 @@ void account_del(char *user)
 	if (!ac)
 		return;
 
-	list_for_each_entry(target, &target_list, t_list) {
+	list_for_each_entry(target, &target_list, target_siblings) {
 		account_ctl(target->tid, ACCOUNT_TYPE_INCOMING, ac->user, 0);
 		account_ctl(target->tid, ACCOUNT_TYPE_OUTGOING, ac->user, 0);
 	}
@@ -1120,7 +1108,7 @@ int tgt_target_show_all(char *buf, int rest)
 	struct acl_entry *acl;
 	struct it_nexus *nexus;
 
-	list_for_each_entry(target, &target_list, t_list) {
+	list_for_each_entry(target, &target_list, target_siblings) {
 		shprintf(total, buf, rest,
 			 "Target %d: %s\n"
 			 TAB1 "System information:\n"
@@ -1139,6 +1127,22 @@ int tgt_target_show_all(char *buf, int rest)
 			if (nexus->info)
 				shprintf(total, buf, rest, "%s", nexus->info);
 		}
+
+		shprintf(total, buf, rest, TAB1 "LUN information:\n");
+		list_for_each_entry(device, &target->device_list, device_siblings)
+			shprintf(total, buf, rest,
+				 TAB2 "LUN: %" PRIu64 "\n"
+				 TAB3 "SCSI ID: %s\n"
+				 TAB3 "SCSI SN: %s\n"
+				 TAB3 "Size: %s\n"
+				 TAB3 "Backing store: %s\n"
+				 TAB3 "Backing store type: %s\n",
+				 device->lun,
+				 device->scsi_id,
+				 device->scsi_sn,
+				 print_disksize(device->size),
+				 device->path,
+				 target_iotype_name(target->target_iotype));
 
 		if (!strcmp(tgt_drivers[target->lid]->name, "iscsi")) {
 			int i, aid;
@@ -1161,22 +1165,6 @@ int tgt_target_show_all(char *buf, int rest)
 		shprintf(total, buf, rest, TAB1 "ACL information:\n");
 		list_for_each_entry(acl, &target->acl_list, aclent_list)
 			shprintf(total, buf, rest, TAB2 "%s\n", acl->address);
-
-		shprintf(total, buf, rest, TAB1 "LUN information:\n");
-		list_for_each_entry(device, &target->device_list, device_siblings)
-			shprintf(total, buf, rest,
-				 TAB2 "LUN: %" PRIu64 "\n"
-				 TAB3 "SCSI ID: %s\n"
-				 TAB3 "SCSI SN: %s\n"
-				 TAB3 "Size: %s\n"
-				 TAB3 "Backing store: %s\n"
-				 TAB3 "Backing store type: %s\n",
-				 device->lun,
-				 device->scsi_id,
-				 device->scsi_sn,
-				 print_disksize(device->size),
-				 device->path,
-				 target_iotype_name(target->target_iotype));
 	}
 	return total;
 overflow:
@@ -1263,16 +1251,14 @@ int tgt_target_create(int lld, int tid, char *args, int t_type, int bs_type)
 	target->lid = lld;
 
 	tgt_cmd_queue_init(&target->cmd_queue);
-	target_hlist_insert(target);
 
-	list_for_each_entry(pos, &target_list, t_list) {
+	list_for_each_entry(pos, &target_list, target_siblings)
 		if (target->tid < pos->tid)
 			break;
-	}
-	list_add_tail(&target->t_list, &pos->t_list);
+
+	list_add_tail(&target->target_siblings, &pos->target_siblings);
 
 	INIT_LIST_HEAD(&target->acl_list);
-
 	INIT_LIST_HEAD(&target->it_nexus_list);
 
 	dprintf("Succeed to create a new target %d\n", tid);
@@ -1297,8 +1283,7 @@ int tgt_target_destroy(int tid)
 	if (!list_empty(&target->cmd_queue.queue))
 		return TGTADM_TARGET_ACTIVE;
 
-	target_hlist_remove(target);
-	list_del(&target->t_list);
+	list_del(&target->target_siblings);
 
 	list_for_each_entry_safe(acl, tmp, &target->acl_list, aclent_list) {
 		list_del(&acl->aclent_list);
@@ -1327,11 +1312,4 @@ int account_show(char *buf, int rest)
 	return total;
 overflow:
 	return max;
-}
-
-__attribute__((constructor)) static void target_init(void)
-{
-	int i;
-	for (i = 0; i < ARRAY_SIZE(target_hash_list); i++)
-		INIT_LIST_HEAD(&target_hash_list[i]);
 }
