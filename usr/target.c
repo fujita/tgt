@@ -1013,7 +1013,7 @@ uint64_t host_no_to_it_nexus(int host_no)
 	list_for_each_entry(target, &target_list, target_siblings) {
 		list_for_each_entry(nexus, &target->it_nexus_list, nexus_siblings) {
 			if (nexus->host_no == host_no)
-				return nexus->nexus_id;
+				return NID64(target->tid, nexus->nexus_id);
 		}
 	}
 	return UINT64_MAX;
