@@ -36,8 +36,6 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
         Driver: iscsi
         Status: running
     I_T nexus information:
-    Account information:
-    ACL information:
     LUN information:
         LUN: 0
             SCSI ID: deadbeaf1:0
@@ -45,6 +43,8 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
             Size: 55G
             Backing store: /dev/hdc1
             Backing store type: file
+    Account information:
+    ACL information:
 
 
 If you don't need to configure this target any more, enable the target
@@ -57,9 +57,6 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
         Driver: iscsi
         Status: running
     I_T nexus information:
-    Account information:
-    ACL information:
-        ALL
     LUN information:
         LUN: 0
             SCSI ID: deadbeaf1:0
@@ -67,6 +64,9 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
             Size: 55G
             Backing store: /dev/hdc1
             Backing store type: file
+    Account information:
+    ACL information:
+        ALL
 
 
 Note "ACL information" section. "ALL" means that this target accepts
@@ -82,8 +82,6 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
         Driver: iscsi
         Status: running
     I_T nexus information:
-    Account information:
-    ACL information:
     LUN information:
         LUN: 0
             SCSI ID: deadbeaf1:0
@@ -91,6 +89,8 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
             Size: 55G
             Backing store: /dev/hdc1
             Backing store type: file
+    Account information:
+    ACL information:
 
 
 Here are some examples:
@@ -103,10 +103,6 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
         Driver: iscsi
         Status: running
     I_T nexus information:
-    Account information:
-    ACL information:
-        192.168.2.29
-        192.168.11.0/24
     LUN information:
         LUN: 0
             SCSI ID: deadbeaf1:0
@@ -114,6 +110,10 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
             Size: 55G
             Backing store: /dev/hdc1
             Backing store type: file
+    Account information:
+    ACL information:
+        192.168.2.29
+        192.168.11.0/24
 
 
 You can add lots of logical units:
@@ -124,8 +124,6 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
     System information:
         Driver: iscsi
         Status: suspended
-    I_T nexus information:
-    Account information:
     LUN information:
         LUN: 0
             SCSI ID: deadbeaf1:0
@@ -139,6 +137,8 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
             Size: 20G
             Backing store: /dev/hdd1
             Backing store type: file
+    I_T nexus information:
+    Account information:
 
 
 You can get iSCSI parameters of the target:
@@ -212,10 +212,6 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
         Driver: iscsi
         Status: running
     I_T nexus information:
-    Account information:
-        fujita
-    ACL information:
-        ALL
     LUN information:
         LUN: 0
             SCSI ID: deadbeaf1:0
@@ -223,6 +219,10 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
             Size: 1G
             Backing store: /var/tmp/image
             Backing store type: file
+    Account information:
+        fujita
+    ACL information:
+        ALL
 
 
 You can set up an outgoing account. First, you need to create a new
@@ -240,11 +240,6 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
         Driver: iscsi
         Status: running
     I_T nexus information:
-    Account information:
-        fujita
-        hoge (outgoing)
-    ACL information:
-        ALL
     LUN information:
         LUN: 0
             SCSI ID: deadbeaf1:0
@@ -252,6 +247,11 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
             Size: 1G
             Backing store: /var/tmp/image
             Backing store type: file
+    Account information:
+        fujita
+        hoge (outgoing)
+    ACL information:
+        ALL
 
 
 Initiator Information
@@ -269,9 +269,6 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
             Initiator: iqn.1987-05.com.cisco:01.4438aca09387
             Connection: 0
                 IP Address: 192.168.11.5
-    Account information:
-    ACL information:
-        ALL
     LUN information:
         LUN: 0
             SCSI ID: deadbeaf1:0
@@ -279,6 +276,9 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
             Size: 1G
             Backing store: /var/tmp/image
             Backing store type: file
+    Account information:
+    ACL information:
+        ALL
 
 
 One initiator (192.168.11.5) logs in now. Let's try again:
@@ -297,9 +297,6 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
             Initiator: iqn.1991-05.com.microsoft:kernel
             Connection: 1
                 IP Address: 192.168.11.133
-     Account information:
-    ACL information:
-        ALL
     LUN information:
         LUN: 0
             SCSI ID: deadbeaf1:0
@@ -307,6 +304,9 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
             Size: 1G
             Backing store: /var/tmp/image
             Backing store type: file
+    Account information:
+    ACL information:
+        ALL
 
 
 Now we have two initiators. You can see the parameters that the target
