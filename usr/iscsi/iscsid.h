@@ -80,6 +80,7 @@ struct iscsi_session {
 
 	struct param session_param[ISCSI_PARAM_MAX];
 
+	uint64_t iscsi_nexus_id;
 	char *info;
 };
 

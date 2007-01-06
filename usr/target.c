@@ -651,66 +651,71 @@ void target_mgmt_request(int host_no, uint64_t req_id, int function,
 	}
 }
 
-static struct it_nexus *it_nexus_lookup(int tid, uint32_t nid)
+static struct it_nexus *it_nexus_lookup(uint64_t nid)
 {
+	int32_t tid;
+	int32_t nid32;
 	struct target *target;
 	struct it_nexus *nexus;
+
+	tid = nid >> TID_SHIFT;
 
 	target = target_lookup(tid);
 	if (!target)
 		return NULL;
 
+	nid32 = nid & NID_MASK;
 	list_for_each_entry(nexus, &target->it_nexus_list, nexus_siblings) {
-		if (nexus->nexus_id == nid)
+		if (nexus->nexus_id == nid32)
 			return nexus;
 	}
 	return NULL;
 }
 
-int it_nexus_create(int tid, uint32_t nid, char *info)
+int it_nexus_create(int tid, char *info, uint64_t *rsp_nid)
 {
 	struct target *target;
 	struct it_nexus *nexus;
+	uint64_t nexus_id;
 
 	target = target_lookup(tid);
 	if (!target)
 		return -ENOENT;
 
-	nexus = it_nexus_lookup(tid, nid);
-	if (nexus)
-		return -EEXIST;
+	for (nexus_id = 0; nexus_id <= UINT32_MAX; nexus_id++) {
+		nexus = it_nexus_lookup(NID64(tid, nexus_id));
+		if (!nexus)
+			goto found;
+	}
 
+	eprintf("can't find free nexus id\n");
+	return -EINVAL;
+found:
 	nexus = zalloc(sizeof(*nexus));
 	if (!nexus)
 		return -ENOMEM;
 
-	nexus->nexus_id = nid;
+	nexus->nexus_id = nexus_id;
 	nexus->nexus_target = target;
 	nexus->info = info;
 
 	list_add_tail(&nexus->nexus_siblings, &target->it_nexus_list);
+	*rsp_nid = NID64(tid, nexus_id);
 
 	return 0;
 }
 
-int it_nexus_destroy(int tid, uint32_t nid)
+int it_nexus_destroy(uint64_t nid)
 {
-	struct target *target;
-	struct it_nexus *nexus, *tmp;
+	struct it_nexus *nexus;
 
-	target = target_lookup(tid);
-	if (!target)
+	nexus = it_nexus_lookup(nid);
+	if (nexus) {
+		list_del(&nexus->nexus_siblings);
+		free(nexus);
+		return 0;
+	} else
 		return -ENOENT;
-
-	list_for_each_entry_safe(nexus, tmp, &target->it_nexus_list,
-				 nexus_siblings) {
-		if (nexus->nexus_id == nid) {
-			list_del(&nexus->nexus_siblings);
-			free(nexus);
-			return 0;
-		}
-	}
-	return -ENOENT;
 }
 
 struct account_entry {

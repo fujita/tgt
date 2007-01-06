@@ -6,6 +6,10 @@
 #define SCSI_ID_LEN	24
 #define SCSI_SN_LEN	8
 
+#define TID_SHIFT 32
+#define NID_MASK ((1ULL << TID_SHIFT) - 1)
+#define NID64(tid, nid) ((uint64_t) tid << TID_SHIFT | nid)
+
 #define TAB1 "    "
 #define TAB2 TAB1 TAB1
 #define TAB3 TAB1 TAB1 TAB1
@@ -125,7 +129,7 @@ extern int account_ctl(int tid, int type, char *user, int bind);
 extern int account_show(char *buf, int rest);
 extern int account_available(int tid, int dir);
 
-extern int it_nexus_create(int tid, uint32_t nid, char *info);
-extern int it_nexus_destroy(int tid, uint32_t nid);
+extern int it_nexus_create(int tid, char *info, uint64_t *nid);
+extern int it_nexus_destroy(uint64_t nid);
 
 #endif
