@@ -1105,6 +1105,7 @@ int tgt_target_show_all(char *buf, int rest)
 	struct target *target;
 	struct tgt_device *device;
 	struct acl_entry *acl;
+	struct it_nexus *nexus;
 
 	list_for_each_entry(target, &target_list, t_list) {
 		shprintf(total, buf, rest,
@@ -1117,7 +1118,22 @@ int tgt_target_show_all(char *buf, int rest)
 			 tgt_drivers[target->lid]->name,
 			 target_state_name(target->target_state));
 
-		if (1) {
+		/* FIXME: brain-dead... */
+
+		if (!strcmp(tgt_drivers[target->lid]->name, "iscsi"))
+			shprintf(total, buf, rest, TAB1
+				 "Session information:\n");
+		else
+			shprintf(total, buf, rest, TAB1
+				 "I_T nexus information:\n");
+
+		list_for_each_entry(nexus, &target->it_nexus_list, nexus_siblings) {
+			shprintf(total, buf, rest, TAB2 "%s: %llu\n",
+				 strcmp(tgt_drivers[target->lid]->name, "iscsi") ?
+				 "I_T nexus" : "Session", nexus->nexus_id);
+		}
+
+		if (!strcmp(tgt_drivers[target->lid]->name, "iscsi")) {
 			int i, aid;
 
 			shprintf(total, buf, rest, TAB1
