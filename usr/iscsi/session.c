@@ -15,6 +15,7 @@
 #include <errno.h>
 
 #include "iscsid.h"
+#include "tgtd.h"
 #include "util.h"
 
 static LIST_HEAD(sessions_list);
@@ -51,6 +52,7 @@ struct iscsi_session *session_lookup(uint16_t tsih)
 
 int session_create(struct iscsi_connection *conn)
 {
+	int err;
 	struct iscsi_session *session = NULL;
 	static uint16_t tsih, last_tsih = 0;
 	struct iscsi_target *target;
@@ -77,6 +79,13 @@ int session_create(struct iscsi_connection *conn)
 	if (!session->initiator) {
 		free(session);
 		return -ENOMEM;
+	}
+
+	err = it_nexus_create(target->tid, tsih);
+	if (err) {
+		free(session->initiator);
+		free(session);
+		return err;
 	}
 
 	session->target = target;
@@ -114,6 +123,8 @@ static void session_destroy(struct iscsi_session *session)
 		list_del(&session->slist);
 /* 		session->target->nr_sessions--; */
 	}
+
+	it_nexus_destroy(session->target->tid, session->tsih);
 
 	list_del(&session->hlist);
 
