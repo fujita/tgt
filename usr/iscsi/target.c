@@ -340,19 +340,13 @@ static int show_iscsi_param(char *buf, struct param *param, int rest)
 static int iscsi_target_show_session(struct iscsi_target* target, uint64_t sid,
 				     char *buf, int rest)
 {
-	int len, total = 0;
+	int len = 0, total = 0;
 	struct iscsi_session *session;
 
 	list_for_each_entry(session, &target->sessions_list, slist) {
-		if (sid64(session->isid, session->tsih) == sid || !sid) {
-			if (sid)
-				len = show_iscsi_param(buf, session->session_param, rest);
-			else
-				len = snprintf(buf, rest, "sid:%" PRIu64 " initiator:%s\n",
-					       sid64(session->isid, session->tsih),
-					       session->initiator);
+		if (session->tsih == sid)
+			len = show_iscsi_param(buf, session->session_param, rest);
 			buffer_check(buf, total, len, rest);
-		}
 	}
 
 	return total;
