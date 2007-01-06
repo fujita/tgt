@@ -66,6 +66,9 @@ struct it_nexus {
 
 	/* the list of i_t_nexus belonging to a target */
 	struct list_head nexus_siblings;
+
+	/* only used for show operation */
+	char *info;
 };
 
 struct cmd {

@@ -337,42 +337,6 @@ static int show_iscsi_param(char *buf, struct param *param, int rest)
 	return total;
 }
 
-static int iscsi_target_show_connection(struct iscsi_target* target, uint64_t sid,
-					uint32_t cid, char *buf, int rest)
-{
-	int len, total = 0;
-	struct iscsi_session *session;
-	struct iscsi_connection *conn;
-
-	session = session_lookup(sid_to_tsih(sid));
-	if (!session)
-		return 0;
-
-	len = 0;
-	list_for_each_entry(conn, &session->conn_list, clist) {
-		if (conn->cid == cid || !cid) {
-			if (cid) {
-			} else {
-				len = snprintf(buf, rest, "cid:%u", conn->cid);
-				buffer_check(buf, total, len, rest);
-
-				len = 0;
-				if (conn->tp->ep_show) {
-					len = conn->tp->ep_show(conn->fd, buf, rest);
-					buffer_check(buf, total, len, rest);
-				}
-
-				if (!len) {
-					len = snprintf(buf, rest, "\n");
-					buffer_check(buf, total, len, rest);
-				}
-			}
-		}
-	}
-
-	return total;
-}
-
 static int iscsi_target_show_session(struct iscsi_target* target, uint64_t sid,
 				     char *buf, int rest)
 {
@@ -411,10 +375,6 @@ int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid, uint64_t lu
 		break;
 	case MODE_SESSION:
 		len = iscsi_target_show_session(target, sid, buf, rest);
-		total += len;
-		break;
-	case MODE_CONNECTION:
-		len = iscsi_target_show_connection(target, sid, cid, buf, rest);
 		total += len;
 		break;
 	default:

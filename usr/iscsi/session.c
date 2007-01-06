@@ -56,6 +56,7 @@ int session_create(struct iscsi_connection *conn)
 	struct iscsi_session *session = NULL;
 	static uint16_t tsih, last_tsih = 0;
 	struct iscsi_target *target;
+	char addr[128];
 
 	target = target_find_by_id(conn->tid);
 	if (!target)
@@ -81,9 +82,24 @@ int session_create(struct iscsi_connection *conn)
 		return -ENOMEM;
 	}
 
-	err = it_nexus_create(target->tid, tsih);
+	session->info = zalloc(1024);
+	if (!session->info) {
+		free(session->initiator);
+		free(session);
+		return -ENOMEM;
+	}
+
+	memset(addr, 0, sizeof(addr));
+	conn->tp->ep_show(conn->fd, addr, sizeof(addr));
+
+	snprintf(session->info, 1024, TAB3 "Initiator: %s\n"
+		 TAB3 "Connection: %u\n"
+		 TAB4 "%s\n", session->initiator, conn->cid, addr);
+
+	err = it_nexus_create(target->tid, tsih, session->info);
 	if (err) {
 		free(session->initiator);
+		free(session->info);
 		free(session);
 		return err;
 	}
@@ -129,6 +145,7 @@ static void session_destroy(struct iscsi_session *session)
 	list_del(&session->hlist);
 
 	free(session->initiator);
+	free(session->info);
 	free(session);
 }
 

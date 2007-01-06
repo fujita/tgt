@@ -196,7 +196,7 @@ static int iscsi_tcp_show(int ep, char *buf, int rest)
 		return 0;
 	}
 
-	total = snprintf(buf, rest, " ip:%s\n", dst);
+	total = snprintf(buf, rest, "IP Address: %s", dst);
 
 	return total > 0 ? total : 0;
 }

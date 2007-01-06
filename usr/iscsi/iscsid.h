@@ -79,6 +79,8 @@ struct iscsi_session {
 	uint32_t exp_cmd_sn;
 
 	struct param session_param[ISCSI_PARAM_MAX];
+
+	char *info;
 };
 
 struct iscsi_task {

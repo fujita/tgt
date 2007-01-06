@@ -663,7 +663,23 @@ void target_mgmt_request(int host_no, uint64_t req_id, int function,
 	}
 }
 
-int it_nexus_create(int tid, uint32_t nid)
+static struct it_nexus *it_nexus_lookup(int tid, uint32_t nid)
+{
+	struct target *target;
+	struct it_nexus *nexus;
+
+	target = target_lookup(tid);
+	if (!target)
+		return NULL;
+
+	list_for_each_entry(nexus, &target->it_nexus_list, nexus_siblings) {
+		if (nexus->nexus_id == nid)
+			return nexus;
+	}
+	return NULL;
+}
+
+int it_nexus_create(int tid, uint32_t nid, char *info)
 {
 	struct target *target;
 	struct it_nexus *nexus;
@@ -672,10 +688,9 @@ int it_nexus_create(int tid, uint32_t nid)
 	if (!target)
 		return -ENOENT;
 
-	list_for_each_entry(nexus, &target->it_nexus_list, nexus_siblings) {
-		if (nexus->nexus_id == nid)
-			return -EEXIST;
-	}
+	nexus = it_nexus_lookup(tid, nid);
+	if (nexus)
+		return -EEXIST;
 
 	nexus = zalloc(sizeof(*nexus));
 	if (!nexus)
@@ -683,6 +698,8 @@ int it_nexus_create(int tid, uint32_t nid)
 
 	nexus->nexus_id = nid;
 	nexus->nexus_target = target;
+	nexus->info = info;
+
 	list_add_tail(&nexus->nexus_siblings, &target->it_nexus_list);
 
 	return 0;
@@ -1095,10 +1112,6 @@ static char *print_disksize(uint64_t size)
 	return buf;
 }
 
-#define TAB1 "    "
-#define TAB2 TAB1 TAB1
-#define TAB3 TAB1 TAB1 TAB1
-
 int tgt_target_show_all(char *buf, int rest)
 {
 	int total = 0, max = rest;
@@ -1118,19 +1131,13 @@ int tgt_target_show_all(char *buf, int rest)
 			 tgt_drivers[target->lid]->name,
 			 target_state_name(target->target_state));
 
-		/* FIXME: brain-dead... */
-
-		if (!strcmp(tgt_drivers[target->lid]->name, "iscsi"))
-			shprintf(total, buf, rest, TAB1
-				 "Session information:\n");
-		else
-			shprintf(total, buf, rest, TAB1
-				 "I_T nexus information:\n");
+		shprintf(total, buf, rest, TAB1 "I_T nexus information:\n");
 
 		list_for_each_entry(nexus, &target->it_nexus_list, nexus_siblings) {
-			shprintf(total, buf, rest, TAB2 "%s: %u\n",
-				 strcmp(tgt_drivers[target->lid]->name, "iscsi") ?
-				 "I_T nexus" : "Session", nexus->nexus_id);
+			shprintf(total, buf, rest, TAB2 "I_T nexus: %u\n",
+				 nexus->nexus_id);
+			if (nexus->info)
+				shprintf(total, buf, rest, "%s", nexus->info);
 		}
 
 		if (!strcmp(tgt_drivers[target->lid]->name, "iscsi")) {

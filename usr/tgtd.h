@@ -6,6 +6,11 @@
 #define SCSI_ID_LEN	24
 #define SCSI_SN_LEN	8
 
+#define TAB1 "    "
+#define TAB2 TAB1 TAB1
+#define TAB3 TAB1 TAB1 TAB1
+#define TAB4 TAB2 TAB2
+
 enum scsi_target_iotype {
 	SCSI_TARGET_FILEIO = 1,
 	SCSI_TARGET_RAWIO,
@@ -120,7 +125,7 @@ extern int account_ctl(int tid, int type, char *user, int bind);
 extern int account_show(char *buf, int rest);
 extern int account_available(int tid, int dir);
 
-extern int it_nexus_create(int tid, uint32_t nid);
+extern int it_nexus_create(int tid, uint32_t nid, char *info);
 extern int it_nexus_destroy(int tid, uint32_t nid);
 
 #endif
