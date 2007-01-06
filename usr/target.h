@@ -60,7 +60,7 @@ struct target {
 };
 
 struct it_nexus {
-	uint64_t nexus_id;
+	uint32_t nexus_id;
 
 	struct target *nexus_target;
 

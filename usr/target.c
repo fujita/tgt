@@ -663,7 +663,7 @@ void target_mgmt_request(int host_no, uint64_t req_id, int function,
 	}
 }
 
-int it_nexus_create(int tid, uint64_t nid)
+int it_nexus_create(int tid, uint32_t nid)
 {
 	struct target *target;
 	struct it_nexus *nexus;
@@ -688,7 +688,7 @@ int it_nexus_create(int tid, uint64_t nid)
 	return 0;
 }
 
-int it_nexus_destroy(int tid, uint64_t nid)
+int it_nexus_destroy(int tid, uint32_t nid)
 {
 	struct target *target;
 	struct it_nexus *nexus, *tmp;
@@ -1128,7 +1128,7 @@ int tgt_target_show_all(char *buf, int rest)
 				 "I_T nexus information:\n");
 
 		list_for_each_entry(nexus, &target->it_nexus_list, nexus_siblings) {
-			shprintf(total, buf, rest, TAB2 "%s: %llu\n",
+			shprintf(total, buf, rest, TAB2 "%s: %u\n",
 				 strcmp(tgt_drivers[target->lid]->name, "iscsi") ?
 				 "I_T nexus" : "Session", nexus->nexus_id);
 		}
