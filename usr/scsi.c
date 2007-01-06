@@ -476,7 +476,7 @@ uint64_t scsi_get_devid(int lid, uint8_t *p)
 	return fn(p);
 }
 
-int scsi_cmd_perform(int tid, int lid, int host_no, uint8_t *pdu,
+int scsi_cmd_perform(uint64_t nid, int lid, int host_no, uint8_t *pdu,
 		     int *len, uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
 		     uint8_t *try_map, uint64_t *offset, uint8_t *lun_buf,
 		     struct tgt_device *dev, struct list_head *dev_list, int *async,
@@ -513,7 +513,7 @@ int scsi_cmd_perform(int tid, int lid, int host_no, uint8_t *pdu,
 	} else {
 		int reserved;
 
-		reserved = device_reserved(tid, dev->lun, host_no);
+		reserved = device_reserved(nid, dev->lun, host_no);
 		if (reserved) {
 			switch (scb[0]) {
 			case INQUIRY:
@@ -588,14 +588,14 @@ int scsi_cmd_perform(int tid, int lid, int host_no, uint8_t *pdu,
 		break;
 	case RESERVE:
 	case RESERVE_10:
-		result = device_reserve(tid, dev->lun, host_no);
+		result = device_reserve(nid, dev->lun, nid);
 		if (result)
 			result = SAM_STAT_RESERVATION_CONFLICT;
 		*len = 0;
 		break;
 	case RELEASE:
 	case RELEASE_10:
-		result = device_release(tid, dev->lun, host_no, 0);
+		result = device_release(nid, dev->lun, host_no, 0);
 		if (result)
 			result = SAM_STAT_RESERVATION_CONFLICT;
 		*len = 0;

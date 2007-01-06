@@ -66,6 +66,9 @@ struct it_nexus {
 	/* the list of i_t_nexus belonging to a target */
 	struct list_head nexus_siblings;
 
+	/* dirty hack for IBMVIO */
+	int host_no;
+
 	/* only used for show operation */
 	char *info;
 };
@@ -82,7 +85,7 @@ struct cmd {
 	struct tgt_device *dev;
 	unsigned long state;
 
-	int hostno;
+	uint64_t cmd_nexus_id;
 	uint32_t data_len;
 	uint8_t scb[16];
 	uint8_t lun[8];

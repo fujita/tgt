@@ -865,7 +865,7 @@ static void iscsi_free_cmd_task(struct iscsi_task *task)
 {
 	struct iscsi_connection *conn = task->conn;
 
-	target_cmd_done(conn->session->tsih, task->tag);
+	target_cmd_done(conn->session->iscsi_nexus_id, task->tag);
 	list_del(&task->c_hlist);
 	if (task->c_buffer) {
 		if ((unsigned long) task->c_buffer != task->addr)
@@ -874,15 +874,15 @@ static void iscsi_free_cmd_task(struct iscsi_task *task)
 	iscsi_free_task(task);
 }
 
-int iscsi_scsi_cmd_done(int host_no, int len, int result, int rw, uint64_t addr,
+int iscsi_scsi_cmd_done(uint64_t nid, int len, int result, int rw, uint64_t addr,
 			uint64_t tag)
 {
 	struct iscsi_session *session;
 	struct iscsi_task *task;
 
-	dprintf("%u %d %d %d %" PRIx64 " %" PRIx64 "\n", host_no, len, result,
-		rw, addr, tag);
-	session = session_lookup(host_no);
+	dprintf("%" PRIu64 " %d %d %d %" PRIx64 " %" PRIx64 "\n", nid,
+		len, result, rw, addr, tag);
+	session = session_lookup(nid);
 	if (!session)
 		return -EINVAL;
 
@@ -952,13 +952,15 @@ static int iscsi_scsi_cmd_execute(struct iscsi_task *task)
 			else
 				list_add_tail(&task->c_list, &task->conn->tx_clist);
 		} else
-			err = target_cmd_queue(conn->session->tsih, req->cdb,
+			err = target_cmd_queue(conn->session->iscsi_nexus_id,
+					       req->cdb,
 					       req->flags & ISCSI_FLAG_CMD_WRITE,
 					       uaddr, req->lun,
 					       ntohl(req->data_length),
 					       cmd_attr(task), req->itt);
 	} else
-		err = target_cmd_queue(conn->session->tsih, req->cdb,
+		err = target_cmd_queue(conn->session->iscsi_nexus_id,
+				       req->cdb,
 				       req->flags & ISCSI_FLAG_CMD_WRITE,
 				       uaddr, req->lun, ntohl(req->data_length),
 				       cmd_attr(task), req->itt);
@@ -968,7 +970,7 @@ static int iscsi_scsi_cmd_execute(struct iscsi_task *task)
 	return err;
 }
 
-extern int iscsi_tm_done(int host_no, uint64_t mid, int result)
+extern int iscsi_tm_done(uint64_t nid, uint64_t mid, int result)
 {
 	struct iscsi_task *task = (struct iscsi_task *) (unsigned long) mid;
 
@@ -1032,8 +1034,8 @@ static int iscsi_tm_execute(struct iscsi_task *task)
 	if (err)
 		task->result = err;
 	else
-		target_mgmt_request(conn->session->tsih, (unsigned long) task,
-				    fn, req->lun, req->itt);
+		target_mgmt_request(conn->session->iscsi_nexus_id,
+				    (unsigned long) task, fn, req->lun, req->itt);
 	return err;
 }
 

@@ -36,7 +36,6 @@
 #include "scsi.h"
 #include "tgtadm.h"
 
-static struct target *hostt[MAX_NR_HOST];
 static LIST_HEAD(target_list);
 
 static struct target *target_lookup(int tid)
@@ -46,6 +45,73 @@ static struct target *target_lookup(int tid)
 		if (target->tid == tid)
 			return target;
 	return NULL;
+}
+
+static struct it_nexus *it_nexus_lookup(uint64_t nid)
+{
+	int32_t tid;
+	int32_t nid32;
+	struct target *target;
+	struct it_nexus *nexus;
+
+	tid = NID2TID(nid);
+
+	target = target_lookup(tid);
+	if (!target)
+		return NULL;
+
+	nid32 = nid & NID_MASK;
+	list_for_each_entry(nexus, &target->it_nexus_list, nexus_siblings) {
+		if (nexus->nexus_id == nid32)
+			return nexus;
+	}
+	return NULL;
+}
+
+int it_nexus_create(int tid, char *info, uint64_t *rsp_nid)
+{
+	struct target *target;
+	struct it_nexus *nexus;
+	uint64_t nexus_id;
+
+	target = target_lookup(tid);
+	if (!target)
+		return -ENOENT;
+
+	for (nexus_id = 0; nexus_id <= UINT32_MAX; nexus_id++) {
+		nexus = it_nexus_lookup(NID64(tid, nexus_id));
+		if (!nexus)
+			goto found;
+	}
+
+	eprintf("can't find free nexus id\n");
+	return -EINVAL;
+found:
+	nexus = zalloc(sizeof(*nexus));
+	if (!nexus)
+		return -ENOMEM;
+
+	nexus->nexus_id = nexus_id;
+	nexus->nexus_target = target;
+	nexus->info = info;
+
+	list_add_tail(&nexus->nexus_siblings, &target->it_nexus_list);
+	*rsp_nid = NID64(tid, nexus_id);
+
+	return 0;
+}
+
+int it_nexus_destroy(uint64_t nid)
+{
+	struct it_nexus *nexus;
+
+	nexus = it_nexus_lookup(nid);
+	if (nexus) {
+		list_del(&nexus->nexus_siblings);
+		free(nexus);
+		return 0;
+	} else
+		return -ENOENT;
 }
 
 static struct tgt_device *device_lookup(struct target *target, uint64_t lun)
@@ -78,14 +144,6 @@ static void cmd_hlist_insert(struct target *target, struct cmd *cmd)
 static void cmd_hlist_remove(struct cmd *cmd)
 {
 	list_del(&cmd->c_hlist);
-}
-
-static struct target *host_to_target(int host_no)
-{
-	if (host_no < MAX_NR_HOST)
-		return hostt[host_no];
-
-	return NULL;
 }
 
 static void tgt_cmd_queue_init(struct tgt_cmd_queue *q)
@@ -215,12 +273,12 @@ int tgt_device_destroy(int tid, uint64_t lun)
 	return 0;
 }
 
-int device_reserve(int tid, uint64_t lun, uint64_t reserve_id)
+int device_reserve(uint64_t nid, uint64_t lun, uint64_t reserve_id)
 {
 	struct target *target;
 	struct tgt_device *device;
 
-	device = __device_lookup(tid, lun, &target);
+	device = __device_lookup(NID2TID(nid), lun, &target);
 	if (!device)
 		return -EINVAL;
 
@@ -234,12 +292,12 @@ int device_reserve(int tid, uint64_t lun, uint64_t reserve_id)
 	return 0;
 }
 
-int device_release(int tid, uint64_t lun, uint64_t reserve_id, int force)
+int device_release(uint64_t nid, uint64_t lun, uint64_t reserve_id, int force)
 {
 	struct target *target;
 	struct tgt_device *device;
 
-	device = __device_lookup(tid, lun, &target);
+	device = __device_lookup(NID2TID(nid), lun, &target);
 	if (!device)
 		return 0;
 
@@ -251,12 +309,12 @@ int device_release(int tid, uint64_t lun, uint64_t reserve_id, int force)
 	return -EBUSY;
 }
 
-int device_reserved(int tid, uint64_t lun, uint64_t reserve_id)
+int device_reserved(uint64_t nid, uint64_t lun, uint64_t reserve_id)
 {
 	struct target *target;
 	struct tgt_device *device;
 
-	device = __device_lookup(tid, lun, &target);
+	device = __device_lookup(NID2TID(nid), lun, &target);
 	if (!device || !device->reserve_id || device->reserve_id == reserve_id)
 		return 0;
 	return -EBUSY;
@@ -335,31 +393,34 @@ static void cmd_post_perform(struct tgt_cmd_queue *q, struct cmd *cmd,
 	}
 }
 
-int target_cmd_queue(int host_no, uint8_t *scb, uint8_t rw,
+int target_cmd_queue(uint64_t nid, uint8_t *scb, uint8_t rw,
 		     unsigned long uaddr,
 		     uint8_t *lun, uint32_t data_len,
 		     int attribute, uint64_t tag)
 {
 	struct target *target;
 	struct tgt_cmd_queue *q;
+	struct it_nexus *nexus;
 	struct cmd *cmd;
 	int result, enabled = 0, async, len = 0;
 	uint64_t offset, dev_id;
 	uint8_t mmapped = 0;
 
-	target = host_to_target(host_no);
-	if (!target) {
-		eprintf("%d is not bind to any target\n", host_no);
+	nexus = it_nexus_lookup(nid);
+	if (!nexus) {
+		eprintf("invalid nid %u %u\n", (int)NID2TID(nid),
+			(uint32_t)(nid & NID_MASK));
 		return -ENOENT;
 	}
 
+	target = nexus->nexus_target;
 	/* TODO: preallocate cmd */
 	cmd = zalloc(sizeof(*cmd));
 	if (!cmd)
 		return -ENOMEM;
 
+	cmd->cmd_nexus_id = nid;
 	cmd->c_target = target;
-	cmd->hostno = host_no;
 	cmd->attribute = attribute;
 	cmd->tag = tag;
 	cmd_hlist_insert(target, cmd);
@@ -396,7 +457,7 @@ int target_cmd_queue(int host_no, uint8_t *scb, uint8_t rw,
 
 	if (enabled) {
 		result = scsi_cmd_perform(target->tid, target->lid,
-					  host_no, scb,
+					  nexus->host_no, scb,
 					  &len, data_len,
 					  &uaddr, &rw, &mmapped, &offset,
 					  lun, cmd->dev,
@@ -411,7 +472,7 @@ int target_cmd_queue(int host_no, uint8_t *scb, uint8_t rw,
 		cmd->rw = rw;
 		set_cmd_processed(cmd);
 		if (!async)
-			tgt_drivers[target->lid]->cmd_end_notify(host_no, len, result,
+			tgt_drivers[target->lid]->cmd_end_notify(nid, len, result,
 								 rw, uaddr, tag);
 	} else {
 		set_cmd_queued(cmd);
@@ -434,7 +495,7 @@ void target_cmd_io_done(void *key, int result)
 	struct cmd *cmd = (struct cmd *) key;
 
 	/* TODO: sense in case of error. */
-	tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->hostno,
+	tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->cmd_nexus_id,
 							cmd->len, result,
 							cmd->rw, cmd->uaddr,
 							cmd->tag);
@@ -447,15 +508,22 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 	int enabled, result, async, len = 0;
 	uint8_t rw = 0, mmapped = 0;
 	uint64_t offset;
+	int (* notify_fn)(uint64_t, int, int, int, uint64_t, uint64_t);
 
 	list_for_each_entry_safe(cmd, tmp, &q->queue, qlist) {
 		enabled = cmd_enabled(q, cmd);
 		if (enabled) {
+			struct it_nexus *nexus;
+
+			nexus = it_nexus_lookup(cmd->cmd_nexus_id);
+			if (!nexus)
+				eprintf("BUG: %" PRIu64 "\n", cmd->cmd_nexus_id);
+
 			list_del(&cmd->qlist);
 			dprintf("perform %" PRIx64 " %x\n", cmd->tag, cmd->attribute);
 			result = scsi_cmd_perform(cmd->c_target->tid,
 						  cmd->c_target->lid,
-						  cmd->hostno, cmd->scb,
+						  nexus->host_no, cmd->scb,
 						  &len, cmd->len,
 						  (unsigned long *) &cmd->uaddr,
 						  &rw, &mmapped, &offset,
@@ -466,13 +534,11 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 			cmd->rw = rw;
 			cmd_post_perform(q, cmd, cmd->uaddr, len, mmapped);
 			set_cmd_processed(cmd);
-			if (!async)
-				tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->hostno,
-										len,
-										result,
-										rw,
-										cmd->uaddr,
-										cmd->tag);
+			if (!async) {
+				notify_fn = tgt_drivers[cmd->c_target->lid]->cmd_end_notify;
+				notify_fn(cmd->cmd_nexus_id, len, result, rw,
+					  cmd->uaddr, cmd->tag);
+			}
 		} else
 			break;
 	}
@@ -519,28 +585,29 @@ static void __cmd_done(struct target *target, struct cmd *cmd)
 	post_cmd_done(q);
 }
 
-void target_cmd_done(int host_no, uint64_t tag)
+void target_cmd_done(uint64_t nid, uint64_t tag)
 {
 	struct target *target;
 	struct cmd *cmd;
 	struct mgmt_req *mreq;
 
-	target = host_to_target(host_no);
+	target = target_lookup(NID2TID(nid));
 	if (!target) {
-		eprintf("%d is not bind to any target\n", host_no);
+		eprintf("invalid nid %u %u\n", (int)NID2TID(nid),
+			(uint32_t)(nid & NID_MASK));
 		return;
 	}
 
 	cmd = cmd_lookup(target, tag);
 	if (!cmd) {
-		eprintf("Cannot find cmd %d %" PRIx64 "\n", host_no, tag);
+		eprintf("Cannot find cmd %d %" PRIx64 "\n", (int)NID2TID(nid), tag);
 		return;
 	}
 
 	mreq = cmd->mreq;
 	if (mreq && !--mreq->busy) {
 		int err = mreq->function == ABORT_TASK ? -EEXIST : 0;
-		tgt_drivers[cmd->c_target->lid]->mgmt_end_notify(cmd->hostno,
+		tgt_drivers[cmd->c_target->lid]->mgmt_end_notify(cmd->cmd_nexus_id,
 								 mreq->mid, err);
 		free(mreq);
 	}
@@ -565,14 +632,14 @@ static int abort_cmd(struct target* target, struct mgmt_req *mreq,
 		err = -EBUSY;
 	} else {
 		__cmd_done(target, cmd);
-		tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->hostno, 0,
+		tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->cmd_nexus_id, 0,
 								TASK_ABORTED, 0, 0, cmd->tag);
 	}
 	return err;
 }
 
-static int abort_task_set(struct mgmt_req *mreq, struct target* target, int host_no,
-			  uint64_t tag, uint8_t *lun, int all)
+static int abort_task_set(struct mgmt_req *mreq, struct target* target,
+			  uint64_t nexus_id, uint64_t tag, uint8_t *lun, int all)
 {
 	struct cmd *cmd, *tmp;
 	int i, err, count = 0;
@@ -582,8 +649,8 @@ static int abort_task_set(struct mgmt_req *mreq, struct target* target, int host
 	for (i = 0; i < ARRAY_SIZE(target->cmd_hash_list); i++) {
 		struct list_head *list = &target->cmd_hash_list[i];
 		list_for_each_entry_safe(cmd, tmp, list, c_hlist) {
-			if ((all && cmd->hostno == host_no) ||
-			    (cmd->tag == tag && cmd->hostno == host_no) ||
+			if ((all && cmd->cmd_nexus_id == nexus_id) ||
+			    (cmd->tag == tag && cmd->cmd_nexus_id == nexus_id) ||
 			    (lun && !memcmp(cmd->lun, lun, sizeof(cmd->lun)))) {
 				err = abort_cmd(target, mreq, cmd);
 				if (err)
@@ -596,16 +663,17 @@ static int abort_task_set(struct mgmt_req *mreq, struct target* target, int host
 	return count;
 }
 
-void target_mgmt_request(int host_no, uint64_t req_id, int function,
+void target_mgmt_request(uint64_t nid, uint64_t req_id, int function,
 			 uint8_t *lun, uint64_t tag)
 {
 	struct target *target;
 	struct mgmt_req *mreq;
 	int err = 0, count, send = 1;
 
-	target = host_to_target(host_no);
+	target = target_lookup(NID2TID(nid));
 	if (!target) {
-		eprintf("%d is not bind to any target\n", host_no);
+		eprintf("invalid nid %u %u\n", (int)NID2TID(nid),
+			(uint32_t)(nid & NID_MASK));
 		return;
 	}
 
@@ -617,14 +685,14 @@ void target_mgmt_request(int host_no, uint64_t req_id, int function,
 
 	switch (function) {
 	case ABORT_TASK:
-		count = abort_task_set(mreq, target, host_no, tag, NULL, 0);
+		count = abort_task_set(mreq, target, nid, tag, NULL, 0);
 		if (mreq->busy)
 			send = 0;
 		if (!count)
 			err = -EEXIST;
 		break;
 	case ABORT_TASK_SET:
-		count = abort_task_set(mreq, target, host_no, 0, NULL, 1);
+		count = abort_task_set(mreq, target, nid, 0, NULL, 1);
 		if (mreq->busy)
 			send = 0;
 		break;
@@ -635,8 +703,8 @@ void target_mgmt_request(int host_no, uint64_t req_id, int function,
 		break;
 	case LOGICAL_UNIT_RESET:
 		device_release(target->tid, scsi_get_devid(target->lid, lun),
-			       host_no, 1);
-		count = abort_task_set(mreq, target, host_no, 0, lun, 0);
+			       nid, 1);
+		count = abort_task_set(mreq, target, nid, 0, lun, 0);
 		if (mreq->busy)
 			send = 0;
 		break;
@@ -646,76 +714,9 @@ void target_mgmt_request(int host_no, uint64_t req_id, int function,
 	}
 
 	if (send) {
-		tgt_drivers[target->lid]->mgmt_end_notify(host_no, req_id, err);
+		tgt_drivers[target->lid]->mgmt_end_notify(nid, req_id, err);
 		free(mreq);
 	}
-}
-
-static struct it_nexus *it_nexus_lookup(uint64_t nid)
-{
-	int32_t tid;
-	int32_t nid32;
-	struct target *target;
-	struct it_nexus *nexus;
-
-	tid = nid >> TID_SHIFT;
-
-	target = target_lookup(tid);
-	if (!target)
-		return NULL;
-
-	nid32 = nid & NID_MASK;
-	list_for_each_entry(nexus, &target->it_nexus_list, nexus_siblings) {
-		if (nexus->nexus_id == nid32)
-			return nexus;
-	}
-	return NULL;
-}
-
-int it_nexus_create(int tid, char *info, uint64_t *rsp_nid)
-{
-	struct target *target;
-	struct it_nexus *nexus;
-	uint64_t nexus_id;
-
-	target = target_lookup(tid);
-	if (!target)
-		return -ENOENT;
-
-	for (nexus_id = 0; nexus_id <= UINT32_MAX; nexus_id++) {
-		nexus = it_nexus_lookup(NID64(tid, nexus_id));
-		if (!nexus)
-			goto found;
-	}
-
-	eprintf("can't find free nexus id\n");
-	return -EINVAL;
-found:
-	nexus = zalloc(sizeof(*nexus));
-	if (!nexus)
-		return -ENOMEM;
-
-	nexus->nexus_id = nexus_id;
-	nexus->nexus_target = target;
-	nexus->info = info;
-
-	list_add_tail(&nexus->nexus_siblings, &target->it_nexus_list);
-	*rsp_nid = NID64(tid, nexus_id);
-
-	return 0;
-}
-
-int it_nexus_destroy(uint64_t nid)
-{
-	struct it_nexus *nexus;
-
-	nexus = it_nexus_lookup(nid);
-	if (nexus) {
-		list_del(&nexus->nexus_siblings);
-		free(nexus);
-		return 0;
-	} else
-		return -ENOENT;
 }
 
 struct account_entry {
@@ -996,24 +997,46 @@ char *acl_get(int tid, int idx)
 	return NULL;
 }
 
-int tgt_target_bind(int tid, int host_no, int lid)
+/* totally broken. kill this after done it_nexus kernel code */
+int it_nexus_to_host_no(uint64_t nid)
+{
+	struct it_nexus *nexus;
+	nexus = it_nexus_lookup(nid);
+	return nexus->host_no;
+}
+
+uint64_t host_no_to_it_nexus(int host_no)
 {
 	struct target *target;
+	struct it_nexus *nexus;
 
-	target = target_lookup(tid);
-	if (!target) {
-		eprintf("target is not found %d\n", tid);
-		return TGTADM_NO_TARGET;
+	list_for_each_entry(target, &target_list, target_siblings) {
+		list_for_each_entry(nexus, &target->it_nexus_list, nexus_siblings) {
+			if (nexus->host_no == host_no)
+				return nexus->nexus_id;
+		}
 	}
+	return UINT64_MAX;
+}
 
-	if (hostt[host_no]) {
-		eprintf("host is already binded %d %d\n", tid, host_no);
+int tgt_target_bind(int tid, int host_no, int lid)
+{
+	int err;
+	uint64_t nexus_id;
+	struct it_nexus *nexus;
+
+	err = it_nexus_create(tid, NULL, &nexus_id);
+	if (err) {
+		eprintf("fail to bind %d %d\n", tid, host_no);
 		return TGTADM_INVALID_REQUEST;
 	}
 
+	nexus = it_nexus_lookup(nexus_id);
+	nexus->host_no = host_no;
+
 	dprintf("Succeed to bind the target %d to the scsi host %d\n",
 		tid, host_no);
-	hostt[host_no] = target;
+
 	return 0;
 }
 

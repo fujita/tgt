@@ -40,7 +40,17 @@ struct iscsi_session *session_find_name(int tid, const char *iname, uint8_t *isi
 	return NULL;
 }
 
-struct iscsi_session *session_lookup(uint16_t tsih)
+struct iscsi_session *session_lookup(uint64_t nexus_id)
+{
+	struct iscsi_session *session;
+	list_for_each_entry(session, &sessions_list, hlist) {
+		if (session->iscsi_nexus_id == nexus_id)
+			return session;
+	}
+	return NULL;
+}
+
+static struct iscsi_session *session_lookup_by_tsih(uint16_t tsih)
 {
 	struct iscsi_session *session;
 	list_for_each_entry(session, &sessions_list, hlist) {
@@ -66,7 +76,7 @@ int session_create(struct iscsi_connection *conn)
 	for (tsih = last_tsih + 1; tsih != last_tsih; tsih++) {
 		if (!tsih)
 			continue;
-		session = session_lookup(tsih);
+		session = session_lookup_by_tsih(tsih);
 		if (!session)
 			break;
 	}

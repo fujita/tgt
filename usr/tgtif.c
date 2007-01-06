@@ -84,21 +84,21 @@ static int kreq_send(struct tgt_event *p)
 	return 0;
 }
 
-int kspace_send_tsk_mgmt_res(int host_no, uint64_t mid, int result)
+int kspace_send_tsk_mgmt_res(uint64_t nid, uint64_t mid, int result)
 {
 	struct tgt_event ev;
 
 	memset(&ev, 0, sizeof(ev));
 
 	ev.hdr.type = TGT_UEVENT_TSK_MGMT_RSP;
-	ev.p.tsk_mgmt_rsp.host_no = host_no;
+	ev.p.tsk_mgmt_rsp.host_no = it_nexus_to_host_no(nid);
 	ev.p.tsk_mgmt_rsp.mid = mid;
 	ev.p.tsk_mgmt_rsp.result = result;
 
 	return kreq_send(&ev);
 }
 
-int kspace_send_cmd_res(int host_no, int len, int result,
+int kspace_send_cmd_res(uint64_t nid, int len, int result,
 			int rw, uint64_t addr, uint64_t tag)
 {
 	struct tgt_event ev;
@@ -106,7 +106,7 @@ int kspace_send_cmd_res(int host_no, int len, int result,
 	memset(&ev, 0, sizeof(ev));
 
 	ev.hdr.type = TGT_UEVENT_CMD_RSP;
-	ev.p.cmd_rsp.host_no = host_no;
+	ev.p.cmd_rsp.host_no = it_nexus_to_host_no(nid);
 	ev.p.cmd_rsp.len = len;
 	ev.p.cmd_rsp.result = result;
 	ev.p.cmd_rsp.uaddr = addr;
@@ -129,17 +129,19 @@ retry:
 
 	switch (ev->hdr.type) {
 	case TGT_KEVENT_CMD_REQ:
-		target_cmd_queue(ev->p.cmd_req.host_no, ev->p.cmd_req.scb,
+		target_cmd_queue(host_no_to_it_nexus(ev->p.cmd_req.host_no),
+				 ev->p.cmd_req.scb,
 				 0, 0,
 /* 				 ev->k.cmd_req.uaddr, */
 				 ev->p.cmd_req.lun, ev->p.cmd_req.data_len,
 				 ev->p.cmd_req.attribute, ev->p.cmd_req.tag);
 		break;
 	case TGT_KEVENT_CMD_DONE:
-		target_cmd_done(ev->p.cmd_done.host_no, ev->p.cmd_done.tag);
+		target_cmd_done(host_no_to_it_nexus(ev->p.cmd_done.host_no),
+				ev->p.cmd_done.tag);
 		break;
 	case TGT_KEVENT_TSK_MGMT_REQ:
-		target_mgmt_request(ev->p.cmd_req.host_no,
+		target_mgmt_request(host_no_to_it_nexus(ev->p.cmd_req.host_no),
 				    ev->p.tsk_mgmt_req.mid,
 				    ev->p.tsk_mgmt_req.function,
 				    ev->p.tsk_mgmt_req.lun,

@@ -256,7 +256,7 @@ extern void iscsi_free_task(struct iscsi_task *task);
 /* session.c */
 extern struct iscsi_session *session_find_name(int tid, const char *iname, uint8_t *isid);
 extern int session_create(struct iscsi_connection *conn);
-extern struct iscsi_session *session_lookup(uint16_t tsih);
+extern struct iscsi_session *session_lookup(uint64_t nexus_id);
 extern void session_get(struct iscsi_session *session);
 extern void session_put(struct iscsi_session *session);
 

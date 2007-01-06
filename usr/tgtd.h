@@ -9,6 +9,7 @@
 #define TID_SHIFT 32
 #define NID_MASK ((1ULL << TID_SHIFT) - 1)
 #define NID64(tid, nid) ((uint64_t) tid << TID_SHIFT | nid)
+#define NID2TID(nid) (nid >> TID_SHIFT)
 
 #define TAB1 "    "
 #define TAB2 TAB1 TAB1
@@ -73,16 +74,16 @@ static inline int kreq_init(void)	\
 struct backedio_template sg_bdt;
 #endif
 
-extern int kspace_send_tsk_mgmt_res(int host_no, uint64_t mid, int result);
-extern int kspace_send_cmd_res(int host_no, int len, int result,
+extern int kspace_send_tsk_mgmt_res(uint64_t nid, uint64_t mid, int result);
+extern int kspace_send_cmd_res(uint64_t nid, int len, int result,
 			       int rw, uint64_t addr, uint64_t tag);
 extern int ipc_init(void);
 extern int tgt_device_create(int tid, uint64_t lun, char *args);
 extern int tgt_device_destroy(int tid, uint64_t lun);
 extern int tgt_device_update(int tid, uint64_t dev_id, char *name);
-extern int device_reserve(int tid, uint64_t lun, uint64_t reserve_id);
-extern int device_release(int tid, uint64_t lun, uint64_t reserve_id, int force);
-extern int device_reserved(int tid, uint64_t lun, uint64_t reserve_id);
+extern int device_reserve(uint64_t nid, uint64_t lun, uint64_t reserve_id);
+extern int device_release(uint64_t nid, uint64_t lun, uint64_t reserve_id, int force);
+extern int device_reserved(uint64_t nid, uint64_t lun, uint64_t reserve_id);
 
 extern int tgt_target_create(int lld, int tid, char *args, int t_type, int bs_type);
 extern int tgt_target_destroy(int tid);
@@ -95,18 +96,18 @@ extern int tgt_event_add(int fd, int events, event_handler_t handler, void *data
 extern void tgt_event_del(int fd);
 extern int tgt_event_modify(int fd, int events);
 
-extern int target_cmd_queue(int host_no, uint8_t *scb, uint8_t rw,
+extern int target_cmd_queue(uint64_t nid, uint8_t *scb, uint8_t rw,
 			    unsigned long uaddr,
 			    uint8_t *lun, uint32_t data_len,
 			    int attribute, uint64_t tag);
-extern void target_cmd_done(int host_no, uint64_t tag);
-extern void target_mgmt_request(int host_no, uint64_t req_id, int function,
+extern void target_cmd_done(uint64_t nid, uint64_t tag);
+extern void target_mgmt_request(uint64_t nid, uint64_t req_id, int function,
 				uint8_t *lun, uint64_t tag);
 
 extern void target_cmd_io_done(void *key, int result);
 
 extern uint64_t scsi_get_devid(int lid, uint8_t *pdu);
-extern int scsi_cmd_perform(int tid, int lid, int host_no, uint8_t *pdu, int *len,
+extern int scsi_cmd_perform(uint64_t nid, int lid, int host_no, uint8_t *pdu, int *len,
 			    uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
 			    uint8_t *try_map, uint64_t *offset, uint8_t *lun,
 			    struct tgt_device *dev, struct list_head *dev_list,
@@ -131,5 +132,9 @@ extern int account_available(int tid, int dir);
 
 extern int it_nexus_create(int tid, char *info, uint64_t *nid);
 extern int it_nexus_destroy(uint64_t nid);
+
+/* crap. kill this after done it_nexus kernel code */
+extern int it_nexus_to_host_no(uint64_t nid);
+extern uint64_t host_no_to_it_nexus(int host_no);
 
 #endif
