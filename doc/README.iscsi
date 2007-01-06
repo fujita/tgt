@@ -35,6 +35,8 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
     System information:
         Driver: iscsi
         Status: running
+    I_T nexus information:
+    Account information:
     ACL information:
     LUN information:
         LUN: 0
@@ -54,6 +56,8 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
     System information:
         Driver: iscsi
         Status: running
+    I_T nexus information:
+    Account information:
     ACL information:
         ALL
     LUN information:
@@ -77,6 +81,8 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
     System information:
         Driver: iscsi
         Status: running
+    I_T nexus information:
+    Account information:
     ACL information:
     LUN information:
         LUN: 0
@@ -96,6 +102,8 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
     System information:
         Driver: iscsi
         Status: running
+    I_T nexus information:
+    Account information:
     ACL information:
         192.168.2.29
         192.168.11.0/24
@@ -116,6 +124,8 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
     System information:
         Driver: iscsi
         Status: suspended
+    I_T nexus information:
+    Account information:
     LUN information:
         LUN: 0
             SCSI ID: deadbeaf1:0
@@ -201,6 +211,7 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
     System information:
         Driver: iscsi
         Status: running
+    I_T nexus information:
     Account information:
         fujita
     ACL information:
@@ -228,6 +239,7 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
     System information:
         Driver: iscsi
         Status: running
+    I_T nexus information:
     Account information:
         fujita
         hoge (outgoing)
@@ -240,6 +252,86 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
             Size: 1G
             Backing store: /var/tmp/image
             Backing store type: file
+
+
+Initiator Information
+-------------
+After the target accepts initiators, the system information would be
+something like the followings:
+
+host:~/tgt# ./tgt/usr/tgtadm --lld iscsi --op show --mode target
+Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
+    System information:
+        Driver: iscsi
+        Status: running
+    I_T nexus information:
+        I_T nexus: 2
+            Initiator: iqn.1987-05.com.cisco:01.4438aca09387
+            Connection: 0
+                IP Address: 192.168.11.5
+    Account information:
+    ACL information:
+        ALL
+    LUN information:
+        LUN: 0
+            SCSI ID: deadbeaf1:0
+            SCSI SN:
+            Size: 1G
+            Backing store: /var/tmp/image
+            Backing store type: file
+
+
+One initiator (192.168.11.5) logs in now. Let's try again:
+
+host:~/tgt# ./tgt/usr/tgtadm --lld iscsi --op show --mode target
+Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
+    System information:
+        Driver: iscsi
+        Status: running
+    I_T nexus information:
+        I_T nexus: 2
+            Initiator: iqn.1987-05.com.cisco:01.4438aca09387
+            Connection: 0
+                IP Address: 192.168.11.5
+        I_T nexus: 3
+            Initiator: iqn.1991-05.com.microsoft:kernel
+            Connection: 1
+                IP Address: 192.168.11.133
+     Account information:
+    ACL information:
+        ALL
+    LUN information:
+        LUN: 0
+            SCSI ID: deadbeaf1:0
+            SCSI SN:
+            Size: 1G
+            Backing store: /var/tmp/image
+            Backing store type: file
+
+
+Now we have two initiators. You can see the parameters that the target
+and initiator negotiated (use the values follows "I_T nexus:"):
+
+host:~/tgt# ./tgt/usr/tgtadm --lld iscsi --op show --mode session --tid 1 --sid 3
+MaxRecvDataSegmentLength=8192
+MaxXmitDataSegmentLength=8192
+HeaderDigest=None
+DataDigest=None
+InitialR2T=Yes
+MaxOutstandingR2T=1
+ImmediateData=Yes
+FirstBurstLength=65536
+MaxBurstLength=262144
+DataPDUInOrder=Yes
+DataSequenceInOrder=Yes
+ErrorRecoveryLevel=0
+IFMarker=No
+OFMarker=No
+DefaultTime2Wait=2
+DefaultTime2Retain=20
+OFMarkInt=Reject
+IFMarkInt=Reject
+MaxConnections=1
 
 
 Shutdown
