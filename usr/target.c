@@ -723,16 +723,16 @@ struct account_entry {
 	int aid;
 	char *user;
 	char *password;
-	struct list_head ac_list;
+	struct list_head account_siblings;
 };
 
-static LIST_HEAD(accounts_list);
+static LIST_HEAD(account_list);
 
 static struct account_entry *__account_lookup_id(int aid)
 {
 	struct account_entry *ac;
 
-	list_for_each_entry(ac, &accounts_list, ac_list)
+	list_for_each_entry(ac, &account_list, account_siblings)
 		if (ac->aid == aid)
 			return ac;
 	return NULL;
@@ -742,7 +742,7 @@ static struct account_entry *__account_lookup_user(char *user)
 {
 	struct account_entry *ac;
 
-	list_for_each_entry(ac, &accounts_list, ac_list)
+	list_for_each_entry(ac, &account_list, account_siblings)
 		if (!strcmp(ac->user, user))
 			return ac;
 	return NULL;
@@ -805,7 +805,7 @@ int account_add(char *user, char *password)
 	if (!ac->password)
 		goto free_username;
 
-	list_add(&ac->ac_list, &accounts_list);
+	list_add(&ac->account_siblings, &account_list);
 	return 0;
 free_username:
 	free(ac->user);
@@ -910,7 +910,7 @@ void account_del(char *user)
 		account_ctl(target->tid, ACCOUNT_TYPE_OUTGOING, ac->user, 0);
 	}
 
-	list_del(&ac->ac_list);
+	list_del(&ac->account_siblings);
 	free(ac->user);
 	free(ac->password);
 	free(ac);
@@ -1331,10 +1331,10 @@ int account_show(char *buf, int rest)
 	int total = 0, max = rest;
 	struct account_entry *ac;
 
-	if (!list_empty(&accounts_list))
+	if (!list_empty(&account_list))
 		shprintf(total, buf, rest, "Account list:\n");
 
-	list_for_each_entry(ac, &accounts_list, ac_list)
+	list_for_each_entry(ac, &account_list, account_siblings)
 		shprintf(total, buf, rest, TAB1 "%s\n", ac->user);
 
 	return total;
