@@ -1520,12 +1520,18 @@ static void iscsi_rx_handler(int fd, struct iscsi_connection *conn)
 	case IOSTATE_READ_AHS_DATA:
 	read_again:
 		res = conn->tp->ep_read(fd, conn->rx_buffer, conn->rx_size);
-		if (res <= 0) {
-			if (res == 0 || (errno != EINTR && errno != EAGAIN)) {
+		if (!res) {
+			conn->state = STATE_CLOSE;
+			break;
+		} else if (res < 0) {
+			if (errno == EINTR)
+				goto read_again;
+			else if (errno == EAGAIN)
+				break;
+			else {
 				conn->state = STATE_CLOSE;
 				dprintf("%d %d, %m\n", res, errno);
-			} else if (errno == EINTR)
-				goto read_again;
+			}
 			break;
 		}
 		conn->rx_size -= res;
