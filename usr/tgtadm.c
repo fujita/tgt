@@ -470,8 +470,13 @@ int main(int argc, char **argv)
 	}
 
 	if (!*req->lld) {
-		eprintf("specify the low level driver name\n");
-		exit(EINVAL);
+		/*
+		 * workaround. we should set the default lld at the
+		 * compile time.
+		 */
+		strncpy(req->lld, "iscsi", sizeof(req->lld));
+/* 		eprintf("specify the low level driver name\n"); */
+/* 		exit(EINVAL); */
 	}
 
 	if ((name || value) && op != OP_UPDATE) {
