@@ -32,6 +32,7 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <linux/types.h>
+#include <scsi/sg.h>
 #include <linux/bsg.h>
 
 #include "list.h"
@@ -65,6 +66,7 @@ static int bd_sg_open(struct tgt_device *dev,
 	struct stat64 st;
 	struct timeval t;
 	struct sg_io_v4 hdr, *h;
+	int nr_queue_cmd;
 
 	/* we assume something like /dev/sda */
 	eprintf("%Zd %Zd %Zd\n", sizeof(hdr), sizeof(*h), sizeof(struct sg_io_v4));
@@ -138,6 +140,14 @@ static int bd_sg_open(struct tgt_device *dev,
 	if (*fd < 0) {
 		eprintf("can't open the bsg device %s, %m\n", buf);
 		return -errno;
+	}
+
+	/* workaround */
+	nr_queue_cmd = 128;
+	err = ioctl(*fd, SG_SET_COMMAND_Q, &nr_queue_cmd);
+	if (err) {
+		eprintf("can't set the queue depth %d, %m\n", nr_queue_cmd);
+		goto close_fd;
 	}
 
 	err = tgt_event_add(*fd, EPOLLIN, sg_handler, dev);
