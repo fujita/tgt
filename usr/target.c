@@ -352,7 +352,7 @@ static int cmd_enabled(struct tgt_cmd_queue *q, struct cmd *cmd)
 
 	if (cmd->attribute != MSG_SIMPLE_TAG)
 		dprintf("non simple attribute %" PRIx64 " %x %" PRIu64 " %d\n",
-			cmd->tag, cmd->attribute, cmd->dev ? cmd->dev->lun : ~0ULL,
+			cmd->tag, cmd->attribute, cmd->dev ? cmd->dev->lun : UINT64_MAX,
 			q->active_cmd);
 
 	switch (cmd->attribute) {
@@ -477,7 +477,7 @@ int target_cmd_queue(uint64_t nid, uint8_t *scb, uint8_t rw,
 	} else {
 		set_cmd_queued(cmd);
 		dprintf("blocked %" PRIx64 " %x %" PRIu64 " %d\n",
-			tag, scb[0], cmd->dev ? cmd->dev->lun : ~0ULL,
+			tag, scb[0], cmd->dev ? cmd->dev->lun : UINT64_MAX,
 			q->active_cmd);
 
 		memcpy(cmd->scb, scb, sizeof(cmd->scb));

@@ -224,7 +224,8 @@ static int __inquiry(struct tgt_device *dev, int host_no, uint8_t *lun_buf,
 			result = SAM_STAT_GOOD;
 
 			if (dev && strlen(dev->scsi_sn)) {
-				char *p, *q;
+				uint8_t *p;
+				char *q;
 
 				p = data + 4 + tmp - 1;
 				q = dev->scsi_sn + SCSI_SN_LEN - 1;
@@ -241,7 +242,8 @@ static int __inquiry(struct tgt_device *dev, int host_no, uint8_t *lun_buf,
 			data[5] = 0x1;
 			data[7] = tmp;
 			if (dev)
-				strncpy(data + 8, dev->scsi_id, SCSI_ID_LEN);
+				strncpy((char *) data + 8, dev->scsi_id,
+				        SCSI_ID_LEN);
 			*len = tmp + 8;
 			result = SAM_STAT_GOOD;
 		}
