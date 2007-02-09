@@ -19,14 +19,13 @@ data.
 
 Preparation
 -------------
-First, get kernel sources from 2.6.20-rc1.
+First, get kernel version 2.6.20.
 
-Second, apply aioepoll-2.6.20-rc1.diff in the patches directory.
+Second, apply aioepoll-2.6.20.diff in the patches directory.
 
 Third, rebuild the kernel and reboot with the new kernel. Note you
 need to enable SCSI_TGT, SCSI_SRP, and SCSI_IBMVSCSIS kernel options
 in order to use the IBM VIO target driver, 
-
 
 Now you are ready to build target drivers. If you like to use the
 iSCSI target driver:
@@ -42,6 +41,3 @@ Make sure that everything is built successfully.
 Now you can run tgt. Target drivers have their own ways for
 configuration. So find an appropriate documentation in the doc
 directory.
-
-
-FUJITA Tomonori and Mike Christie
