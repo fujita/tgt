@@ -49,6 +49,7 @@ struct tgt_event {
 };
 
 io_context_t ctx;
+unsigned long pagesize, pageshift, pagemask;
 
 static int ep_fd;
 static char program_name[] = "tgtd";
@@ -280,6 +281,11 @@ int main(int argc, char **argv)
 	sigaction(SIGINT, &sa_new, &sa_old );
 	sigaction(SIGPIPE, &sa_new, &sa_old );
 	sigaction(SIGTERM, &sa_new, &sa_old );
+
+	pagesize = sysconf(_SC_PAGESIZE);
+	for (pageshift = 0;; pageshift++)
+		if (1UL << pageshift == pagesize)
+			break;
 
 	while ((ch = getopt_long(argc, argv, short_options, long_options,
 				 &longindex)) >= 0) {

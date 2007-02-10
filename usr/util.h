@@ -2,18 +2,9 @@
 #define __UTIL_H__
 
 #include <byteswap.h>
-#include <sys/user.h>
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 #define ALIGN(x,a) (((x)+(a)-1)&~((a)-1))
-
-#ifndef PAGE_SHIFT
-#define	PAGE_SHIFT	12
-#define	PAGE_SIZE	(1UL << PAGE_SHIFT)
-#define	PAGE_MASK	(~(PAGE_SIZE-1))
-#endif
-
-#define pgcnt(size, offset)	((((size) + ((offset) & ~PAGE_MASK)) + PAGE_SIZE - 1) >> PAGE_SHIFT)
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 #define __cpu_to_be16(x) bswap_16(x)
@@ -91,5 +82,7 @@ do {									\
 	total += len;							\
 	rest -= len;							\
 } while (0)
+
+extern unsigned long pagesize, pageshift;
 
 #endif

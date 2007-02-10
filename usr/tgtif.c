@@ -50,18 +50,20 @@ struct uring {
 static struct uring kuring, ukring;
 static int chrfd;
 
+static unsigned long tgt_ring_pages, tgt_max_events, tgt_event_per_page;
+
 static inline void ring_index_inc(struct uring *ring)
 {
-	ring->idx = (ring->idx == TGT_MAX_EVENTS - 1) ? 0 : ring->idx + 1;
+	ring->idx = (ring->idx == tgt_max_events - 1) ? 0 : ring->idx + 1;
 }
 
 static inline struct tgt_event *head_ring_hdr(struct uring *ring)
 {
 	uint32_t pidx, off, pos;
 
-	pidx = ring->idx / TGT_EVENT_PER_PAGE;
-	off = ring->idx % TGT_EVENT_PER_PAGE;
-	pos = pidx * PAGE_SIZE + off * sizeof(struct tgt_event);
+	pidx = ring->idx / tgt_event_per_page;
+	off = ring->idx % tgt_event_per_page;
+	pos = pidx * pagesize + off * sizeof(struct tgt_event);
 
 	return (struct tgt_event *) (ring->buf + pos);
 }
@@ -209,6 +211,11 @@ int kreq_init(void)
 		close(chrfd);
 		return -EINVAL;
 	}
+
+	tgt_ring_pages = (pagesize > size) ? 1 : size >> pageshift;
+
+	tgt_event_per_page = pagesize / sizeof(struct tgt_event);
+	tgt_max_events = tgt_event_per_page * tgt_ring_pages;
 
 	kuring.idx = ukring.idx = 0;
 	kuring.buf = buf;

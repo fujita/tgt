@@ -44,6 +44,8 @@ static void bd_mmap_close(struct tgt_device *dev)
 	close(dev->fd);
 }
 
+#define pgcnt(size, offset)	((((size) + ((offset) & (pagesize - 1))) + (pagesize - 1)) >> pageshift)
+
 static int bd_mmap_cmd_submit(struct tgt_device *dev, uint8_t *scb, int rw,
 			      uint32_t datalen, unsigned long *uaddr,
 			      uint64_t offset, int *async, void *key)
@@ -55,11 +57,11 @@ static int bd_mmap_cmd_submit(struct tgt_device *dev, uint8_t *scb, int rw,
 	if (*uaddr)
 		*uaddr = *uaddr + offset;
 	else {
-		p = mmap64(NULL, pgcnt(datalen, offset) << PAGE_SHIFT,
+		p = mmap64(NULL, pgcnt(datalen, offset) << pageshift,
 			   PROT_READ | PROT_WRITE, MAP_SHARED, fd,
-			   offset & ~((1ULL << PAGE_SHIFT) - 1));
+			   offset & ~((1ULL << pageshift) - 1));
 
-		*uaddr = (unsigned long) p + (offset & ~PAGE_MASK);
+		*uaddr = (unsigned long) p + (offset & (pagesize - 1));
 		if (p == MAP_FAILED) {
 			err = -EINVAL;
 			eprintf("%lx %u %" PRIu64 "\n", *uaddr, datalen, offset);
@@ -78,8 +80,8 @@ static int bd_mmap_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
 	dprintf("%d %d %" PRIx64 " %d\n", do_munmap, do_free, uaddr, len);
 
 	if (do_munmap) {
-		len = pgcnt(len, (uaddr & ~PAGE_MASK)) << PAGE_SHIFT;
-		uaddr &= PAGE_MASK;
+		len = pgcnt(len, (uaddr & (pagesize - 1))) << pageshift;
+		uaddr &= ~(pagesize - 1);
 		err = munmap((void *) (unsigned long) uaddr, len);
 		if (err)
 			eprintf("%" PRIx64 " %d\n", uaddr, len);

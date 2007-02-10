@@ -491,8 +491,8 @@ int scsi_cmd_perform(uint64_t nid, int lid, int host_no, uint8_t *pdu,
 
 	*async = *offset = 0;
 	if (scsi_cmd_rw(scb, rw)) {
-		data = valloc(PAGE_SIZE);
-		memset(data, 0, PAGE_SIZE);
+		data = valloc(pagesize);
+		memset(data, 0, pagesize);
 	}
 
 	if (!dev) {
@@ -504,8 +504,8 @@ int scsi_cmd_perform(uint64_t nid, int lid, int host_no, uint8_t *pdu,
 		default:
 			*offset = 0;
 			if (!data) {
-				data = valloc(PAGE_SIZE);
-				memset(data, 0, PAGE_SIZE);
+				data = valloc(pagesize);
+				memset(data, 0, pagesize);
 			}
 			*len = sense_data_build(data, 0x70, ILLEGAL_REQUEST,
 						0x25, 0);
@@ -583,7 +583,7 @@ int scsi_cmd_perform(uint64_t nid, int lid, int host_no, uint8_t *pdu,
 			*rw = READ;
 			*offset = 0;
 			if (!data)
-				data = valloc(PAGE_SIZE);
+				data = valloc(pagesize);
 			*len = sense_data_build(data, 0x70, ILLEGAL_REQUEST,
 						0x25, 0);
 		}
