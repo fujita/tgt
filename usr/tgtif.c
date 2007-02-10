@@ -205,6 +205,9 @@ int kreq_init(void)
 	if (err)
 		return err;
 
+	if (size < pagesize)
+		size = pagesize;
+
 	buf = mmap(NULL, size * 2, PROT_READ | PROT_WRITE, MAP_SHARED, chrfd, 0);
 	if (buf == MAP_FAILED) {
 		eprintf("fail to mmap, %m\n");
@@ -212,8 +215,7 @@ int kreq_init(void)
 		return -EINVAL;
 	}
 
-	tgt_ring_pages = (pagesize > size) ? 1 : size >> pageshift;
-
+	tgt_ring_pages = size >> pageshift;
 	tgt_event_per_page = pagesize / sizeof(struct tgt_event);
 	tgt_max_events = tgt_event_per_page * tgt_ring_pages;
 
