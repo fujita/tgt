@@ -48,7 +48,6 @@ struct tgt_event {
 	struct list_head e_list;
 };
 
-io_context_t ctx;
 unsigned long pagesize, pageshift, pagemask;
 
 static int ep_fd;
@@ -182,44 +181,14 @@ int tgt_event_modify(int fd, int events)
 	return epoll_ctl(ep_fd, EPOLL_CTL_MOD, fd, &ev);
 }
 
-#define IOCB_CMD_EPOLL_WAIT 9
-
-static void io_prep_epoll_wait(struct iocb *iocb, int epfd,
-			       struct epoll_event *events, int maxevents,
-			       int timeout)
-{
-	memset(iocb, 0, sizeof(*iocb));
-	iocb->aio_fildes = epfd;
-	iocb->aio_lio_opcode = IOCB_CMD_EPOLL_WAIT;
-	iocb->aio_reqprio = 0;
-
-	iocb->u.c.nbytes = maxevents;
-	iocb->u.c.offset = timeout;
-	iocb->u.c.buf = events;
-}
-
 static void event_loop(void)
 {
-	int nevent, i, err;
+	int nevent, i;
 	struct epoll_event events[1024];
 	struct tgt_event *tev;
-	struct iocb iocbs[1], *iocb;
-	struct io_event aioevents[2048];
-	struct timespec timeout = {1, 0};
-
-	err = io_queue_init(2048, &ctx);
-	if (err) {
-		eprintf("%m\n");
-		return;
-	}
-
-	iocb = iocbs;
-	io_prep_epoll_wait(iocb, ep_fd, events, ARRAY_SIZE(events), -1);
-	err = io_submit(ctx, 1, &iocb);
 
 retry:
-	nevent = io_getevents(ctx, 1, ARRAY_SIZE(aioevents), aioevents, &timeout);
-
+	nevent = epoll_wait(ep_fd, events, ARRAY_SIZE(events), -1);
 	if (nevent < 0) {
 		if (errno != EINTR) {
 			eprintf("%m\n");
@@ -227,18 +196,8 @@ retry:
 		}
 	} else if (nevent) {
 		for (i = 0; i < nevent; i++) {
-			if (iocb == aioevents[i].obj) {
-				int j;
-				for (j = 0; j < aioevents[i].res; j++) {
-					tev = (struct tgt_event *) events[j].data.ptr;
-					tev->handler(tev->fd, events[j].events, tev->data);
-				}
-
-				err = io_submit(ctx, 1, &iocb);
-			} else {
-				/* FIXME */
-				target_cmd_io_done(aioevents[i].data, 0);
-			}
+			tev = (struct tgt_event *) events[i].data.ptr;
+			tev->handler(tev->fd, events[i].events, tev->data);
 		}
 	} else
 		schedule();

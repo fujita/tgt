@@ -37,7 +37,7 @@ CFLAGS += -DISCSI
 TGTD_OBJS += $(addprefix iscsi/, conn.o param.o session.o iscsid.o target.o \
 	chap.o transport.o iscsi_tcp.o)
 TGTD_OBJS += bd_aio.o
-LIBS += -lcrypto
+LIBS += -lcrypto -lpthread
 BD_AIO=1
 endif
 
