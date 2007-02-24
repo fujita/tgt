@@ -24,6 +24,7 @@
 #include "list.h"
 #include "util.h"
 #include "tgtd.h"
+#include "target.h"
 #include "driver.h"
 #include "scsi.h"
 
@@ -478,14 +479,25 @@ uint64_t scsi_get_devid(int lid, uint8_t *p)
 	return fn(p);
 }
 
-int scsi_cmd_perform(uint64_t nid, int lid, int host_no, uint8_t *pdu,
-		     int *len, uint32_t datalen, unsigned long *uaddr, uint8_t *rw,
-		     uint8_t *try_map, uint64_t *offset, uint8_t *lun_buf,
-		     struct tgt_device *dev, struct list_head *dev_list, int *async,
-		     void *key, bkio_submit_t *submit)
+int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd, void *key)
 {
+	struct target *target = cmd->c_target;
 	int result = SAM_STAT_GOOD;
-	uint8_t *data = NULL, *scb = pdu;
+	int lid = target->lid;
+	uint8_t *rw = &cmd->rw;
+	uint8_t *data = NULL;
+	uint8_t *scb = cmd->scb;
+	uint32_t datalen = cmd->len;
+	int *try_map = &cmd->mmapped;
+	uint64_t *offset = &cmd->offset;
+	uint8_t *lun_buf = cmd->lun;
+	int *len = &cmd->len;
+	int *async = &cmd->async;
+	uint64_t nid = cmd->cmd_nexus_id;
+	unsigned long *uaddr = (unsigned long *)&cmd->uaddr;
+	struct tgt_device *dev = cmd->dev;
+	struct list_head *dev_list = &target->device_list;
+	bkio_submit_t *submit = target->bdt->bd_cmd_submit;
 
 	dprintf("%x %u\n", scb[0], datalen);
 

@@ -377,13 +377,8 @@ static int cmd_enabled(struct tgt_cmd_queue *q, struct scsi_cmd *cmd)
 	return enabled;
 }
 
-static void cmd_post_perform(struct tgt_cmd_queue *q, struct scsi_cmd *cmd,
-			     unsigned long uaddr, int len, uint8_t mmapped)
+static void cmd_post_perform(struct tgt_cmd_queue *q, struct scsi_cmd *cmd)
 {
-	cmd->uaddr = uaddr;
-	cmd->len = len;
-	cmd->mmapped = mmapped;
-
 	q->active_cmd++;
 	switch (cmd->attribute) {
 	case MSG_ORDERED_TAG:
@@ -402,9 +397,8 @@ int target_cmd_queue(uint64_t nid, uint8_t *scb, uint8_t rw,
 	struct tgt_cmd_queue *q;
 	struct it_nexus *nexus;
 	struct scsi_cmd *cmd;
-	int result, enabled = 0, async, len = 0;
-	uint64_t offset, dev_id;
-	uint8_t mmapped = 0;
+	int result, enabled = 0;
+	uint64_t dev_id;
 
 	nexus = it_nexus_lookup(nid);
 	if (!nexus) {
@@ -423,6 +417,11 @@ int target_cmd_queue(uint64_t nid, uint8_t *scb, uint8_t rw,
 	cmd->c_target = target;
 	cmd->attribute = attribute;
 	cmd->tag = tag;
+	cmd->uaddr = uaddr;
+	cmd->len = data_len;
+	memcpy(cmd->scb, scb, sizeof(cmd->scb));
+	memcpy(cmd->lun, lun, sizeof(cmd->lun));
+
 	cmd_hlist_insert(target, cmd);
 
 	dev_id = scsi_get_devid(target->lid, lun);
@@ -432,11 +431,13 @@ int target_cmd_queue(uint64_t nid, uint8_t *scb, uint8_t rw,
 
 	/* FIXME */
 	if (target->target_iotype == SCSI_TARGET_RAWIO) {
-		memcpy(cmd->scb, scb, sizeof(cmd->scb));
 		dprintf("%u %s\n", scb[0], cmd->dev ? "do sg" : "fake");
 
 		/* we can't pass through REPORT_LUNS. */
 		if (cmd->dev && scb[0] != REPORT_LUNS) {
+			uint64_t offset = 0;
+			int async = 0;
+
 			target->bdt->bd_cmd_submit(cmd->dev, cmd->scb, rw,
 						   data_len, &uaddr, offset,
 						   &async, (void *) cmd);
@@ -456,34 +457,23 @@ int target_cmd_queue(uint64_t nid, uint8_t *scb, uint8_t rw,
 		enabled = cmd_enabled(q, cmd);
 
 	if (enabled) {
-		result = scsi_cmd_perform(target->tid, target->lid,
-					  nexus->host_no, scb,
-					  &len, data_len,
-					  &uaddr, &rw, &mmapped, &offset,
-					  lun, cmd->dev,
-					  &target->device_list, &async, (void *) cmd,
-					  target->bdt->bd_cmd_submit);
+		result = scsi_cmd_perform(nexus->host_no, cmd, (void *)cmd);
 
-		cmd_post_perform(q, cmd, uaddr, len, mmapped);
+		cmd_post_perform(q, cmd);
 
-		dprintf("%" PRIx64 " %x %lx %" PRIu64 " %d %d %d\n",
-			tag, scb[0], uaddr, offset, len, result, async);
+		dprintf("%" PRIx64 " %x %" PRIx64 " %" PRIu64 " %u %d %d\n",
+			tag, scb[0], cmd->uaddr, cmd->offset, cmd->len, result, cmd->async);
 
-		cmd->rw = rw;
 		set_cmd_processed(cmd);
-		if (!async)
-			tgt_drivers[target->lid]->cmd_end_notify(nid, len, result,
-								 rw, uaddr, tag);
+		if (!cmd->async)
+			tgt_drivers[target->lid]->cmd_end_notify(nid, cmd->len, result,
+								 cmd->rw, cmd->uaddr, tag);
 	} else {
 		set_cmd_queued(cmd);
 		dprintf("blocked %" PRIx64 " %x %" PRIu64 " %d\n",
 			tag, scb[0], cmd->dev ? cmd->dev->lun : UINT64_MAX,
 			q->active_cmd);
 
-		memcpy(cmd->scb, scb, sizeof(cmd->scb));
-		memcpy(cmd->lun, lun, sizeof(cmd->lun));
-		cmd->len = data_len;
-		cmd->uaddr = uaddr;
 		list_add_tail(&cmd->qlist, &q->queue);
 	}
 out:
@@ -505,9 +495,7 @@ void target_cmd_io_done(void *key, int result)
 static void post_cmd_done(struct tgt_cmd_queue *q)
 {
 	struct scsi_cmd *cmd, *tmp;
-	int enabled, result, async, len = 0;
-	uint8_t rw = 0, mmapped = 0;
-	uint64_t offset;
+	int enabled, result;
 	int (* notify_fn)(uint64_t, int, int, int, uint64_t, uint64_t);
 
 	list_for_each_entry_safe(cmd, tmp, &q->queue, qlist) {
@@ -521,22 +509,12 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 
 			list_del(&cmd->qlist);
 			dprintf("perform %" PRIx64 " %x\n", cmd->tag, cmd->attribute);
-			result = scsi_cmd_perform(cmd->c_target->tid,
-						  cmd->c_target->lid,
-						  nexus->host_no, cmd->scb,
-						  &len, cmd->len,
-						  (unsigned long *) &cmd->uaddr,
-						  &rw, &mmapped, &offset,
-						  cmd->lun, cmd->dev,
-						  &cmd->c_target->device_list,
-						  &async, (void *) cmd,
-						  cmd->c_target->bdt->bd_cmd_submit);
-			cmd->rw = rw;
-			cmd_post_perform(q, cmd, cmd->uaddr, len, mmapped);
+			result = scsi_cmd_perform(nexus->host_no, cmd, (void *)cmd);
+			cmd_post_perform(q, cmd);
 			set_cmd_processed(cmd);
-			if (!async) {
+			if (!cmd->async) {
 				notify_fn = tgt_drivers[cmd->c_target->lid]->cmd_end_notify;
-				notify_fn(cmd->cmd_nexus_id, len, result, rw,
+				notify_fn(cmd->cmd_nexus_id, cmd->len, result, cmd->rw,
 					  cmd->uaddr, cmd->tag);
 			}
 		} else

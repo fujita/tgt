@@ -1,6 +1,7 @@
 #ifndef __TARGET_H__
 #define __TARGET_H__
 
+#include <limits.h>
 #define BITS_PER_LONG (ULONG_MAX == 0xFFFFFFFFUL ? 32 : 64)
 #include <linux/hash.h>
 
@@ -87,11 +88,13 @@ struct scsi_cmd {
 
 	uint64_t cmd_nexus_id;
 	uint32_t data_len;
+	uint64_t offset;
 	uint8_t scb[16];
 	uint8_t lun[8];
 	int attribute;
 	uint64_t tag;
-	int rw;
+	uint8_t rw;
+	int async;
 	struct mgmt_req *mreq;
 };
 
