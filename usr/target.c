@@ -124,9 +124,9 @@ static struct tgt_device *device_lookup(struct target *target, uint64_t lun)
 	return NULL;
 }
 
-static struct cmd *cmd_lookup(struct target *target, uint64_t tag)
+static struct scsi_cmd *cmd_lookup(struct target *target, uint64_t tag)
 {
-	struct cmd *cmd;
+	struct scsi_cmd *cmd;
 	struct list_head *list = &target->cmd_hash_list[hashfn(tag)];
 	list_for_each_entry(cmd, list, c_hlist) {
 		if (cmd->tag == tag)
@@ -135,13 +135,13 @@ static struct cmd *cmd_lookup(struct target *target, uint64_t tag)
 	return NULL;
 }
 
-static void cmd_hlist_insert(struct target *target, struct cmd *cmd)
+static void cmd_hlist_insert(struct target *target, struct scsi_cmd *cmd)
 {
 	struct list_head *list = &target->cmd_hash_list[hashfn(cmd->tag)];
 	list_add(&cmd->c_hlist, list);
 }
 
-static void cmd_hlist_remove(struct cmd *cmd)
+static void cmd_hlist_remove(struct scsi_cmd *cmd)
 {
 	list_del(&cmd->c_hlist);
 }
@@ -346,7 +346,7 @@ int tgt_device_update(int tid, uint64_t dev_id, char *name)
 	return err;
 }
 
-static int cmd_enabled(struct tgt_cmd_queue *q, struct cmd *cmd)
+static int cmd_enabled(struct tgt_cmd_queue *q, struct scsi_cmd *cmd)
 {
 	int enabled = 0;
 
@@ -377,7 +377,7 @@ static int cmd_enabled(struct tgt_cmd_queue *q, struct cmd *cmd)
 	return enabled;
 }
 
-static void cmd_post_perform(struct tgt_cmd_queue *q, struct cmd *cmd,
+static void cmd_post_perform(struct tgt_cmd_queue *q, struct scsi_cmd *cmd,
 			     unsigned long uaddr, int len, uint8_t mmapped)
 {
 	cmd->uaddr = uaddr;
@@ -401,7 +401,7 @@ int target_cmd_queue(uint64_t nid, uint8_t *scb, uint8_t rw,
 	struct target *target;
 	struct tgt_cmd_queue *q;
 	struct it_nexus *nexus;
-	struct cmd *cmd;
+	struct scsi_cmd *cmd;
 	int result, enabled = 0, async, len = 0;
 	uint64_t offset, dev_id;
 	uint8_t mmapped = 0;
@@ -492,7 +492,7 @@ out:
 
 void target_cmd_io_done(void *key, int result)
 {
-	struct cmd *cmd = (struct cmd *) key;
+	struct scsi_cmd *cmd = (struct scsi_cmd *) key;
 
 	/* TODO: sense in case of error. */
 	tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->cmd_nexus_id,
@@ -504,7 +504,7 @@ void target_cmd_io_done(void *key, int result)
 
 static void post_cmd_done(struct tgt_cmd_queue *q)
 {
-	struct cmd *cmd, *tmp;
+	struct scsi_cmd *cmd, *tmp;
 	int enabled, result, async, len = 0;
 	uint8_t rw = 0, mmapped = 0;
 	uint64_t offset;
@@ -544,7 +544,7 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 	}
 }
 
-static void __cmd_done(struct target *target, struct cmd *cmd)
+static void __cmd_done(struct target *target, struct scsi_cmd *cmd)
 {
 	struct tgt_cmd_queue *q;
 	int err, do_munmap;
@@ -588,7 +588,7 @@ static void __cmd_done(struct target *target, struct cmd *cmd)
 void target_cmd_done(uint64_t nid, uint64_t tag)
 {
 	struct target *target;
-	struct cmd *cmd;
+	struct scsi_cmd *cmd;
 	struct mgmt_req *mreq;
 
 	target = target_lookup(NID2TID(nid));
@@ -616,7 +616,7 @@ void target_cmd_done(uint64_t nid, uint64_t tag)
 }
 
 static int abort_cmd(struct target* target, struct mgmt_req *mreq,
-		     struct cmd *cmd)
+		     struct scsi_cmd *cmd)
 {
 	int err = 0;
 
@@ -641,7 +641,7 @@ static int abort_cmd(struct target* target, struct mgmt_req *mreq,
 static int abort_task_set(struct mgmt_req *mreq, struct target* target,
 			  uint64_t nexus_id, uint64_t tag, uint8_t *lun, int all)
 {
-	struct cmd *cmd, *tmp;
+	struct scsi_cmd *cmd, *tmp;
 	int i, err, count = 0;
 
 	eprintf("found %" PRIx64 " %d\n", tag, all);

@@ -73,7 +73,7 @@ struct it_nexus {
 	char *info;
 };
 
-struct cmd {
+struct scsi_cmd {
 	struct target *c_target;
 	/* linked target->cmd_hash_list */
 	struct list_head c_hlist;
@@ -128,15 +128,15 @@ QUEUE_FNS(BLOCKED, blocked)
 QUEUE_FNS(DELETED, deleted)
 
 #define CMD_FNS(bit, name)						\
-static inline void set_cmd_##name(struct cmd *c)			\
+static inline void set_cmd_##name(struct scsi_cmd *c)			\
 {									\
 	(c)->state |= (1UL << TGT_CMD_##bit);				\
 }									\
-static inline void clear_cmd_##name(struct cmd *c)			\
+static inline void clear_cmd_##name(struct scsi_cmd *c)			\
 {									\
 	(c)->state &= ~(1UL << TGT_CMD_##bit);				\
 }									\
-static inline int cmd_##name(const struct cmd *c)			\
+static inline int cmd_##name(const struct scsi_cmd *c)			\
 {									\
 	return ((c)->state & (1UL << TGT_CMD_##bit));			\
 }
