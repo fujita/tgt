@@ -10,15 +10,6 @@ code.
 sg v4 is necessary for the user-space target drivers' passthrough.
 
 
-- AIO event notification
-
-The user-space target drivers (only iSCSI now, possibly SRP later on)
-need the event notification to handle both synchronous and
-asynchronous file descriptors. We use the aio epoll patch (that would
-be merged into mainline at 2.6.21), but it's not effective. We need
-something like kevent.
-
-
 - backing-storage disk images
 
 bd_mmap/aio support only raw images. They should support fancy disk
@@ -55,3 +46,15 @@ no plan to implement this.
 
 Virtual cdrom support isn't difficult but I'm not sure people really
 need it.
+
+
+- AIO event notification
+
+The user-space target drivers (only iSCSI now, possibly SRP later on)
+need an event notification inferface to handle both synchronous and
+asynchronous file descriptors. Now we use a workaround to use a I/O
+helper thread (runs synchrnously to enable tgtd daemon run
+asynchrnously). This workaround will be removed when upstream kernels
+have a unified event notification interface (there are some candidates
+under development). It should improve the tgt AIO performance too.
+
