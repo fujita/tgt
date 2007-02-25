@@ -68,23 +68,29 @@ static void *bs_aio_endio_thread(void *arg)
 retry:
 	ret = read(info->command_fd[0], &command, sizeof(command));
 	if (ret < 0) {
-		eprintf("AIO pthread will be dead.\n");
+		eprintf("AIO pthread will be dead, %m\n");
+		if (errno == EAGAIN || errno == EINTR)
+			goto retry;
+
 		goto out;
 	}
 
 	ret = io_getevents(info->ctx, 1, MAX_AIO_REQS, info->events, NULL);
 	nr = ret;
-	if (nr) {
+	if (nr > 0) {
+	rewrite:
 		ret = write(info->done_fd[1], &nr, sizeof(nr));
 		if (ret < 0) {
 			eprintf("can't notify tgtd, %m\n");
-			goto out;
+		if (errno == EAGAIN || errno == EINTR)
+			goto rewrite;
+
+		goto out;
 		}
 	}
 	goto retry;
 out:
-	/* TODO: this lu is going to be removed. */
-	pthread_exit(&ret);
+	return NULL;
 }
 
 static void bs_aio_handler(int fd, int events, void *data)
@@ -165,7 +171,8 @@ static void bd_aio_close(struct tgt_device *dev)
 
 	info = (struct bd_aio_info *) ((char *)dev + sizeof(*dev));
 
-	/* FIXME: we should kill pthread */
+	pthread_cancel(info->aio_thread);
+	pthread_join(info->aio_thread, NULL);
 	io_destroy(info->ctx);
 	close(dev->fd);
 }
