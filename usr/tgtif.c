@@ -100,8 +100,7 @@ int kspace_send_tsk_mgmt_res(uint64_t nid, uint64_t mid, int result)
 	return kreq_send(&ev);
 }
 
-int kspace_send_cmd_res(uint64_t nid, int len, int result,
-			int rw, uint64_t addr, uint64_t tag)
+int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *cmd)
 {
 	struct tgt_event ev;
 
@@ -109,11 +108,11 @@ int kspace_send_cmd_res(uint64_t nid, int len, int result,
 
 	ev.hdr.type = TGT_UEVENT_CMD_RSP;
 	ev.p.cmd_rsp.host_no = it_nexus_to_host_no(nid);
-	ev.p.cmd_rsp.len = len;
+	ev.p.cmd_rsp.len = cmd->len;
 	ev.p.cmd_rsp.result = result;
-	ev.p.cmd_rsp.uaddr = addr;
-	ev.p.cmd_rsp.rw = rw;
-	ev.p.cmd_rsp.tag = tag;
+	ev.p.cmd_rsp.uaddr = cmd->uaddr;
+	ev.p.cmd_rsp.rw = cmd->rw;
+	ev.p.cmd_rsp.tag = cmd->tag;
 
 	return kreq_send(&ev);
 }

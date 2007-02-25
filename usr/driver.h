@@ -17,8 +17,7 @@ struct tgt_driver {
 				uint8_t *, int *);
 	int (*scsi_inquiry)(struct tgt_device *, int, uint8_t *, uint8_t *,
 			    uint8_t *, int *);
-	int (*cmd_end_notify)(uint64_t nid, int len, int result, int rw, uint64_t addr,
-			      uint64_t tag);
+	int (*cmd_end_notify)(uint64_t nid, int result, struct scsi_cmd *);
 	int (*mgmt_end_notify)(uint64_t nid, uint64_t mid, int result);
 
 	struct backedio_template *default_bdt;

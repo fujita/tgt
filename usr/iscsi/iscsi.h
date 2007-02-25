@@ -6,8 +6,7 @@ extern int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid,
 extern int iscsi_target_update(int, char *);
 extern int iscsi_mgmt_account(uint32_t op, int tid, uint32_t uid, char *param,
 			      char *buf, int len);
-extern int iscsi_scsi_cmd_done(uint64_t nid, int len, int result, int rw,
-			       uint64_t addr, uint64_t tag);
+extern int iscsi_scsi_cmd_done(uint64_t nid, int result, struct scsi_cmd *cmd);
 extern int iscsi_tm_done(uint64_t nid, uint64_t mid, int result);
 
 struct tgt_driver iscsi = {

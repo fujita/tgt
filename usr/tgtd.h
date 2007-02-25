@@ -102,8 +102,8 @@ struct backedio_template sg_bdt;
 #endif
 
 extern int kspace_send_tsk_mgmt_res(uint64_t nid, uint64_t mid, int result);
-extern int kspace_send_cmd_res(uint64_t nid, int len, int result,
-			       int rw, uint64_t addr, uint64_t tag);
+extern int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *);
+
 extern int ipc_init(void);
 extern int tgt_device_create(int tid, uint64_t lun, char *args);
 extern int tgt_device_destroy(int tid, uint64_t lun);

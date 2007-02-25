@@ -874,27 +874,26 @@ static void iscsi_free_cmd_task(struct iscsi_task *task)
 	iscsi_free_task(task);
 }
 
-int iscsi_scsi_cmd_done(uint64_t nid, int len, int result, int rw, uint64_t addr,
-			uint64_t tag)
+int iscsi_scsi_cmd_done(uint64_t nid, int result, struct scsi_cmd *cmd)
 {
 	struct iscsi_session *session;
 	struct iscsi_task *task;
 
 	dprintf("%" PRIu64 " %d %d %d %" PRIx64 " %" PRIx64 "\n", nid,
-		len, result, rw, addr, tag);
+		cmd->len, result, cmd->rw, cmd->uaddr, cmd->tag);
 	session = session_lookup(nid);
 	if (!session)
 		return -EINVAL;
 
 	list_for_each_entry(task, &session->cmd_list, c_hlist) {
-		if (task->tag == tag)
+		if (task->tag == cmd->tag)
 			goto found;
 	}
-	eprintf("Cannot find a task %" PRIx64 "\n", tag);
+	eprintf("Cannot find a task %" PRIx64 "\n", cmd->tag);
 	return -EINVAL;
 
 found:
-	dprintf("found a task %" PRIx64 "\n", tag);
+	dprintf("found a task %" PRIx64 "\n", cmd->tag);
 
 	/*
 	 * Since the connection is closed we just free the task.
@@ -907,10 +906,10 @@ found:
 		return 0;
 	}
 
-	task->addr = addr;
+	task->addr = cmd->uaddr;
 	task->result = result;
-	task->len = len;
-	task->rw = rw;
+	task->len = cmd->len;
+	task->rw = cmd->rw;
 
 	list_add_tail(&task->c_list, &task->conn->tx_clist);
 	tgt_event_modify(task->conn->fd, EPOLLIN | EPOLLOUT);

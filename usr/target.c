@@ -466,8 +466,7 @@ int target_cmd_queue(uint64_t nid, uint8_t *scb, uint8_t rw,
 
 		set_cmd_processed(cmd);
 		if (!cmd->async)
-			tgt_drivers[target->lid]->cmd_end_notify(nid, cmd->len, result,
-								 cmd->rw, cmd->uaddr, tag);
+			tgt_drivers[target->lid]->cmd_end_notify(nid, result, cmd);
 	} else {
 		set_cmd_queued(cmd);
 		dprintf("blocked %" PRIx64 " %x %" PRIu64 " %d\n",
@@ -486,9 +485,7 @@ void target_cmd_io_done(void *key, int result)
 
 	/* TODO: sense in case of error. */
 	tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->cmd_nexus_id,
-							cmd->len, result,
-							cmd->rw, cmd->uaddr,
-							cmd->tag);
+							result, cmd);
 	return;
 }
 
@@ -496,7 +493,6 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 {
 	struct scsi_cmd *cmd, *tmp;
 	int enabled, result;
-	int (* notify_fn)(uint64_t, int, int, int, uint64_t, uint64_t);
 
 	list_for_each_entry_safe(cmd, tmp, &q->queue, qlist) {
 		enabled = cmd_enabled(q, cmd);
@@ -513,9 +509,8 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 			cmd_post_perform(q, cmd);
 			set_cmd_processed(cmd);
 			if (!cmd->async) {
-				notify_fn = tgt_drivers[cmd->c_target->lid]->cmd_end_notify;
-				notify_fn(cmd->cmd_nexus_id, cmd->len, result, cmd->rw,
-					  cmd->uaddr, cmd->tag);
+				tgt_drivers[cmd->c_target->lid]->cmd_end_notify(
+					cmd->cmd_nexus_id, result, cmd);
 			}
 		} else
 			break;
@@ -610,8 +605,8 @@ static int abort_cmd(struct target* target, struct mgmt_req *mreq,
 		err = -EBUSY;
 	} else {
 		__cmd_done(target, cmd);
-		tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->cmd_nexus_id, 0,
-								TASK_ABORTED, 0, 0, cmd->tag);
+		tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->cmd_nexus_id,
+								TASK_ABORTED, cmd);
 	}
 	return err;
 }
