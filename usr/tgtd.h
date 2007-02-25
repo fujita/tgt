@@ -61,6 +61,33 @@ struct backedio_template {
 	int (*bd_cmd_done) (int do_munmap, int do_free, uint64_t uaddr, int len);
 };
 
+struct scsi_cmd {
+	struct target *c_target;
+	/* linked target->cmd_hash_list */
+	struct list_head c_hlist;
+	struct list_head qlist;
+
+	uint64_t uaddr;
+	uint32_t len;
+	int mmapped;
+	struct tgt_device *dev;
+	unsigned long state;
+
+	uint64_t cmd_nexus_id;
+	uint32_t data_len;
+	uint64_t offset;
+	uint8_t scb[16];
+	uint8_t lun[8];
+	int attribute;
+	uint64_t tag;
+	uint8_t rw;
+	int async;
+	struct mgmt_req *mreq;
+
+#define SCSI_SENSE_BUFFERSIZE	96
+	unsigned char sense_buffer[SCSI_SENSE_BUFFERSIZE];
+};
+
 #ifdef USE_KERNEL
 extern int kreq_init(void);
 #else

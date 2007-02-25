@@ -74,30 +74,6 @@ struct it_nexus {
 	char *info;
 };
 
-struct scsi_cmd {
-	struct target *c_target;
-	/* linked target->cmd_hash_list */
-	struct list_head c_hlist;
-	struct list_head qlist;
-
-	uint64_t uaddr;
-	uint32_t len;
-	int mmapped;
-	struct tgt_device *dev;
-	unsigned long state;
-
-	uint64_t cmd_nexus_id;
-	uint32_t data_len;
-	uint64_t offset;
-	uint8_t scb[16];
-	uint8_t lun[8];
-	int attribute;
-	uint64_t tag;
-	uint8_t rw;
-	int async;
-	struct mgmt_req *mreq;
-};
-
 enum {
 	TGT_QUEUE_BLOCKED,
 	TGT_QUEUE_DELETED,
