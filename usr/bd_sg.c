@@ -51,7 +51,7 @@ static void sg_handler(int fd, int events, void *data)
 		return;
 
 	for (i = 0; i < err / sizeof(hdrs[0]); i++) {
-		struct cmd *cmd = (void *) (unsigned long) hdrs[i].usr_ptr;
+		struct scsi_cmd *cmd = (void *) (unsigned long) hdrs[i].usr_ptr;
 		if (hdrs[i].din_resid)
 			cmd->len = hdrs[i].din_resid;
 		target_cmd_io_done(cmd, 0);
