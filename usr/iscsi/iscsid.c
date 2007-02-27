@@ -756,6 +756,41 @@ static int iscsi_cmd_rsp_build(struct iscsi_task *task)
 	return 0;
 }
 
+struct iscsi_sense_data {
+	uint16_t length;
+	uint8_t  data[0];
+} __packed;
+
+static int iscsi_sense_rsp_build(struct iscsi_task *task)
+{
+	struct iscsi_connection *conn = task->conn;
+	struct iscsi_cmd_rsp *rsp = (struct iscsi_cmd_rsp *) &conn->rsp.bhs;
+	struct iscsi_sense_data *sense;
+	uint16_t sense_len = task->len;
+
+	memset(rsp, 0, sizeof(*rsp));
+	rsp->opcode = ISCSI_OP_SCSI_CMD_RSP;
+	rsp->itt = task->tag;
+	rsp->flags = ISCSI_FLAG_CMD_FINAL;
+	rsp->response = ISCSI_STATUS_CMD_COMPLETED;
+	rsp->cmd_status = SAM_STAT_CHECK_CONDITION;
+
+	sense = (void *) (unsigned long) task->addr;
+
+	/* FIXME: we assume that sense_buffer is large enough
+	 * (sense_len + 2 bytes). It's true now, but... */
+
+	memmove(sense->data, sense, sense_len);
+	sense->length = cpu_to_be16(sense_len);
+
+	conn->rsp.datasize = sense_len + sizeof(*sense);
+	hton24(rsp->dlength, sense_len + sizeof(*sense));
+	conn->rsp.data = (void *) (unsigned long) task->addr;
+	task->offset += sense_len + sizeof(*sense);
+
+	return 0;
+}
+
 static int iscsi_data_rsp_build(struct iscsi_task *task)
 {
 	struct iscsi_connection *conn = task->conn;
@@ -1347,10 +1382,17 @@ static int iscsi_scsi_cmd_tx_start(struct iscsi_task *task)
 	if (task->r2t_count)
 		err = iscsi_r2t_build(task);
 	else {
+		/* Needs to clean up this mess. */
+
 		if (req->flags & ISCSI_FLAG_CMD_WRITE)
-			err = iscsi_cmd_rsp_build(task);
+			if (task->result)
+				err = iscsi_sense_rsp_build(task);
+			else
+				err = iscsi_cmd_rsp_build(task);
 		else {
-			if (task->len)
+			if (task->result)
+				err = iscsi_sense_rsp_build(task);
+			else if (task->len)
 				err = iscsi_data_rsp_build(task);
 			else
 				err = iscsi_cmd_rsp_build(task);
