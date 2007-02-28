@@ -106,6 +106,9 @@ int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *cmd)
 
 	memset(&ev, 0, sizeof(ev));
 
+	dprintf("%p %u %d %" PRIx64 " %u %" PRIu64 "\n", cmd,
+		cmd->len, result, cmd->uaddr, cmd->rw, cmd->tag);
+
 	ev.hdr.type = TGT_UEVENT_CMD_RSP;
 	ev.p.cmd_rsp.host_no = it_nexus_to_host_no(nid);
 	ev.p.cmd_rsp.len = cmd->len;

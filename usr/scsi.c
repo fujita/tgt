@@ -494,7 +494,7 @@ int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd, void *key)
 	int *len = &cmd->len;
 	int *async = &cmd->async;
 	uint64_t nid = cmd->cmd_nexus_id;
-	unsigned long *uaddr = (unsigned long *)&cmd->uaddr;
+	unsigned long uaddr = cmd->uaddr;
 	struct tgt_device *dev = cmd->dev;
 	struct list_head *dev_list = &target->device_list;
 	bkio_submit_t *submit = target->bdt->bd_cmd_submit;
@@ -587,10 +587,11 @@ int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd, void *key)
 	case WRITE_16:
 	case WRITE_VERIFY:
 		*offset = scsi_cmd_data_offset(scb);
-		result = submit(dev, scb, *rw, datalen, uaddr, *offset, async, key);
+		result = submit(dev, scb, *rw, datalen, &uaddr, *offset, async, key);
 		if (result == SAM_STAT_GOOD) {
 			*len = datalen;
 			*try_map = 1;
+			cmd->uaddr = uaddr;
 		} else {
 			*rw = READ;
 			*offset = 0;
@@ -622,7 +623,7 @@ int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd, void *key)
 
 out:
 	if (data)
-		*uaddr = (unsigned long) data;
+		cmd->uaddr = (unsigned long) data;
 
 	return result;
 }
