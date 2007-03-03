@@ -1,8 +1,8 @@
 /*
- * rawio routine
+ * SCSI pass through
  *
- * Copyright (C) 2006 FUJITA Tomonori <tomof@acm.org>
- * Copyright (C) 2006 Mike Christie <michaelc@cs.wisc.edu>
+ * Copyright (C) 2006-2007 FUJITA Tomonori <tomof@acm.org>
+ * Copyright (C) 2006-2007 Mike Christie <michaelc@cs.wisc.edu>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -39,6 +39,8 @@
 #include "util.h"
 #include "tgtd.h"
 #include "target.h"
+#include "scsi.h"
+#include "spc.h"
 
 static void sg_handler(int fd, int events, void *data)
 {
@@ -173,47 +175,80 @@ static int bd_sg_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
 	return 0;
 }
 
-static int bd_sg_cmd_submit(struct tgt_device *dev, uint8_t *scb,
-			    int rw, uint32_t datalen, unsigned long *uaddr,
-			    uint64_t offset, int *async, void *key)
+static int sg_cmd_submit(struct scsi_cmd *cmd)
 {
-	int err;
+	int ret;
 	struct sg_io_v4 hdr;
 
 	/* TODO sense */
 
-	dprintf("%x %d %u %lx\n", scb[0], rw, datalen, *uaddr);
+	dprintf("%x %d %u %" PRIx64"\n", cmd->scb[0], cmd->rw, cmd->len, cmd->uaddr);
 	memset(&hdr, 0, sizeof(hdr));
 	hdr.guard = 'Q';
 	hdr.request_len = 16;
-	hdr.request = (unsigned long) scb;
+	hdr.request = (unsigned long) cmd->scb;
 
-	if (rw) {
-		hdr.dout_xfer_len = datalen;
-		hdr.dout_xferp = *uaddr;
+	if (cmd->rw) {
+		hdr.dout_xfer_len = cmd->len;
+		hdr.dout_xferp = cmd->uaddr;
 	} else {
-		hdr.din_xfer_len = datalen;
-		hdr.din_xferp = *uaddr;
+		hdr.din_xfer_len = cmd->len;
+		hdr.din_xferp = cmd->uaddr;
 	}
 
-/* 	hdr.max_response_len = sizeof(sense); */
-/* 	hdr.response = (unsigned long) sense; */
+	hdr.max_response_len = sizeof(cmd->sense_buffer);
+	hdr.response = (unsigned long) cmd->sense_buffer;
 
-	hdr.usr_ptr = (unsigned long) key;
+	hdr.usr_ptr = (unsigned long) cmd;
 
-	*async = 1;
-
-	err = write(dev->fd, &hdr, sizeof(hdr));
-	if (err != sizeof(hdr))
-		eprintf("%d %m\n", err);
-	else
-		err = 0;
-	return err;
+	ret = write(cmd->dev->fd, &hdr, sizeof(hdr));
+	if (ret == sizeof(hdr)) {
+		cmd->async = 1;
+		return 0;
+	} else {
+		eprintf("%d %m\n", ret);
+		return -1;
+	}
 }
 
 struct backedio_template sg_bdt = {
 	.bd_open		= bd_sg_open,
 	.bd_close		= bd_sg_close,
-	.bd_cmd_submit		= bd_sg_cmd_submit,
 	.bd_cmd_done		= bd_sg_cmd_done,
+};
+
+static int spt_cmd_perform(int host_no, struct scsi_cmd *cmd)
+{
+	int ret;
+	ret = sg_cmd_submit(cmd);
+	if (ret) {
+		cmd->len = 0;
+		sense_data_build(cmd, ILLEGAL_REQUEST, 0x25, 0);
+		return SAM_STAT_CHECK_CONDITION;
+	} else
+		return SAM_STAT_GOOD;
+}
+
+struct device_command_operations spt_ops[] = {
+	[0x40 ... 0x7f] = {spt_cmd_perform,},
+
+	{spc_report_luns,},
+	{spt_cmd_perform,},
+	{spt_cmd_perform,},
+	{spt_cmd_perform,},
+	{spt_cmd_perform,},
+	{spt_cmd_perform,},
+	{spt_cmd_perform,},
+	{spt_cmd_perform,},
+
+	{spt_cmd_perform,},
+	{spt_cmd_perform,},
+	{spt_cmd_perform,},
+	{spt_cmd_perform,},
+	{spt_cmd_perform,},
+	{spt_cmd_perform,},
+	{spt_cmd_perform,},
+	{spt_cmd_perform,},
+
+	[0xb0 ... 0xff] = {spt_cmd_perform},
 };

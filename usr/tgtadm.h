@@ -54,6 +54,7 @@ enum tgtadm_target_type {
 	TARGET_SSC, /* tape */
 	TARGET_MMC, /* cdrom */
 	TARGET_OSD, /* object storage device */
+	TARGET_SPT, /* pass through */
 };
 
 /* backing store type */

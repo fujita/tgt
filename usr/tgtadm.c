@@ -315,6 +315,8 @@ static int target_type(char *str)
 	} else if (!strcmp(str, "osd")) {
 		eprintf("osd isn't supported yet\n");
 		exit(EINVAL);
+	} else if (!strcmp(str, "pt")) {
+		return TARGET_SPT;
 	} else {
 		eprintf("unknown target type: %s\n", str);
 		exit(EINVAL);

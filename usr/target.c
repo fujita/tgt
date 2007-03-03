@@ -36,7 +36,7 @@
 #include "scsi.h"
 #include "tgtadm.h"
 
-extern struct device_command_operations sbc_ops[];
+extern struct device_command_operations sbc_ops[], spt_ops[];
 
 static LIST_HEAD(target_list);
 
@@ -431,25 +431,6 @@ int target_cmd_queue(uint64_t nid, uint8_t *scb, uint8_t rw,
 
 	cmd->dev = device_lookup(target, dev_id);
 
-	/* FIXME */
-	if (target->target_iotype == SCSI_TARGET_RAWIO) {
-		dprintf("%u %s\n", scb[0], cmd->dev ? "do sg" : "fake");
-
-		/* we can't pass through REPORT_LUNS. */
-		if (cmd->dev && scb[0] != REPORT_LUNS) {
-			uint64_t offset = 0;
-			int async = 0;
-
-			target->bdt->bd_cmd_submit(cmd->dev, cmd->scb, rw,
-						   data_len, &uaddr, offset,
-						   &async, (void *) cmd);
-			cmd->len = data_len;
-			cmd->uaddr = uaddr;
-			goto out;
-		} else
-			enabled = 1;
-	}
-
 	if (cmd->dev)
 		q = &cmd->dev->cmd_queue;
 	else
@@ -477,7 +458,7 @@ int target_cmd_queue(uint64_t nid, uint8_t *scb, uint8_t rw,
 
 		list_add_tail(&cmd->qlist, &q->queue);
 	}
-out:
+
 	return 0;
 }
 
@@ -1225,6 +1206,9 @@ int tgt_target_create(int lld, int tid, char *args, int t_type, int bs_type)
 	case TARGET_SBC:
 		target->dev_cmd_ops = sbc_ops;
 		break;
+	case TARGET_SPT:
+		target->dev_cmd_ops = spt_ops;
+		break;
 	default:
 		free(target);
 		return TGTADM_INVALID_REQUEST;
@@ -1251,7 +1235,7 @@ int tgt_target_create(int lld, int tid, char *args, int t_type, int bs_type)
 	INIT_LIST_HEAD(&target->device_list);
 
 	/* FIXME */
-	if (bs_type == LU_BS_RAW) {
+	if (t_type == TARGET_SPT) {
 		target->target_iotype = SCSI_TARGET_RAWIO;
 		target->bdt = &sg_bdt;
 	} else {
