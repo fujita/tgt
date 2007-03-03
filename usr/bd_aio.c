@@ -183,11 +183,9 @@ static int bd_aio_cmd_submit(struct tgt_device *dev, uint8_t *scb, int rw,
 {
 	struct bd_aio_info *info;
 	struct iocb iocb, *io;
-	int err;
+	int ret;
 
 	info = (struct bd_aio_info *) ((char *)dev + sizeof(*dev));
-
-	*async = 1;
 
 	io = &iocb;
 	memset(io, 0, sizeof(*io));
@@ -201,9 +199,13 @@ static int bd_aio_cmd_submit(struct tgt_device *dev, uint8_t *scb, int rw,
 		io_prep_pwrite(io, dev->fd, (void *) *uaddr, datalen, offset);
 
 	io->data = key;
-	err = io_submit(info->ctx, 1, &io);
+	ret = io_submit(info->ctx, 1, &io);
 
-	return 0;
+	if (ret == 1) {
+		*async = 1;
+		return 0;
+	} else
+		return 1;
 }
 
 static int bd_aio_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)

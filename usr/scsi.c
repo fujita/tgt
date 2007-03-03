@@ -225,13 +225,13 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 	uaddr = cmd->uaddr;
 	ret = submit(cmd->dev, cmd->scb, cmd->rw, cmd->len, &uaddr,
 		     cmd->offset, &cmd->async, (void *)cmd);
-	if (ret == SAM_STAT_GOOD) {
+	if (ret) {
+		key = HARDWARE_ERROR;
+		asc = 0;
+	} else {
 		cmd->mmapped = 1;
 		cmd->uaddr = uaddr;
 		return SAM_STAT_GOOD;
-	} else {
-		key = HARDWARE_ERROR;
-		asc = 0;
 	}
 sense:
 	cmd->rw = READ;
