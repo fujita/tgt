@@ -21,7 +21,7 @@ LIBS += -laio
 endif
 
 ifneq ($(RAW),)
-TGTD_OBJS += spt.o
+TGTD_OBJS += spt.o spt_sgv4.o
 CFLAGS += -DUSE_RAW
 endif
 
