@@ -1,7 +1,5 @@
-extern int scsi_inquiry(struct tgt_device *dev, int host_no, uint8_t *lun_buf,
-			uint8_t *scb, uint8_t *data, int *len);
-extern int scsi_report_luns(struct list_head *dev_list, uint8_t *lun_buf,
-			    uint8_t *scb, uint8_t *p, int *len);
+extern int scsi_inquiry(int host_no, struct scsi_cmd *cmd, void *key);
+extern int scsi_report_luns(int host_no, struct scsi_cmd *cmd, void *key);
 
 extern uint64_t scsi_lun_to_int(uint8_t *p);
 

@@ -41,6 +41,7 @@
 #include "list.h"
 #include "util.h"
 #include "tgtd.h"
+#include "target.h"
 
 #define GETTARGET(x) ((int)((((uint64_t)(x)) >> 56) & 0x003f))
 #define GETBUS(x) ((int)((((uint64_t)(x)) >> 53) & 0x0007))
@@ -124,10 +125,15 @@ static int ibmvstgt_inquiry(int host_no, uint64_t lun, uint8_t *data)
 	return sizeof(*id);
 }
 
-int scsi_inquiry(struct tgt_device *dev, int host_no, uint8_t *lun_buf,
-		 uint8_t *scb, uint8_t *data, int *len)
+int scsi_inquiry(int host_no, struct scsi_cmd *cmd, void *key)
 {
 	int result = SAM_STAT_CHECK_CONDITION;
+	uint8_t *data, *scb = cmd->scb;
+	int *len = &cmd->len;
+
+	data = valloc(pagesize);
+	memset(data, 0, pagesize);
+	cmd->uaddr = (unsigned long) data;
 
 	if (((scb[1] & 0x3) == 0x3) || (!(scb[1] & 0x3) && scb[2]))
 		goto err;
@@ -135,7 +141,7 @@ int scsi_inquiry(struct tgt_device *dev, int host_no, uint8_t *lun_buf,
 	dprintf("%x %x\n", scb[1], scb[2]);
 
 	if (!(scb[1] & 0x3)) {
-		*len = ibmvstgt_inquiry(host_no, *((uint64_t *) lun_buf), data);
+		*len = ibmvstgt_inquiry(host_no, *((uint64_t *) cmd->lun), data);
 		result = SAM_STAT_GOOD;
 	} else if (scb[1] & 0x2) {
 		/* CmdDt bit is set */
@@ -168,8 +174,8 @@ int scsi_inquiry(struct tgt_device *dev, int host_no, uint8_t *lun_buf,
 			data[4] = 0x1;
 			data[5] = 0x1;
 			data[7] = tmp;
-			if (dev)
-				strncpy(data + 8, dev->scsi_id, SCSI_ID_LEN);
+			if (cmd->dev)
+				strncpy(data + 8, cmd->dev->scsi_id, SCSI_ID_LEN);
 			*len = tmp + 8;
 			result = SAM_STAT_GOOD;
 		}
@@ -180,7 +186,7 @@ int scsi_inquiry(struct tgt_device *dev, int host_no, uint8_t *lun_buf,
 
 	*len = min_t(int, *len, scb[4]);
 
-	if (!dev)
+	if (!cmd->dev)
 		data[0] = TYPE_NO_LUN;
 
 	return SAM_STAT_GOOD;
@@ -200,19 +206,23 @@ static uint64_t make_lun(unsigned int bus, unsigned int target, unsigned int lun
 	return ((uint64_t) result) << 48;
 }
 
-int scsi_report_luns(struct list_head *dev_list, uint8_t *lun_buf,
-		     uint8_t *scb, uint8_t *p, int *len)
+int scsi_report_luns(int host_no, struct scsi_cmd *cmd, void *key)
 {
 	struct tgt_device *dev;
-	uint64_t lun, *data = (uint64_t *) p;
+	struct list_head *dev_list = &cmd->c_target->device_list;
+	uint64_t lun, *data;
 	int idx, alen, oalen, nr_luns, rbuflen = 4096;
 	int result = SAM_STAT_GOOD;
+	int *len = &cmd->len;
+	uint8_t *lun_buf = cmd->lun;
 
-	memset(data, 0, rbuflen);
+	data = valloc(pagesize);
+	memset(data, 0, pagesize);
+	cmd->uaddr = (unsigned long)data;
 
-	alen = __be32_to_cpu(*(uint32_t *)&scb[6]);
+	alen = __be32_to_cpu(*(uint32_t *)&cmd->scb[6]);
 	if (alen < 16) {
-		*len = sense_data_build(p, 0x70, ILLEGAL_REQUEST,
+		*len = sense_data_build((void *)data, 0x70, ILLEGAL_REQUEST,
 					0x24, 0);
 		return SAM_STAT_CHECK_CONDITION;
 	}

@@ -105,17 +105,22 @@ static int sbc_request_sense(int host_no, struct scsi_cmd *cmd, void *key)
 	return SAM_STAT_GOOD;
 }
 
-static int __report_luns(struct list_head *dev_list, uint8_t *lun_buf,
-			 uint8_t *scb, uint8_t *p, int *len)
+static int __spc_report_luns(int host_no, struct scsi_cmd *cmd, void *key)
 {
 	struct tgt_device *dev;
-	uint64_t lun, *data = (uint64_t *) p;
+	struct list_head *dev_list = &cmd->c_target->device_list;
+	uint64_t lun, *data;
 	int idx, alen, oalen, nr_luns, rbuflen = 4096, overflow;
 	int result = SAM_STAT_GOOD;
+	int *len = &cmd->len;
 
-	alen = __be32_to_cpu(*(uint32_t *)&scb[6]);
+	data = valloc(pagesize);
+	memset(data, 0, pagesize);
+	cmd->uaddr = (unsigned long)data;
+
+	alen = __be32_to_cpu(*(uint32_t *)&cmd->scb[6]);
 	if (alen < 16) {
-		*len = sense_data_build(p, 0x70, ILLEGAL_REQUEST,
+		*len = sense_data_build((void *)data, 0x70, ILLEGAL_REQUEST,
 					0x24, 0);
 		return SAM_STAT_CHECK_CONDITION;
 	}
@@ -155,16 +160,15 @@ static int __report_luns(struct list_head *dev_list, uint8_t *lun_buf,
 static int spc_report_luns(int host_no, struct scsi_cmd *cmd, void *key)
 {
 	struct target *target = cmd->c_target;
-	struct list_head *dev_list = &target->device_list;
-	uint8_t *data;
+	int ret, lid = target->lid;
 
-	data = valloc(pagesize);
-	memset(data, 0, pagesize);
-	cmd->uaddr = (unsigned long)data;
+	/* temp hack */
+	if (tgt_drivers[lid]->scsi_report_luns)
+		ret = tgt_drivers[lid]->scsi_report_luns(host_no, cmd, key);
+	else
+		ret = __spc_report_luns(host_no, cmd, key);
 
-	typeof(__report_luns) *fn;
-	fn = tgt_drivers[target->lid]->scsi_report_luns ? : __report_luns;
-	return fn(dev_list, cmd->lun, cmd->scb, data, &cmd->len);
+	return ret;
 }
 
 static uint64_t sbc_rw_offset(uint8_t *scb)
@@ -354,17 +358,10 @@ static int sbc_inquiry(int host_no, struct scsi_cmd *cmd, void *key)
 {
 	int ret, lid = cmd->c_target->lid;
 
-	if (tgt_drivers[lid]->scsi_inquiry) {
-		uint8_t *data;
-
-		data = valloc(pagesize);
-		memset(data, 0, pagesize);
-		cmd->uaddr = (unsigned long)data;
-		ret = tgt_drivers[lid]->scsi_inquiry(cmd->dev, host_no, cmd->lun,
-						     cmd->scb, data, &cmd->len);
-	} else
+	if (tgt_drivers[lid]->scsi_inquiry)
+		ret = tgt_drivers[lid]->scsi_inquiry(host_no, cmd, key);
+	else
 		ret = __sbc_inquiry(host_no, cmd, key);
-
 	return ret;
 }
 
