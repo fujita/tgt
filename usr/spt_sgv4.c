@@ -43,9 +43,8 @@
 #include "scsi.h"
 
 /*
- *
+ * until sgv4 is merged into mainline, we support sgv3 too.
  */
-
 static void sgv4_handler(int fd, int events, void *data)
 {
 	int i, err;
@@ -58,9 +57,17 @@ static void sgv4_handler(int fd, int events, void *data)
 
 	for (i = 0; i < err / sizeof(hdrs[0]); i++) {
 		struct scsi_cmd *cmd = (void *) (unsigned long) hdrs[i].usr_ptr;
-		if (hdrs[i].din_resid)
-			cmd->len = hdrs[i].din_resid;
-		target_cmd_io_done(cmd, 0);
+
+		dprintf("%p %u %u %u %u\n", cmd,
+			hdrs[i].response_len, hdrs[i].device_status,
+			hdrs[i].transport_status, hdrs[i].transport_status);
+
+		if (hdrs[i].device_status) {
+			cmd->sense_len = hdrs[i].response_len;
+			cmd->len = 0;
+		}
+
+		target_cmd_io_done(cmd, hdrs[i].device_status);
 	}
 }
 
@@ -171,8 +178,6 @@ int spt_sg_perform(struct scsi_cmd *cmd)
 {
 	int ret;
 	struct sg_io_v4 hdr;
-
-	/* TODO sense */
 
 	dprintf("%x %d %u %" PRIx64"\n", cmd->scb[0], cmd->rw, cmd->len, cmd->uaddr);
 	memset(&hdr, 0, sizeof(hdr));
