@@ -36,6 +36,8 @@
 #include "scsi.h"
 #include "tgtadm.h"
 
+extern struct device_command_operations sbc_ops[];
+
 static LIST_HEAD(target_list);
 
 static struct target *target_lookup(int tid)
@@ -1218,6 +1220,15 @@ int tgt_target_create(int lld, int tid, char *args, int t_type, int bs_type)
 	target = zalloc(sizeof(*target));
 	if (!target)
 		return TGTADM_NOMEM;
+
+	switch (t_type) {
+	case TARGET_SBC:
+		target->dev_cmd_ops = sbc_ops;
+		break;
+	default:
+		free(target);
+		return TGTADM_INVALID_REQUEST;
+	}
 
 	target->name = strdup(targetname);
 	if (!target->name) {

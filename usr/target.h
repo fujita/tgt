@@ -57,6 +57,8 @@ struct target {
 	struct list_head acl_list;
 
 	struct tgt_account account;
+
+	struct device_command_operations *dev_cmd_ops;
 };
 
 struct it_nexus {
