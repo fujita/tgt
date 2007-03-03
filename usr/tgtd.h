@@ -101,6 +101,10 @@ static inline int kreq_init(void)	\
 struct backedio_template sg_bdt;
 #endif
 
+struct device_command_operations {
+	int (*cmd_perform)(int host_no, struct scsi_cmd *cmd, void *key);
+};
+
 extern int kspace_send_tsk_mgmt_res(uint64_t nid, uint64_t mid, int result);
 extern int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *);
 
