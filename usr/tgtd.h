@@ -84,8 +84,9 @@ struct scsi_cmd {
 	int async;
 	struct mgmt_req *mreq;
 
-#define SCSI_SENSE_BUFFERSIZE	96
+#define SCSI_SENSE_BUFFERSIZE	252
 	unsigned char sense_buffer[SCSI_SENSE_BUFFERSIZE];
+	int sense_len;
 };
 
 #ifdef USE_KERNEL
@@ -102,7 +103,7 @@ struct backedio_template sg_bdt;
 #endif
 
 struct device_command_operations {
-	int (*cmd_perform)(int host_no, struct scsi_cmd *cmd, void *key);
+	int (*cmd_perform)(int host_no, struct scsi_cmd *cmd);
 };
 
 extern int kspace_send_tsk_mgmt_res(uint64_t nid, uint64_t mid, int result);
@@ -141,8 +142,8 @@ struct scsi_cmd;
 
 extern uint64_t scsi_get_devid(int lid, uint8_t *pdu);
 extern int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd, void *key);
-extern int sense_data_build(uint8_t *data, uint8_t res_code, uint8_t key,
-			    uint8_t ascode, uint8_t ascodeq);
+extern void sense_data_build(struct scsi_cmd *cmd, uint8_t key, uint8_t asc,
+			     uint8_t asq);
 
 extern enum scsi_target_state tgt_get_target_state(int tid);
 extern int tgt_set_target_state(int tid, char *str);

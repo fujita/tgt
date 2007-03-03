@@ -112,8 +112,10 @@ int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *cmd)
 	ev.hdr.type = TGT_UEVENT_CMD_RSP;
 	ev.p.cmd_rsp.host_no = it_nexus_to_host_no(nid);
 	ev.p.cmd_rsp.len = cmd->len;
-	ev.p.cmd_rsp.result = result;
 	ev.p.cmd_rsp.uaddr = cmd->uaddr;
+	ev.p.cmd_rsp.sense_len = cmd->sense_len;
+	ev.p.cmd_rsp.sense_uaddr = (unsigned long) cmd->sense_buffer;
+	ev.p.cmd_rsp.result = result;
 	ev.p.cmd_rsp.rw = cmd->rw;
 	ev.p.cmd_rsp.tag = cmd->tag;
 

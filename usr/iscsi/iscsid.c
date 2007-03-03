@@ -766,7 +766,7 @@ static int iscsi_sense_rsp_build(struct iscsi_task *task)
 	struct iscsi_connection *conn = task->conn;
 	struct iscsi_cmd_rsp *rsp = (struct iscsi_cmd_rsp *) &conn->rsp.bhs;
 	struct iscsi_sense_data *sense;
-	uint16_t sense_len = task->len;
+	unsigned char sense_len;
 
 	memset(rsp, 0, sizeof(*rsp));
 	rsp->opcode = ISCSI_OP_SCSI_CMD_RSP;
@@ -775,18 +775,15 @@ static int iscsi_sense_rsp_build(struct iscsi_task *task)
 	rsp->response = ISCSI_STATUS_CMD_COMPLETED;
 	rsp->cmd_status = SAM_STAT_CHECK_CONDITION;
 
-	sense = (void *) (unsigned long) task->addr;
-
-	/* FIXME: we assume that sense_buffer is large enough
-	 * (sense_len + 2 bytes). It's true now, but... */
+	sense = (struct iscsi_sense_data *)task->scmd->sense_buffer;
+	sense_len = task->scmd->sense_len;
 
 	memmove(sense->data, sense, sense_len);
 	sense->length = cpu_to_be16(sense_len);
 
 	conn->rsp.datasize = sense_len + sizeof(*sense);
 	hton24(rsp->dlength, sense_len + sizeof(*sense));
-	conn->rsp.data = (void *) (unsigned long) task->addr;
-	task->offset += sense_len + sizeof(*sense);
+	conn->rsp.data = sense;
 
 	return 0;
 }
@@ -945,6 +942,7 @@ found:
 	task->result = result;
 	task->len = cmd->len;
 	task->rw = cmd->rw;
+	task->scmd = cmd;
 
 	list_add_tail(&task->c_list, &task->conn->tx_clist);
 	tgt_event_modify(task->conn->fd, EPOLLIN | EPOLLOUT);

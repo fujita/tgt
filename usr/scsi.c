@@ -30,18 +30,17 @@
 
 #define BLK_SHIFT	9
 
-int sense_data_build(uint8_t *data, uint8_t res_code, uint8_t key,
-		     uint8_t ascode, uint8_t ascodeq)
+void sense_data_build(struct scsi_cmd *cmd, uint8_t key, uint8_t asc, uint8_t asq)
 {
-	int len = 6;
+	int len = 0xa;
 
-	data[0] = res_code | 1U << 7;
-	data[2] = key;
-	data[7] = len;
-	data[12] = ascode;
-	data[13] = ascodeq;
+	cmd->sense_buffer[0] = 0x70;
+	cmd->sense_buffer[2] = key;
+	cmd->sense_buffer[7] = len;
+	cmd->sense_buffer[12] = asc;
+	cmd->sense_buffer[13] = asq;
 
-	return len + 8;
+	cmd->sense_len = len + 8;
 }
 
 #define        TGT_INVALID_DEV_ID      ~0ULL
@@ -73,57 +72,51 @@ uint64_t scsi_get_devid(int lid, uint8_t *p)
 	return fn(p);
 }
 
-static int sbc_test_unit(int host_no, struct scsi_cmd *cmd, void *key)
+static int sbc_test_unit(int host_no, struct scsi_cmd *cmd)
 {
 	int ret = SAM_STAT_GOOD;
-	uint8_t *data;
 
 	/* how should we test a backing-storage file? */
 
 	if (cmd->dev) {
-		if (device_reserved(cmd->cmd_nexus_id, cmd->dev->lun, host_no))
+		ret = device_reserved(cmd->cmd_nexus_id, cmd->dev->lun, host_no);
+		if (ret)
 			ret = SAM_STAT_RESERVATION_CONFLICT;
 	} else {
-		data = valloc(pagesize);
-		cmd->len = sense_data_build(data, 0x70, ILLEGAL_REQUEST, 0x24, 0);
-		cmd->uaddr = (unsigned long)data;
+		cmd->len = 0;
+		sense_data_build(cmd, ILLEGAL_REQUEST, 0x24, 0);
 		ret = SAM_STAT_CHECK_CONDITION;
 	}
 	return ret;
 }
 
-static int sbc_request_sense(int host_no, struct scsi_cmd *cmd, void *key)
+static int sbc_request_sense(int host_no, struct scsi_cmd *cmd)
 {
-	uint8_t *data;
-
-	data = valloc(pagesize);
-	if (!data)
-		return SAM_STAT_CHECK_CONDITION;
-
-	cmd->len = sense_data_build(data, 0x70, NO_SENSE, 0, 0);
-	cmd->uaddr = (unsigned long)data;
+	cmd->len = 0;
+	sense_data_build(cmd, NO_SENSE, 0, 0);
 	return SAM_STAT_GOOD;
 }
 
-static int __spc_report_luns(int host_no, struct scsi_cmd *cmd, void *key)
+static int __spc_report_luns(int host_no, struct scsi_cmd *cmd)
 {
 	struct tgt_device *dev;
 	struct list_head *dev_list = &cmd->c_target->device_list;
 	uint64_t lun, *data;
 	int idx, alen, oalen, nr_luns, rbuflen = 4096, overflow;
-	int result = SAM_STAT_GOOD;
 	int *len = &cmd->len;
-
-	data = valloc(pagesize);
-	memset(data, 0, pagesize);
-	cmd->uaddr = (unsigned long)data;
+	unsigned char key = ILLEGAL_REQUEST, asc = 0x24;
 
 	alen = __be32_to_cpu(*(uint32_t *)&cmd->scb[6]);
-	if (alen < 16) {
-		*len = sense_data_build((void *)data, 0x70, ILLEGAL_REQUEST,
-					0x24, 0);
-		return SAM_STAT_CHECK_CONDITION;
+	if (alen < 16)
+		goto sense;
+
+	data = valloc(pagesize);
+	if (!data) {
+		key = HARDWARE_ERROR;
+		asc = 0;
+		goto sense;
 	}
+	memset(data, 0, pagesize);
 
 	alen &= ~(8 - 1);
 	oalen = alen;
@@ -151,22 +144,26 @@ static int __spc_report_luns(int host_no, struct scsi_cmd *cmd, void *key)
 		}
 	}
 
+	cmd->uaddr = (unsigned long)data;
 	*((uint32_t *) data) = __cpu_to_be32(nr_luns * 8);
 	*len = min(oalen, nr_luns * 8 + 8);
-
-	return result;
+	return SAM_STAT_GOOD;
+sense:
+	*len = 0;
+	sense_data_build(cmd, key, asc, 0);
+	return SAM_STAT_CHECK_CONDITION;
 }
 
-static int spc_report_luns(int host_no, struct scsi_cmd *cmd, void *key)
+static int spc_report_luns(int host_no, struct scsi_cmd *cmd)
 {
 	struct target *target = cmd->c_target;
 	int ret, lid = target->lid;
 
 	/* temp hack */
 	if (tgt_drivers[lid]->scsi_report_luns)
-		ret = tgt_drivers[lid]->scsi_report_luns(host_no, cmd, key);
+		ret = tgt_drivers[lid]->scsi_report_luns(host_no, cmd);
 	else
-		ret = __spc_report_luns(host_no, cmd, key);
+		ret = __spc_report_luns(host_no, cmd);
 
 	return ret;
 }
@@ -197,18 +194,17 @@ static uint64_t sbc_rw_offset(uint8_t *scb)
 	return off << BLK_SHIFT;
 }
 
-static int sbc_rw(int host_no, struct scsi_cmd *cmd, void *key)
+static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 {
 	int ret;
 	unsigned long uaddr;
-	uint8_t *data;
 	bkio_submit_t *submit = cmd->c_target->bdt->bd_cmd_submit;
+	unsigned char key = ILLEGAL_REQUEST, asc = 0x25;
 
 	if (cmd->dev) {
-		if (device_reserved(cmd->cmd_nexus_id, cmd->dev->lun, host_no)) {
-			ret = SAM_STAT_RESERVATION_CONFLICT;
-			goto sense;
-		}
+		ret = device_reserved(cmd->cmd_nexus_id, cmd->dev->lun, host_no);
+		if (ret)
+			return SAM_STAT_RESERVATION_CONFLICT;
 	} else {
 		ret = SAM_STAT_CHECK_CONDITION;
 		goto sense;
@@ -228,40 +224,44 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd, void *key)
 	cmd->offset = sbc_rw_offset(cmd->scb);
 	uaddr = cmd->uaddr;
 	ret = submit(cmd->dev, cmd->scb, cmd->rw, cmd->len, &uaddr,
-		     cmd->offset, &cmd->async, key);
+		     cmd->offset, &cmd->async, (void *)cmd);
 	if (ret == SAM_STAT_GOOD) {
 		cmd->mmapped = 1;
 		cmd->uaddr = uaddr;
 		return SAM_STAT_GOOD;
+	} else {
+		key = HARDWARE_ERROR;
+		asc = 0;
 	}
-
 sense:
 	cmd->rw = READ;
 	cmd->offset = 0;
-	data = valloc(pagesize);
-	if (data) {
-		cmd->len = sense_data_build(data, 0x70, ILLEGAL_REQUEST, 0x25, 0);
-		cmd->uaddr = (unsigned long) data;
-	}
-	return ret;
+	cmd->len = 0;
+	sense_data_build(cmd, key, asc, 0);
+	return SAM_STAT_CHECK_CONDITION;
 }
 
 #define VENDOR_ID	"IET"
 #define PRODUCT_ID	"VIRTUAL-DISK"
 #define PRODUCT_REV	"0"
 
-static int __sbc_inquiry(int host_no, struct scsi_cmd *cmd, void *key)
+static int __sbc_inquiry(int host_no, struct scsi_cmd *cmd)
 {
 	int len, ret = SAM_STAT_CHECK_CONDITION;
 	uint8_t *data;
 	uint8_t *scb = cmd->scb;
-
-	data = valloc(pagesize);
-	memset(data, 0, pagesize);
-	cmd->uaddr = (unsigned long) data;
+	unsigned char key = ILLEGAL_REQUEST, asc = 0x24;
 
 	if (((scb[1] & 0x3) == 0x3) || (!(scb[1] & 0x3) && scb[2]))
-		goto err;
+		goto sense;
+
+	data = valloc(pagesize);
+	if (!data) {
+		key = HARDWARE_ERROR;
+		asc = 0;
+		goto sense;
+	}
+	memset(data, 0, pagesize);
 
 	dprintf("%x %x\n", scb[1], scb[2]);
 
@@ -338,37 +338,35 @@ static int __sbc_inquiry(int host_no, struct scsi_cmd *cmd, void *key)
 	}
 
 	if (ret != SAM_STAT_GOOD)
-		goto err;
+		goto sense;
 
-	len = min_t(int, len, scb[4]);
+	cmd->len = min_t(int, len, scb[4]);
+	cmd->uaddr = (unsigned long) data;
 
 	if (!cmd->dev)
 		data[0] = TYPE_NO_LUN;
 
-	cmd->len = len;
-
 	return SAM_STAT_GOOD;
-
-err:
-	cmd->len = sense_data_build(data, 0x70, ILLEGAL_REQUEST, 0x24, 0);
+sense:
+	cmd->len = 0;
+	sense_data_build(cmd, key, asc, 0);
 	return SAM_STAT_CHECK_CONDITION;
 }
 
-static int sbc_inquiry(int host_no, struct scsi_cmd *cmd, void *key)
+static int sbc_inquiry(int host_no, struct scsi_cmd *cmd)
 {
 	int ret, lid = cmd->c_target->lid;
 
 	if (tgt_drivers[lid]->scsi_inquiry)
-		ret = tgt_drivers[lid]->scsi_inquiry(host_no, cmd, key);
+		ret = tgt_drivers[lid]->scsi_inquiry(host_no, cmd);
 	else
-		ret = __sbc_inquiry(host_no, cmd, key);
+		ret = __sbc_inquiry(host_no, cmd);
 	return ret;
 }
 
-static int sbc_reserve(int host_no, struct scsi_cmd *cmd, void *key)
+static int sbc_reserve(int host_no, struct scsi_cmd *cmd)
 {
 	int ret;
-	uint8_t *data;
 
 	if (cmd->dev) {
 		ret = device_reserve(cmd->cmd_nexus_id, cmd->dev->lun, host_no);
@@ -377,20 +375,16 @@ static int sbc_reserve(int host_no, struct scsi_cmd *cmd, void *key)
 		else
 			ret = SAM_STAT_GOOD;
 	} else {
-		data = valloc(pagesize);
-		if (data) {
-			cmd->uaddr = (unsigned long)data;
-			cmd->len = sense_data_build(data, 0x70, ILLEGAL_REQUEST, 0x25, 0);
-		}
+		cmd->len = 0;
+		sense_data_build(cmd, ILLEGAL_REQUEST, 0x25, 0);
 		ret = SAM_STAT_CHECK_CONDITION;
 	}
 	return ret;
 }
 
-static int sbc_release(int host_no, struct scsi_cmd *cmd, void *key)
+static int sbc_release(int host_no, struct scsi_cmd *cmd)
 {
-	int ret = SAM_STAT_CHECK_CONDITION;
-	uint8_t *data;
+	int ret;
 
 	if (cmd->dev) {
 		ret = device_release(cmd->cmd_nexus_id, cmd->dev->lun, host_no, 0);
@@ -399,38 +393,38 @@ static int sbc_release(int host_no, struct scsi_cmd *cmd, void *key)
 		else
 			ret = SAM_STAT_GOOD;
 	} else {
-		data = valloc(pagesize);
-		if (data) {
-			cmd->uaddr = (unsigned long) data;
-			cmd->len = sense_data_build(data, 0x70, ILLEGAL_REQUEST, 0x25, 0);
-		}
+		cmd->len = 0;
+		sense_data_build(cmd, ILLEGAL_REQUEST, 0x25, 0);
+		ret = SAM_STAT_CHECK_CONDITION;
 	}
 	return ret;
 }
 
-static int sbc_read_capacity(int host_no, struct scsi_cmd *cmd, void *key)
+static int sbc_read_capacity(int host_no, struct scsi_cmd *cmd)
 {
 	uint32_t *data;
 	uint64_t size;
 	uint8_t *scb = cmd->scb;
-
-	data = valloc(pagesize);
-	cmd->uaddr = (unsigned long) data;
+	unsigned char key = ILLEGAL_REQUEST, asc = 0x25;
 
 	if (cmd->dev) {
 		if (device_reserved(cmd->cmd_nexus_id, cmd->dev->lun, host_no))
 			return SAM_STAT_RESERVATION_CONFLICT;
-	} else {
-		cmd->len = sense_data_build((uint8_t *)data, 0x70,
-					    ILLEGAL_REQUEST, 0x25, 0);
-		return SAM_STAT_CHECK_CONDITION;
-	}
+	} else
+		goto sense;
 
 	if (!(scb[8] & 0x1) & (scb[2] | scb[3] | scb[4] | scb[5])) {
-		cmd->len = sense_data_build((uint8_t *)data, 0x70,
-					    ILLEGAL_REQUEST, 0x24, 0);
-		return SAM_STAT_CHECK_CONDITION;
+		asc = 0x24;
+		goto sense;
 	}
+
+	data = valloc(pagesize);
+	if (!data) {
+		key = HARDWARE_ERROR;
+		asc = 0;
+		goto sense;
+	}
+	cmd->uaddr = (unsigned long) data;
 
 	size = cmd->dev->size >> BLK_SHIFT;
 
@@ -440,18 +434,22 @@ static int sbc_read_capacity(int host_no, struct scsi_cmd *cmd, void *key)
 	cmd->len = 8;
 
 	return SAM_STAT_GOOD;
+sense:
+	cmd->len = 0;
+	sense_data_build(cmd, key, asc, 0);
+	return SAM_STAT_CHECK_CONDITION;
 }
 
-static int sbc_sync_cache(int host_no, struct scsi_cmd *cmd, void *key)
+static int sbc_sync_cache(int host_no, struct scsi_cmd *cmd)
 {
 	int ret, len;
-	uint8_t *data, ascode;
+	uint8_t key = ILLEGAL_REQUEST, asc;
 
 	if (cmd->dev) {
 		if (device_reserved(cmd->cmd_nexus_id, cmd->dev->lun, host_no))
 			return SAM_STAT_RESERVATION_CONFLICT;
 	} else {
-		ascode = 0x25;
+		asc = 0x25;
 		goto sense;
 	}
 
@@ -466,7 +464,8 @@ static int sbc_sync_cache(int host_no, struct scsi_cmd *cmd, void *key)
 		 * is this the right sense code?
 		 * what should I put for the asc/ascq?
 		 */
-		ascode = 0;
+		key = HARDWARE_ERROR;
+		asc = 0;
 		goto sense;
 	default:
 		len = 0;
@@ -474,10 +473,8 @@ static int sbc_sync_cache(int host_no, struct scsi_cmd *cmd, void *key)
 	}
 
 sense:
-	data = valloc(pagesize);
-	cmd->uaddr = (unsigned long) data;
-	cmd->len = sense_data_build(data, 0x70, ILLEGAL_REQUEST, ascode, 0);
-
+	cmd->len = 0;
+	sense_data_build(cmd, key, asc, 0);
 	return SAM_STAT_CHECK_CONDITION;
 }
 
@@ -542,25 +539,27 @@ static int insert_geo_m_pg(uint8_t *ptr, uint64_t sec)
 	return sizeof(geo_m_pg);
 }
 
-static int sbc_mode_sense(int host_no, struct scsi_cmd *cmd, void *key)
+static int sbc_mode_sense(int host_no, struct scsi_cmd *cmd)
 {
 	int ret = SAM_STAT_GOOD, len;
 	uint8_t pcode = cmd->scb[2] & 0x3f;
 	uint64_t size;
 	uint8_t *data = NULL;
-
-	data = valloc(pagesize);
-	memset(data, 0, pagesize);
-	cmd->uaddr = (unsigned long) data;
+	unsigned char key = ILLEGAL_REQUEST, asc = 0x25;
 
 	if (cmd->dev) {
 		if (device_reserved(cmd->cmd_nexus_id, cmd->dev->lun, host_no))
 			return SAM_STAT_RESERVATION_CONFLICT;
-	} else {
-		cmd->len = sense_data_build((uint8_t *)data, 0x70,
-					    ILLEGAL_REQUEST, 0x25, 0);
-		return SAM_STAT_CHECK_CONDITION;
+	} else
+		goto sense;
+
+	data = valloc(pagesize);
+	if (!data) {
+		key = HARDWARE_ERROR;
+		asc = 0;
+		goto sense;
 	}
+	memset(data, 0, pagesize);
 
 	len = 4;
 	size = cmd->dev->size >> BLK_SHIFT;
@@ -605,16 +604,21 @@ static int sbc_mode_sense(int host_no, struct scsi_cmd *cmd, void *key)
 		len += insert_iec_m_pg(data + len);
 		break;
 	default:
-		ret = SAM_STAT_CHECK_CONDITION;
-		len = sense_data_build(data, 0x70, ILLEGAL_REQUEST,0x24, 0);
+		asc = 0x24;
+		goto sense;
 	}
 
 	data[0] = len - 1;
 	cmd->len = len;
+	cmd->uaddr = (unsigned long) data;
 	return ret;
+sense:
+	cmd->len = 0;
+	sense_data_build(cmd, key, asc, 0);
+	return SAM_STAT_CHECK_CONDITION;
 }
 
-static int spc_start_stop(int host_no, struct scsi_cmd *cmd, void *key)
+static int spc_start_stop(int host_no, struct scsi_cmd *cmd)
 {
 	cmd->len = 0;
 
@@ -622,29 +626,16 @@ static int spc_start_stop(int host_no, struct scsi_cmd *cmd, void *key)
 		if (device_reserved(cmd->cmd_nexus_id, cmd->dev->lun, host_no))
 			return SAM_STAT_RESERVATION_CONFLICT;
 	} else {
-		uint8_t *data;
-
-		data = valloc(pagesize);
-		memset(data, 0, pagesize);
-		cmd->uaddr = (unsigned long) data;
-
-		cmd->len = sense_data_build((uint8_t *)data, 0x70,
-					    ILLEGAL_REQUEST, 0x25, 0);
+		sense_data_build(cmd, ILLEGAL_REQUEST, 0x25, 0);
 		return SAM_STAT_CHECK_CONDITION;
 	}
-
 	return SAM_STAT_GOOD;
 }
 
-static int spc_illegal_op(int host_no, struct scsi_cmd *cmd, void *key)
+static int spc_illegal_op(int host_no, struct scsi_cmd *cmd)
 {
-	uint8_t *data;
-
-	data = valloc(pagesize);
-	memset(data, 0, pagesize);
-	cmd->uaddr = (unsigned long) data;
-	cmd->len = sense_data_build(data, 0x70, ILLEGAL_REQUEST,0x24, 0);
-
+	cmd->len = 0;
+	sense_data_build(cmd, ILLEGAL_REQUEST,0x24, 0);
 	return SAM_STAT_CHECK_CONDITION;
 }
 
@@ -790,5 +781,5 @@ int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd, void *key)
 {
 	unsigned char op = cmd->scb[0];
 
-	return sbc_ops[op].cmd_perform(host_no, cmd, key);
+	return sbc_ops[op].cmd_perform(host_no, cmd);
 }

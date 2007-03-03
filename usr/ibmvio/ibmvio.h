@@ -1,5 +1,5 @@
-extern int scsi_inquiry(int host_no, struct scsi_cmd *cmd, void *key);
-extern int scsi_report_luns(int host_no, struct scsi_cmd *cmd, void *key);
+extern int scsi_inquiry(int host_no, struct scsi_cmd *cmd);
+extern int scsi_report_luns(int host_no, struct scsi_cmd *cmd);
 
 extern uint64_t scsi_lun_to_int(uint8_t *p);
 

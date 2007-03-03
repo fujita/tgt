@@ -14,8 +14,8 @@ struct tgt_driver {
 
 	/* the following three should be killed shortly */
 	uint64_t (*scsi_get_lun)(uint8_t *);
-	int (*scsi_report_luns)(int host_no, struct scsi_cmd *cmd, void *key);
-	int (*scsi_inquiry)(int host_no, struct scsi_cmd *cmd, void *key);
+	int (*scsi_report_luns)(int host_no, struct scsi_cmd *cmd);
+	int (*scsi_inquiry)(int host_no, struct scsi_cmd *cmd);
 
 	int (*cmd_end_notify)(uint64_t nid, int result, struct scsi_cmd *);
 	int (*mgmt_end_notify)(uint64_t nid, uint64_t mid, int result);

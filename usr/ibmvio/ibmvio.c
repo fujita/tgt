@@ -125,18 +125,23 @@ static int ibmvstgt_inquiry(int host_no, uint64_t lun, uint8_t *data)
 	return sizeof(*id);
 }
 
-int scsi_inquiry(int host_no, struct scsi_cmd *cmd, void *key)
+int scsi_inquiry(int host_no, struct scsi_cmd *cmd)
 {
 	int result = SAM_STAT_CHECK_CONDITION;
 	uint8_t *data, *scb = cmd->scb;
 	int *len = &cmd->len;
-
-	data = valloc(pagesize);
-	memset(data, 0, pagesize);
-	cmd->uaddr = (unsigned long) data;
+	unsigned char key = ILLEGAL_REQUEST, asc = 0x24;
 
 	if (((scb[1] & 0x3) == 0x3) || (!(scb[1] & 0x3) && scb[2]))
-		goto err;
+		goto sense;
+
+	data = valloc(pagesize);
+	if (!data) {
+		key = HARDWARE_ERROR;
+		asc = 0;
+		goto sense;
+	}
+	memset(data, 0, pagesize);
 
 	dprintf("%x %x\n", scb[1], scb[2]);
 
@@ -181,19 +186,22 @@ int scsi_inquiry(int host_no, struct scsi_cmd *cmd, void *key)
 		}
 	}
 
-	if (result != SAM_STAT_GOOD)
-		goto err;
+	if (result != SAM_STAT_GOOD) {
+		free(data);
+		goto sense;
+	}
 
 	*len = min_t(int, *len, scb[4]);
+	cmd->uaddr = (unsigned long)data;
 
 	if (!cmd->dev)
 		data[0] = TYPE_NO_LUN;
 
 	return SAM_STAT_GOOD;
 
-err:
-	*len = sense_data_build(data, 0x70, ILLEGAL_REQUEST,
-				0x24, 0);
+sense:
+	*len = 0;
+	sense_data_build(cmd, key, asc, 0);
 	return SAM_STAT_CHECK_CONDITION;
 }
 
@@ -206,26 +214,28 @@ static uint64_t make_lun(unsigned int bus, unsigned int target, unsigned int lun
 	return ((uint64_t) result) << 48;
 }
 
-int scsi_report_luns(int host_no, struct scsi_cmd *cmd, void *key)
+int scsi_report_luns(int host_no, struct scsi_cmd *cmd)
 {
 	struct tgt_device *dev;
 	struct list_head *dev_list = &cmd->c_target->device_list;
 	uint64_t lun, *data;
 	int idx, alen, oalen, nr_luns, rbuflen = 4096;
-	int result = SAM_STAT_GOOD;
 	int *len = &cmd->len;
 	uint8_t *lun_buf = cmd->lun;
-
-	data = valloc(pagesize);
-	memset(data, 0, pagesize);
-	cmd->uaddr = (unsigned long)data;
+	unsigned char key = ILLEGAL_REQUEST, asc = 0x24;
 
 	alen = __be32_to_cpu(*(uint32_t *)&cmd->scb[6]);
-	if (alen < 16) {
-		*len = sense_data_build((void *)data, 0x70, ILLEGAL_REQUEST,
-					0x24, 0);
-		return SAM_STAT_CHECK_CONDITION;
+	if (alen < 16)
+		goto sense;
+
+	data = valloc(pagesize);
+	if (!data) {
+		key = HARDWARE_ERROR;
+		asc = 0;
+		goto sense;
 	}
+	memset(data, 0, pagesize);
+	cmd->uaddr = (unsigned long)data;
 
 	alen &= ~(8 - 1);
 	oalen = alen;
@@ -256,8 +266,11 @@ int scsi_report_luns(int host_no, struct scsi_cmd *cmd, void *key)
 done:
 	*((uint32_t *) data) = __cpu_to_be32(nr_luns * 8);
 	*len = min(oalen, nr_luns * 8 + 8);
-
-	return result;
+	return SAM_STAT_GOOD;
+sense:
+	*len = 0;
+	sense_data_build(cmd, key, asc, 0);
+	return SAM_STAT_CHECK_CONDITION;
 }
 
 #define        TGT_INVALID_DEV_ID      ~0ULL

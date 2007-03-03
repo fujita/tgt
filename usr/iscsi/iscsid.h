@@ -112,6 +112,12 @@ struct iscsi_task {
 	int exp_r2tsn;
 
 	void *c_buffer;
+
+	/*
+	 * temp hack.
+	 * TODO: move most of iscsi_task to scsi_cmd
+	 */
+	struct scsi_cmd *scmd;
 };
 
 struct iscsi_connection {
