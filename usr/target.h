@@ -10,8 +10,6 @@
 #define	MSG_HEAD_TAG	0x21
 #define	MSG_ORDERED_TAG	0x22
 
-#define	MAX_NR_HOST		1024
-
 #define	HASH_ORDER	4
 #define	hashfn(val)	hash_long((unsigned long) (val), HASH_ORDER)
 
