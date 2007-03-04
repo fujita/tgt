@@ -83,14 +83,6 @@ Target framework daemon.\n\
 static void signal_catch(int signo) {
 }
 
-static int set_realtime(void)
-{
-	struct sched_param sp;
-
-	sp.sched_priority = sched_get_priority_max(SCHED_FIFO);
-	return sched_setscheduler(0, SCHED_FIFO, &sp);
-}
-
 static int oom_adjust(void)
 {
 	int fd, err;
@@ -285,10 +277,6 @@ int main(int argc, char **argv)
 	err = oom_adjust();
 	if (err)
 		exit(1);
-
-	err = set_realtime();
-	if (err)
-		eprintf("can't set SCHED_FIFO, %m\n");
 
 	err = log_init(program_name, LOG_SPACE_SIZE, is_daemon, is_debug);
 	if (err)
