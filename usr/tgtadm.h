@@ -49,12 +49,6 @@ enum tgtadm_mode {
 	MODE_ACCOUNT,
 };
 
-/* backing store type */
-enum tgtadm_lu_bs_type {
-	LU_BS_FILE,
-	LU_BS_RAW, /* pass through */
-};
-
 enum tgtadm_account_dir {
 	ACCOUNT_TYPE_INCOMING,
 	ACCOUNT_TYPE_OUTGOING,
@@ -71,7 +65,6 @@ struct tgtadm_req {
 	uint32_t cid;
 	uint32_t host_no;
 	uint32_t target_type;
-	uint32_t bs_type;
 	uint32_t ac_dir;
 	uint32_t pack;
 };

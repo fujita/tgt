@@ -106,7 +106,6 @@ struct option const long_options[] = {
 
 	{"bus", required_argument, NULL, 'B'},
 	{"target-type", required_argument, NULL, 'Y'},
-	{"backing-store-type", required_argument, NULL, 'S'},
 	{"outgoing", no_argument, NULL, 'O'},
 	{NULL, 0, NULL, 0},
 };
@@ -291,18 +290,6 @@ static int bus_to_host(char *bus)
 	return host;
 }
 
-static int backing_store_type(char *str)
-{
-	if (!strcmp(str, "file"))
-		return LU_BS_FILE;
-	else if (!strcmp(str, "raw"))
-		return LU_BS_RAW;
-	else {
-		eprintf("unknown backing store type: %s\n", str);
-		exit(EINVAL);
-	}
-}
-
 static int target_type(char *str)
 {
 	if (!strcmp(str, "disk"))
@@ -364,7 +351,7 @@ static int str_to_op(char *str)
 int main(int argc, char **argv)
 {
 	int ch, longindex;
-	int op, total, tid, rest, mode, t_type, bs_type, ac_dir;
+	int op, total, tid, rest, mode, t_type, ac_dir;
 	uint32_t cid, hostno;
 	uint64_t sid, lun;
 	char *name, *value, *path, *targetname, *params, *address;
@@ -375,7 +362,6 @@ int main(int argc, char **argv)
 	op = tid = mode = -1;
 	total = cid = hostno = sid = lun = 0;
 	t_type = TYPE_DISK;
-	bs_type = LU_BS_FILE;
 	ac_dir = ACCOUNT_TYPE_INCOMING;
 	rest = BUFSIZE;
 	name = value = path = targetname = address = NULL;
@@ -435,9 +421,6 @@ int main(int argc, char **argv)
 			break;
 		case 'Y':
 			t_type = target_type(optarg);
-			break;
-		case 'S':
-			bs_type = backing_store_type(optarg);
 			break;
 		case 'O':
 			ac_dir = ACCOUNT_TYPE_OUTGOING;
@@ -565,7 +548,6 @@ int main(int argc, char **argv)
 	req->mode = mode;
 	req->host_no = hostno;
 	req->target_type = t_type;
-	req->bs_type = bs_type;
 	req->ac_dir = ac_dir;
 
 	params = buf + sizeof(*req);

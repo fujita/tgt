@@ -120,7 +120,7 @@ extern int device_reserve(uint64_t nid, uint64_t lun, uint64_t reserve_id);
 extern int device_release(uint64_t nid, uint64_t lun, uint64_t reserve_id, int force);
 extern int device_reserved(uint64_t nid, uint64_t lun, uint64_t reserve_id);
 
-extern int tgt_target_create(int lld, int tid, char *args, int t_type, int bs_type);
+extern int tgt_target_create(int lld, int tid, char *args, int t_type);
 extern int tgt_target_destroy(int tid);
 extern int tgt_target_bind(int tid, int host_no, int lld);
 extern char *tgt_targetname(int tid);

@@ -78,7 +78,7 @@ static int target_mgmt(int lld_no, struct mgmt_task *mtask)
 	switch (req->op) {
 	case OP_NEW:
 		err = tgt_target_create(lld_no, req->tid, mtask->buf,
-					req->target_type, req->bs_type);
+					req->target_type);
 		if (!err && tgt_drivers[lld_no]->target_create)
 			tgt_drivers[lld_no]->target_create(req->tid, mtask->buf);
 		break;

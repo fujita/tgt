@@ -997,28 +997,6 @@ int tgt_target_bind(int tid, int host_no, int lid)
 	return 0;
 }
 
-static struct {
-	enum scsi_target_iotype value;
-	char *name;
-} target_iotype[] = {
-	{SCSI_TARGET_FILEIO, "file"},
-	{SCSI_TARGET_RAWIO, "raw"},
-};
-
-static char *target_iotype_name(enum scsi_target_state state)
-{
-	int i;
-	char *name = NULL;
-
-	for (i = 0; i < ARRAY_SIZE(target_iotype); i++) {
-		if (target_iotype[i].value == state) {
-			name = target_iotype[i].name;
-			break;
-		}
-	}
-	return name;
-}
-
 enum scsi_target_state tgt_get_target_state(int tid)
 {
 	struct target *target;
@@ -1097,9 +1075,9 @@ int tgt_target_show_all(char *buf, int rest)
 		shprintf(total, buf, rest,
 			 "Target %d: %s\n"
 			 TAB1 "System information:\n"
-			 TAB2 "driver : %s\n"
-			 TAB2 "type   : %s\n"
-			 TAB2 "status : %s\n",
+			 TAB2 "Type: %s\n"
+			 TAB2 "Driver: %s\n"
+			 TAB2 "Status: %s\n",
 			 target->tid,
 			 target->name,
 			 tgt_drivers[target->lid]->name,
@@ -1122,14 +1100,12 @@ int tgt_target_show_all(char *buf, int rest)
 				 TAB3 "SCSI ID: %s\n"
 				 TAB3 "SCSI SN: %s\n"
 				 TAB3 "Size: %s\n"
-				 TAB3 "Backing store: %s\n"
-				 TAB3 "Backing store type: %s\n",
+				 TAB3 "Backing store: %s\n",
 				 device->lun,
 				 device->scsi_id,
 				 device->scsi_sn,
 				 print_disksize(device->size),
-				 device->path,
-				 target_iotype_name(target->target_iotype));
+				 device->path);
 
 		if (!strcmp(tgt_drivers[target->lid]->name, "iscsi")) {
 			int i, aid;
@@ -1171,7 +1147,7 @@ char *tgt_targetname(int tid)
 
 #define DEFAULT_NR_ACCOUNT 16
 
-int tgt_target_create(int lld, int tid, char *args, int t_type, int bs_type)
+int tgt_target_create(int lld, int tid, char *args, int t_type)
 {
 	int i;
 	struct target *target, *pos;
