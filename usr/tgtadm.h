@@ -49,14 +49,6 @@ enum tgtadm_mode {
 	MODE_ACCOUNT,
 };
 
-enum tgtadm_target_type {
-	TARGET_SBC, /* disk */
-	TARGET_SSC, /* tape */
-	TARGET_MMC, /* cdrom */
-	TARGET_OSD, /* object storage device */
-	TARGET_SPT, /* pass through */
-};
-
 /* backing store type */
 enum tgtadm_lu_bs_type {
 	LU_BS_FILE,

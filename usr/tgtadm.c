@@ -36,6 +36,7 @@
 #include <sys/types.h>
 #include <sys/un.h>
 
+#include "scsi.h"
 #include "util.h"
 #include "list.h"
 #include "tgtadm.h"
@@ -305,18 +306,18 @@ static int backing_store_type(char *str)
 static int target_type(char *str)
 {
 	if (!strcmp(str, "disk"))
-		return TARGET_SBC;
+		return TYPE_DISK;
 	else if (!strcmp(str, "tape")) {
 		eprintf("type emulation isn't supported yet\n");
 		exit(EINVAL);
-	} else if (!strcmp(str, "cd")) {
-		return TARGET_MMC;
-	} else if (!strcmp(str, "osd")) {
+	} else if (!strcmp(str, "cd"))
+		return TYPE_ROM;
+	else if (!strcmp(str, "osd")) {
 		eprintf("osd isn't supported yet\n");
 		exit(EINVAL);
-	} else if (!strcmp(str, "pt")) {
-		return TARGET_SPT;
-	} else {
+	} else if (!strcmp(str, "pt"))
+		return TYPE_SPT;
+	else {
 		eprintf("unknown target type: %s\n", str);
 		exit(EINVAL);
 	}
@@ -373,7 +374,7 @@ int main(int argc, char **argv)
 
 	op = tid = mode = -1;
 	total = cid = hostno = sid = lun = 0;
-	t_type = TARGET_SBC;
+	t_type = TYPE_DISK;
 	bs_type = LU_BS_FILE;
 	ac_dir = ACCOUNT_TYPE_INCOMING;
 	rest = BUFSIZE;

@@ -1204,13 +1204,13 @@ int tgt_target_create(int lld, int tid, char *args, int t_type, int bs_type)
 		return TGTADM_NOMEM;
 
 	switch (t_type) {
-	case TARGET_SBC:
+	case TYPE_DISK:
 		target->dev_cmd_ops = sbc_ops;
 		break;
-	case TARGET_MMC:
+	case TYPE_ROM:
 		target->dev_cmd_ops = mmc_ops;
 		break;
-	case TARGET_SPT:
+	case TYPE_SPT:
 		target->dev_cmd_ops = spt_ops;
 		break;
 	default:
@@ -1239,7 +1239,7 @@ int tgt_target_create(int lld, int tid, char *args, int t_type, int bs_type)
 	INIT_LIST_HEAD(&target->device_list);
 
 	/* FIXME */
-	if (t_type == TARGET_SPT) {
+	if (t_type == TYPE_SPT) {
 		target->target_iotype = SCSI_TARGET_RAWIO;
 		target->bdt = &sg_bdt;
 	} else {
