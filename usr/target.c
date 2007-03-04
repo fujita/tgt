@@ -36,7 +36,7 @@
 #include "scsi.h"
 #include "tgtadm.h"
 
-extern struct device_command_operations sbc_ops[], spt_ops[];
+extern struct device_command_operations sbc_ops[], mmc_ops[], spt_ops[];
 
 static LIST_HEAD(target_list);
 
@@ -1206,6 +1206,9 @@ int tgt_target_create(int lld, int tid, char *args, int t_type, int bs_type)
 	switch (t_type) {
 	case TARGET_SBC:
 		target->dev_cmd_ops = sbc_ops;
+		break;
+	case TARGET_MMC:
+		target->dev_cmd_ops = mmc_ops;
 		break;
 	case TARGET_SPT:
 		target->dev_cmd_ops = spt_ops;

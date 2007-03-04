@@ -117,9 +117,34 @@ int spc_start_stop(int host_no, struct scsi_cmd *cmd)
 	return SAM_STAT_GOOD;
 }
 
+int spc_test_unit(int host_no, struct scsi_cmd *cmd)
+{
+	int ret = SAM_STAT_GOOD;
+
+	/* how should we test a backing-storage file? */
+
+	if (cmd->dev) {
+		ret = device_reserved(cmd->cmd_nexus_id, cmd->dev->lun, host_no);
+		if (ret)
+			ret = SAM_STAT_RESERVATION_CONFLICT;
+	} else {
+		cmd->len = 0;
+		sense_data_build(cmd, ILLEGAL_REQUEST, 0x24, 0);
+		ret = SAM_STAT_CHECK_CONDITION;
+	}
+	return ret;
+}
+
+int spc_request_sense(int host_no, struct scsi_cmd *cmd)
+{
+	cmd->len = 0;
+	sense_data_build(cmd, NO_SENSE, 0, 0);
+	return SAM_STAT_GOOD;
+}
+
 int spc_illegal_op(int host_no, struct scsi_cmd *cmd)
 {
 	cmd->len = 0;
-	sense_data_build(cmd, ILLEGAL_REQUEST,0x24, 0);
+	sense_data_build(cmd, ILLEGAL_REQUEST, 0x24, 0);
 	return SAM_STAT_CHECK_CONDITION;
 }

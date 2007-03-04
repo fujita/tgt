@@ -9,7 +9,6 @@
  *   Copyright (C) 2002-2003 Ardis Technolgies <roman@ardistech.com>,
  *   licensed under the terms of the GNU GPL v2.0,
  */
-
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,57 +26,6 @@
 #include "spc.h"
 
 #define BLK_SHIFT	9
-
-static int sbc_test_unit(int host_no, struct scsi_cmd *cmd)
-{
-	int ret = SAM_STAT_GOOD;
-
-	/* how should we test a backing-storage file? */
-
-	if (cmd->dev) {
-		ret = device_reserved(cmd->cmd_nexus_id, cmd->dev->lun, host_no);
-		if (ret)
-			ret = SAM_STAT_RESERVATION_CONFLICT;
-	} else {
-		cmd->len = 0;
-		sense_data_build(cmd, ILLEGAL_REQUEST, 0x24, 0);
-		ret = SAM_STAT_CHECK_CONDITION;
-	}
-	return ret;
-}
-
-static int sbc_request_sense(int host_no, struct scsi_cmd *cmd)
-{
-	cmd->len = 0;
-	sense_data_build(cmd, NO_SENSE, 0, 0);
-	return SAM_STAT_GOOD;
-}
-
-static uint64_t sbc_rw_offset(uint8_t *scb)
-{
-	uint64_t off;
-
-	switch (scb[0]) {
-	case READ_6:
-	case WRITE_6:
-		off = ((scb[1] & 0x1f) << 16) + (scb[2] << 8) + scb[3];
-		break;
-	case READ_10:
-	case WRITE_10:
-	case WRITE_VERIFY:
-		off = __be32_to_cpu(*(uint32_t *) &scb[2]);
-		break;
-	case READ_16:
-	case WRITE_16:
-		off = __be64_to_cpu(*(uint64_t *) &scb[2]);
-		break;
-	default:
-		off = 0;
-		break;
-	}
-
-	return off << BLK_SHIFT;
-}
 
 static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 {
@@ -106,7 +54,7 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 		break;
 	}
 
-	cmd->offset = sbc_rw_offset(cmd->scb);
+	cmd->offset = (scsi_rw_offset(cmd->scb) << BLK_SHIFT);
 	uaddr = cmd->uaddr;
 	ret = submit(cmd->dev, cmd->scb, cmd->rw, cmd->len, &uaddr,
 		     cmd->offset, &cmd->async, (void *)cmd);
@@ -126,7 +74,6 @@ sense:
 	return SAM_STAT_CHECK_CONDITION;
 }
 
-#define VENDOR_ID	"IET"
 #define PRODUCT_ID	"VIRTUAL-DISK"
 #define PRODUCT_REV	"0"
 
@@ -504,10 +451,10 @@ sense:
 }
 
 struct device_command_operations sbc_ops[] = {
-	{sbc_test_unit,},
+	{spc_test_unit,},
 	{spc_illegal_op,},
 	{spc_illegal_op,},
-	{sbc_request_sense,},
+	{spc_request_sense,},
 	{spc_illegal_op,},
 	{spc_illegal_op,},
 	{spc_illegal_op,},
@@ -558,7 +505,7 @@ struct device_command_operations sbc_ops[] = {
 	{spc_illegal_op,},
 	{spc_illegal_op,},
 	{sbc_rw},
-	{sbc_test_unit},
+	{spc_test_unit},
 
 	/* 0x30 */
 	{spc_illegal_op,},
@@ -598,7 +545,7 @@ struct device_command_operations sbc_ops[] = {
 	{spc_illegal_op,},
 	{spc_illegal_op,},
 	{sbc_rw},
-	{sbc_test_unit},
+	{spc_test_unit},
 
 	/* 0x90 */
 	{spc_illegal_op,},
@@ -636,7 +583,7 @@ struct device_command_operations sbc_ops[] = {
 	{spc_illegal_op,},
 	{spc_illegal_op,},
 	{sbc_rw,},
-	{sbc_test_unit,},
+	{spc_test_unit,},
 
 	[0xb0 ... 0xff] = {spc_illegal_op},
 };

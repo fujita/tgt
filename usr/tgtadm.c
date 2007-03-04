@@ -310,8 +310,7 @@ static int target_type(char *str)
 		eprintf("type emulation isn't supported yet\n");
 		exit(EINVAL);
 	} else if (!strcmp(str, "cd")) {
-		eprintf("cdrom emulation isn't supported yet\n");
-		exit(EINVAL);
+		return TARGET_MMC;
 	} else if (!strcmp(str, "osd")) {
 		eprintf("osd isn't supported yet\n");
 		exit(EINVAL);

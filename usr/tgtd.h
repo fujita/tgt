@@ -6,6 +6,8 @@
 #define SCSI_ID_LEN	24
 #define SCSI_SN_LEN	8
 
+#define VENDOR_ID	"IET"
+
 #define TID_SHIFT 32
 #define NID_MASK ((1ULL << TID_SHIFT) - 1)
 #define NID64(tid, nid) ((uint64_t) tid << TID_SHIFT | nid)
@@ -98,10 +100,6 @@ static inline int kreq_init(void)	\
 }
 #endif
 
-#ifndef USE_RAW
-struct backedio_template sg_bdt;
-#endif
-
 struct device_command_operations {
 	int (*cmd_perform)(int host_no, struct scsi_cmd *cmd);
 };
@@ -144,6 +142,7 @@ extern uint64_t scsi_get_devid(int lid, uint8_t *pdu);
 extern int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd, void *key);
 extern void sense_data_build(struct scsi_cmd *cmd, uint8_t key, uint8_t asc,
 			     uint8_t asq);
+extern uint64_t scsi_rw_offset(uint8_t *scb);
 
 extern enum scsi_target_state tgt_get_target_state(int tid);
 extern int tgt_set_target_state(int tid, char *str);

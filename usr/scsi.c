@@ -80,6 +80,32 @@ uint64_t scsi_get_devid(int lid, uint8_t *p)
 	return fn(p);
 }
 
+uint64_t scsi_rw_offset(uint8_t *scb)
+{
+	uint64_t off;
+
+	switch (scb[0]) {
+	case READ_6:
+	case WRITE_6:
+		off = ((scb[1] & 0x1f) << 16) + (scb[2] << 8) + scb[3];
+		break;
+	case READ_10:
+	case WRITE_10:
+	case WRITE_VERIFY:
+		off = __be32_to_cpu(*(uint32_t *) &scb[2]);
+		break;
+	case READ_16:
+	case WRITE_16:
+		off = __be64_to_cpu(*(uint64_t *) &scb[2]);
+		break;
+	default:
+		off = 0;
+		break;
+	}
+
+	return off;
+}
+
 int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd, void *key)
 {
 	unsigned char op = cmd->scb[0];
