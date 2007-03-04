@@ -59,7 +59,7 @@ tgtadm: tgtadm.o
 
 ifneq ($(XEN),)
 install: $(PROGRAMS)
-	install -m0755 $(PROGRAMS) $(DESTDIR)/usr/sbin
+	install -m 0755 $(PROGRAMS) $(DESTDIR)/usr/sbin
 endif
 
 clean:
