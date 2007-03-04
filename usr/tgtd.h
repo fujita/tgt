@@ -100,8 +100,13 @@ static inline int kreq_init(void)	\
 }
 #endif
 
-struct device_command_operations {
+struct device_type_operations {
 	int (*cmd_perform)(int host_no, struct scsi_cmd *cmd);
+};
+
+struct device_type_template {
+	char *name;
+	struct device_type_operations ops[256];
 };
 
 extern int kspace_send_tsk_mgmt_res(uint64_t nid, uint64_t mid, int result);

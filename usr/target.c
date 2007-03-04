@@ -36,7 +36,7 @@
 #include "scsi.h"
 #include "tgtadm.h"
 
-extern struct device_command_operations sbc_ops[], mmc_ops[], spt_ops[];
+extern struct device_type_template sbc_template, mmc_template, spt_template;
 
 static LIST_HEAD(target_list);
 
@@ -1097,11 +1097,13 @@ int tgt_target_show_all(char *buf, int rest)
 		shprintf(total, buf, rest,
 			 "Target %d: %s\n"
 			 TAB1 "System information:\n"
-			 TAB2 "Driver: %s\n"
-			 TAB2 "Status: %s\n",
+			 TAB2 "driver : %s\n"
+			 TAB2 "type   : %s\n"
+			 TAB2 "status : %s\n",
 			 target->tid,
 			 target->name,
 			 tgt_drivers[target->lid]->name,
+			 target->dev_type_template->name,
 			 target_state_name(target->target_state));
 
 		shprintf(total, buf, rest, TAB1 "I_T nexus information:\n");
@@ -1205,13 +1207,13 @@ int tgt_target_create(int lld, int tid, char *args, int t_type, int bs_type)
 
 	switch (t_type) {
 	case TYPE_DISK:
-		target->dev_cmd_ops = sbc_ops;
+		target->dev_type_template = &sbc_template;
 		break;
 	case TYPE_ROM:
-		target->dev_cmd_ops = mmc_ops;
+		target->dev_type_template = &mmc_template;
 		break;
 	case TYPE_SPT:
-		target->dev_cmd_ops = spt_ops;
+		target->dev_type_template = &spt_template;
 		break;
 	default:
 		free(target);

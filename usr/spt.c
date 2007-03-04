@@ -61,7 +61,7 @@ struct backedio_template sg_bdt = {
 	.bd_cmd_done		= spt_sg_cmd_done,
 };
 
-extern struct device_command_operations sbc_ops[];
+extern struct device_type_template sbc_template;
 
 static int spt_cmd_perform(int host_no, struct scsi_cmd *cmd)
 {
@@ -69,7 +69,7 @@ static int spt_cmd_perform(int host_no, struct scsi_cmd *cmd)
 
 	/* FIXME */
 	if (!cmd->dev)
-		return sbc_ops[cmd->scb[0]].cmd_perform(host_no, cmd);
+		return sbc_template.ops[cmd->scb[0]].cmd_perform(host_no, cmd);
 
 	ret = spt_sg_perform(cmd);
 	if (ret) {
@@ -80,27 +80,30 @@ static int spt_cmd_perform(int host_no, struct scsi_cmd *cmd)
 		return SAM_STAT_GOOD;
 }
 
-struct device_command_operations spt_ops[] = {
-	[0x00 ... 0x9f] = {spt_cmd_perform,},
+struct device_type_template spt_template = {
+	.name	= "passthrough",
+	.ops	= {
+		[0x00 ... 0x9f] = {spt_cmd_perform,},
 
-	/* 0xA0 */
-	{spc_report_luns,},
-	{spt_cmd_perform,},
-	{spt_cmd_perform,},
-	{spt_cmd_perform,},
-	{spt_cmd_perform,},
-	{spt_cmd_perform,},
-	{spt_cmd_perform,},
-	{spt_cmd_perform,},
+		/* 0xA0 */
+		{spc_report_luns,},
+		{spt_cmd_perform,},
+		{spt_cmd_perform,},
+		{spt_cmd_perform,},
+		{spt_cmd_perform,},
+		{spt_cmd_perform,},
+		{spt_cmd_perform,},
+		{spt_cmd_perform,},
 
-	{spt_cmd_perform,},
-	{spt_cmd_perform,},
-	{spt_cmd_perform,},
-	{spt_cmd_perform,},
-	{spt_cmd_perform,},
-	{spt_cmd_perform,},
-	{spt_cmd_perform,},
-	{spt_cmd_perform,},
+		{spt_cmd_perform,},
+		{spt_cmd_perform,},
+		{spt_cmd_perform,},
+		{spt_cmd_perform,},
+		{spt_cmd_perform,},
+		{spt_cmd_perform,},
+		{spt_cmd_perform,},
+		{spt_cmd_perform,},
 
-	[0xb0 ... 0xff] = {spt_cmd_perform},
+		[0xb0 ... 0xff] = {spt_cmd_perform},
+	}
 };

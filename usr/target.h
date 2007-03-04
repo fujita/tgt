@@ -51,7 +51,7 @@ struct target {
 
 	struct tgt_account account;
 
-	struct device_command_operations *dev_cmd_ops;
+	struct device_type_template *dev_type_template;
 };
 
 struct it_nexus {
