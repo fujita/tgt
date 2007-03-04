@@ -5,11 +5,6 @@
 #define BITS_PER_LONG (ULONG_MAX == 0xFFFFFFFFUL ? 32 : 64)
 #include <linux/hash.h>
 
-/* better if we can include the followings in kernel header files. */
-#define	MSG_SIMPLE_TAG	0x20
-#define	MSG_HEAD_TAG	0x21
-#define	MSG_ORDERED_TAG	0x22
-
 #define	HASH_ORDER	4
 #define	hashfn(val)	hash_long((unsigned long) (val), HASH_ORDER)
 
