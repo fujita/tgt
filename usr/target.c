@@ -1217,13 +1217,10 @@ int tgt_target_create(int lld, int tid, char *args, int t_type)
 	INIT_LIST_HEAD(&target->device_list);
 
 	/* FIXME */
-	if (t_type == TYPE_SPT) {
-		target->target_iotype = SCSI_TARGET_RAWIO;
+	if (t_type == TYPE_SPT)
 		target->bdt = &sg_bdt;
-	} else {
-		target->target_iotype = SCSI_TARGET_FILEIO;
+	else
 		target->bdt = tgt_drivers[lld]->default_bdt;
-	}
 
 	target->target_state = SCSI_TARGET_RUNNING;
 	target->lid = lld;

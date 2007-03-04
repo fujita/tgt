@@ -18,11 +18,6 @@
 #define TAB3 TAB1 TAB1 TAB1
 #define TAB4 TAB2 TAB2
 
-enum scsi_target_iotype {
-	SCSI_TARGET_FILEIO = 1,
-	SCSI_TARGET_RAWIO,
-};
-
 enum scsi_target_state {
 	SCSI_TARGET_SUSPENDED = 1,
 	SCSI_TARGET_RUNNING,
