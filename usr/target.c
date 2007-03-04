@@ -421,13 +421,14 @@ int target_cmd_queue(uint64_t nid, uint8_t *scb, uint8_t rw,
 	cmd->tag = tag;
 	cmd->uaddr = uaddr;
 	cmd->len = data_len;
+	cmd->rw = rw;
 	memcpy(cmd->scb, scb, sizeof(cmd->scb));
 	memcpy(cmd->lun, lun, sizeof(cmd->lun));
 
 	cmd_hlist_insert(target, cmd);
 
 	dev_id = scsi_get_devid(target->lid, lun);
-	dprintf("%x %" PRIx64 "\n", scb[0], dev_id);
+	dprintf("%p %x %" PRIx64 "\n", cmd, scb[0], dev_id);
 
 	cmd->dev = device_lookup(target, dev_id);
 
@@ -436,8 +437,8 @@ int target_cmd_queue(uint64_t nid, uint8_t *scb, uint8_t rw,
 	else
 		q = &target->cmd_queue;
 
-	if (!enabled)
-		enabled = cmd_enabled(q, cmd);
+	enabled = cmd_enabled(q, cmd);
+	dprintf("%p %x %" PRIx64 " %d\n", cmd, scb[0], dev_id, enabled);
 
 	if (enabled) {
 		result = scsi_cmd_perform(nexus->host_no, cmd, (void *)cmd);

@@ -743,6 +743,8 @@ static int iscsi_cmd_rsp_build(struct iscsi_task *task)
 	struct iscsi_connection *conn = task->conn;
 	struct iscsi_cmd_rsp *rsp = (struct iscsi_cmd_rsp *) &conn->rsp.bhs;
 
+	dprintf("%p %x\n", task, task->scmd->scb[0]);
+
 	memset(rsp, 0, sizeof(*rsp));
 	rsp->opcode = ISCSI_OP_SCSI_CMD_RSP;
 	rsp->itt = task->tag;

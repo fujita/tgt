@@ -21,7 +21,8 @@ LIBS += -laio
 endif
 
 ifneq ($(RAW),)
-TGTD_OBJS += spt.o spt_sgv4.o
+#TGTD_OBJS += spt.o spt_sgv4.o
+TGTD_OBJS += spt.o spt_sgv3.o
 CFLAGS += -DUSE_RAW
 endif
 
@@ -42,7 +43,7 @@ BD_AIO=1
 endif
 
 INCLUDES += -I.
-CFLAGS += -Wall -O2 -Wstrict-prototypes -fPIC -D_LARGEFILE64_SOURCE $(INCLUDES)
+CFLAGS += -Wall -g -O2 -Wstrict-prototypes -fPIC -D_LARGEFILE64_SOURCE $(INCLUDES)
 
 PROGRAMS += tgtd tgtadm
 TGTD_OBJS += tgtd.o mgmt.o target.o spc.o sbc.o scsi.o log.o driver.o util.o work.o

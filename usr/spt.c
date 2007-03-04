@@ -33,7 +33,6 @@
 #include <sys/time.h>
 #include <linux/types.h>
 #include <scsi/sg.h>
-#include <linux/bsg.h>
 
 #include "list.h"
 #include "util.h"
@@ -62,9 +61,16 @@ struct backedio_template sg_bdt = {
 	.bd_cmd_done		= spt_sg_cmd_done,
 };
 
+extern struct device_command_operations sbc_ops[];
+
 static int spt_cmd_perform(int host_no, struct scsi_cmd *cmd)
 {
 	int ret;
+
+	/* FIXME */
+	if (!cmd->dev)
+		return sbc_ops[cmd->scb[0]].cmd_perform(host_no, cmd);
+
 	ret = spt_sg_perform(cmd);
 	if (ret) {
 		cmd->len = 0;
@@ -75,8 +81,9 @@ static int spt_cmd_perform(int host_no, struct scsi_cmd *cmd)
 }
 
 struct device_command_operations spt_ops[] = {
-	[0x40 ... 0x7f] = {spt_cmd_perform,},
+	[0x00 ... 0x9f] = {spt_cmd_perform,},
 
+	/* 0xA0 */
 	{spc_report_luns,},
 	{spt_cmd_perform,},
 	{spt_cmd_perform,},

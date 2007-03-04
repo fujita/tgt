@@ -65,6 +65,9 @@ static void sgv4_handler(int fd, int events, void *data)
 		if (hdrs[i].device_status) {
 			cmd->sense_len = hdrs[i].response_len;
 			cmd->len = 0;
+		} else {
+			if (hdrs[i].din_resid)
+				cmd->len = hdrs[i].din_resid;
 		}
 
 		target_cmd_io_done(cmd, hdrs[i].device_status);
