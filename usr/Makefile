@@ -20,7 +20,7 @@ INCLUDES += -I../include -I$(KERNELSRC)/include
 LIBS += -laio
 endif
 
-ifneq ($(RAW),)
+ifneq ($(SGV4),)
 TGTD_OBJS += spt_sgv4.o
 else
 TGTD_OBJS += spt_sgv3.o
