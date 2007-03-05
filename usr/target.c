@@ -36,7 +36,8 @@
 #include "scsi.h"
 #include "tgtadm.h"
 
-extern struct device_type_template sbc_template, mmc_template, spt_template;
+extern struct device_type_template sbc_template, mmc_template, osd_template,
+	spt_template;
 
 static LIST_HEAD(target_list);
 
@@ -1187,6 +1188,9 @@ int tgt_target_create(int lld, int tid, char *args, int t_type)
 		break;
 	case TYPE_ROM:
 		target->dev_type_template = &mmc_template;
+		break;
+	case TYPE_OSD:
+		target->dev_type_template = &osd_template;
 		break;
 	case TYPE_SPT:
 		target->dev_type_template = &spt_template;

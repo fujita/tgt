@@ -58,7 +58,7 @@ static int mmc_inquiry(int host_no, struct scsi_cmd *cmd)
 		memcpy(data + 8, VENDOR_ID,
 		       min_t(size_t, strlen(VENDOR_ID), 8));
 		memcpy(data + 16, PRODUCT_ID,
-			min_t(size_t, strlen(PRODUCT_ID), 16));
+		       min_t(size_t, strlen(PRODUCT_ID), 16));
 		memcpy(data + 32, PRODUCT_REV,
 			min_t(size_t, strlen(PRODUCT_REV), 4));
 		len = data[4] + 5;

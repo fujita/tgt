@@ -299,10 +299,9 @@ static int target_type(char *str)
 		exit(EINVAL);
 	} else if (!strcmp(str, "cd"))
 		return TYPE_ROM;
-	else if (!strcmp(str, "osd")) {
-		eprintf("osd isn't supported yet\n");
-		exit(EINVAL);
-	} else if (!strcmp(str, "pt"))
+	else if (!strcmp(str, "osd"))
+		return TYPE_OSD;
+	else if (!strcmp(str, "pt"))
 		return TYPE_SPT;
 	else {
 		eprintf("unknown target type: %s\n", str);

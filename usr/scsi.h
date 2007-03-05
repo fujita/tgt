@@ -69,6 +69,7 @@
 #define MODE_SENSE_10         0x5a
 #define PERSISTENT_RESERVE_IN 0x5e
 #define PERSISTENT_RESERVE_OUT 0x5f
+#define VARLEN_CDB            0x7f
 #define REPORT_LUNS           0xa0
 #define MOVE_MEDIUM           0xa5
 #define EXCHANGE_MEDIUM       0xa6
