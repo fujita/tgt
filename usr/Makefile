@@ -30,7 +30,6 @@ ifneq ($(IBMVIO),)
 CFLAGS += -DIBMVIO -DUSE_KERNEL
 TGTD_OBJS += $(addprefix ibmvio/, ibmvio.o)
 TGTD_OBJS += bd_mmap.o tgtif.o
-BD_MMAP=1
 endif
 
 ifneq ($(ISCSI),)
@@ -39,7 +38,6 @@ TGTD_OBJS += $(addprefix iscsi/, conn.o param.o session.o iscsid.o target.o \
 	chap.o transport.o iscsi_tcp.o)
 TGTD_OBJS += bd_aio.o
 LIBS += -lcrypto -lpthread
-BD_AIO=1
 endif
 
 INCLUDES += -I.
