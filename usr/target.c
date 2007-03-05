@@ -1081,8 +1081,8 @@ int tgt_target_show_all(char *buf, int rest)
 			 TAB2 "Status: %s\n",
 			 target->tid,
 			 target->name,
-			 tgt_drivers[target->lid]->name,
 			 target->dev_type_template->name,
+			 tgt_drivers[target->lid]->name,
 			 target_state_name(target->target_state));
 
 		shprintf(total, buf, rest, TAB1 "I_T nexus information:\n");
