@@ -19,9 +19,14 @@ data.
 
 Preparation
 -------------
+
 Get kernel version 2.6.20, rebuild the kernel, and reboot with the new
 kernel. Note you need to enable SCSI_TGT, SCSI_SRP, and SCSI_IBMVSCSIS
-kernel options in order to use the IBM VIO target driver,
+kernel options in order to use the IBM VIO target driver.
+
+Note that if you are interested in only the iSCSI target driver, you
+don't need 2.6.20.  It works with any recent kernel versions (the
+oldest version that I confirmed is 2.6.18).
 
 Now you are ready to build target drivers. If you like to use the
 iSCSI target driver:
