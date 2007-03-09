@@ -115,7 +115,7 @@ static int target_mgmt(int lld_no, struct mgmt_task *mtask)
 	case OP_UPDATE:
 	{
 		char *p;
-		err = -EINVAL;
+		err = TGTADM_UNSUPPORTED_OPERATION;
 
 		p = strchr(mtask->buf, '=');
 		if (!p)
