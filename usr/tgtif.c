@@ -32,6 +32,7 @@
 #include <sys/epoll.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/sysmacros.h>
 
 #define aligned_u64 unsigned long long __attribute__((aligned(8)))
 #include <scsi/scsi_tgt_if.h>
@@ -184,7 +185,7 @@ static int tgt_miscdev_init(char *path, int *fd)
 		goto out;
 
 	unlink(path);
-	err = mknod(path, (S_IFCHR | 0600), (major << 8) | minor);
+	err = mknod(path, (S_IFCHR | 0600), makedev(major, minor));
 	if (err)
 		goto out;
 

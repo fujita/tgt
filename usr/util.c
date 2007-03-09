@@ -8,6 +8,7 @@
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <linux/fs.h>
+#include <sys/sysmacros.h>
 
 #include "log.h"
 
@@ -44,7 +45,7 @@ int chrdev_open(char *modname, char *devpath, uint8_t minor, int *fd)
 	}
 
 	unlink(devpath);
-	err = mknod(devpath, (S_IFCHR | 0600), (major << 8) | minor);
+	err = mknod(devpath, (S_IFCHR | 0600), makedev(major, minor));
 	if (err) {
 		eprintf("cannot create %s, %m\n", devpath);
 		return -errno;

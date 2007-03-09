@@ -51,6 +51,7 @@
 #include <poll.h>
 #include <time.h>
 #include <sys/time.h>
+#include <sys/sysmacros.h>
 
 /* FIXME */
 #define SRP_RING_PAGES 1
@@ -238,7 +239,7 @@ static int xen_chrdev_open(char *name, uint8_t minor)
 	snprintf(devname, sizeof(devname), "/dev/%s%d", name, minor);
 
 	unlink(devname);
-	if (mknod(devname, (S_IFCHR | 0600), (devn << 8) | minor)) {
+	if (mknod(devname, (S_IFCHR | 0600), makedev(devn, minor))) {
 		eprintf("cannot create %s %s\n", devname, strerror(errno));
 		return -1;
 	}

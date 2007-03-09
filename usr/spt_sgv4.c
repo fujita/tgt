@@ -35,6 +35,7 @@
 #include <linux/types.h>
 #include <scsi/sg.h>
 #include <linux/bsg.h>
+#include <sys/sysmacros.h>
 
 #include "list.h"
 #include "util.h"
@@ -141,7 +142,7 @@ int spt_sg_open(struct tgt_device *dev, char *path, int *fd, uint64_t *size)
 	memset(buf, 0, sizeof(buf));
 	snprintf(buf, sizeof(buf), "/tmp/%lx%lx", t.tv_sec, t.tv_usec);
 	err = mknod(buf, S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH,
-		    maj << 8 | min);
+		    makedev(maj, min));
 	if (err < 0) {
 		eprintf("can't create the bsg device %s, %m\n", buf);
 		return -errno;
