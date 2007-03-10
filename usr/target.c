@@ -391,18 +391,15 @@ static void cmd_post_perform(struct tgt_cmd_queue *q, struct scsi_cmd *cmd)
 	}
 }
 
-int target_cmd_queue(uint64_t nid, uint8_t *scb, uint8_t rw,
-		     unsigned long uaddr,
-		     uint8_t *lun, uint32_t data_len,
-		     int attribute, uint64_t tag)
+int target_cmd_queue(struct scsi_cmd *cmd)
 {
 	struct target *target;
 	struct tgt_cmd_queue *q;
 	struct it_nexus *nexus;
-	struct scsi_cmd *cmd;
 	int result, enabled = 0;
-	uint64_t dev_id;
+	uint64_t dev_id, nid;
 
+	nid = cmd->cmd_nexus_id;
 	nexus = it_nexus_lookup(nid);
 	if (!nexus) {
 		eprintf("invalid nid %u %u\n", (int)NID2TID(nid),
@@ -410,26 +407,12 @@ int target_cmd_queue(uint64_t nid, uint8_t *scb, uint8_t rw,
 		return -ENOENT;
 	}
 
-	target = nexus->nexus_target;
-	/* TODO: preallocate cmd */
-	cmd = zalloc(sizeof(*cmd));
-	if (!cmd)
-		return -ENOMEM;
-
-	cmd->cmd_nexus_id = nid;
-	cmd->c_target = target;
-	cmd->attribute = attribute;
-	cmd->tag = tag;
-	cmd->uaddr = uaddr;
-	cmd->len = data_len;
-	cmd->rw = rw;
-	memcpy(cmd->scb, scb, sizeof(cmd->scb));
-	memcpy(cmd->lun, lun, sizeof(cmd->lun));
+	cmd->c_target = target = nexus->nexus_target;
 
 	cmd_hlist_insert(target, cmd);
 
-	dev_id = scsi_get_devid(target->lid, lun);
-	dprintf("%p %x %" PRIx64 "\n", cmd, scb[0], dev_id);
+	dev_id = scsi_get_devid(target->lid, cmd->lun);
+	dprintf("%p %x %" PRIx64 "\n", cmd, cmd->scb[0], dev_id);
 
 	cmd->dev = device_lookup(target, dev_id);
 
@@ -439,7 +422,7 @@ int target_cmd_queue(uint64_t nid, uint8_t *scb, uint8_t rw,
 		q = &target->cmd_queue;
 
 	enabled = cmd_enabled(q, cmd);
-	dprintf("%p %x %" PRIx64 " %d\n", cmd, scb[0], dev_id, enabled);
+	dprintf("%p %x %" PRIx64 " %d\n", cmd, cmd->scb[0], dev_id, enabled);
 
 	if (enabled) {
 		result = scsi_cmd_perform(nexus->host_no, cmd, (void *)cmd);
@@ -447,7 +430,8 @@ int target_cmd_queue(uint64_t nid, uint8_t *scb, uint8_t rw,
 		cmd_post_perform(q, cmd);
 
 		dprintf("%" PRIx64 " %x %" PRIx64 " %" PRIu64 " %u %d %d\n",
-			tag, scb[0], cmd->uaddr, cmd->offset, cmd->len, result, cmd->async);
+			cmd->tag, cmd->scb[0], cmd->uaddr, cmd->offset, cmd->len,
+			result, cmd->async);
 
 		set_cmd_processed(cmd);
 		if (!cmd->async)
@@ -455,7 +439,7 @@ int target_cmd_queue(uint64_t nid, uint8_t *scb, uint8_t rw,
 	} else {
 		set_cmd_queued(cmd);
 		dprintf("blocked %" PRIx64 " %x %" PRIu64 " %d\n",
-			tag, scb[0], cmd->dev ? cmd->dev->lun : UINT64_MAX,
+			cmd->tag, cmd->scb[0], cmd->dev ? cmd->dev->lun : UINT64_MAX,
 			q->active_cmd);
 
 		list_add_tail(&cmd->qlist, &q->queue);
@@ -464,11 +448,8 @@ int target_cmd_queue(uint64_t nid, uint8_t *scb, uint8_t rw,
 	return 0;
 }
 
-void target_cmd_io_done(void *key, int result)
+void target_cmd_io_done(struct scsi_cmd *cmd, int result)
 {
-	struct scsi_cmd *cmd = (struct scsi_cmd *) key;
-
-	/* TODO: sense in case of error. */
 	tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->cmd_nexus_id,
 							result, cmd);
 	return;
@@ -538,29 +519,31 @@ static void __cmd_done(struct target *target, struct scsi_cmd *cmd)
 		break;
 	}
 
-	free(cmd);
-
 	post_cmd_done(q);
 }
 
-void target_cmd_done(uint64_t nid, uint64_t tag)
+struct scsi_cmd *target_cmd_lookup(uint64_t nid, uint64_t tag)
 {
 	struct target *target;
 	struct scsi_cmd *cmd;
-	struct mgmt_req *mreq;
 
 	target = target_lookup(NID2TID(nid));
 	if (!target) {
 		eprintf("invalid nid %u %u\n", (int)NID2TID(nid),
 			(uint32_t)(nid & NID_MASK));
-		return;
+		return NULL;
 	}
 
 	cmd = cmd_lookup(target, tag);
-	if (!cmd) {
+	if (!cmd)
 		eprintf("Cannot find cmd %d %" PRIx64 "\n", (int)NID2TID(nid), tag);
-		return;
-	}
+
+	return cmd;
+}
+
+void target_cmd_done(struct scsi_cmd *cmd)
+{
+	struct mgmt_req *mreq;
 
 	mreq = cmd->mreq;
 	if (mreq && !--mreq->busy) {
@@ -570,7 +553,7 @@ void target_cmd_done(uint64_t nid, uint64_t tag)
 		free(mreq);
 	}
 
-	__cmd_done(target, cmd);
+	__cmd_done(cmd->c_target, cmd);
 }
 
 static int abort_cmd(struct target* target, struct mgmt_req *mreq,

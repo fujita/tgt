@@ -46,29 +46,28 @@ static void bd_mmap_close(struct tgt_device *dev)
 
 #define pgcnt(size, offset)	((((size) + ((offset) & (pagesize - 1))) + (pagesize - 1)) >> pageshift)
 
-static int bd_mmap_cmd_submit(struct tgt_device *dev, uint8_t *scb, int rw,
-			      uint32_t datalen, unsigned long *uaddr,
-			      uint64_t offset, int *async, void *key)
+static int bd_mmap_cmd_submit(struct scsi_cmd *cmd)
 {
-	int fd = dev->fd;
+	int fd = cmd->dev->fd;
 	void *p;
 	int err = 0;
 
-	if (*uaddr)
-		*uaddr = *uaddr + offset;
+	if (cmd->uaddr)
+		cmd->uaddr += cmd->offset;
 	else {
-		p = mmap64(NULL, pgcnt(datalen, offset) << pageshift,
+		p = mmap64(NULL, pgcnt(cmd->len, cmd->offset) << pageshift,
 			   PROT_READ | PROT_WRITE, MAP_SHARED, fd,
-			   offset & ~((1ULL << pageshift) - 1));
+			   cmd->offset & ~((1ULL << pageshift) - 1));
 
-		*uaddr = (unsigned long) p + (offset & (pagesize - 1));
+		cmd->uaddr = (unsigned long) p + (cmd->offset & (pagesize - 1));
 		if (p == MAP_FAILED) {
 			err = -EINVAL;
-			eprintf("%lx %u %" PRIu64 "\n", *uaddr, datalen, offset);
+			eprintf("%" PRIx64 " %u %" PRIu64 "\n", cmd->uaddr,
+				cmd->len, cmd->offset);
 		}
 	}
 
-	dprintf("%lx %u %" PRIu64 "\n", *uaddr, datalen, offset);
+	dprintf("%" PRIx64 " %u %" PRIu64 "\n", cmd->uaddr, cmd->len, cmd->offset);
 
 	return err;
 }

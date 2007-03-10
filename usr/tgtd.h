@@ -46,18 +46,6 @@ struct tgt_device {
 	uint64_t reserve_id;
 };
 
-typedef int (bkio_submit_t) (struct tgt_device *dev, uint8_t *scb,
-			     int rw, uint32_t datalen, unsigned long *uaddr,
-			     uint64_t offset, int *async, void *key);
-
-struct backedio_template {
-	int bd_datasize;
-	int (*bd_open)(struct tgt_device *dev, char *path, int *fd, uint64_t *size);
-	void (*bd_close)(struct tgt_device *dev);
-	bkio_submit_t *bd_cmd_submit;
-	int (*bd_cmd_done) (int do_munmap, int do_free, uint64_t uaddr, int len);
-};
-
 struct scsi_cmd {
 	struct target *c_target;
 	/* linked target->cmd_hash_list */
@@ -73,7 +61,8 @@ struct scsi_cmd {
 	uint64_t cmd_nexus_id;
 	uint32_t data_len;
 	uint64_t offset;
-	uint8_t scb[16];
+	uint8_t *scb;
+	int scb_len;
 	uint8_t lun[8];
 	int attribute;
 	uint64_t tag;
@@ -84,6 +73,14 @@ struct scsi_cmd {
 #define SCSI_SENSE_BUFFERSIZE	252
 	unsigned char sense_buffer[SCSI_SENSE_BUFFERSIZE];
 	int sense_len;
+};
+
+struct backedio_template {
+	int bd_datasize;
+	int (*bd_open)(struct tgt_device *dev, char *path, int *fd, uint64_t *size);
+	void (*bd_close)(struct tgt_device *dev);
+	int (*bd_cmd_submit)(struct scsi_cmd *cmd);
+	int (*bd_cmd_done) (int do_munmap, int do_free, uint64_t uaddr, int len);
 };
 
 #ifdef USE_KERNEL
@@ -125,18 +122,13 @@ typedef void (event_handler_t)(int fd, int events, void *data);
 extern int tgt_event_add(int fd, int events, event_handler_t handler, void *data);
 extern void tgt_event_del(int fd);
 extern int tgt_event_modify(int fd, int events);
-
-extern int target_cmd_queue(uint64_t nid, uint8_t *scb, uint8_t rw,
-			    unsigned long uaddr,
-			    uint8_t *lun, uint32_t data_len,
-			    int attribute, uint64_t tag);
-extern void target_cmd_done(uint64_t nid, uint64_t tag);
+extern int target_cmd_queue(struct scsi_cmd *cmd);
+extern void target_cmd_done(struct scsi_cmd *cmd);
+struct scsi_cmd *target_cmd_lookup(uint64_t nid, uint64_t tag);
 extern void target_mgmt_request(uint64_t nid, uint64_t req_id, int function,
 				uint8_t *lun, uint64_t tag);
 
-extern void target_cmd_io_done(void *key, int result);
-
-struct scsi_cmd;
+extern void target_cmd_io_done(struct scsi_cmd *cmd, int result);
 
 extern uint64_t scsi_get_devid(int lid, uint8_t *pdu);
 extern int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd, void *key);

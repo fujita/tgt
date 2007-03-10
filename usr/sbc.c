@@ -30,8 +30,6 @@
 static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 {
 	int ret;
-	unsigned long uaddr;
-	bkio_submit_t *submit = cmd->c_target->bdt->bd_cmd_submit;
 	unsigned char key = ILLEGAL_REQUEST, asc = 0x25;
 
 	if (cmd->dev) {
@@ -55,15 +53,12 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 	}
 
 	cmd->offset = (scsi_rw_offset(cmd->scb) << BLK_SHIFT);
-	uaddr = cmd->uaddr;
-	ret = submit(cmd->dev, cmd->scb, cmd->rw, cmd->len, &uaddr,
-		     cmd->offset, &cmd->async, (void *)cmd);
+	ret = cmd->c_target->bdt->bd_cmd_submit(cmd);
 	if (ret) {
 		key = HARDWARE_ERROR;
 		asc = 0;
 	} else {
 		cmd->mmapped = 1;
-		cmd->uaddr = uaddr;
 		return SAM_STAT_GOOD;
 	}
 sense:

@@ -77,6 +77,7 @@ retry:
 
 	ret = io_getevents(info->ctx, 1, MAX_AIO_REQS, info->events, NULL);
 	nr = ret;
+	dprintf("%d", ret);
 	if (nr > 0) {
 	rewrite:
 		ret = write(info->done_fd[1], &nr, sizeof(nr));
@@ -177,35 +178,37 @@ static void bd_aio_close(struct tgt_device *dev)
 	close(dev->fd);
 }
 
-static int bd_aio_cmd_submit(struct tgt_device *dev, uint8_t *scb, int rw,
-			     uint32_t datalen, unsigned long *uaddr,
-			     uint64_t offset, int *async, void *key)
+static int bd_aio_cmd_submit(struct scsi_cmd *cmd)
 {
-	struct bd_aio_info *info;
+	struct tgt_device *dev = cmd->dev;
+	struct bd_aio_info *info = (struct bd_aio_info *)((char *)dev + sizeof(*dev));
 	struct iocb iocb, *io;
 	int ret;
-
-	info = (struct bd_aio_info *) ((char *)dev + sizeof(*dev));
 
 	io = &iocb;
 	memset(io, 0, sizeof(*io));
 
-	dprintf("%d %d %u %lx %" PRIx64 " %p %p\n", dev->fd, rw, datalen,
-		*uaddr, offset, io, key);
+	dprintf("%d %d %u %"  PRIx64 " %" PRIx64 " %p\n", dev->fd, cmd->rw, cmd->len,
+		cmd->uaddr, cmd->offset, cmd);
 
-	if (rw == READ)
-		io_prep_pread(io, dev->fd, (void *) *uaddr, datalen, offset);
+	if (cmd->rw == READ)
+		io_prep_pread(io, dev->fd, (void *)(unsigned long)cmd->uaddr,
+			      cmd->len,	cmd->offset);
 	else
-		io_prep_pwrite(io, dev->fd, (void *) *uaddr, datalen, offset);
+		io_prep_pwrite(io, dev->fd, (void *)(unsigned long)cmd->uaddr,
+			       cmd->len, cmd->offset);
 
-	io->data = key;
+	io->data = cmd;
 	ret = io_submit(info->ctx, 1, &io);
 
 	if (ret == 1) {
-		*async = 1;
+		cmd->async = 1;
 		return 0;
-	} else
+	} else {
+		dprintf("%d %d %u %"  PRIx64 " %" PRIx64 " %p\n", dev->fd, cmd->rw, cmd->len,
+			cmd->uaddr, cmd->offset, cmd);
 		return 1;
+	}
 }
 
 static int bd_aio_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)

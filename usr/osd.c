@@ -122,8 +122,6 @@ static int osd_varlen_cdb(int host_no, struct scsi_cmd *cmd)
 	int ret = SAM_STAT_GOOD;
 	uint16_t action;
 	unsigned char key = ILLEGAL_REQUEST, asc = 0x25;
-	unsigned long uaddr;
-	bkio_submit_t *submit = cmd->c_target->bdt->bd_cmd_submit;
 
 	dprintf("cdb[0] %x datalen %u\n", cmd->scb[0], cmd->len);
 	if (cmd->scb[7] != 200 - 8) {
@@ -162,8 +160,7 @@ static int osd_varlen_cdb(int host_no, struct scsi_cmd *cmd)
 	case OSD_SET_MASTER_KEY:
 	case OSD_SET_MEMBER_ATTRIBUTES:
 	case OSD_WRITE:
-		ret = submit(cmd->dev, cmd->scb, cmd->rw, cmd->len, &uaddr,
-			     cmd->offset, &cmd->async, (void *)cmd);
+		ret = cmd->c_target->bdt->bd_cmd_submit(cmd);
 		if (ret)
 			goto sense;
 		break;

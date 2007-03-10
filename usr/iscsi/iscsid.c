@@ -743,7 +743,7 @@ static int iscsi_cmd_rsp_build(struct iscsi_task *task)
 	struct iscsi_connection *conn = task->conn;
 	struct iscsi_cmd_rsp *rsp = (struct iscsi_cmd_rsp *) &conn->rsp.bhs;
 
-	dprintf("%p %x\n", task, task->scmd->scb[0]);
+	dprintf("%p %x\n", task, task->scmd.scb[0]);
 
 	memset(rsp, 0, sizeof(*rsp));
 	rsp->opcode = ISCSI_OP_SCSI_CMD_RSP;
@@ -777,8 +777,8 @@ static int iscsi_sense_rsp_build(struct iscsi_task *task)
 	rsp->response = ISCSI_STATUS_CMD_COMPLETED;
 	rsp->cmd_status = SAM_STAT_CHECK_CONDITION;
 
-	sense = (struct iscsi_sense_data *)task->scmd->sense_buffer;
-	sense_len = task->scmd->sense_len;
+	sense = (struct iscsi_sense_data *)task->scmd.sense_buffer;
+	sense_len = task->scmd.sense_len;
 
 	memmove(sense->data, sense, sense_len);
 	sense->length = cpu_to_be16(sense_len);
@@ -895,11 +895,15 @@ void iscsi_free_task(struct iscsi_task *task)
 	conn_put(conn);
 }
 
+static inline struct iscsi_task *ITASK(struct scsi_cmd *scmd)
+{
+	return container_of(scmd, struct iscsi_task, scmd);
+}
+
 static void iscsi_free_cmd_task(struct iscsi_task *task)
 {
-	struct iscsi_connection *conn = task->conn;
+	target_cmd_done(&task->scmd);
 
-	target_cmd_done(conn->session->iscsi_nexus_id, task->tag);
 	list_del(&task->c_hlist);
 	if (task->c_buffer) {
 		if ((unsigned long) task->c_buffer != task->addr)
@@ -908,26 +912,9 @@ static void iscsi_free_cmd_task(struct iscsi_task *task)
 	iscsi_free_task(task);
 }
 
-int iscsi_scsi_cmd_done(uint64_t nid, int result, struct scsi_cmd *cmd)
+int iscsi_scsi_cmd_done(uint64_t nid, int result, struct scsi_cmd *scmd)
 {
-	struct iscsi_session *session;
-	struct iscsi_task *task;
-
-	dprintf("%" PRIu64 " %d %d %d %" PRIx64 " %" PRIx64 "\n", nid,
-		cmd->len, result, cmd->rw, cmd->uaddr, cmd->tag);
-	session = session_lookup(nid);
-	if (!session)
-		return -EINVAL;
-
-	list_for_each_entry(task, &session->cmd_list, c_hlist) {
-		if (task->tag == cmd->tag)
-			goto found;
-	}
-	eprintf("Cannot find a task %" PRIx64 "\n", cmd->tag);
-	return -EINVAL;
-
-found:
-	dprintf("found a task %" PRIx64 "\n", cmd->tag);
+	struct iscsi_task *task = ITASK(scmd);
 
 	/*
 	 * Since the connection is closed we just free the task.
@@ -940,11 +927,10 @@ found:
 		return 0;
 	}
 
-	task->addr = cmd->uaddr;
+	task->addr = scmd->uaddr;
 	task->result = result;
-	task->len = cmd->len;
-	task->rw = cmd->rw;
-	task->scmd = cmd;
+	task->len = scmd->len;
+	task->rw = scmd->rw;
 
 	list_add_tail(&task->c_list, &task->conn->tx_clist);
 	tgt_event_modify(task->conn->fd, EPOLLIN | EPOLLOUT);
@@ -972,11 +958,32 @@ static int cmd_attr(struct iscsi_task *task)
 	return attr;
 }
 
+static int iscsi_target_cmd_queue(struct iscsi_task *task)
+{
+	struct scsi_cmd *scmd = &task->scmd;
+	struct iscsi_connection *conn = task->conn;
+	struct iscsi_cmd *req = (struct iscsi_cmd *) &task->req;
+	unsigned long uaddr = (unsigned long) task->c_buffer;
+
+	scmd->cmd_nexus_id = conn->session->iscsi_nexus_id;
+	/* tmp hack */
+	scmd->scb = req->cdb;
+	scmd->scb_len = sizeof(req->cdb);
+
+	memcpy(scmd->lun, task->req.lun, sizeof(scmd->lun));
+	scmd->rw = req->flags & ISCSI_FLAG_CMD_WRITE;
+	scmd->len = ntohl(req->data_length);
+	scmd->attribute = cmd_attr(task);
+	scmd->tag = req->itt;
+	scmd->uaddr = uaddr;
+
+	return target_cmd_queue(scmd);
+}
+
 static int iscsi_scsi_cmd_execute(struct iscsi_task *task)
 {
 	struct iscsi_connection *conn = task->conn;
 	struct iscsi_cmd *req = (struct iscsi_cmd *) &task->req;
-	unsigned long uaddr = (unsigned long) task->c_buffer;
 	int err = 0;
 
 	if (req->flags & ISCSI_FLAG_CMD_WRITE) {
@@ -986,18 +993,9 @@ static int iscsi_scsi_cmd_execute(struct iscsi_task *task)
 			else
 				list_add_tail(&task->c_list, &task->conn->tx_clist);
 		} else
-			err = target_cmd_queue(conn->session->iscsi_nexus_id,
-					       req->cdb,
-					       req->flags & ISCSI_FLAG_CMD_WRITE,
-					       uaddr, req->lun,
-					       ntohl(req->data_length),
-					       cmd_attr(task), req->itt);
+			err = iscsi_target_cmd_queue(task);
 	} else
-		err = target_cmd_queue(conn->session->iscsi_nexus_id,
-				       req->cdb,
-				       req->flags & ISCSI_FLAG_CMD_WRITE,
-				       uaddr, req->lun, ntohl(req->data_length),
-				       cmd_attr(task), req->itt);
+		err = iscsi_target_cmd_queue(task);
 
 	tgt_event_modify(conn->fd, EPOLLIN|EPOLLOUT);
 

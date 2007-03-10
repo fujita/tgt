@@ -15,6 +15,7 @@
 #include "list.h"
 #include "param.h"
 #include "log.h"
+#include "tgtd.h"
 
 #include <scsi/iscsi_if.h>
 #include <scsi/iscsi_proto.h>
@@ -113,11 +114,7 @@ struct iscsi_task {
 
 	void *c_buffer;
 
-	/*
-	 * temp hack.
-	 * TODO: move most of iscsi_task to scsi_cmd
-	 */
-	struct scsi_cmd *scmd;
+	struct scsi_cmd scmd;
 };
 
 struct iscsi_connection {

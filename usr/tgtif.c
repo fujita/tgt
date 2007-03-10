@@ -123,9 +123,39 @@ int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *cmd)
 	return kreq_send(&ev);
 }
 
+static int kern_queue_cmd(struct tgt_event *ev)
+{
+	struct scsi_cmd *cmd;
+	int scb_len = 16;
+
+	/* TODO: define scsi_kcmd and move mmap stuff */
+
+	cmd = zalloc(sizeof(*cmd) + scb_len);
+	if (!cmd)
+		return ENOMEM;
+
+	cmd->cmd_nexus_id = host_no_to_it_nexus(ev->p.cmd_req.host_no);
+	cmd->scb = (char *)cmd + sizeof(*cmd);
+	memcpy(cmd->scb, ev->p.cmd_req.scb, scb_len);
+	cmd->scb_len = scb_len;
+	memcpy(cmd->lun, ev->p.cmd_req.lun, sizeof(cmd->lun));
+
+	cmd->len = ev->p.cmd_req.data_len;
+	cmd->attribute = ev->p.cmd_req.attribute;
+	cmd->tag = ev->p.cmd_req.tag;
+/* 	cmd->uaddr = ev->k.cmd_req.uaddr; */
+	cmd->uaddr = 0;
+
+	return target_cmd_queue(cmd);
+}
+
 static void kern_event_handler(int fd, int events, void *data)
 {
+	int ret;
+	uint64_t nid;
 	struct tgt_event *ev;
+	/* temp hack */
+	struct scsi_cmd *cmd;
 
 retry:
 	ev = head_ring_hdr(&kuring);
@@ -136,15 +166,18 @@ retry:
 
 	switch (ev->hdr.type) {
 	case TGT_KEVENT_CMD_REQ:
-		target_cmd_queue(host_no_to_it_nexus(ev->p.cmd_req.host_no),
-				 ev->p.cmd_req.scb,
-				 0, 0,
-/* 				 ev->k.cmd_req.uaddr, */
-				 ev->p.cmd_req.lun, ev->p.cmd_req.data_len,
-				 ev->p.cmd_req.attribute, ev->p.cmd_req.tag);
+		ret = kern_queue_cmd(ev);
+		if (ret)
+			eprintf("can't queue this command %d\n", ret);
 		break;
 	case TGT_KEVENT_CMD_DONE:
-		target_cmd_done(host_no_to_it_nexus(ev->p.cmd_done.host_no),
+		nid = host_no_to_it_nexus(ev->p.cmd_done.host_no);
+		cmd = target_cmd_lookup(nid, ev->p.cmd_done.tag);
+		if (cmd) {
+			target_cmd_done(cmd);
+			free(cmd);
+		} else
+			eprintf("unknow command %" PRIu64 " %" PRIu64 "\n", nid,
 				ev->p.cmd_done.tag);
 		break;
 	case TGT_KEVENT_TSK_MGMT_REQ:

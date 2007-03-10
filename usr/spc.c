@@ -38,7 +38,6 @@ static int __spc_report_luns(int host_no, struct scsi_cmd *cmd)
 	struct list_head *dev_list = &cmd->c_target->device_list;
 	uint64_t lun, *data;
 	int idx, alen, oalen, nr_luns, rbuflen = 4096, overflow;
-	int *len = &cmd->len;
 	unsigned char key = ILLEGAL_REQUEST, asc = 0x24;
 
 	alen = __be32_to_cpu(*(uint32_t *)&cmd->scb[6]);
@@ -81,10 +80,10 @@ static int __spc_report_luns(int host_no, struct scsi_cmd *cmd)
 
 	cmd->uaddr = (unsigned long)data;
 	*((uint32_t *) data) = __cpu_to_be32(nr_luns * 8);
-	*len = min(oalen, nr_luns * 8 + 8);
+	cmd->len = min(oalen, nr_luns * 8 + 8);
 	return SAM_STAT_GOOD;
 sense:
-	*len = 0;
+	cmd->len = 0;
 	sense_data_build(cmd, key, asc, 0);
 	return SAM_STAT_CHECK_CONDITION;
 }

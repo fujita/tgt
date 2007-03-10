@@ -130,13 +130,9 @@ sense:
 static int mmc_rw(int host_no, struct scsi_cmd *cmd)
 {
 	int ret;
-	unsigned long uaddr;
-	bkio_submit_t *submit = cmd->c_target->bdt->bd_cmd_submit;
 
 	cmd->offset = (scsi_rw_offset(cmd->scb) << MMC_BLK_SHIFT);
-	uaddr = cmd->uaddr;
-	ret = submit(cmd->dev, cmd->scb, cmd->rw, cmd->len, &uaddr,
-		     cmd->offset, &cmd->async, (void *)cmd);
+	ret = cmd->c_target->bdt->bd_cmd_submit(cmd);
 	if (ret) {
 		cmd->offset = 0;
 		cmd->len = 0;
@@ -144,7 +140,6 @@ static int mmc_rw(int host_no, struct scsi_cmd *cmd)
 		return SAM_STAT_CHECK_CONDITION;
 	} else {
 		cmd->mmapped = 1;
-		cmd->uaddr = uaddr;
 		return SAM_STAT_GOOD;
 	}
 	return 0;
@@ -188,7 +183,7 @@ static int mmc_read_toc(int host_no, struct scsi_cmd *cmd)
 static int mmc_read_capacity(int host_no, struct scsi_cmd *cmd)
 {
 	uint64_t size;
-	uint8_t *data;
+	uint32_t *data;
 
 	data = valloc(pagesize);
 	if (!data) {
