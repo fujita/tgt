@@ -207,7 +207,8 @@ int spt_sg_perform(struct scsi_cmd *cmd)
 		cmd->async = 1;
 		return 0;
 	} else {
-		eprintf("%d %m\n", ret);
+		eprintf("%x %d %u %" PRIx64" %d %m\n",
+			cmd->scb[0], cmd->rw, cmd->len, cmd->uaddr, ret);
 		return -1;
 	}
 }
