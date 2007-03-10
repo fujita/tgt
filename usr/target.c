@@ -1058,33 +1058,33 @@ int tgt_target_show_all(char *buf, int rest)
 	list_for_each_entry(target, &target_list, target_siblings) {
 		shprintf(total, buf, rest,
 			 "Target %d: %s\n"
-			 TAB1 "System information:\n"
-			 TAB2 "Type: %s\n"
-			 TAB2 "Driver: %s\n"
-			 TAB2 "Status: %s\n",
+			 _TAB1 "System information:\n"
+			 _TAB2 "Type: %s\n"
+			 _TAB2 "Driver: %s\n"
+			 _TAB2 "Status: %s\n",
 			 target->tid,
 			 target->name,
 			 target->dev_type_template->name,
 			 tgt_drivers[target->lid]->name,
 			 target_state_name(target->target_state));
 
-		shprintf(total, buf, rest, TAB1 "I_T nexus information:\n");
+		shprintf(total, buf, rest, _TAB1 "I_T nexus information:\n");
 
 		list_for_each_entry(nexus, &target->it_nexus_list, nexus_siblings) {
-			shprintf(total, buf, rest, TAB2 "I_T nexus: %u\n",
+			shprintf(total, buf, rest, _TAB2 "I_T nexus: %u\n",
 				 nexus->nexus_id);
 			if (nexus->info)
 				shprintf(total, buf, rest, "%s", nexus->info);
 		}
 
-		shprintf(total, buf, rest, TAB1 "LUN information:\n");
+		shprintf(total, buf, rest, _TAB1 "LUN information:\n");
 		list_for_each_entry(device, &target->device_list, device_siblings)
 			shprintf(total, buf, rest,
-				 TAB2 "LUN: %" PRIu64 "\n"
-				 TAB3 "SCSI ID: %s\n"
-				 TAB3 "SCSI SN: %s\n"
-				 TAB3 "Size: %s\n"
-				 TAB3 "Backing store: %s\n",
+				 _TAB2 "LUN: %" PRIu64 "\n"
+				 _TAB3 "SCSI ID: %s\n"
+				 _TAB3 "SCSI SN: %s\n"
+				 _TAB3 "Size: %s\n"
+				 _TAB3 "Backing store: %s\n",
 				 device->lun,
 				 device->scsi_id,
 				 device->scsi_sn,
@@ -1094,24 +1094,24 @@ int tgt_target_show_all(char *buf, int rest)
 		if (!strcmp(tgt_drivers[target->lid]->name, "iscsi")) {
 			int i, aid;
 
-			shprintf(total, buf, rest, TAB1
+			shprintf(total, buf, rest, _TAB1
 				 "Account information:\n");
 			for (i = 0; i < target->account.nr_inaccount; i++) {
 				aid = target->account.in_aids[i];
-				shprintf(total, buf, rest, TAB2 "%s\n",
+				shprintf(total, buf, rest, _TAB2 "%s\n",
 					 __account_lookup_id(aid)->user);
 			}
 			if (target->account.out_aid) {
 				aid = target->account.out_aid;
 				shprintf(total, buf, rest,
-					 TAB2 "%s (outgoing)\n",
+					 _TAB2 "%s (outgoing)\n",
 					 __account_lookup_id(aid)->user);
 			}
 		}
 
-		shprintf(total, buf, rest, TAB1 "ACL information:\n");
+		shprintf(total, buf, rest, _TAB1 "ACL information:\n");
 		list_for_each_entry(acl, &target->acl_list, aclent_list)
-			shprintf(total, buf, rest, TAB2 "%s\n", acl->address);
+			shprintf(total, buf, rest, _TAB2 "%s\n", acl->address);
 	}
 	return total;
 overflow:
@@ -1269,7 +1269,7 @@ int account_show(char *buf, int rest)
 		shprintf(total, buf, rest, "Account list:\n");
 
 	list_for_each_entry(ac, &account_list, account_siblings)
-		shprintf(total, buf, rest, TAB1 "%s\n", ac->user);
+		shprintf(total, buf, rest, _TAB1 "%s\n", ac->user);
 
 	return total;
 overflow:

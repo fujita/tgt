@@ -103,9 +103,9 @@ int session_create(struct iscsi_connection *conn)
 	memset(addr, 0, sizeof(addr));
 	conn->tp->ep_show(conn->fd, addr, sizeof(addr));
 
-	snprintf(session->info, 1024, TAB3 "Initiator: %s\n"
-		 TAB3 "Connection: %u\n"
-		 TAB4 "%s\n", session->initiator, conn->cid, addr);
+	snprintf(session->info, 1024, _TAB3 "Initiator: %s\n"
+		 _TAB3 "Connection: %u\n"
+		 _TAB4 "%s\n", session->initiator, conn->cid, addr);
 
 	err = it_nexus_create(target->tid, session->info, &nexus_id);
 	if (err) {

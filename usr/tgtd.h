@@ -13,10 +13,10 @@
 #define NID64(tid, nid) ((uint64_t) tid << TID_SHIFT | nid)
 #define NID2TID(nid) (nid >> TID_SHIFT)
 
-#define TAB1 "    "
-#define TAB2 TAB1 TAB1
-#define TAB3 TAB1 TAB1 TAB1
-#define TAB4 TAB2 TAB2
+#define _TAB1 "    "
+#define _TAB2 _TAB1 _TAB1
+#define _TAB3 _TAB1 _TAB1 _TAB1
+#define _TAB4 _TAB2 _TAB2
 
 enum scsi_target_state {
 	SCSI_TARGET_SUSPENDED = 1,
