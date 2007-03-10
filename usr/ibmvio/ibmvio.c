@@ -42,6 +42,7 @@
 #include "util.h"
 #include "tgtd.h"
 #include "target.h"
+#include "spc.h"
 
 #define GETTARGET(x) ((int)((((uint64_t)(x)) >> 56) & 0x003f))
 #define GETBUS(x) ((int)((((uint64_t)(x)) >> 53) & 0x0007))
@@ -68,12 +69,14 @@ struct inquiry_data {
 
 #define	IBMVSTGT_HOSTDIR	"/sys/class/scsi_host/host"
 
-static int ibmvstgt_inquiry(int host_no, uint64_t lun, uint8_t *data)
+static int ibmvstgt_inquiry(int host_no, struct scsi_cmd *cmd, uint8_t *data)
 {
 	struct inquiry_data *id = (struct inquiry_data *) data;
 	char system_id[256], path[256], buf[32];
 	int fd, err, partition_number;
 	unsigned int unit_address;
+	unsigned char device_type = cmd->c_target->dev_type_template->type;
+	uint64_t lun = *((uint64_t *) cmd->lun);
 
 	snprintf(path, sizeof(path), IBMVSTGT_HOSTDIR "%d/system_id", host_no);
 	fd = open(path, O_RDONLY);
@@ -98,7 +101,7 @@ static int ibmvstgt_inquiry(int host_no, uint64_t lun, uint8_t *data)
 	dprintf("%d %s %d %x %" PRIx64 "\n",
 		host_no, system_id, partition_number, unit_address, lun);
 
-	id->qual_type = TYPE_DISK;
+	id->qual_type = device_type;
 	id->rmb_reserve = 0x00;
 	id->version = 0x84;	/* ISO/IE		  */
 	id->aerc_naca_hisup_format = 0x22;/* naca & fmt 0x02 */
@@ -127,9 +130,8 @@ static int ibmvstgt_inquiry(int host_no, uint64_t lun, uint8_t *data)
 
 int scsi_inquiry(int host_no, struct scsi_cmd *cmd)
 {
-	int result = SAM_STAT_CHECK_CONDITION;
+	int ret = SAM_STAT_CHECK_CONDITION;
 	uint8_t *data, *scb = cmd->scb;
-	int *len = &cmd->len;
 	unsigned char key = ILLEGAL_REQUEST, asc = 0x24;
 
 	if (((scb[1] & 0x3) == 0x3) || (!(scb[1] & 0x3) && scb[2]))
@@ -146,61 +148,23 @@ int scsi_inquiry(int host_no, struct scsi_cmd *cmd)
 	dprintf("%x %x\n", scb[1], scb[2]);
 
 	if (!(scb[1] & 0x3)) {
-		*len = ibmvstgt_inquiry(host_no, *((uint64_t *) cmd->lun), data);
-		result = SAM_STAT_GOOD;
-	} else if (scb[1] & 0x2) {
-		/* CmdDt bit is set */
-		/* We do not support it now. */
-		data[1] = 0x1;
-		data[5] = 0;
-		*len = 6;
-		result = SAM_STAT_GOOD;
-	} else if (scb[1] & 0x1) {
-		/* EVPD bit set */
-		if (scb[2] == 0x0) {
-			data[1] = 0x0;
-			data[3] = 3;
-			data[4] = 0x0;
-			data[5] = 0x80;
-			data[6] = 0x83;
-			*len = 7;
-			result = SAM_STAT_GOOD;
-		} else if (scb[2] == 0x80) {
-			data[1] = 0x80;
-			data[3] = 4;
-			memset(data + 4, 0x20, 4);
-			*len = 8;
-			result = SAM_STAT_GOOD;
-		} else if (scb[2] == 0x83) {
-			uint32_t tmp = SCSI_ID_LEN * sizeof(uint8_t);
+		cmd->len = ibmvstgt_inquiry(host_no, cmd, data);
+		ret = SAM_STAT_GOOD;
+	} else
+		return spc_inquiry(host_no, cmd);
 
-			data[1] = 0x83;
-			data[3] = tmp + 4;
-			data[4] = 0x1;
-			data[5] = 0x1;
-			data[7] = tmp;
-			if (cmd->dev)
-				strncpy(data + 8, cmd->dev->scsi_id, SCSI_ID_LEN);
-			*len = tmp + 8;
-			result = SAM_STAT_GOOD;
-		}
-	}
-
-	if (result != SAM_STAT_GOOD) {
-		free(data);
+	if (ret != SAM_STAT_GOOD)
 		goto sense;
-	}
 
-	*len = min_t(int, *len, scb[4]);
-	cmd->uaddr = (unsigned long)data;
+	cmd->len = min_t(int, cmd->len, scb[4]);
+	cmd->uaddr = (unsigned long) data;
 
 	if (!cmd->dev)
 		data[0] = TYPE_NO_LUN;
 
 	return SAM_STAT_GOOD;
-
 sense:
-	*len = 0;
+	cmd->len = 0;
 	sense_data_build(cmd, key, asc, 0);
 	return SAM_STAT_CHECK_CONDITION;
 }

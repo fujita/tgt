@@ -177,6 +177,7 @@ sense:
 }
 
 struct device_type_template osd_template = {
+	.type	= TYPE_OSD,
 	.name	= "osd",
 	.ops	= {
 		[0x00 ... 0x0f] = {spc_illegal_op},

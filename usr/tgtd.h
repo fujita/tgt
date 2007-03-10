@@ -97,7 +97,9 @@ struct device_type_operations {
 };
 
 struct device_type_template {
+	unsigned char type;
 	char *name;
+	char *pid;
 	struct device_type_operations ops[256];
 };
 

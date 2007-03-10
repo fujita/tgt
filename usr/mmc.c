@@ -27,106 +27,6 @@
 
 #define MMC_BLK_SHIFT 11
 
-#define PRODUCT_ID	"Virtual CD/DVD ROM"
-#define PRODUCT_REV	"0"
-
-static int mmc_inquiry(int host_no, struct scsi_cmd *cmd)
-{
-	int len, ret = SAM_STAT_CHECK_CONDITION;
-	uint8_t *data;
-	uint8_t *scb = cmd->scb;
-	unsigned char key = ILLEGAL_REQUEST, asc = 0x24;
-
-	if (((scb[1] & 0x3) == 0x3) || (!(scb[1] & 0x3) && scb[2]))
-		goto sense;
-
-	data = valloc(pagesize);
-	if (!data) {
-		key = HARDWARE_ERROR;
-		asc = 0;
-		goto sense;
-	}
-	memset(data, 0, pagesize);
-
-	if (!(scb[1] & 0x3)) {
-		data[0] = TYPE_ROM;
-		data[1] = 0x80;
-		data[2] = 0x03;
-		data[3] = 0x02;
-		data[4] = 0x1f;
-		data[7] = 0x02;
-		memcpy(data + 8, VENDOR_ID,
-		       min_t(size_t, strlen(VENDOR_ID), 8));
-		memcpy(data + 16, PRODUCT_ID,
-		       min_t(size_t, strlen(PRODUCT_ID), 16));
-		memcpy(data + 32, PRODUCT_REV,
-			min_t(size_t, strlen(PRODUCT_REV), 4));
-		len = data[4] + 5;
-		ret = SAM_STAT_GOOD;
-	} else if (scb[1] & 0x2) {
-		/* CmdDt bit is set */
-		/* We do not support it now. */
-	} else if (scb[1] & 0x1) {
-		if (scb[2] == 0x0) {
-			data[0] = TYPE_ROM;
-			data[1] = 0x0;
-			data[3] = 3;
-			data[4] = 0x0;
-			data[5] = 0x80;
-			data[6] = 0x83;
-			len = 7;
-			ret = SAM_STAT_GOOD;
-		} else if (scb[2] == 0x80) {
-			int tmp = SCSI_SN_LEN;
-
-			data[1] = 0x80;
-			data[3] = SCSI_SN_LEN;
-			memset(data + 4, 0x20, 4);
-			len = SCSI_SN_LEN + 4;
-			ret = SAM_STAT_GOOD;
-
-			if (cmd->dev && strlen(cmd->dev->scsi_sn)) {
-				uint8_t *p;
-				char *q;
-
-				p = data + 4 + tmp - 1;
-				q = cmd->dev->scsi_sn + SCSI_SN_LEN - 1;
-
-				for (; tmp > 0; tmp--, q)
-					*(p--) = *q;
-			}
-		} else if (scb[2] == 0x83) {
-			int tmp = SCSI_ID_LEN;
-
-			data[1] = 0x83;
-			data[3] = tmp + 4;
-			data[4] = 0x1;
-			data[5] = 0x1;
-			data[7] = tmp;
-			if (cmd->dev)
-				strncpy((char *) data + 8, cmd->dev->scsi_id,
-				        SCSI_ID_LEN);
-			len = tmp + 8;
-			ret = SAM_STAT_GOOD;
-		}
-	}
-
-	if (ret != SAM_STAT_GOOD)
-		goto sense;
-
-	cmd->len = min_t(int, len, scb[4]);
-	cmd->uaddr = (unsigned long) data;
-
-	if (!cmd->dev)
-		data[0] = TYPE_NO_LUN;
-
-	return SAM_STAT_GOOD;
-sense:
-	cmd->len = 0;
-	sense_data_build(cmd, key, asc, 0);
-	return SAM_STAT_CHECK_CONDITION;
-}
-
 static int mmc_rw(int host_no, struct scsi_cmd *cmd)
 {
 	int ret;
@@ -205,7 +105,9 @@ static int mmc_read_capacity(int host_no, struct scsi_cmd *cmd)
 }
 
 struct device_type_template mmc_template = {
+	.type	= TYPE_ROM,
 	.name	= "cdrom/dvd",
+	.pid	= "VIRTUAL-CDROM",
 	.ops	= {
 		{spc_test_unit,},
 		{spc_illegal_op,},
@@ -228,7 +130,7 @@ struct device_type_template mmc_template = {
 		/* 0x10 */
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{mmc_inquiry,},
+		{spc_inquiry,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
