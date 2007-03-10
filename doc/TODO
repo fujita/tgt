@@ -57,4 +57,3 @@ helper thread (runs synchrnously to enable tgtd daemon run
 asynchrnously). This workaround will be removed when upstream kernels
 have a unified event notification interface (there are some candidates
 under development). It should improve the tgt AIO performance too.
-
