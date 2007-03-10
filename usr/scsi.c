@@ -106,7 +106,7 @@ uint64_t scsi_rw_offset(uint8_t *scb)
 	return off;
 }
 
-int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd, void *key)
+int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd)
 {
 	unsigned char op = cmd->scb[0];
 	return cmd->c_target->dev_type_template->ops[op].cmd_perform(host_no, cmd);

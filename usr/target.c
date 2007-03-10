@@ -425,7 +425,7 @@ int target_cmd_queue(struct scsi_cmd *cmd)
 	dprintf("%p %x %" PRIx64 " %d\n", cmd, cmd->scb[0], dev_id, enabled);
 
 	if (enabled) {
-		result = scsi_cmd_perform(nexus->host_no, cmd, (void *)cmd);
+		result = scsi_cmd_perform(nexus->host_no, cmd);
 
 		cmd_post_perform(q, cmd);
 
@@ -471,7 +471,7 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 
 			list_del(&cmd->qlist);
 			dprintf("perform %" PRIx64 " %x\n", cmd->tag, cmd->attribute);
-			result = scsi_cmd_perform(nexus->host_no, cmd, (void *)cmd);
+			result = scsi_cmd_perform(nexus->host_no, cmd);
 			cmd_post_perform(q, cmd);
 			set_cmd_processed(cmd);
 			if (!cmd->async) {
