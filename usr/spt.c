@@ -61,15 +61,15 @@ struct backedio_template sg_bdt = {
 	.bd_cmd_done		= spt_sg_cmd_done,
 };
 
-extern struct device_type_template sbc_template;
-
 static int spt_cmd_perform(int host_no, struct scsi_cmd *cmd)
 {
 	int ret;
+	struct device_type_operations *ops;
 
-	/* FIXME */
-	if (!cmd->dev)
-		return sbc_template.ops[cmd->scb[0]].cmd_perform(host_no, cmd);
+	if (!cmd->dev) {
+		ops = cmd->c_target->dev_type_template.ops;
+		return ops[cmd->scb[0]].cmd_perform(host_no, cmd);
+	}
 
 	ret = spt_sg_perform(cmd);
 	if (ret) {
