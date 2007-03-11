@@ -17,8 +17,8 @@
 #include "log.h"
 #include "tgtd.h"
 
-#include <scsi/iscsi_if.h>
-#include <scsi/iscsi_proto.h>
+#include "iscsi_proto.h"
+#include "iscsi_if.h"
 
 #define cpu_to_be16(x)	__cpu_to_be16(x)
 #define cpu_to_be32(x)	__cpu_to_be32(x)
