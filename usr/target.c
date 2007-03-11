@@ -1064,7 +1064,7 @@ int tgt_target_show_all(char *buf, int rest)
 			 _TAB2 "Status: %s\n",
 			 target->tid,
 			 target->name,
-			 target->dev_type_template->name,
+			 target->dev_type_template.name,
 			 tgt_drivers[target->lid]->name,
 			 target_state_name(target->target_state));
 
@@ -1167,16 +1167,16 @@ int tgt_target_create(int lld, int tid, char *args, int t_type)
 
 	switch (t_type) {
 	case TYPE_DISK:
-		target->dev_type_template = &sbc_template;
+		target->dev_type_template = sbc_template;
 		break;
 	case TYPE_ROM:
-		target->dev_type_template = &mmc_template;
+		target->dev_type_template = mmc_template;
 		break;
 	case TYPE_OSD:
-		target->dev_type_template = &osd_template;
+		target->dev_type_template = osd_template;
 		break;
 	case TYPE_SPT:
-		target->dev_type_template = &spt_template;
+		target->dev_type_template = spt_template;
 		break;
 	default:
 		free(target);
@@ -1224,6 +1224,9 @@ int tgt_target_create(int lld, int tid, char *args, int t_type)
 	INIT_LIST_HEAD(&target->it_nexus_list);
 
 	dprintf("Succeed to create a new target %d\n", tid);
+
+	if (tgt_drivers[lld]->target_create)
+		tgt_drivers[lld]->target_create(target);
 
 	return 0;
 }

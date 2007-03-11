@@ -50,7 +50,8 @@ struct target {
 
 	struct tgt_account account;
 
-	struct device_type_template *dev_type_template;
+	/* we don't use a pointer because a lld could change this. */
+	struct device_type_template dev_type_template;
 };
 
 struct it_nexus {

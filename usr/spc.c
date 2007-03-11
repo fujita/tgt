@@ -39,8 +39,8 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 	int len, ret = SAM_STAT_CHECK_CONDITION;
 	uint8_t *data;
 	uint8_t *scb = cmd->scb;
-	unsigned char device_type = cmd->c_target->dev_type_template->type;
-	char *product_id = cmd->c_target->dev_type_template->pid;
+	unsigned char device_type = cmd->c_target->dev_type_template.type;
+	char *product_id = cmd->c_target->dev_type_template.pid;
 	unsigned char key = ILLEGAL_REQUEST, asc = 0x24;
 
 	if (((scb[1] & 0x3) == 0x3) || (!(scb[1] & 0x3) && scb[2]))
@@ -143,7 +143,7 @@ sense:
 	return SAM_STAT_CHECK_CONDITION;
 }
 
-static int __spc_report_luns(int host_no, struct scsi_cmd *cmd)
+int spc_report_luns(int host_no, struct scsi_cmd *cmd)
 {
 	struct tgt_device *dev;
 	struct list_head *dev_list = &cmd->c_target->device_list;
@@ -197,20 +197,6 @@ sense:
 	cmd->len = 0;
 	sense_data_build(cmd, key, asc, 0);
 	return SAM_STAT_CHECK_CONDITION;
-}
-
-int spc_report_luns(int host_no, struct scsi_cmd *cmd)
-{
-	struct target *target = cmd->c_target;
-	int ret, lid = target->lid;
-
-	/* temp hack */
-	if (tgt_drivers[lid]->scsi_report_luns)
-		ret = tgt_drivers[lid]->scsi_report_luns(host_no, cmd);
-	else
-		ret = __spc_report_luns(host_no, cmd);
-
-	return ret;
 }
 
 int spc_start_stop(int host_no, struct scsi_cmd *cmd)

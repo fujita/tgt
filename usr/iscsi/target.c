@@ -24,6 +24,7 @@
 #include "iscsid.h"
 #include "tgtadm.h"
 #include "tgtd.h"
+#include "target.h"
 
 static LIST_HEAD(targets_list);
 
@@ -240,8 +241,9 @@ int iscsi_target_destroy(int tid)
 	return 0;
 }
 
-int iscsi_target_create(int tid, char *name)
+int iscsi_target_create(struct target *t)
 {
+	int tid = t->tid;
 	struct iscsi_target *target;
 	struct param default_tgt_session_param[] = {
 		{0, 8192},

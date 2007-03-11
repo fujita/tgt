@@ -69,13 +69,13 @@ struct inquiry_data {
 
 #define	IBMVSTGT_HOSTDIR	"/sys/class/scsi_host/host"
 
-static int ibmvstgt_inquiry(int host_no, struct scsi_cmd *cmd, uint8_t *data)
+static int __ibmvio_inquiry(int host_no, struct scsi_cmd *cmd, uint8_t *data)
 {
 	struct inquiry_data *id = (struct inquiry_data *) data;
 	char system_id[256], path[256], buf[32];
 	int fd, err, partition_number;
 	unsigned int unit_address;
-	unsigned char device_type = cmd->c_target->dev_type_template->type;
+	unsigned char device_type = cmd->c_target->dev_type_template.type;
 	uint64_t lun = *((uint64_t *) cmd->lun);
 
 	snprintf(path, sizeof(path), IBMVSTGT_HOSTDIR "%d/system_id", host_no);
@@ -114,7 +114,11 @@ static int ibmvstgt_inquiry(int host_no, struct scsi_cmd *cmd, uint8_t *data)
 	 * and their client won't  work unless we use VOPTA and
 	 * VDASD.
 	 */
-	memcpy(id->product, "VDASD blkdev    ", 16);
+	if (device_type)
+		memcpy(id->product, "VOPTA blkdev    ", 16);
+	else
+		memcpy(id->product, "VDASD blkdev    ", 16);
+
 	memcpy(id->revision, "0001", 4);
 	snprintf(id->unique,sizeof(id->unique),
 		 "IBM-VSCSI-%s-P%d-%x-%d-%d-%d\n",
@@ -128,7 +132,7 @@ static int ibmvstgt_inquiry(int host_no, struct scsi_cmd *cmd, uint8_t *data)
 	return sizeof(*id);
 }
 
-int scsi_inquiry(int host_no, struct scsi_cmd *cmd)
+static int ibmvio_inquiry(int host_no, struct scsi_cmd *cmd)
 {
 	int ret = SAM_STAT_CHECK_CONDITION;
 	uint8_t *data, *scb = cmd->scb;
@@ -148,7 +152,7 @@ int scsi_inquiry(int host_no, struct scsi_cmd *cmd)
 	dprintf("%x %x\n", scb[1], scb[2]);
 
 	if (!(scb[1] & 0x3)) {
-		cmd->len = ibmvstgt_inquiry(host_no, cmd, data);
+		cmd->len = __ibmvio_inquiry(host_no, cmd, data);
 		ret = SAM_STAT_GOOD;
 	} else
 		return spc_inquiry(host_no, cmd);
@@ -178,7 +182,7 @@ static uint64_t make_lun(unsigned int bus, unsigned int target, unsigned int lun
 	return ((uint64_t) result) << 48;
 }
 
-int scsi_report_luns(int host_no, struct scsi_cmd *cmd)
+static int ibmvio_report_luns(int host_no, struct scsi_cmd *cmd)
 {
 	struct tgt_device *dev;
 	struct list_head *dev_list = &cmd->c_target->device_list;
@@ -250,4 +254,17 @@ uint64_t scsi_lun_to_int(uint8_t *p)
 		return TGT_INVALID_DEV_ID;
 	else
 		return GETTARGET(lun);
+}
+
+int ibmvio_target_create(struct target *target)
+{
+	unsigned char device_type = target->dev_type_template.type;
+	struct device_type_operations *ops = target->dev_type_template.ops;
+
+	if (device_type == TYPE_DISK || device_type == TYPE_ROM)
+		ops[INQUIRY].cmd_perform = ibmvio_inquiry;
+
+	ops[REPORT_LUNS].cmd_perform = ibmvio_report_luns;
+
+	return 0;
 }

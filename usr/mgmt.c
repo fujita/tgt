@@ -79,8 +79,6 @@ static int target_mgmt(int lld_no, struct mgmt_task *mtask)
 	case OP_NEW:
 		err = tgt_target_create(lld_no, req->tid, mtask->buf,
 					req->target_type);
-		if (!err && tgt_drivers[lld_no]->target_create)
-			tgt_drivers[lld_no]->target_create(req->tid, mtask->buf);
 		break;
 	case OP_DELETE:
 		err = tgt_target_destroy(req->tid);

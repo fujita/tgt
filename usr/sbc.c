@@ -69,17 +69,6 @@ sense:
 	return SAM_STAT_CHECK_CONDITION;
 }
 
-static int sbc_inquiry(int host_no, struct scsi_cmd *cmd)
-{
-	int ret, lid = cmd->c_target->lid;
-
-	if (tgt_drivers[lid]->scsi_inquiry)
-		ret = tgt_drivers[lid]->scsi_inquiry(host_no, cmd);
-	else
-		ret = spc_inquiry(host_no, cmd);
-	return ret;
-}
-
 static int sbc_reserve(int host_no, struct scsi_cmd *cmd)
 {
 	int ret;
@@ -360,7 +349,7 @@ struct device_type_template sbc_template = {
 		/* 0x10 */
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{sbc_inquiry,},
+		{spc_inquiry,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},

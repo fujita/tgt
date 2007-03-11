@@ -1,5 +1,5 @@
 extern int iscsi_init(int);
-extern int iscsi_target_create(int, char *);
+extern int iscsi_target_create(struct target *);
 extern int iscsi_target_destroy(int);
 extern int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid,
 			     uint64_t lun, char *buf, int rest);
