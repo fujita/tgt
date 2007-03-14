@@ -3,6 +3,7 @@
 
 #include <byteswap.h>
 
+#define roundup(x, y) ((((x) + ((y) - 1)) / (y)) * (y))
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 #define ALIGN(x,a) (((x)+(a)-1)&~((a)-1))
 
