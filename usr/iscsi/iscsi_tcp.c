@@ -40,6 +40,33 @@
 #define LISTEN_MAX		4
 #define INCOMING_MAX		32
 
+static int set_keepalive(int fd)
+{
+	int ret, opt;
+
+	opt = 1;
+	ret = setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof(opt));
+	if (ret)
+		return ret;
+
+	opt = 1800;
+	ret = setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &opt, sizeof(opt));
+	if (ret)
+		return ret;
+
+	opt = 6;
+	ret = setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &opt, sizeof(opt));
+	if (ret)
+		return ret;
+
+	opt = 300;
+	ret = setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &opt, sizeof(opt));
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 static void accept_connection(int afd, int events, void *data)
 {
 	struct sockaddr_storage from;
@@ -55,6 +82,10 @@ static void accept_connection(int afd, int events, void *data)
 		eprintf("can't accept, %m\n");
 		return;
 	}
+
+	err = set_keepalive(fd);
+	if (err)
+		goto out;
 
 	conn = conn_alloc();
 	if (!conn)
