@@ -3,6 +3,7 @@
  *
  * (C) 2005-2006 FUJITA Tomonori <tomof@acm.org>
  * (C) 2005-2006 Mike Christie <michaelc@cs.wisc.edu>
+ * (C) 2007 Pete Wyckoff <pw@osc.edu>
  *
  * This code is based on Ardis's iSCSI implementation.
  *   http://www.ardistech.com/iscsi/
