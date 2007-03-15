@@ -1597,16 +1597,8 @@ static void iscsi_rx_handler(int fd, struct iscsi_connection *conn)
 
 		switch (conn->rx_iostate) {
 		case IOSTATE_READ_BHS:
-			conn->rx_iostate = IOSTATE_READ_AHS_DATA;
 			conn->req.ahssize = conn->req.bhs.hlength * 4;
 			conn->req.datasize = ntoh24(conn->req.bhs.dlength);
-			conn->rx_size = (conn->req.ahssize + conn->req.datasize + 3) & -4;
-
-			if (conn->req.ahssize) {
-				eprintf("FIXME: we cannot handle ahs\n");
-				conn->state = STATE_CLOSE;
-				break;
-			}
 
 			if (conn->state == STATE_SCSI) {
 				res = iscsi_task_rx_start(conn);
@@ -1614,15 +1606,16 @@ static void iscsi_rx_handler(int fd, struct iscsi_connection *conn)
 					conn->state = STATE_CLOSE;
 					break;
 				}
+			} else {
+				conn->rx_buffer = conn->req_buffer;
+				conn->req.ahs = conn->rx_buffer;
+				conn->rx_size = roundup(conn->req.ahssize, 4);
+				conn->req.data = conn->rx_buffer + conn->rx_size;
+				conn->rx_size += roundup(conn->req.datasize, 4);
 			}
 
 			if (conn->rx_size) {
-				if (conn->state != STATE_SCSI) {
-					conn->rx_buffer = conn->req_buffer;
-					conn->req.ahs = conn->rx_buffer;
-				}
-				conn->req.data =
-					conn->rx_buffer + conn->req.ahssize;
+				conn->rx_iostate = IOSTATE_READ_AHS_DATA;
 				goto read_again;
 			}
 
