@@ -984,19 +984,17 @@ static int iscsi_scsi_cmd_execute(struct iscsi_task *task)
 {
 	struct iscsi_connection *conn = task->conn;
 	struct iscsi_cmd *req = (struct iscsi_cmd *) &task->req;
+	uint8_t rw = req->flags & ISCSI_FLAG_CMD_WRITE;
 	int err = 0;
 
-	if (req->flags & ISCSI_FLAG_CMD_WRITE) {
-		if (task->r2t_count) {
-			if (task->unsol_count)
-				;
-			else
-				list_add_tail(&task->c_list, &task->conn->tx_clist);
-		} else
-			err = iscsi_target_cmd_queue(task);
-	} else
-		err = iscsi_target_cmd_queue(task);
+	if (rw && task->r2t_count) {
+		if (!task->unsol_count)
+			list_add_tail(&task->c_list, &task->conn->tx_clist);
+		goto no_queuing;
+	}
 
+	err = iscsi_target_cmd_queue(task);
+no_queuing:
 	tgt_event_modify(conn->fd, EPOLLIN|EPOLLOUT);
 
 	return err;
