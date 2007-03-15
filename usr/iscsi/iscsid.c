@@ -966,9 +966,31 @@ static int iscsi_target_cmd_queue(struct iscsi_task *task)
 	unsigned long uaddr = (unsigned long) task->data;
 
 	scmd->cmd_nexus_id = conn->session->iscsi_nexus_id;
-	/* tmp hack */
-	scmd->scb = req->cdb;
-	scmd->scb_len = sizeof(req->cdb);
+
+	if (task->ahs) {
+		struct iscsi_ecdb_ahdr *ahs_extcdb = task->ahs;
+		char *p = (void *)task->extdata;
+
+		if (ahs_extcdb->ahstype == ISCSI_AHSTYPE_CDB) {
+			int extcdb_len = ntohs(ahs_extcdb->ahslength) - 1;
+
+			if (extcdb_len + sizeof(req->cdb) > 260) {
+				eprintf("invalid extcdb len %d\n", extcdb_len);
+
+				return EINVAL;
+			}
+
+			memcpy(p, req->cdb, sizeof(req->cdb));
+			memmove(p + sizeof(req->cdb), ahs_extcdb->ecdb,
+				extcdb_len);
+
+			scmd->scb = p;
+			scmd->scb_len = sizeof(req->cdb) + extcdb_len;
+		}
+	} else {
+		scmd->scb = req->cdb;
+		scmd->scb_len = sizeof(req->cdb);
+	}
 
 	memcpy(scmd->lun, task->req.lun, sizeof(scmd->lun));
 	scmd->rw = req->flags & ISCSI_FLAG_CMD_WRITE;
