@@ -1207,12 +1207,20 @@ static int iscsi_scsi_cmd_rx_start(struct iscsi_connection *conn)
 {
 	struct iscsi_cmd *req = (struct iscsi_cmd *) &conn->req.bhs;
 	struct iscsi_task *task;
+	int ahs_len, imm_len, data_len, task_len;
 
-	dprintf("%u %x %d %d %x\n", conn->session->tsih,
-		req->cdb[0], ntohl(req->data_length),
+	ahs_len = roundup(req->hlength * 4, 4);
+	imm_len = roundup(ntoh24(req->dlength), 4);
+	data_len = ntohl(req->data_length);
+
+	dprintf("%u %x %d %d %d %x %x\n", conn->session->tsih,
+		req->cdb[0], ahs_len, imm_len, data_len,
 		req->flags & ISCSI_FLAG_CMD_ATTR_MASK, req->itt);
 
-	task = iscsi_alloc_task(conn, ntohl(req->data_length));
+	task_len = ahs_len ? sizeof(req->cdb) + ahs_len : 0
+		+ max(imm_len, data_len);
+
+	task = iscsi_alloc_task(conn, task_len);
 	if (task)
 		conn->rx_task = task;
 	else
@@ -1220,12 +1228,20 @@ static int iscsi_scsi_cmd_rx_start(struct iscsi_connection *conn)
 
 	task->tag = req->itt;
 
-	if (req->flags & ISCSI_FLAG_CMD_WRITE) {
-		conn->rx_size = ntoh24(req->dlength);
+	if (ahs_len || data_len) {
+		if (ahs_len) {
+			task->ahs = task->data + sizeof(req->cdb);
+			task->data = task->ahs + ahs_len;
+		}
+
+		conn->rx_size = ahs_len + imm_len;
 		conn->rx_buffer = task->data;
-		task->r2t_count = ntohl(req->data_length) - conn->rx_size;
+	}
+
+	if (req->flags & ISCSI_FLAG_CMD_WRITE) {
+		task->r2t_count = data_len - imm_len;
 		task->unsol_count = !(req->flags & ISCSI_FLAG_CMD_FINAL);
-		task->offset = conn->rx_size;
+		task->offset = imm_len;
 
 		dprintf("%d %d %d %d\n", conn->rx_size, task->r2t_count,
 			task->unsol_count, task->offset);
