@@ -865,12 +865,12 @@ static int iscsi_r2t_build(struct iscsi_task *task)
 }
 
 static inline struct iscsi_task *
-iscsi_alloc_task(struct iscsi_connection *conn)
+iscsi_alloc_task(struct iscsi_connection *conn, int ext_len)
 {
 	struct iscsi_hdr *req = (struct iscsi_hdr *) &conn->req.bhs;
 	struct iscsi_task *task;
 
-	task = zalloc(sizeof(*task));
+	task = zalloc(sizeof(*task) + ext_len);
 	if (!task)
 		return NULL;
 
@@ -1205,25 +1205,16 @@ static int iscsi_task_queue(struct iscsi_task *task)
 	return 0;
 }
 
-static struct iscsi_task *__iscsi_task_rx_start(struct iscsi_connection *conn)
-{
-	struct iscsi_task *task;
-
-	task = iscsi_alloc_task(conn);
-	if (!task)
-		return NULL;
-	conn->rx_task = task;
-	return task;
-}
-
 static int iscsi_scsi_cmd_rx_start(struct iscsi_connection *conn)
 {
 	struct iscsi_cmd *req = (struct iscsi_cmd *) &conn->req.bhs;
 	struct iscsi_task *task;
 	int len;
 
-	task = __iscsi_task_rx_start(conn);
-	if (!task)
+	task = iscsi_alloc_task(conn, 0);
+	if (task)
+		conn->rx_task = task;
+	else
 		return -ENOMEM;
 	task->tag = req->itt;
 
@@ -1283,8 +1274,10 @@ static int iscsi_noop_out_rx_start(struct iscsi_connection *conn)
 
 	conn->exp_stat_sn = be32_to_cpu(req->exp_statsn);
 
-	task = __iscsi_task_rx_start(conn);
-	if (!task)
+	task = iscsi_alloc_task(conn, 0);
+	if (task)
+		conn->rx_task = task;
+	else
 		goto out;
 
 	len = ntoh24(req->dlength);
@@ -1335,6 +1328,7 @@ static int iscsi_task_rx_done(struct iscsi_connection *conn)
 static int iscsi_task_rx_start(struct iscsi_connection *conn)
 {
 	struct iscsi_hdr *hdr = &conn->req.bhs;
+	struct iscsi_task *task;
 	uint8_t op;
 	int err = 0;
 
@@ -1355,7 +1349,10 @@ static int iscsi_task_rx_start(struct iscsi_connection *conn)
 		break;
 	case ISCSI_OP_SCSI_TMFUNC:
 	case ISCSI_OP_LOGOUT:
-		if (!__iscsi_task_rx_start(conn))
+		task = iscsi_alloc_task(conn, 0);
+		if (task)
+			conn->rx_task = task;
+		else
 			err = -ENOMEM;
 		break;
 	case ISCSI_OP_TEXT:

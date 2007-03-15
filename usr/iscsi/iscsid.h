@@ -115,6 +115,8 @@ struct iscsi_task {
 	void *c_buffer;
 
 	struct scsi_cmd scmd;
+
+	unsigned long extdata[0];
 };
 
 struct iscsi_connection {
