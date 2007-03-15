@@ -112,7 +112,7 @@ struct iscsi_task {
 	int unsol_count;
 	int exp_r2tsn;
 
-	void *c_buffer;
+	void *data;
 
 	struct scsi_cmd scmd;
 

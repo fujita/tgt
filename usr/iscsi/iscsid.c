@@ -879,6 +879,9 @@ iscsi_alloc_task(struct iscsi_connection *conn, int ext_len)
 	INIT_LIST_HEAD(&task->c_hlist);
 	INIT_LIST_HEAD(&task->c_list);
 
+	if (ext_len)
+		task->data = task->extdata;
+
 	conn_get(conn);
 	return task;
 }
@@ -887,10 +890,7 @@ void iscsi_free_task(struct iscsi_task *task)
 {
 	struct iscsi_connection *conn = task->conn;
 
-	if (task->c_buffer)
-		free(task->c_buffer);
 	free(task);
-
 	/* from alloc */
 	conn_put(conn);
 }
@@ -905,8 +905,8 @@ static void iscsi_free_cmd_task(struct iscsi_task *task)
 	target_cmd_done(&task->scmd);
 
 	list_del(&task->c_hlist);
-	if (task->c_buffer) {
-		if ((unsigned long) task->c_buffer != task->addr)
+	if (task->data) {
+		if ((unsigned long) task->data != task->addr)
 			free((void *) (unsigned long) task->addr);
 	}
 	iscsi_free_task(task);
@@ -963,7 +963,7 @@ static int iscsi_target_cmd_queue(struct iscsi_task *task)
 	struct scsi_cmd *scmd = &task->scmd;
 	struct iscsi_connection *conn = task->conn;
 	struct iscsi_cmd *req = (struct iscsi_cmd *) &task->req;
-	unsigned long uaddr = (unsigned long) task->c_buffer;
+	unsigned long uaddr = (unsigned long) task->data;
 
 	scmd->cmd_nexus_id = conn->session->iscsi_nexus_id;
 	/* tmp hack */
@@ -1141,7 +1141,7 @@ found:
 		task->r2t_count,
 		ntoh24(req->dlength), be32_to_cpu(req->offset));
 
-	conn->rx_buffer = (void *) (unsigned long) task->c_buffer;
+	conn->rx_buffer = task->data;
 	conn->rx_buffer += be32_to_cpu(req->offset);
 	conn->rx_size = ntoh24(req->dlength);
 
@@ -1209,32 +1209,22 @@ static int iscsi_scsi_cmd_rx_start(struct iscsi_connection *conn)
 {
 	struct iscsi_cmd *req = (struct iscsi_cmd *) &conn->req.bhs;
 	struct iscsi_task *task;
-	int len;
-
-	task = iscsi_alloc_task(conn, 0);
-	if (task)
-		conn->rx_task = task;
-	else
-		return -ENOMEM;
-	task->tag = req->itt;
 
 	dprintf("%u %x %d %d %x\n", conn->session->tsih,
 		req->cdb[0], ntohl(req->data_length),
 		req->flags & ISCSI_FLAG_CMD_ATTR_MASK, req->itt);
 
-	len = ntohl(req->data_length);
-	if (len) {
-		task->c_buffer = valloc(len);
-		if (!task->c_buffer) {
-			iscsi_free_task(task);
-			return -ENOMEM;
-		}
-		dprintf("%p\n", task->c_buffer);
-	}
+	task = iscsi_alloc_task(conn, ntohl(req->data_length));
+	if (task)
+		conn->rx_task = task;
+	else
+		return -ENOMEM;
+
+	task->tag = req->itt;
 
 	if (req->flags & ISCSI_FLAG_CMD_WRITE) {
 		conn->rx_size = ntoh24(req->dlength);
-		conn->rx_buffer = task->c_buffer;
+		conn->rx_buffer = task->data;
 		task->r2t_count = ntohl(req->data_length) - conn->rx_size;
 		task->unsol_count = !(req->flags & ISCSI_FLAG_CMD_FINAL);
 		task->offset = conn->rx_size;
@@ -1274,23 +1264,17 @@ static int iscsi_noop_out_rx_start(struct iscsi_connection *conn)
 
 	conn->exp_stat_sn = be32_to_cpu(req->exp_statsn);
 
-	task = iscsi_alloc_task(conn, 0);
+	len = ntoh24(req->dlength);
+	task = iscsi_alloc_task(conn, len);
 	if (task)
 		conn->rx_task = task;
 	else
 		goto out;
 
-	len = ntoh24(req->dlength);
 	if (len) {
 		conn->rx_size = len;
 		task->len = len;
-		task->c_buffer = malloc(len);
-		if (!task->c_buffer) {
-			iscsi_free_task(task);
-			goto out;
-		}
-
-		conn->rx_buffer = task->c_buffer;
+		conn->rx_buffer = task->data;
 	}
 out:
 	return err;
@@ -1436,7 +1420,7 @@ static int iscsi_noop_out_tx_start(struct iscsi_task *task, int *is_rsp)
 		/* TODO: honor max_burst */
 		conn->rsp.datasize = task->len;
 		hton24(rsp->dlength, task->len);
-		conn->rsp.data = task->c_buffer;
+		conn->rsp.data = task->data;
 	}
 
 	return 0;
