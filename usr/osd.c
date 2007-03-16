@@ -176,10 +176,16 @@ sense:
 	return SAM_STAT_CHECK_CONDITION;
 }
 
+static void device_osd_init(struct tgt_device *dev)
+{
+	dev->d_sense = 1;
+}
+
 struct device_type_template osd_template = {
-	.type	= TYPE_OSD,
-	.name	= "osd",
-	.ops	= {
+	.type		= TYPE_OSD,
+	.name		= "osd",
+	.device_init	= device_osd_init,
+	.ops		= {
 		[0x00 ... 0x0f] = {spc_illegal_op},
 
 		/* 0x10 */

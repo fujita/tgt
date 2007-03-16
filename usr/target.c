@@ -242,6 +242,9 @@ int tgt_device_create(int tid, uint64_t lun, char *args)
 
 	tgt_cmd_queue_init(&device->cmd_queue);
 
+	if (target->dev_type_template.device_init)
+		target->dev_type_template.device_init(device);
+
 	list_for_each_entry(pos, &target->device_list, device_siblings) {
 		if (device->lun < pos->lun)
 			break;

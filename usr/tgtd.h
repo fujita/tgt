@@ -45,7 +45,7 @@ struct tgt_device {
 
 	uint64_t reserve_id;
 
-	/* TODO: needs a structure for device parameters */
+	/* TODO: needs a structure for lots of device parameters */
 	uint8_t d_sense;
 };
 
@@ -103,6 +103,9 @@ struct device_type_template {
 	unsigned char type;
 	char *name;
 	char *pid;
+
+	void (*device_init)(struct tgt_device *dev);
+
 	struct device_type_operations ops[256];
 };
 
