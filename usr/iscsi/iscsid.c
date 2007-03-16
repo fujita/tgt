@@ -968,17 +968,20 @@ static int iscsi_target_cmd_queue(struct iscsi_task *task)
 
 	scmd->cmd_nexus_id = conn->session->iscsi_nexus_id;
 
+	scmd->scb = req->cdb;
+	scmd->scb_len = sizeof(req->cdb);
+
 	if (task->ahs) {
 		struct iscsi_ecdb_ahdr *ahs_extcdb = task->ahs;
-		char *p = (void *)task->extdata;
 
 		if (ahs_extcdb->ahstype == ISCSI_AHSTYPE_CDB) {
 			int extcdb_len = ntohs(ahs_extcdb->ahslength) - 1;
+			char *p = (void *)task->extdata;
 
 			if (extcdb_len + sizeof(req->cdb) > 260) {
 				eprintf("invalid extcdb len %d\n", extcdb_len);
 
-				return EINVAL;
+				return -EINVAL;
 			}
 
 			memcpy(p, req->cdb, sizeof(req->cdb));
@@ -988,9 +991,6 @@ static int iscsi_target_cmd_queue(struct iscsi_task *task)
 			scmd->scb = p;
 			scmd->scb_len = sizeof(req->cdb) + extcdb_len;
 		}
-	} else {
-		scmd->scb = req->cdb;
-		scmd->scb_len = sizeof(req->cdb);
 	}
 
 	memcpy(scmd->lun, task->req.lun, sizeof(scmd->lun));
@@ -1240,8 +1240,8 @@ static int iscsi_scsi_cmd_rx_start(struct iscsi_connection *conn)
 		req->cdb[0], ahs_len, imm_len, data_len,
 		req->flags & ISCSI_FLAG_CMD_ATTR_MASK, req->itt);
 
-	task_len = ahs_len ? sizeof(req->cdb) + ahs_len : 0
-		+ max(imm_len, data_len);
+	task_len = max(imm_len, data_len) +
+		ahs_len ? sizeof(req->cdb) + ahs_len : 0;
 
 	task = iscsi_alloc_task(conn, task_len);
 	if (task)
@@ -1251,20 +1251,20 @@ static int iscsi_scsi_cmd_rx_start(struct iscsi_connection *conn)
 
 	task->tag = req->itt;
 
-	if (ahs_len || data_len) {
-		if (ahs_len) {
-			task->ahs = task->data + sizeof(req->cdb);
-			task->data = task->ahs + ahs_len;
-		}
-
-		conn->rx_size = ahs_len + imm_len;
-		conn->rx_buffer = task->data;
-	}
+	if (ahs_len) {
+		task->ahs = task->data + sizeof(req->cdb);
+		task->data = task->ahs + ahs_len;
+		conn->rx_buffer = task->ahs;
+ 		conn->rx_size = ahs_len + imm_len;
+	} else if (data_len) {
+ 		conn->rx_buffer = task->data;
+		conn->rx_size = imm_len;
+ 	}
 
 	if (req->flags & ISCSI_FLAG_CMD_WRITE) {
-		task->r2t_count = data_len - imm_len;
+		task->offset = ntoh24(req->dlength);
+		task->r2t_count = data_len - task->offset;
 		task->unsol_count = !(req->flags & ISCSI_FLAG_CMD_FINAL);
-		task->offset = imm_len;
 
 		dprintf("%d %d %d %d\n", conn->rx_size, task->r2t_count,
 			task->unsol_count, task->offset);
