@@ -44,6 +44,9 @@ struct tgt_device {
 	struct tgt_cmd_queue cmd_queue;
 
 	uint64_t reserve_id;
+
+	/* TODO: needs a structure for device parameters */
+	uint8_t d_sense;
 };
 
 struct scsi_cmd {

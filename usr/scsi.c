@@ -40,15 +40,25 @@
 
 void sense_data_build(struct scsi_cmd *cmd, uint8_t key, uint8_t asc, uint8_t asq)
 {
-	int len = 0xa;
+	if (cmd->dev && cmd->dev->d_sense) {
+		/* descriptor format */
 
-	cmd->sense_buffer[0] = 0x70;
-	cmd->sense_buffer[2] = key;
-	cmd->sense_buffer[7] = len;
-	cmd->sense_buffer[12] = asc;
-	cmd->sense_buffer[13] = asq;
+		cmd->sense_buffer[0] = 0x72;  /* current, not deferred */
+		cmd->sense_buffer[1] = key;
+		cmd->sense_buffer[2] = asc;
+		cmd->sense_buffer[3] = asq;
+		cmd->sense_len = 8;
+	} else {
+		/* fixed format */
 
-	cmd->sense_len = len + 8;
+		int len = 0xa;
+		cmd->sense_buffer[0] = 0x70;
+		cmd->sense_buffer[2] = key;
+		cmd->sense_buffer[7] = len;
+		cmd->sense_buffer[12] = asc;
+		cmd->sense_buffer[13] = asq;
+		cmd->sense_len = len + 8;
+	}
 }
 
 #define        TGT_INVALID_DEV_ID      ~0ULL
