@@ -109,7 +109,7 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 				q = cmd->dev->scsi_sn + SCSI_SN_LEN - 1;
 
 				for (; tmp > 0; tmp--, q)
-					*(p--) = *q;
+					*(p--) = *(q--);
 			}
 		} else if (scb[2] == 0x83) {
 			int tmp = SCSI_ID_LEN;
