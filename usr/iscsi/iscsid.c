@@ -1241,7 +1241,7 @@ static int iscsi_scsi_cmd_rx_start(struct iscsi_connection *conn)
 		req->flags & ISCSI_FLAG_CMD_ATTR_MASK, req->itt);
 
 	task_len = max(imm_len, data_len) +
-		ahs_len ? sizeof(req->cdb) + ahs_len : 0;
+		(ahs_len ? sizeof(req->cdb) + ahs_len : 0);
 
 	task = iscsi_alloc_task(conn, task_len);
 	if (task)
