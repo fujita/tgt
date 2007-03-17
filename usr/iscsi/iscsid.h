@@ -99,6 +99,9 @@ struct iscsi_task {
 	struct list_head c_list;
 
 	unsigned long flags;
+	enum { NONE, WRITE, READ, BIDIRECTIONAL } dir;
+	uint32_t write_len;  /* from command pdu, write and read lengths */
+	uint32_t read_len;
 
 	uint64_t addr;
 	int result;
@@ -106,7 +109,6 @@ struct iscsi_task {
 	int rw;
 
 	int offset;
-	int data_sn;
 
 	int r2t_count;
 	int unsol_count;
