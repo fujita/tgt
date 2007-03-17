@@ -342,9 +342,9 @@ int tgt_device_update(int tid, uint64_t dev_id, char *name)
 		return TGTADM_NO_LUN;
 	}
 
-	if (!strcmp(name, "scsi_id="))
+	if (!strncmp(name, "scsi_id=", 8))
 		memcpy(device->scsi_id, name + 8, sizeof(device->scsi_id) - 1);
-	else if (!strcmp(name, "scsi_sn="))
+	else if (!strncmp(name, "scsi_sn=", 8))
 		memcpy(device->scsi_sn, name + 8, sizeof(device->scsi_sn) - 1);
 	else
 		err = TGTADM_INVALID_REQUEST;
