@@ -53,7 +53,7 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 	}
 
 	cmd->offset = (scsi_rw_offset(cmd->scb) << BLK_SHIFT);
-	ret = cmd->c_target->bdt->bd_cmd_submit(cmd);
+	ret = cmd->c_target->bst->bs_cmd_submit(cmd);
 	if (ret) {
 		key = HARDWARE_ERROR;
 		asc = 0;

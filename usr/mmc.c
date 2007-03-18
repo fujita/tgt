@@ -32,7 +32,7 @@ static int mmc_rw(int host_no, struct scsi_cmd *cmd)
 	int ret;
 
 	cmd->offset = (scsi_rw_offset(cmd->scb) << MMC_BLK_SHIFT);
-	ret = cmd->c_target->bdt->bd_cmd_submit(cmd);
+	ret = cmd->c_target->bst->bs_cmd_submit(cmd);
 	if (ret) {
 		cmd->offset = 0;
 		cmd->len = 0;

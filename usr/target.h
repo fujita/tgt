@@ -44,7 +44,7 @@ struct target {
 
 	struct tgt_cmd_queue cmd_queue;
 
-	struct backedio_template *bdt;
+	struct backingstore_template *bst;
 
 	struct list_head acl_list;
 

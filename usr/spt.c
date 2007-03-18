@@ -55,10 +55,10 @@ static int spt_sg_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
 	return 0;
 }
 
-struct backedio_template sg_bdt = {
-	.bd_open		= spt_sg_open,
-	.bd_close		= spt_sg_close,
-	.bd_cmd_done		= spt_sg_cmd_done,
+struct backingstore_template sg_bst = {
+	.bs_open		= spt_sg_open,
+	.bs_close		= spt_sg_close,
+	.bs_cmd_done		= spt_sg_cmd_done,
 };
 
 static int spt_cmd_perform(int host_no, struct scsi_cmd *cmd)

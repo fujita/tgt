@@ -9,5 +9,5 @@ struct tgt_driver ibmvio = {
 	.target_create		= ibmvio_target_create,
 	.cmd_end_notify		= kspace_send_cmd_res,
 	.mgmt_end_notify	= kspace_send_tsk_mgmt_res,
-	.default_bdt		= &mmap_bdt,
+	.default_bst		= &mmap_bst,
 };

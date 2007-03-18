@@ -78,12 +78,12 @@ struct scsi_cmd {
 	int sense_len;
 };
 
-struct backedio_template {
-	int bd_datasize;
-	int (*bd_open)(struct tgt_device *dev, char *path, int *fd, uint64_t *size);
-	void (*bd_close)(struct tgt_device *dev);
-	int (*bd_cmd_submit)(struct scsi_cmd *cmd);
-	int (*bd_cmd_done) (int do_munmap, int do_free, uint64_t uaddr, int len);
+struct backingstore_template {
+	int bs_datasize;
+	int (*bs_open)(struct tgt_device *dev, char *path, int *fd, uint64_t *size);
+	void (*bs_close)(struct tgt_device *dev);
+	int (*bs_cmd_submit)(struct scsi_cmd *cmd);
+	int (*bs_cmd_done) (int do_munmap, int do_free, uint64_t uaddr, int len);
 };
 
 #ifdef USE_KERNEL

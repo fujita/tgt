@@ -166,7 +166,7 @@ static int tgt_device_path_update(struct target *target,
 	if (!path)
 		return TGTADM_NOMEM;
 
-	err = target->bdt->bd_open(device, path, &dev_fd, &size);
+	err = target->bst->bs_open(device, path, &dev_fd, &size);
 	if (err) {
 		free(path);
 		return TGTADM_INVALID_REQUEST;
@@ -225,7 +225,7 @@ int tgt_device_create(int tid, uint64_t lun, char *args)
 		return TGTADM_INVALID_REQUEST;
 	p++;
 
-	device = zalloc(sizeof(*device) + target->bdt->bd_datasize);
+	device = zalloc(sizeof(*device) + target->bst->bs_datasize);
 	if (!device)
 		return TGTADM_NOMEM;
 
@@ -274,7 +274,7 @@ int tgt_device_destroy(int tid, uint64_t lun)
 	free(device->path);
 	list_del(&device->device_siblings);
 
-	target->bdt->bd_close(device);
+	target->bst->bs_close(device);
 	free(device);
 	return 0;
 }
@@ -503,7 +503,7 @@ static void __cmd_done(struct target *target, struct scsi_cmd *cmd)
 		if (cmd->dev->addr)
 			do_munmap = 0;
 	}
-	err = target->bdt->bd_cmd_done(do_munmap,
+	err = target->bst->bs_cmd_done(do_munmap,
 				       !cmd->mmapped,
 				       cmd->uaddr, cmd->len);
 
@@ -1208,9 +1208,9 @@ int tgt_target_create(int lld, int tid, char *args, int t_type)
 
 	/* FIXME */
 	if (t_type == TYPE_SPT)
-		target->bdt = &sg_bdt;
+		target->bst = &sg_bst;
 	else
-		target->bdt = tgt_drivers[lld]->default_bdt;
+		target->bst = tgt_drivers[lld]->default_bst;
 
 	target->target_state = SCSI_TARGET_RUNNING;
 	target->lid = lld;

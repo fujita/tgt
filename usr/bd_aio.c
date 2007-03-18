@@ -47,7 +47,7 @@
 /* FIXME */
 #define MAX_AIO_REQS 2048
 
-struct bd_aio_info {
+struct bs_aio_info {
 	io_context_t ctx;
 
 	/* TODO: batch requests */
@@ -62,7 +62,7 @@ struct bd_aio_info {
 
 static void *bs_aio_endio_thread(void *arg)
 {
-	struct bd_aio_info *info = arg;
+	struct bs_aio_info *info = arg;
 	int command, ret, nr;
 
 retry:
@@ -96,7 +96,7 @@ out:
 
 static void bs_aio_handler(int fd, int events, void *data)
 {
-	struct bd_aio_info *info = data;
+	struct bs_aio_info *info = data;
 	int i, nr_events, ret;
 
 	ret = read(info->done_fd[0], &nr_events, sizeof(nr_events));
@@ -115,11 +115,11 @@ static void bs_aio_handler(int fd, int events, void *data)
 }
 
 static int
-bd_aio_open(struct tgt_device *dev, char *path, int *fd, uint64_t *size)
+bs_aio_open(struct tgt_device *dev, char *path, int *fd, uint64_t *size)
 {
 	int ret;
-	struct bd_aio_info *info =
-		(struct bd_aio_info *) ((char *)dev + sizeof(*dev));
+	struct bs_aio_info *info =
+		(struct bs_aio_info *) ((char *)dev + sizeof(*dev));
 
 	*fd = backed_file_open(path, O_RDWR| O_LARGEFILE, size);
 	if (*fd < 0)
@@ -166,11 +166,11 @@ close_dev_fd:
 	return -1;
 }
 
-static void bd_aio_close(struct tgt_device *dev)
+static void bs_aio_close(struct tgt_device *dev)
 {
-	struct bd_aio_info *info;
+	struct bs_aio_info *info;
 
-	info = (struct bd_aio_info *) ((char *)dev + sizeof(*dev));
+	info = (struct bs_aio_info *) ((char *)dev + sizeof(*dev));
 
 	pthread_cancel(info->aio_thread);
 	pthread_join(info->aio_thread, NULL);
@@ -178,10 +178,10 @@ static void bd_aio_close(struct tgt_device *dev)
 	close(dev->fd);
 }
 
-static int bd_aio_cmd_submit(struct scsi_cmd *cmd)
+static int bs_aio_cmd_submit(struct scsi_cmd *cmd)
 {
 	struct tgt_device *dev = cmd->dev;
-	struct bd_aio_info *info = (struct bd_aio_info *)((char *)dev + sizeof(*dev));
+	struct bs_aio_info *info = (struct bs_aio_info *)((char *)dev + sizeof(*dev));
 	struct iocb iocb, *io;
 	int ret;
 
@@ -211,15 +211,15 @@ static int bd_aio_cmd_submit(struct scsi_cmd *cmd)
 	}
 }
 
-static int bd_aio_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
+static int bs_aio_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
 {
 	return 0;
 }
 
-struct backedio_template aio_bdt = {
-	.bd_datasize		= sizeof(struct bd_aio_info),
-	.bd_open		= bd_aio_open,
-	.bd_close		= bd_aio_close,
-	.bd_cmd_submit		= bd_aio_cmd_submit,
-	.bd_cmd_done		= bd_aio_cmd_done,
+struct backingstore_template aio_bst = {
+	.bs_datasize		= sizeof(struct bs_aio_info),
+	.bs_open		= bs_aio_open,
+	.bs_close		= bs_aio_close,
+	.bs_cmd_submit		= bs_aio_cmd_submit,
+	.bs_cmd_done		= bs_aio_cmd_done,
 };

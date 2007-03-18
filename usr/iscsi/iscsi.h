@@ -19,5 +19,5 @@ struct tgt_driver iscsi = {
 	.show			= iscsi_target_show,
 	.cmd_end_notify		= iscsi_scsi_cmd_done,
 	.mgmt_end_notify	= iscsi_tm_done,
-	.default_bdt		= &aio_bdt,
+	.default_bst		= &aio_bst,
 };

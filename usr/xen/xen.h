@@ -9,7 +9,7 @@ struct tgt_driver xen = {
 	.init			= xen_init,
 	.cmd_end_notify		= kspace_send_cmd_res,
 	.mgmt_end_notify	= kspace_send_tsk_mgmt_res,
-	.default_bdt		= &xen_bdt,
+	.default_bst		= &xen_bst,
 };
 
 #endif

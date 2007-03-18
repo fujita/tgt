@@ -32,21 +32,21 @@
 #include "util.h"
 #include "tgtd.h"
 
-static int bd_mmap_open(struct tgt_device *dev, char *path, int *fd, uint64_t *size)
+static int bs_mmap_open(struct tgt_device *dev, char *path, int *fd, uint64_t *size)
 {
 	*fd = backed_file_open(path, O_RDWR| O_LARGEFILE, size);
 
 	return *fd >= 0 ? 0 : *fd;
 }
 
-static void bd_mmap_close(struct tgt_device *dev)
+static void bs_mmap_close(struct tgt_device *dev)
 {
 	close(dev->fd);
 }
 
 #define pgcnt(size, offset)	((((size) + ((offset) & (pagesize - 1))) + (pagesize - 1)) >> pageshift)
 
-static int bd_mmap_cmd_submit(struct scsi_cmd *cmd)
+static int bs_mmap_cmd_submit(struct scsi_cmd *cmd)
 {
 	int fd = cmd->dev->fd;
 	void *p;
@@ -72,7 +72,7 @@ static int bd_mmap_cmd_submit(struct scsi_cmd *cmd)
 	return err;
 }
 
-static int bd_mmap_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
+static int bs_mmap_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
 {
 	int err = 0;
 
@@ -90,9 +90,9 @@ static int bd_mmap_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
 	return err;
 }
 
-struct backedio_template mmap_bdt = {
-	.bd_open		= bd_mmap_open,
-	.bd_close		= bd_mmap_close,
-	.bd_cmd_submit		= bd_mmap_cmd_submit,
-	.bd_cmd_done		= bd_mmap_cmd_done,
+struct backingstore_template mmap_bst = {
+	.bs_open		= bs_mmap_open,
+	.bs_close		= bs_mmap_close,
+	.bs_cmd_submit		= bs_mmap_cmd_submit,
+	.bs_cmd_done		= bs_mmap_cmd_done,
 };

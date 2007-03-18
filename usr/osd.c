@@ -128,7 +128,7 @@ static int osd_varlen_cdb(int host_no, struct scsi_cmd *cmd)
 		return SAM_STAT_CHECK_CONDITION;
 	}
 
-	return cmd->c_target->bdt->bd_cmd_submit(cmd);
+	return cmd->c_target->bst->bs_cmd_submit(cmd);
 }
 
 static void device_osd_init(struct tgt_device *dev)

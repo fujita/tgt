@@ -1,4 +1,4 @@
-extern struct backedio_template mmap_bdt, aio_bdt, sg_bdt, xen_bdt;
+extern struct backingstore_template mmap_bst, aio_bst, sg_bst, xen_bst;
 
 struct tgt_driver {
 	const char *name;
@@ -17,7 +17,7 @@ struct tgt_driver {
 	int (*cmd_end_notify)(uint64_t nid, int result, struct scsi_cmd *);
 	int (*mgmt_end_notify)(uint64_t nid, uint64_t mid, int result);
 
-	struct backedio_template *default_bdt;
+	struct backingstore_template *default_bst;
 };
 
 extern struct tgt_driver *tgt_drivers[];

@@ -37,14 +37,14 @@
 
 #define O_DIRECT 040000 /* who defines this?*/
 
-static int bd_xen_open(struct tgt_device *dev, char *path, int *fd, uint64_t *size)
+static int bs_xen_open(struct tgt_device *dev, char *path, int *fd, uint64_t *size)
 {
 	*fd = backed_file_open(path, O_RDWR| O_LARGEFILE | O_DIRECT, size);
 
 	return *fd >= 0 ? 0 : *fd;
 }
 
-static void bd_xen_close(struct tgt_device *dev)
+static void bs_xen_close(struct tgt_device *dev)
 {
 	close(dev->fd);
 }
@@ -52,7 +52,7 @@ static void bd_xen_close(struct tgt_device *dev)
 /*
  * Replace this with AIO readv/writev after 2.6.20.
  */
-static int bd_xen_cmd_submit(struct tgt_device *dev, uint8_t *scb, int rw,
+static int bs_xen_cmd_submit(struct tgt_device *dev, uint8_t *scb, int rw,
 			     uint32_t datalen, unsigned long *uaddr,
 			     uint64_t offset, int *async, void *key)
 {
@@ -75,14 +75,14 @@ static int bd_xen_cmd_submit(struct tgt_device *dev, uint8_t *scb, int rw,
 	return 0;
 }
 
-static int bd_xen_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
+static int bs_xen_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
 {
 	return 0;
 }
 
-struct backedio_template xen_bdt = {
-	.bd_open		= bd_xen_open,
-	.bd_close		= bd_xen_close,
-	.bd_cmd_submit		= bd_xen_cmd_submit,
-	.bd_cmd_done		= bd_xen_cmd_done,
+struct backingstore_template xen_bst = {
+	.bs_open		= bs_xen_open,
+	.bs_close		= bs_xen_close,
+	.bs_cmd_submit		= bs_xen_cmd_submit,
+	.bs_cmd_done		= bs_xen_cmd_done,
 };
