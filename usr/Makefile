@@ -14,7 +14,7 @@ LIBS += -L$(XEN_LIBXC)
 LIBS += -lxenctrl
 LIBS += -L$(XEN_XENSTORE) -lxenstore $(AIOLIBS)
 TGTD_OBJS += $(addprefix xen/, xen.o xs_api.o xenbus.o)
-TGTD_OBJS += tgtif.o bd_xen.o
+TGTD_OBJS += tgtif.o bs_xen.o
 else
 INCLUDES += -I../include -I$(KERNELSRC)/include
 LIBS += -laio
@@ -29,14 +29,14 @@ endif
 ifneq ($(IBMVIO),)
 CFLAGS += -DIBMVIO -DUSE_KERNEL
 TGTD_OBJS += $(addprefix ibmvio/, ibmvio.o)
-TGTD_OBJS += bd_mmap.o tgtif.o
+TGTD_OBJS += bs_mmap.o tgtif.o
 endif
 
 ifneq ($(ISCSI),)
 CFLAGS += -DISCSI
 TGTD_OBJS += $(addprefix iscsi/, conn.o param.o session.o iscsid.o target.o \
 	chap.o transport.o iscsi_tcp.o)
-TGTD_OBJS += bd_aio.o
+TGTD_OBJS += bs_aio.o
 LIBS += -lcrypto -lpthread
 endif
 
