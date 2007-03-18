@@ -24,7 +24,6 @@
 #include "tgtd.h"
 #include "util.h"
 #include "driver.h"
-#include "iscsi.h"
 
 #define MAX_QUEUE_CMD	32
 
@@ -971,7 +970,7 @@ static void iscsi_free_cmd_task(struct iscsi_task *task)
 	iscsi_free_task(task);
 }
 
-int iscsi_scsi_cmd_done(uint64_t nid, int result, struct scsi_cmd *scmd)
+static int iscsi_scsi_cmd_done(uint64_t nid, int result, struct scsi_cmd *scmd)
 {
 	struct iscsi_task *task = ITASK(scmd);
 
@@ -1121,7 +1120,7 @@ no_queuing:
 	return err;
 }
 
-extern int iscsi_tm_done(uint64_t nid, uint64_t mid, int result)
+static int iscsi_tm_done(uint64_t nid, uint64_t mid, int result)
 {
 	struct iscsi_task *task = (struct iscsi_task *) (unsigned long) mid;
 
