@@ -35,3 +35,18 @@ Make sure that everything is built successfully.
 Now you can run tgt. Target drivers have their own ways for
 configuration. So find an appropriate documentation in the doc
 directory.
+
+
+Developer Notes
+-------------
+The central resource for tgt development is the mailing list
+(stgt-devel@lists.berlios.de).
+
+Before submitting patches, please read (in short, follow Linux kernel
+development rules):
+
+http://lxr.linux.no/source/Documentation/CodingStyle
+http://lxr.linux.no/source/Documentation/SubmittingPatches
+
+The commits to the subversion repository go to the stgt-svn mailing
+list (stgt-svn@lists.berlios.de).
