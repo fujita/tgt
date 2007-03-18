@@ -107,6 +107,7 @@ static int osd_inquiry(int host_no, struct scsi_cmd *cmd)
 		goto sense;
 
 	cmd->len = min_t(int, len, scb[4]);
+	cmd->uaddr = (unsigned long) data;
 
 	return SAM_STAT_GOOD;
 sense:
@@ -128,6 +129,7 @@ static int osd_varlen_cdb(int host_no, struct scsi_cmd *cmd)
 		return SAM_STAT_CHECK_CONDITION;
 	}
 
+/* 	return SAM_STAT_GOOD; */
 	return cmd->c_target->bst->bs_cmd_submit(cmd);
 }
 
