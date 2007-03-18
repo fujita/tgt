@@ -1,5 +1,5 @@
 /*
- * (C) 2005 FUJITA Tomonori <tomof@acm.org>
+ * Copyright (C) 2005-2007 FUJITA Tomonori <tomof@acm.org>
  *
  * This code is licenced under the GPL.
  */

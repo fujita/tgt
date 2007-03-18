@@ -1,9 +1,9 @@
 /*
  * Software iSCSI target protocol routines
  *
- * (C) 2005-2006 FUJITA Tomonori <tomof@acm.org>
- * (C) 2005-2006 Mike Christie <michaelc@cs.wisc.edu>
- * (C) 2007 Pete Wyckoff <pw@osc.edu>
+ * Copyright (C) 2005-2007 FUJITA Tomonori <tomof@acm.org>
+ * Copyright (C) 2005-2007 Mike Christie <michaelc@cs.wisc.edu>
+ * Copyright (C) 2007 Pete Wyckoff <pw@osc.edu>
  *
  * This code is based on Ardis's iSCSI implementation.
  *   http://www.ardistech.com/iscsi/

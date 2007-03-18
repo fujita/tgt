@@ -1,8 +1,8 @@
 /*
  * Xen file backed routine
  *
- * Copyright (C) 2006 FUJITA Tomonori <tomof@acm.org>
- * Copyright (C) 2006 Mike Christie <michaelc@cs.wisc.edu>
+ * Copyright (C) 2006-2007 FUJITA Tomonori <tomof@acm.org>
+ * Copyright (C) 2006-2007 Mike Christie <michaelc@cs.wisc.edu>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as

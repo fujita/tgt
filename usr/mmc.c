@@ -1,10 +1,13 @@
 /*
  * SCSI multimedia command processing
  *
- * (C) 2007 FUJITA Tomonori <tomof@acm.org>
- * (C) 2007 Mike Christie <michaelc@cs.wisc.edu>
+ * Copyright (C) 2007 FUJITA Tomonori <tomof@acm.org>
+ * Copyright (C) 2007 Mike Christie <michaelc@cs.wisc.edu>
  *
- * based on Ardis's iSCSI implementation.
+ * This code is based on Ardis's iSCSI implementation.
+ *   http://www.ardistech.com/iscsi/
+ *   Copyright (C) 2002-2003 Ardis Technolgies <roman@ardistech.com>
+ *   licensed under the terms of the GNU GPL v2.0,
  *
  * (C) 2005-2007 Ming Zhang <blackmagic02881@gmail.com>
  * This code is licenced under the GPL.

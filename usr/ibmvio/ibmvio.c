@@ -1,7 +1,7 @@
 /*
  * SCSI command processing specific to IBM Virtual SCSI target Driver
  *
- * Copyright (C) 2005 FUJITA Tomonori <tomof@acm.org>
+ * Copyright (C) 2005-2007 FUJITA Tomonori <tomof@acm.org>
  *
  * Based on:
  *

@@ -1,8 +1,8 @@
 /*
  * SCSI block command processing
  *
- * (C) 2004-2007 FUJITA Tomonori <tomof@acm.org>
- * (C) 2005-2007 Mike Christie <michaelc@cs.wisc.edu>
+ * Copyright (C) 2004-2007 FUJITA Tomonori <tomof@acm.org>
+ * Copyright (C) 2005-2007 Mike Christie <michaelc@cs.wisc.edu>
  *
  * SCSI target emulation code is based on Ardis's iSCSI implementation.
  *   http://www.ardistech.com/iscsi/
