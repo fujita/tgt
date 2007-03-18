@@ -6,17 +6,7 @@
 #include "tgtd.h"
 #include "driver.h"
 
-#ifdef IBMVIO
-#include "ibmvio/ibmvio.h"
-#endif
-
-#ifdef ISCSI
-#include "iscsi/iscsi.h"
-#endif
-
-#ifdef XEN
-#include "xen/xen.h"
-#endif
+extern struct tgt_driver ibmvio, iscsi, xen;
 
 struct tgt_driver *tgt_drivers[] = {
 #ifdef IBMVIO

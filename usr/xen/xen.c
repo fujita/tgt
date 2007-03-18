@@ -5,6 +5,7 @@
 #include "list.h"
 #include "util.h"
 #include "tgtd.h"
+#include "driver.h"
 #include "xs_api.h"
 
 /* xenstore/xenbus: */
@@ -17,7 +18,7 @@ static void xen_event_handle(int fd, int events, void *data)
 	xs_fire_next_watch((struct xs_handle *) data);
 }
 
-int xen_init(int index)
+static int xen_init(int index)
 {
 	int err;
 	struct xs_handle *xsh;
@@ -41,3 +42,12 @@ int xen_init(int index)
 open_failed:
 	return -1;
 }
+
+struct tgt_driver xen = {
+	.name			= "xen",
+	.use_kernel		= 1,
+	.init			= xen_init,
+	.cmd_end_notify		= kspace_send_cmd_res,
+	.mgmt_end_notify	= kspace_send_tsk_mgmt_res,
+	.default_bst		= &xen_bst,
+};

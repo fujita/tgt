@@ -23,6 +23,8 @@
 #include "iscsid.h"
 #include "tgtd.h"
 #include "util.h"
+#include "driver.h"
+#include "iscsi.h"
 
 #define MAX_QUEUE_CMD	32
 
@@ -1843,3 +1845,16 @@ void iscsi_event_handler(int fd, int events, void *data)
 	if (conn->state == STATE_CLOSE)
 		conn_close(conn, fd);
 }
+
+struct tgt_driver iscsi = {
+	.name			= "iscsi",
+	.use_kernel		= 0,
+	.init			= iscsi_init,
+	.target_create		= iscsi_target_create,
+	.target_destroy		= iscsi_target_destroy,
+	.target_update		= iscsi_target_update,
+	.show			= iscsi_target_show,
+	.cmd_end_notify		= iscsi_scsi_cmd_done,
+	.mgmt_end_notify	= iscsi_tm_done,
+	.default_bst		= &aio_bst,
+};

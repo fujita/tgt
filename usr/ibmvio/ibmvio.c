@@ -42,6 +42,7 @@
 #include "util.h"
 #include "tgtd.h"
 #include "target.h"
+#include "driver.h"
 #include "spc.h"
 
 #define GETTARGET(x) ((int)((((uint64_t)(x)) >> 56) & 0x003f))
@@ -243,7 +244,7 @@ sense:
 
 #define        TGT_INVALID_DEV_ID      ~0ULL
 
-uint64_t scsi_lun_to_int(uint8_t *p)
+static uint64_t scsi_lun_to_int(uint8_t *p)
 {
 	uint64_t lun = TGT_INVALID_DEV_ID;
 
@@ -256,7 +257,7 @@ uint64_t scsi_lun_to_int(uint8_t *p)
 		return GETTARGET(lun);
 }
 
-int ibmvio_target_create(struct target *target)
+static int ibmvio_target_create(struct target *target)
 {
 	unsigned char device_type = target->dev_type_template.type;
 	struct device_type_operations *ops = target->dev_type_template.ops;
@@ -268,3 +269,13 @@ int ibmvio_target_create(struct target *target)
 
 	return 0;
 }
+
+struct tgt_driver ibmvio = {
+	.name			= "ibmvio",
+	.use_kernel		= 1,
+	.scsi_get_lun		= scsi_lun_to_int,
+	.target_create		= ibmvio_target_create,
+	.cmd_end_notify		= kspace_send_cmd_res,
+	.mgmt_end_notify	= kspace_send_tsk_mgmt_res,
+	.default_bst		= &mmap_bst,
+};
