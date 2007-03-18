@@ -185,6 +185,27 @@ struct device_type_template osd_template = {
 		{spc_illegal_op,},
 		{osd_varlen_cdb,},
 
-		[0x80 ... 0xff] = {spc_illegal_op},
+		[0x80 ... 0x9f] = {spc_illegal_op},
+
+		/* 0xA0 */
+		{spc_report_luns,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+
+		[0xb0 ... 0xff] = {spc_illegal_op},
 	}
 };
