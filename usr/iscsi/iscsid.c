@@ -1044,7 +1044,7 @@ static int iscsi_target_cmd_queue(struct iscsi_task *task)
 
 		if (ahs_extcdb->ahstype == ISCSI_AHSTYPE_CDB) {
 			int extcdb_len = ntohs(ahs_extcdb->ahslength) - 1;
-			char *p = (void *)task->extdata;
+			unsigned char *p = (void *)task->extdata;
 
 			if (4 + extcdb_len > ahslen) {
 				eprintf("AHS len %d too short for extcdb %d\n",

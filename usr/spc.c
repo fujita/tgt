@@ -63,9 +63,9 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 		data[4] = 59;
 		data[7] = 0x02;
 		memset(data + 8, 0x20, 28);
-		strncpy(data + 8, VENDOR_ID, 8);
-		strncpy(data + 16, product_id, 16);
-		strncpy(data + 32, PRODUCT_REV, 4);
+		strncpy((char *)data + 8, VENDOR_ID, 8);
+		strncpy((char *)data + 16, product_id, 16);
+		strncpy((char *)data + 32, PRODUCT_REV, 4);
 		data[58] = 0x03;
 		data[59] = 0x20;
 		data[60] = 0x09;
