@@ -740,28 +740,12 @@ static void cmnd_finish(struct iscsi_connection *conn)
 	}
 }
 
-static int iscsi_cmd_rsp_build(struct iscsi_task *task)
+static void calc_residual(struct iscsi_cmd_rsp *rsp, struct iscsi_task *task)
 {
-	struct iscsi_connection *conn = task->conn;
-	struct iscsi_cmd_rsp *rsp = (struct iscsi_cmd_rsp *) &conn->rsp.bhs;
-	uint32_t residual;
-
-	dprintf("%p %x\n", task, task->scmd.scb[0]);
-
-	memset(rsp, 0, sizeof(*rsp));
-	rsp->opcode = ISCSI_OP_SCSI_CMD_RSP;
-	rsp->itt = task->tag;
-	rsp->flags = ISCSI_FLAG_CMD_FINAL;
-	rsp->response = ISCSI_STATUS_CMD_COMPLETED;
-	rsp->cmd_status = task->result;
-	rsp->statsn = cpu_to_be32(conn->stat_sn++);
-	rsp->exp_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn);
-	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn + MAX_QUEUE_CMD);
+	uint32_t residual = 0;
 
 	/* we never have write under/over flow, no way to signal that
 	 * back from the target currently. */
-
-	residual = 0;
 	if (task->dir == BIDIRECTIONAL) {
 		if (task->len < task->read_len) {
 			rsp->flags |= ISCSI_FLAG_CMD_BIDI_UNDERFLOW;
@@ -782,6 +766,26 @@ static int iscsi_cmd_rsp_build(struct iscsi_task *task)
 		}
 		rsp->residual_count = cpu_to_be32(residual);
 	}
+}
+
+static int iscsi_cmd_rsp_build(struct iscsi_task *task)
+{
+	struct iscsi_connection *conn = task->conn;
+	struct iscsi_cmd_rsp *rsp = (struct iscsi_cmd_rsp *) &conn->rsp.bhs;
+
+	dprintf("%p %x\n", task, task->scmd.scb[0]);
+
+	memset(rsp, 0, sizeof(*rsp));
+	rsp->opcode = ISCSI_OP_SCSI_CMD_RSP;
+	rsp->itt = task->tag;
+	rsp->flags = ISCSI_FLAG_CMD_FINAL;
+	rsp->response = ISCSI_STATUS_CMD_COMPLETED;
+	rsp->cmd_status = task->result;
+	rsp->statsn = cpu_to_be32(conn->stat_sn++);
+	rsp->exp_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn);
+	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn + MAX_QUEUE_CMD);
+
+	calc_residual(rsp, task);
 
 	return 0;
 }
@@ -797,7 +801,6 @@ static int iscsi_sense_rsp_build(struct iscsi_task *task)
 	struct iscsi_cmd_rsp *rsp = (struct iscsi_cmd_rsp *) &conn->rsp.bhs;
 	struct iscsi_sense_data *sense;
 	unsigned char sense_len;
- 	uint32_t residual;
 
 	memset(rsp, 0, sizeof(*rsp));
 	rsp->opcode = ISCSI_OP_SCSI_CMD_RSP;
@@ -809,28 +812,7 @@ static int iscsi_sense_rsp_build(struct iscsi_task *task)
 	rsp->exp_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn);
 	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn + MAX_QUEUE_CMD);
 
-	/* XXX: copied from above, consider merging these functions */
-	residual = 0;
-	if (task->dir == BIDIRECTIONAL) {
-		if (task->len < task->read_len) {
-			rsp->flags |= ISCSI_FLAG_CMD_BIDI_UNDERFLOW;
-			residual = task->read_len - task->len;
-		} else if (task->len > task->read_len) {
-			rsp->flags |= ISCSI_FLAG_CMD_BIDI_OVERFLOW;
-			residual = task->len - task->read_len;
-		}
-		rsp->bi_residual_count = cpu_to_be32(residual);
-		rsp->residual_count = 0;
-	} else {
-		if (task->len < task->read_len) {
-			rsp->flags |= ISCSI_FLAG_CMD_UNDERFLOW;
-			residual = task->read_len - task->len;
-		} else if (task->len > task->read_len) {
-			rsp->flags |= ISCSI_FLAG_CMD_OVERFLOW;
-			residual = task->len - task->read_len;
-		}
-		rsp->residual_count = cpu_to_be32(residual);
-	}
+	calc_residual(rsp, task);
 
 	sense = (struct iscsi_sense_data *)task->scmd.sense_buffer;
 	sense_len = task->scmd.sense_len;
@@ -849,9 +831,8 @@ static int iscsi_data_rsp_build(struct iscsi_task *task)
 {
 	struct iscsi_connection *conn = task->conn;
 	struct iscsi_data_rsp *rsp = (struct iscsi_data_rsp *) &conn->rsp.bhs;
-	int datalen, exp_datalen = task->read_len;
+	int datalen;
 	int max_burst = conn->session_param[ISCSI_PARAM_MAX_XMIT_DLENGTH].val;
- 	uint32_t residual;
 
 	memset(rsp, 0, sizeof(*rsp));
 	rsp->opcode = ISCSI_OP_SCSI_DATA_IN;
@@ -861,10 +842,10 @@ static int iscsi_data_rsp_build(struct iscsi_task *task)
 	rsp->offset = cpu_to_be32(task->offset);
 	rsp->datasn = cpu_to_be32(task->exp_r2tsn++);
 
-	datalen = min(exp_datalen, task->len);
+	datalen = min_t(uint32_t, task->read_len, task->len);
 	datalen -= task->offset;
 
-	dprintf("%d %d %d %d %x\n", datalen, exp_datalen, task->len, max_burst, rsp->itt);
+	dprintf("%d %d %d %d %x\n", datalen, task->read_len, task->len, max_burst, rsp->itt);
 
 	if (datalen <= max_burst) {
 		rsp->flags = ISCSI_FLAG_CMD_FINAL;
@@ -872,17 +853,9 @@ static int iscsi_data_rsp_build(struct iscsi_task *task)
 		/* collapse status into final packet if successful */
 		if (task->result == 0 && task->dir != BIDIRECTIONAL) {
 			rsp->flags |= ISCSI_FLAG_DATA_STATUS;
-			if (task->len < exp_datalen) {
-				rsp->flags |= ISCSI_FLAG_CMD_UNDERFLOW;
-				residual = exp_datalen - task->len;
-			} else if (task->len > exp_datalen) {
-				rsp->flags |= ISCSI_FLAG_CMD_OVERFLOW;
-				residual = task->len - exp_datalen;
-			} else
-				residual = 0;
 			rsp->cmd_status = task->result;
 			rsp->statsn = cpu_to_be32(conn->stat_sn++);
-			rsp->residual_count = cpu_to_be32(residual);
+			calc_residual((struct iscsi_cmd_rsp *) rsp, task);
 		}
 	} else
 		datalen = max_burst;
