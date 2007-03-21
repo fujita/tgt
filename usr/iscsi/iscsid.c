@@ -1272,7 +1272,7 @@ found:
 
 	conn->rx_buffer = task->data;
 	conn->rx_buffer += be32_to_cpu(req->offset);
-	conn->rx_size = ntoh24(req->dlength);
+	conn->rx_size = roundup(ntoh24(req->dlength), 4);
 
 	task->offset += ntoh24(req->dlength);
 	task->r2t_count -= ntoh24(req->dlength);
@@ -1495,7 +1495,7 @@ static int iscsi_task_rx_start(struct iscsi_connection *conn)
 		break;
 	}
 
-	return 0;
+	return err;
 }
 
 static int iscsi_scsi_cmd_tx_start(struct iscsi_task *task)
