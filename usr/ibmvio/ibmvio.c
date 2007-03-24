@@ -185,7 +185,7 @@ static uint64_t make_lun(unsigned int bus, unsigned int target, unsigned int lun
 
 static int ibmvio_report_luns(int host_no, struct scsi_cmd *cmd)
 {
-	struct tgt_device *dev;
+	struct scsi_lu *lu;
 	struct list_head *dev_list = &cmd->c_target->device_list;
 	uint64_t lun, *data;
 	int idx, alen, oalen, nr_luns, rbuflen = 4096;
@@ -219,8 +219,8 @@ static int ibmvio_report_luns(int host_no, struct scsi_cmd *cmd)
 	idx = 2;
 	nr_luns = 1;
 
-	list_for_each_entry(dev, dev_list, device_siblings) {
-		lun = dev->lun;
+	list_for_each_entry(lu, dev_list, device_siblings) {
+		lun = lu->lun;
 		lun = make_lun(0, lun & 0x003f, 0);
 		data[idx++] = __cpu_to_be64(lun);
 		if (!(alen -= 8))

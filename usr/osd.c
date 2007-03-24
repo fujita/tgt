@@ -133,9 +133,9 @@ static int osd_varlen_cdb(int host_no, struct scsi_cmd *cmd)
 	return cmd->c_target->bst->bs_cmd_submit(cmd);
 }
 
-static void device_osd_init(struct tgt_device *dev)
+static void device_osd_init(struct scsi_lu *lu)
 {
-	dev->d_sense = 1;
+	lu->d_sense = 1;
 }
 
 struct device_type_template osd_template = {

@@ -41,13 +41,13 @@
 #include "scsi.h"
 #include "spc.h"
 
-extern int spt_sg_open(struct tgt_device *dev, char *path, int *fd, uint64_t *size);
+extern int spt_sg_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size);
 extern int spt_sg_perform(struct scsi_cmd *cmd);
 
-static void spt_sg_close(struct tgt_device *dev)
+static void spt_sg_close(struct scsi_lu *lu)
 {
-	tgt_event_del(dev->fd);
-	close(dev->fd);
+	tgt_event_del(lu->fd);
+	close(lu->fd);
 }
 
 static int spt_sg_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)

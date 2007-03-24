@@ -115,11 +115,11 @@ static void bs_aio_handler(int fd, int events, void *data)
 }
 
 static int
-bs_aio_open(struct tgt_device *dev, char *path, int *fd, uint64_t *size)
+bs_aio_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 {
 	int ret;
 	struct bs_aio_info *info =
-		(struct bs_aio_info *) ((char *)dev + sizeof(*dev));
+		(struct bs_aio_info *) ((char *)lu + sizeof(*lu));
 
 	*fd = backed_file_open(path, O_RDWR| O_LARGEFILE, size);
 	if (*fd < 0)
@@ -166,36 +166,36 @@ close_dev_fd:
 	return -1;
 }
 
-static void bs_aio_close(struct tgt_device *dev)
+static void bs_aio_close(struct scsi_lu *lu)
 {
 	struct bs_aio_info *info;
 
-	info = (struct bs_aio_info *) ((char *)dev + sizeof(*dev));
+	info = (struct bs_aio_info *) ((char *)lu + sizeof(*lu));
 
 	pthread_cancel(info->aio_thread);
 	pthread_join(info->aio_thread, NULL);
 	io_destroy(info->ctx);
-	close(dev->fd);
+	close(lu->fd);
 }
 
 static int bs_aio_cmd_submit(struct scsi_cmd *cmd)
 {
-	struct tgt_device *dev = cmd->dev;
-	struct bs_aio_info *info = (struct bs_aio_info *)((char *)dev + sizeof(*dev));
+	struct scsi_lu *lu = cmd->dev;
+	struct bs_aio_info *info = (struct bs_aio_info *)((char *)lu + sizeof(*lu));
 	struct iocb iocb, *io;
 	int ret;
 
 	io = &iocb;
 	memset(io, 0, sizeof(*io));
 
-	dprintf("%d %d %u %"  PRIx64 " %" PRIx64 " %p\n", dev->fd, cmd->rw, cmd->len,
+	dprintf("%d %d %u %"  PRIx64 " %" PRIx64 " %p\n", lu->fd, cmd->rw, cmd->len,
 		cmd->uaddr, cmd->offset, cmd);
 
 	if (cmd->rw == READ)
-		io_prep_pread(io, dev->fd, (void *)(unsigned long)cmd->uaddr,
+		io_prep_pread(io, lu->fd, (void *)(unsigned long)cmd->uaddr,
 			      cmd->len,	cmd->offset);
 	else
-		io_prep_pwrite(io, dev->fd, (void *)(unsigned long)cmd->uaddr,
+		io_prep_pwrite(io, lu->fd, (void *)(unsigned long)cmd->uaddr,
 			       cmd->len, cmd->offset);
 
 	io->data = cmd;
@@ -205,7 +205,7 @@ static int bs_aio_cmd_submit(struct scsi_cmd *cmd)
 		cmd->async = 1;
 		return 0;
 	} else {
-		dprintf("%d %d %u %"  PRIx64 " %" PRIx64 " %p\n", dev->fd, cmd->rw, cmd->len,
+		dprintf("%d %d %u %"  PRIx64 " %" PRIx64 " %p\n", lu->fd, cmd->rw, cmd->len,
 			cmd->uaddr, cmd->offset, cmd);
 		return 1;
 	}

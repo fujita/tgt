@@ -37,22 +37,22 @@
 
 #define O_DIRECT 040000 /* who defines this?*/
 
-static int bs_xen_open(struct tgt_device *dev, char *path, int *fd, uint64_t *size)
+static int bs_xen_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 {
 	*fd = backed_file_open(path, O_RDWR| O_LARGEFILE | O_DIRECT, size);
 
 	return *fd >= 0 ? 0 : *fd;
 }
 
-static void bs_xen_close(struct tgt_device *dev)
+static void bs_xen_close(struct scsi_lu *lu)
 {
-	close(dev->fd);
+	close(lu->fd);
 }
 
 /*
  * Replace this with AIO readv/writev after 2.6.20.
  */
-static int bs_xen_cmd_submit(struct tgt_device *dev, uint8_t *scb, int rw,
+static int bs_xen_cmd_submit(struct scsi_lu *lu, uint8_t *scb, int rw,
 			     uint32_t datalen, unsigned long *uaddr,
 			     uint64_t offset, int *async, void *key)
 {
@@ -65,12 +65,12 @@ static int bs_xen_cmd_submit(struct tgt_device *dev, uint8_t *scb, int rw,
 		total += iov[cnt++].iov_len;
 	} while (total < datalen);
 
-	lseek64(dev->fd, offset, SEEK_SET);
+	lseek64(lu->fd, offset, SEEK_SET);
 
 	if (rw == READ)
-		readv(dev->fd, iov, cnt);
+		readv(lu->fd, iov, cnt);
 	else
-		writev(dev->fd, iov, cnt);
+		writev(lu->fd, iov, cnt);
 
 	return 0;
 }

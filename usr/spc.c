@@ -145,7 +145,7 @@ sense:
 
 int spc_report_luns(int host_no, struct scsi_cmd *cmd)
 {
-	struct tgt_device *dev;
+	struct scsi_lu *lu;
 	struct list_head *dev_list = &cmd->c_target->device_list;
 	uint64_t lun, *data;
 	int idx, alen, oalen, nr_luns, rbuflen = 4096, overflow;
@@ -172,13 +172,13 @@ int spc_report_luns(int host_no, struct scsi_cmd *cmd)
 	nr_luns = 0;
 
 	overflow = 0;
-	list_for_each_entry(dev, dev_list, device_siblings) {
+	list_for_each_entry(lu, dev_list, device_siblings) {
 		nr_luns++;
 
 		if (overflow)
 			continue;
 
-		lun = dev->lun;
+		lun = lu->lun;
 		lun = ((lun > 0xff) ? (0x1 << 30) : 0) | ((0x3ff & lun) << 16);
 		data[idx++] = __cpu_to_be64(lun << 32);
 		if (!(alen -= 8))

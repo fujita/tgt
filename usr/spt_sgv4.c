@@ -50,9 +50,9 @@ static void sgv4_handler(int fd, int events, void *data)
 {
 	int i, err;
 	struct sg_io_v4 hdrs[64];
-	struct tgt_device *dev = data;
+	struct scsi_lu *lu = data;
 
-	err = read(dev->fd, hdrs, sizeof(hdrs));
+	err = read(lu->fd, hdrs, sizeof(hdrs));
 	if (err < 0)
 		return;
 
@@ -75,7 +75,7 @@ static void sgv4_handler(int fd, int events, void *data)
 	}
 }
 
-int spt_sg_open(struct tgt_device *dev, char *path, int *fd, uint64_t *size)
+int spt_sg_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 {
 	int err, maj, min;
 	char *sd, buf[256];
@@ -166,9 +166,9 @@ int spt_sg_open(struct tgt_device *dev, char *path, int *fd, uint64_t *size)
 		goto close_fd;
 	}
 
-	err = tgt_event_add(*fd, EPOLLIN, sgv4_handler, dev);
+	err = tgt_event_add(*fd, EPOLLIN, sgv4_handler, lu);
 	if (err) {
-		free(dev);
+		free(lu);
 		goto close_fd;
 	}
 

@@ -29,7 +29,7 @@ struct tgt_cmd_queue {
 	struct list_head queue;
 };
 
-struct tgt_device {
+struct scsi_lu {
 	int fd;
 	uint64_t addr; /* persistent mapped address */
 	uint64_t size;
@@ -58,7 +58,7 @@ struct scsi_cmd {
 	uint64_t uaddr;
 	uint32_t len;
 	int mmapped;
-	struct tgt_device *dev;
+	struct scsi_lu *dev;
 	unsigned long state;
 
 	uint64_t cmd_nexus_id;
@@ -80,8 +80,8 @@ struct scsi_cmd {
 
 struct backingstore_template {
 	int bs_datasize;
-	int (*bs_open)(struct tgt_device *dev, char *path, int *fd, uint64_t *size);
-	void (*bs_close)(struct tgt_device *dev);
+	int (*bs_open)(struct scsi_lu *dev, char *path, int *fd, uint64_t *size);
+	void (*bs_close)(struct scsi_lu *dev);
 	int (*bs_cmd_submit)(struct scsi_cmd *cmd);
 	int (*bs_cmd_done) (int do_munmap, int do_free, uint64_t uaddr, int len);
 };
@@ -104,7 +104,7 @@ struct device_type_template {
 	char *name;
 	char *pid;
 
-	void (*device_init)(struct tgt_device *dev);
+	void (*device_init)(struct scsi_lu *dev);
 
 	struct device_type_operations ops[256];
 };

@@ -117,13 +117,13 @@ int it_nexus_destroy(uint64_t nid)
 		return -ENOENT;
 }
 
-static struct tgt_device *device_lookup(struct target *target, uint64_t lun)
+static struct scsi_lu *device_lookup(struct target *target, uint64_t lun)
 {
-	struct tgt_device *device;
+	struct scsi_lu *lu;
 
-	list_for_each_entry(device, &target->device_list, device_siblings)
-		if (device->lun == lun)
-			return device;
+	list_for_each_entry(lu, &target->device_list, device_siblings)
+		if (lu->lun == lun)
+			return lu;
 	return NULL;
 }
 
@@ -157,7 +157,7 @@ static void tgt_cmd_queue_init(struct tgt_cmd_queue *q)
 }
 
 static int tgt_device_path_update(struct target *target,
-				  struct tgt_device *device, char *path)
+				  struct scsi_lu *lu, char *path)
 {
 	int err, dev_fd;
 	uint64_t size;
@@ -166,36 +166,36 @@ static int tgt_device_path_update(struct target *target,
 	if (!path)
 		return TGTADM_NOMEM;
 
-	err = target->bst->bs_open(device, path, &dev_fd, &size);
+	err = target->bst->bs_open(lu, path, &dev_fd, &size);
 	if (err) {
 		free(path);
 		return TGTADM_INVALID_REQUEST;
 	}
 
-	device->fd = dev_fd;
-	device->addr = 0;
-	device->size = size;
-	device->path = path;
+	lu->fd = dev_fd;
+	lu->addr = 0;
+	lu->size = size;
+	lu->path = path;
 
 	return 0;
 }
 
-static struct tgt_device *
+static struct scsi_lu *
 __device_lookup(int tid, uint64_t lun, struct target **t)
 {
 	struct target *target;
-	struct tgt_device *device;
+	struct scsi_lu *lu;
 
 	target = target_lookup(tid);
 	if (!target)
 		return NULL;
 
-	device = device_lookup(target, lun);
-	if (!device)
+	lu = device_lookup(target, lun);
+	if (!lu)
 		return NULL;
 
 	*t = target;
-	return device;
+	return lu;
 }
 
 int tgt_device_create(int tid, uint64_t lun, char *args)
@@ -203,7 +203,7 @@ int tgt_device_create(int tid, uint64_t lun, char *args)
 	char *p;
 	int err;
 	struct target *target;
-	struct tgt_device *device, *pos;
+	struct scsi_lu *lu, *pos;
 
 	dprintf("%d %" PRIu64 "\n", tid, lun);
 
@@ -211,8 +211,8 @@ int tgt_device_create(int tid, uint64_t lun, char *args)
 	if (!target)
 		return TGTADM_NO_TARGET;
 
-	device = device_lookup(target, lun);
-	if (device) {
+	lu = device_lookup(target, lun);
+	if (lu) {
 		eprintf("device %" PRIu64 " already exists\n", lun);
 		return TGTADM_LUN_EXIST;
 	}
@@ -225,31 +225,31 @@ int tgt_device_create(int tid, uint64_t lun, char *args)
 		return TGTADM_INVALID_REQUEST;
 	p++;
 
-	device = zalloc(sizeof(*device) + target->bst->bs_datasize);
-	if (!device)
+	lu = zalloc(sizeof(*lu) + target->bst->bs_datasize);
+	if (!lu)
 		return TGTADM_NOMEM;
 
-	err = tgt_device_path_update(target, device, p);
+	err = tgt_device_path_update(target, lu, p);
 	if (err) {
-		free(device);
+		free(lu);
 		return err;
 	}
 
-	device->lun = lun;
+	lu->lun = lun;
 
-	snprintf(device->scsi_id, sizeof(device->scsi_id),
+	snprintf(lu->scsi_id, sizeof(lu->scsi_id),
 		 "deadbeaf%d:%" PRIu64, tid, lun);
 
-	tgt_cmd_queue_init(&device->cmd_queue);
+	tgt_cmd_queue_init(&lu->cmd_queue);
 
 	if (target->dev_type_template.device_init)
-		target->dev_type_template.device_init(device);
+		target->dev_type_template.device_init(lu);
 
 	list_for_each_entry(pos, &target->device_list, device_siblings) {
-		if (device->lun < pos->lun)
+		if (lu->lun < pos->lun)
 			break;
 	}
-	list_add_tail(&device->device_siblings, &pos->device_siblings);
+	list_add_tail(&lu->device_siblings, &pos->device_siblings);
 
 	dprintf("Add a logical unit %" PRIu64 " to the target %d\n", lun, tid);
 	return 0;
@@ -258,57 +258,57 @@ int tgt_device_create(int tid, uint64_t lun, char *args)
 int tgt_device_destroy(int tid, uint64_t lun)
 {
 	struct target *target;
-	struct tgt_device *device;
+	struct scsi_lu *lu;
 
 	dprintf("%u %" PRIu64 "\n", tid, lun);
 
-	device = __device_lookup(tid, lun, &target);
-	if (!device) {
+	lu = __device_lookup(tid, lun, &target);
+	if (!lu) {
 		eprintf("device %" PRIu64 " not found\n", lun);
 		return TGTADM_NO_LUN;
 	}
 
-	if (!list_empty(&device->cmd_queue.queue))
+	if (!list_empty(&lu->cmd_queue.queue))
 		return TGTADM_LUN_ACTIVE;
 
-	free(device->path);
-	list_del(&device->device_siblings);
+	free(lu->path);
+	list_del(&lu->device_siblings);
 
-	target->bst->bs_close(device);
-	free(device);
+	target->bst->bs_close(lu);
+	free(lu);
 	return 0;
 }
 
 int device_reserve(uint64_t nid, uint64_t lun, uint64_t reserve_id)
 {
 	struct target *target;
-	struct tgt_device *device;
+	struct scsi_lu *lu;
 
-	device = __device_lookup(NID2TID(nid), lun, &target);
-	if (!device)
+	lu = __device_lookup(NID2TID(nid), lun, &target);
+	if (!lu)
 		return -EINVAL;
 
-	if (device->reserve_id && device->reserve_id != reserve_id) {
+	if (lu->reserve_id && lu->reserve_id != reserve_id) {
 		dprintf("already reserved %" PRIu64 " %" PRIu64 "\n",
-			device->reserve_id, reserve_id);
+			lu->reserve_id, reserve_id);
 		return -EBUSY;
 	}
 
-	device->reserve_id = reserve_id;
+	lu->reserve_id = reserve_id;
 	return 0;
 }
 
 int device_release(uint64_t nid, uint64_t lun, uint64_t reserve_id, int force)
 {
 	struct target *target;
-	struct tgt_device *device;
+	struct scsi_lu *lu;
 
-	device = __device_lookup(NID2TID(nid), lun, &target);
-	if (!device)
+	lu = __device_lookup(NID2TID(nid), lun, &target);
+	if (!lu)
 		return 0;
 
-	if (force || device->reserve_id == reserve_id) {
-		device->reserve_id = 0;
+	if (force || lu->reserve_id == reserve_id) {
+		lu->reserve_id = 0;
 		return 0;
 	}
 
@@ -318,10 +318,10 @@ int device_release(uint64_t nid, uint64_t lun, uint64_t reserve_id, int force)
 int device_reserved(uint64_t nid, uint64_t lun, uint64_t reserve_id)
 {
 	struct target *target;
-	struct tgt_device *device;
+	struct scsi_lu *lu;
 
-	device = __device_lookup(NID2TID(nid), lun, &target);
-	if (!device || !device->reserve_id || device->reserve_id == reserve_id)
+	lu = __device_lookup(NID2TID(nid), lun, &target);
+	if (!lu || !lu->reserve_id || lu->reserve_id == reserve_id)
 		return 0;
 	return -EBUSY;
 }
@@ -330,22 +330,22 @@ int tgt_device_update(int tid, uint64_t dev_id, char *name)
 {
 	int err = 0;
 	struct target *target;
-	struct tgt_device *device;
+	struct scsi_lu *lu;
 
 	target = target_lookup(tid);
 	if (!target)
 		return TGTADM_NO_TARGET;
 
-	device = device_lookup(target, dev_id);
-	if (!device) {
+	lu = device_lookup(target, dev_id);
+	if (!lu) {
 		eprintf("device %" PRIu64 " not found\n", dev_id);
 		return TGTADM_NO_LUN;
 	}
 
 	if (!strncmp(name, "scsi_id=", 8))
-		memcpy(device->scsi_id, name + 8, sizeof(device->scsi_id) - 1);
+		memcpy(lu->scsi_id, name + 8, sizeof(lu->scsi_id) - 1);
 	else if (!strncmp(name, "scsi_sn=", 8))
-		memcpy(device->scsi_sn, name + 8, sizeof(device->scsi_sn) - 1);
+		memcpy(lu->scsi_sn, name + 8, sizeof(lu->scsi_sn) - 1);
 	else
 		err = TGTADM_INVALID_REQUEST;
 
@@ -1054,7 +1054,7 @@ int tgt_target_show_all(char *buf, int rest)
 {
 	int total = 0, max = rest;
 	struct target *target;
-	struct tgt_device *device;
+	struct scsi_lu *lu;
 	struct acl_entry *acl;
 	struct it_nexus *nexus;
 
@@ -1081,18 +1081,18 @@ int tgt_target_show_all(char *buf, int rest)
 		}
 
 		shprintf(total, buf, rest, _TAB1 "LUN information:\n");
-		list_for_each_entry(device, &target->device_list, device_siblings)
+		list_for_each_entry(lu, &target->device_list, device_siblings)
 			shprintf(total, buf, rest,
 				 _TAB2 "LUN: %" PRIu64 "\n"
 				 _TAB3 "SCSI ID: %s\n"
 				 _TAB3 "SCSI SN: %s\n"
 				 _TAB3 "Size: %s\n"
 				 _TAB3 "Backing store: %s\n",
-				 device->lun,
-				 device->scsi_id,
-				 device->scsi_sn,
-				 print_disksize(device->size),
-				 device->path);
+				 lu->lun,
+				 lu->scsi_id,
+				 lu->scsi_sn,
+				 print_disksize(lu->size),
+				 lu->path);
 
 		if (!strcmp(tgt_drivers[target->lid]->name, "iscsi")) {
 			int i, aid;

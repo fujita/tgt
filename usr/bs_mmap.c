@@ -32,16 +32,16 @@
 #include "util.h"
 #include "tgtd.h"
 
-static int bs_mmap_open(struct tgt_device *dev, char *path, int *fd, uint64_t *size)
+static int bs_mmap_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 {
 	*fd = backed_file_open(path, O_RDWR| O_LARGEFILE, size);
 
 	return *fd >= 0 ? 0 : *fd;
 }
 
-static void bs_mmap_close(struct tgt_device *dev)
+static void bs_mmap_close(struct scsi_lu *lu)
 {
-	close(dev->fd);
+	close(lu->fd);
 }
 
 #define pgcnt(size, offset)	((((size) + ((offset) & (pagesize - 1))) + (pagesize - 1)) >> pageshift)
