@@ -268,7 +268,7 @@ int tgt_device_destroy(int tid, uint64_t lun)
 		return TGTADM_NO_LUN;
 	}
 
-	if (!list_empty(&lu->cmd_queue.queue))
+	if (!list_empty(&lu->cmd_queue.queue) || lu->cmd_queue.active_cmd)
 		return TGTADM_LUN_ACTIVE;
 
 	free(lu->path);
