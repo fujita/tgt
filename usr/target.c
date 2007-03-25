@@ -236,6 +236,7 @@ int tgt_device_create(int tid, uint64_t lun, char *args)
 	}
 
 	lu->lun = lun;
+	lu->lu_state = SCSI_LU_RUNNING;
 
 	snprintf(lu->scsi_id, sizeof(lu->scsi_id),
 		 "deadbeaf%d:%" PRIu64, tid, lun);
@@ -412,12 +413,17 @@ int target_cmd_queue(struct scsi_cmd *cmd)
 
 	cmd->c_target = target = nexus->nexus_target;
 
-	cmd_hlist_insert(target, cmd);
-
 	dev_id = scsi_get_devid(target->lid, cmd->lun);
 	dprintf("%p %x %" PRIx64 "\n", cmd, cmd->scb[0], dev_id);
 
 	cmd->dev = device_lookup(target, dev_id);
+
+	/* service delivery or target failure */
+	if (target->target_state != SCSI_TARGET_RUNNING ||
+	    (cmd->dev && cmd->dev->lu_state != SCSI_LU_RUNNING))
+		return -EBUSY;
+
+	cmd_hlist_insert(target, cmd);
 
 	if (cmd->dev)
 		q = &cmd->dev->cmd_queue;
@@ -998,7 +1004,7 @@ static struct {
 	enum scsi_target_state value;
 	char *name;
 } target_state[] = {
-	{SCSI_TARGET_SUSPENDED, "suspended"},
+	{SCSI_TARGET_OFFLINE, "offline"},
 	{SCSI_TARGET_RUNNING, "running"},
 };
 
