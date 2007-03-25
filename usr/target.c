@@ -1266,7 +1266,7 @@ int tgt_target_destroy(int tid)
 	}
 
 	free(target->account.in_aids);
-
+	free(target->name);
 	free(target);
 
 	return 0;
