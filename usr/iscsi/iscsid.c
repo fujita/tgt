@@ -1359,7 +1359,7 @@ static int iscsi_noop_out_rx_start(struct iscsi_connection *conn)
 {
 	struct iscsi_hdr *req = (struct iscsi_hdr *) &conn->req.bhs;
 	struct iscsi_task *task;
-	int len, err = -ENOMEM;
+	int len, err = 0;
 
 	dprintf("%x %x %u\n", req->ttt, req->itt, ntoh24(req->dlength));
 	if (req->ttt != cpu_to_be32(ISCSI_RESERVED_TAG)) {
@@ -1386,8 +1386,10 @@ static int iscsi_noop_out_rx_start(struct iscsi_connection *conn)
 	task = iscsi_alloc_task(conn, len);
 	if (task)
 		conn->rx_task = task;
-	else
+	else {
+		err = -ENOMEM;
 		goto out;
+	}
 
 	if (len) {
 		conn->rx_size = len;
