@@ -241,6 +241,6 @@ int spc_request_sense(int host_no, struct scsi_cmd *cmd)
 int spc_illegal_op(int host_no, struct scsi_cmd *cmd)
 {
 	cmd->len = 0;
-	sense_data_build(cmd, ILLEGAL_REQUEST, 0x24, 0);
+	sense_data_build(cmd, ILLEGAL_REQUEST, 0x20, 0);
 	return SAM_STAT_CHECK_CONDITION;
 }
