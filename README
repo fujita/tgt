@@ -16,6 +16,8 @@ Currently, tgt supports three target drivers:
 Note that tgt is under active development. Don't play with important
 data.
 
+The code is under the GNU General Public License version 2.
+
 
 Preparation
 -------------

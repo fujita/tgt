@@ -7,10 +7,24 @@
  * This code is based on Ardis's iSCSI implementation.
  *   http://www.ardistech.com/iscsi/
  *   Copyright (C) 2002-2003 Ardis Technolgies <roman@ardistech.com>
- *   licensed under the terms of the GNU GPL v2.0,
  *
- * (C) 2005-2007 Ming Zhang <blackmagic02881@gmail.com>
- * This code is licenced under the GPL.
+ * This code is also based on Ming's mmc work for IET.
+ * Copyright (C) 2005-2007 Ming Zhang <blackmagic02881@gmail.com>
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, version 2 of the
+ * License.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+ * 02110-1301 USA
  */
 #include <errno.h>
 #include <stdio.h>
