@@ -698,7 +698,7 @@ static struct account_entry *__account_lookup_user(char *user)
 	return NULL;
 }
 
-int account_lookup(int tid, int type, char *user, char *password, int plen)
+int account_lookup(int tid, int type, char *user, int ulen, char *password, int plen)
 {
 	int i;
 	struct target *target;
@@ -718,8 +718,10 @@ int account_lookup(int tid, int type, char *user, char *password, int plen)
 		}
 	} else {
 		ac = __account_lookup_id(target->account.out_aid);
-		if (ac)
+		if (ac) {
+			strncpy(user, ac->user, ulen);
 			goto found;
+		}
 	}
 
 	return -ENOENT;

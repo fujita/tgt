@@ -405,7 +405,8 @@ static int chap_initiator_auth_check_response(struct iscsi_connection *conn)
 	}
 
 	memset(pass, 0, sizeof(pass));
-	err = account_lookup(conn->tid, AUTH_DIR_INCOMING, value, pass, ISCSI_NAME_LEN);
+	err = account_lookup(conn->tid, AUTH_DIR_INCOMING, value, 0, pass,
+			     ISCSI_NAME_LEN);
 	if (err) {
 		eprintf("No valid user/pass combination for initiator %s "
 			    "found\n", conn->initiator);
@@ -502,7 +503,8 @@ static int chap_target_auth_create_response(struct iscsi_connection *conn)
 
 	memset(pass, 0, sizeof(pass));
 	memset(name, 0, sizeof(name));
-	err = account_lookup(conn->tid, AUTH_DIR_OUTGOING, name, pass, ISCSI_NAME_LEN);
+	err = account_lookup(conn->tid, AUTH_DIR_OUTGOING, name, sizeof(name),
+			     pass, sizeof(pass));
 	if (err) {
 		log_warning("CHAP target auth.: "
 			    "no outgoing credentials configured%s",
