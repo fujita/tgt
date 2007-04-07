@@ -110,7 +110,7 @@ struct option const long_options[] = {
 	{NULL, 0, NULL, 0},
 };
 
-static char *short_options = "dhL:o:m:t:s:c:l:n:v:b:T:I:u:p:";
+static char *short_options = "dhL:o:m:t:s:c:l:n:v:b:T:I:u:p:B:Y:O";
 
 static void usage(int status)
 {
