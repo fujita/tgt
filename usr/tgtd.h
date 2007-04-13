@@ -78,11 +78,15 @@ struct scsi_cmd {
 	uint64_t tag;
 	uint8_t rw;
 	int async;
+	int result;
 	struct mgmt_req *mreq;
 
 #define SCSI_SENSE_BUFFERSIZE	252
 	unsigned char sense_buffer[SCSI_SENSE_BUFFERSIZE];
 	int sense_len;
+
+	/* workaround */
+	struct list_head bs_list;
 };
 
 struct backingstore_template {
