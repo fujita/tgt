@@ -275,35 +275,39 @@ int tgt_device_destroy(int tid, uint64_t lun)
 	return 0;
 }
 
-int device_reserve(int tid, uint64_t lun, uint64_t reserve_id)
+int device_reserve(struct scsi_cmd *cmd)
 {
-	struct target *target;
 	struct scsi_lu *lu;
 
-	lu = __device_lookup(tid, lun, &target);
-	if (!lu)
-		return -EINVAL;
+	lu = device_lookup(cmd->c_target, cmd->dev->lun);
+	if (!lu) {
+		eprintf("invalid target and lun %d %" PRIu64 "\n",
+			cmd->c_target->tid, cmd->dev->lun);
+		return 0;
+	}
 
-	if (lu->reserve_id && lu->reserve_id != reserve_id) {
+	if (lu->reserve_id && lu->reserve_id != cmd->cmd_itn_id) {
 		dprintf("already reserved %" PRIu64 " %" PRIu64 "\n",
-			lu->reserve_id, reserve_id);
+			lu->reserve_id, cmd->cmd_itn_id);
 		return -EBUSY;
 	}
 
-	lu->reserve_id = reserve_id;
+	lu->reserve_id = cmd->cmd_itn_id;
 	return 0;
 }
 
-int device_release(int tid, uint64_t lun, uint64_t reserve_id, int force)
+int device_release(int tid, uint64_t itn_id, uint64_t lun, int force)
 {
 	struct target *target;
 	struct scsi_lu *lu;
 
 	lu = __device_lookup(tid, lun, &target);
-	if (!lu)
+	if (!lu) {
+		eprintf("invalid target and lun %d %" PRIu64 "\n", tid, lun);
 		return 0;
+	}
 
-	if (force || lu->reserve_id == reserve_id) {
+	if (force || lu->reserve_id == itn_id) {
 		lu->reserve_id = 0;
 		return 0;
 	}
@@ -311,13 +315,12 @@ int device_release(int tid, uint64_t lun, uint64_t reserve_id, int force)
 	return -EBUSY;
 }
 
-int device_reserved(int tid, uint64_t lun, uint64_t reserve_id)
+int device_reserved(struct scsi_cmd *cmd)
 {
-	struct target *target;
 	struct scsi_lu *lu;
 
-	lu = __device_lookup(tid, lun, &target);
-	if (!lu || !lu->reserve_id || lu->reserve_id == reserve_id)
+	lu = device_lookup(cmd->c_target, cmd->dev->lun);
+	if (!lu || !lu->reserve_id || lu->reserve_id == cmd->cmd_itn_id)
 		return 0;
 	return -EBUSY;
 }
@@ -627,8 +630,8 @@ void target_mgmt_request(int tid, uint64_t itn_id, uint64_t req_id,
 		err = -EINVAL;
 		break;
 	case LOGICAL_UNIT_RESET:
-		device_release(target->tid, scsi_get_devid(target->lid, lun),
-			       itn_id, 1);
+		device_release(target->tid, itn_id,
+			       scsi_get_devid(target->lid, lun), 1);
 		count = abort_task_set(mreq, target, itn_id, 0, lun, 0);
 		if (mreq->busy)
 			send = 0;

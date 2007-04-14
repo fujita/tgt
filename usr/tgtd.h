@@ -122,9 +122,9 @@ extern int ipc_init(void);
 extern int tgt_device_create(int tid, uint64_t lun, char *args);
 extern int tgt_device_destroy(int tid, uint64_t lun);
 extern int tgt_device_update(int tid, uint64_t dev_id, char *name);
-extern int device_reserve(int tid, uint64_t lun, uint64_t reserve_id);
-extern int device_release(int tid, uint64_t lun, uint64_t reserve_id, int force);
-extern int device_reserved(int tid, uint64_t lun, uint64_t reserve_id);
+extern int device_reserve(struct scsi_cmd *cmd);
+extern int device_release(int tid, uint64_t itn_id, uint64_t lun, int force);
+extern int device_reserved(struct scsi_cmd *cmd);
 
 extern int tgt_target_create(int lld, int tid, char *args, int t_type);
 extern int tgt_target_destroy(int tid);
