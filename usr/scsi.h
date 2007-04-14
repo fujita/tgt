@@ -85,6 +85,7 @@
 #define READ_16               0x88
 #define WRITE_16              0x8a
 #define VERIFY_16	      0x8f
+#define SYNCHRONIZE_CACHE_16  0x91
 #define SERVICE_ACTION_IN     0x9e
 #define	SAI_READ_CAPACITY_16  0x10
 

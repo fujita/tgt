@@ -115,7 +115,8 @@ out:
 
 static void *bs_sync_worker_fn(void *arg)
 {
-	int ret;
+	int ret, fd;
+	void *buf;
 	struct bs_sync_info *info = arg;
 	struct scsi_cmd *cmd;
 
@@ -135,18 +136,24 @@ static void *bs_sync_worker_fn(void *arg)
 		list_del(&cmd->bs_list);
 		pthread_mutex_unlock(&info->pending_lock);
 
-		if (cmd->rw == READ)
-			ret = pread(cmd->dev->fd, (void *)(unsigned long)cmd->uaddr,
-				    cmd->len, cmd->offset);
-		else
-			ret = pwrite(cmd->dev->fd, (void *)(unsigned long)cmd->uaddr,
-				     cmd->len, cmd->offset);
+		fd = cmd->dev->fd;
+		buf = (void *)(unsigned long)cmd->uaddr;
 
-		dprintf("io done %p, %d %d\n", cmd, ret, cmd->len);
+		if (cmd->scb[0] == SYNCHRONIZE_CACHE ||
+		    cmd->scb[0] == SYNCHRONIZE_CACHE_16)
+			ret = fsync(fd);
+		else if (cmd->rw == READ)
+			ret = pread(fd, buf, cmd->len, cmd->offset);
+		else
+			ret = pwrite(fd, buf, cmd->len, cmd->offset);
+
+		dprintf("io done %p %x %d %d\n", cmd, cmd->scb[0], ret, cmd->len);
 
 		if (ret == cmd->len)
 			cmd->result = SAM_STAT_GOOD;
 		else {
+			eprintf("io error %p %x %d %d %" PRIu64 ", %m\n",
+				cmd, cmd->scb[0], ret, cmd->len, cmd->offset);
 			cmd->result = SAM_STAT_CHECK_CONDITION;
 			sense_data_build(cmd, MEDIUM_ERROR, 0x11, 0x0);
 		}

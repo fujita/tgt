@@ -172,8 +172,7 @@ static int sbc_sync_cache(int host_no, struct scsi_cmd *cmd)
 		goto sense;
 	}
 
-	ret = fsync(cmd->dev->fd);
-
+	ret = cmd->c_target->bst->bs_cmd_submit(cmd);
 	switch (ret) {
 	case EROFS:
 	case EINVAL:

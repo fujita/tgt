@@ -31,6 +31,7 @@
 #include "list.h"
 #include "util.h"
 #include "tgtd.h"
+#include "scsi.h"
 
 static int bs_mmap_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 {
@@ -48,9 +49,12 @@ static void bs_mmap_close(struct scsi_lu *lu)
 
 static int bs_mmap_cmd_submit(struct scsi_cmd *cmd)
 {
-	int fd = cmd->dev->fd;
+	int fd = cmd->dev->fd, ret = 0;
 	void *p;
-	int err = 0;
+
+	if (cmd->scb[0] == SYNCHRONIZE_CACHE ||
+	    cmd->scb[0] == SYNCHRONIZE_CACHE_16)
+		return fsync(fd);
 
 	if (cmd->uaddr)
 		cmd->uaddr += cmd->offset;
@@ -61,7 +65,7 @@ static int bs_mmap_cmd_submit(struct scsi_cmd *cmd)
 
 		cmd->uaddr = (unsigned long) p + (cmd->offset & (pagesize - 1));
 		if (p == MAP_FAILED) {
-			err = -EINVAL;
+			ret = -EINVAL;
 			eprintf("%" PRIx64 " %u %" PRIu64 "\n", cmd->uaddr,
 				cmd->len, cmd->offset);
 		}
@@ -69,7 +73,7 @@ static int bs_mmap_cmd_submit(struct scsi_cmd *cmd)
 
 	dprintf("%" PRIx64 " %u %" PRIu64 "\n", cmd->uaddr, cmd->len, cmd->offset);
 
-	return err;
+	return ret;
 }
 
 static int bs_mmap_cmd_done(struct scsi_cmd *cmd)
