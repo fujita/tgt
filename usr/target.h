@@ -55,7 +55,7 @@ struct target {
 };
 
 struct it_nexus {
-	uint32_t nexus_id;
+	uint64_t itn_id;
 
 	struct target *nexus_target;
 

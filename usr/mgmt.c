@@ -145,7 +145,7 @@ static int target_mgmt(int lld_no, struct mgmt_task *mtask)
 		} else if (tgt_drivers[lld_no]->show)
 			err = tgt_drivers[lld_no]->show(req->mode,
 							req->tid,
-							NID64(req->tid, req->sid),
+							req->sid,
 							req->cid, req->lun,
 							mtask->buf, mtask->bsize);
 		break;

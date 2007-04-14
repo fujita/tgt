@@ -8,11 +8,6 @@
 
 #define VENDOR_ID	"IET"
 
-#define TID_SHIFT 32
-#define NID_MASK ((1ULL << TID_SHIFT) - 1)
-#define NID64(tid, nid) ((uint64_t) tid << TID_SHIFT | nid)
-#define NID2TID(nid) (nid >> TID_SHIFT)
-
 #define _TAB1 "    "
 #define _TAB2 _TAB1 _TAB1
 #define _TAB3 _TAB1 _TAB1 _TAB1
@@ -127,9 +122,9 @@ extern int ipc_init(void);
 extern int tgt_device_create(int tid, uint64_t lun, char *args);
 extern int tgt_device_destroy(int tid, uint64_t lun);
 extern int tgt_device_update(int tid, uint64_t dev_id, char *name);
-extern int device_reserve(uint64_t nid, uint64_t lun, uint64_t reserve_id);
-extern int device_release(uint64_t nid, uint64_t lun, uint64_t reserve_id, int force);
-extern int device_reserved(uint64_t nid, uint64_t lun, uint64_t reserve_id);
+extern int device_reserve(int tid, uint64_t lun, uint64_t reserve_id);
+extern int device_release(int tid, uint64_t lun, uint64_t reserve_id, int force);
+extern int device_reserved(int tid, uint64_t lun, uint64_t reserve_id);
 
 extern int tgt_target_create(int lld, int tid, char *args, int t_type);
 extern int tgt_target_destroy(int tid);
@@ -141,11 +136,11 @@ typedef void (event_handler_t)(int fd, int events, void *data);
 extern int tgt_event_add(int fd, int events, event_handler_t handler, void *data);
 extern void tgt_event_del(int fd);
 extern int tgt_event_modify(int fd, int events);
-extern int target_cmd_queue(struct scsi_cmd *cmd);
+extern int target_cmd_queue(int tid, struct scsi_cmd *cmd);
 extern void target_cmd_done(struct scsi_cmd *cmd);
-struct scsi_cmd *target_cmd_lookup(uint64_t nid, uint64_t tag);
-extern void target_mgmt_request(uint64_t nid, uint64_t req_id, int function,
-				uint8_t *lun, uint64_t tag);
+struct scsi_cmd *target_cmd_lookup(int tid, uint64_t itn_id, uint64_t tag);
+extern void target_mgmt_request(int tid, uint64_t itn_id, uint64_t req_id,
+				int function, uint8_t *lun, uint64_t tag);
 
 extern void target_cmd_io_done(struct scsi_cmd *cmd, int result);
 
@@ -169,8 +164,8 @@ extern int account_ctl(int tid, int type, char *user, int bind);
 extern int account_show(char *buf, int rest);
 extern int account_available(int tid, int dir);
 
-extern int it_nexus_create(int tid, char *info, uint64_t *nid);
-extern int it_nexus_destroy(uint64_t nid);
+extern int it_nexus_create(int tid, uint64_t itn_id, char *info);
+extern int it_nexus_destroy(int tid, uint64_t itn_id);
 
 /* crap. kill this after done it_nexus kernel code */
 extern int it_nexus_to_host_no(uint64_t nid);

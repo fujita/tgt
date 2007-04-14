@@ -1019,7 +1019,7 @@ static int iscsi_target_cmd_queue(struct iscsi_task *task)
 	uint8_t *ahs;
 	int ahslen;
 
-	scmd->cmd_nexus_id = conn->session->iscsi_nexus_id;
+	scmd->cmd_nexus_id = conn->session->tsih;
 
 	scmd->scb = req->cdb;
 	scmd->scb_len = sizeof(req->cdb);
@@ -1083,7 +1083,7 @@ static int iscsi_target_cmd_queue(struct iscsi_task *task)
 	scmd->tag = req->itt;
 	scmd->uaddr = uaddr;
 
-	return target_cmd_queue(scmd);
+	return target_cmd_queue(conn->session->target->tid, scmd);
 }
 
 static int iscsi_scsi_cmd_execute(struct iscsi_task *task)
@@ -1171,7 +1171,7 @@ static int iscsi_tm_execute(struct iscsi_task *task)
 	if (err)
 		task->result = err;
 	else
-		target_mgmt_request(conn->session->iscsi_nexus_id,
+		target_mgmt_request(conn->session->target->tid, conn->session->tsih,
 				    (unsigned long) task, fn, req->lun, req->itt);
 	return err;
 }

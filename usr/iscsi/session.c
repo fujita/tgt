@@ -52,16 +52,6 @@ struct iscsi_session *session_find_name(int tid, const char *iname, uint8_t *isi
 	return NULL;
 }
 
-struct iscsi_session *session_lookup(uint64_t nexus_id)
-{
-	struct iscsi_session *session;
-	list_for_each_entry(session, &sessions_list, hlist) {
-		if (session->iscsi_nexus_id == nexus_id)
-			return session;
-	}
-	return NULL;
-}
-
 static struct iscsi_session *session_lookup_by_tsih(uint16_t tsih)
 {
 	struct iscsi_session *session;
@@ -79,7 +69,7 @@ int session_create(struct iscsi_connection *conn)
 	static uint16_t tsih, last_tsih = 0;
 	struct iscsi_target *target;
 	char addr[128];
-	uint64_t nexus_id;
+
 
 	target = target_find_by_id(conn->tid);
 	if (!target)
@@ -119,7 +109,7 @@ int session_create(struct iscsi_connection *conn)
 		 _TAB3 "Connection: %u\n"
 		 _TAB4 "%s\n", session->initiator, conn->cid, addr);
 
-	err = it_nexus_create(target->tid, session->info, &nexus_id);
+	err = it_nexus_create(target->tid, tsih, session->info);
 	if (err) {
 		free(session->initiator);
 		free(session->info);
@@ -137,7 +127,6 @@ int session_create(struct iscsi_connection *conn)
 
 	memcpy(session->isid, conn->isid, sizeof(session->isid));
 	session->tsih = last_tsih = tsih;
-	session->iscsi_nexus_id = nexus_id;
 
 	conn_add_to_session(conn, session);
 
@@ -162,9 +151,8 @@ static void session_destroy(struct iscsi_session *session)
 	if (session->target) {
 		list_del(&session->slist);
 /* 		session->target->nr_sessions--; */
+		it_nexus_destroy(session->target->tid, session->tsih);
 	}
-
-	it_nexus_destroy(session->iscsi_nexus_id);
 
 	list_del(&session->hlist);
 

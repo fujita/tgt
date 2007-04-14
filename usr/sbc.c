@@ -88,7 +88,7 @@ static int sbc_reserve(int host_no, struct scsi_cmd *cmd)
 	int ret;
 
 	if (cmd->dev) {
-		ret = device_reserve(cmd->cmd_nexus_id, cmd->dev->lun, host_no);
+		ret = device_reserve(cmd->c_target->tid, cmd->dev->lun, host_no);
 		if (ret)
 			ret = SAM_STAT_RESERVATION_CONFLICT;
 		else
@@ -106,7 +106,7 @@ static int sbc_release(int host_no, struct scsi_cmd *cmd)
 	int ret;
 
 	if (cmd->dev) {
-		ret = device_release(cmd->cmd_nexus_id, cmd->dev->lun, host_no, 0);
+		ret = device_release(cmd->c_target->tid, cmd->dev->lun, host_no, 0);
 		if (ret)
 			ret = SAM_STAT_RESERVATION_CONFLICT;
 		else
