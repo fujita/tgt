@@ -1019,8 +1019,7 @@ static int iscsi_target_cmd_queue(struct iscsi_task *task)
 	uint8_t *ahs;
 	int ahslen;
 
-	scmd->cmd_nexus_id = conn->session->tsih;
-
+	scmd->cmd_itn_id = conn->session->tsih;
 	scmd->scb = req->cdb;
 	scmd->scb_len = sizeof(req->cdb);
 

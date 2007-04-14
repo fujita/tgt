@@ -204,7 +204,7 @@ int spc_start_stop(int host_no, struct scsi_cmd *cmd)
 	cmd->len = 0;
 
 	if (cmd->dev) {
-		if (device_reserved(cmd->cmd_nexus_id, cmd->dev->lun, host_no))
+		if (device_reserved(cmd->c_target->tid, cmd->dev->lun, host_no))
 			return SAM_STAT_RESERVATION_CONFLICT;
 	} else {
 		sense_data_build(cmd, ILLEGAL_REQUEST, 0x25, 0);
@@ -220,7 +220,7 @@ int spc_test_unit(int host_no, struct scsi_cmd *cmd)
 	/* how should we test a backing-storage file? */
 
 	if (cmd->dev) {
-		ret = device_reserved(cmd->cmd_nexus_id, cmd->dev->lun, host_no);
+		ret = device_reserved(cmd->c_target->tid, cmd->dev->lun, host_no);
 		if (ret)
 			ret = SAM_STAT_RESERVATION_CONFLICT;
 	} else {

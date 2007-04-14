@@ -53,7 +53,7 @@ struct scsi_lu {
 
 struct scsi_cmd {
 	struct target *c_target;
-	/* linked target->cmd_hash_list */
+	/* linked it_nexus->cmd_hash_list */
 	struct list_head c_hlist;
 	struct list_head qlist;
 
@@ -63,7 +63,7 @@ struct scsi_cmd {
 	struct scsi_lu *dev;
 	unsigned long state;
 
-	uint64_t cmd_nexus_id;
+	uint64_t cmd_itn_id;
 	uint32_t data_len;
 	uint64_t offset;
 	uint8_t *scb;

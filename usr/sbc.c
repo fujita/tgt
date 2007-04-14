@@ -47,7 +47,7 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 	unsigned char key = ILLEGAL_REQUEST, asc = 0x25;
 
 	if (cmd->dev) {
-		ret = device_reserved(cmd->cmd_nexus_id, cmd->dev->lun, host_no);
+		ret = device_reserved(cmd->c_target->tid, cmd->dev->lun, host_no);
 		if (ret)
 			return SAM_STAT_RESERVATION_CONFLICT;
 	} else {
@@ -127,7 +127,7 @@ static int sbc_read_capacity(int host_no, struct scsi_cmd *cmd)
 	unsigned char key = ILLEGAL_REQUEST, asc = 0x25;
 
 	if (cmd->dev) {
-		if (device_reserved(cmd->cmd_nexus_id, cmd->dev->lun, host_no))
+		if (device_reserved(cmd->c_target->tid, cmd->dev->lun, host_no))
 			return SAM_STAT_RESERVATION_CONFLICT;
 	} else
 		goto sense;
@@ -165,7 +165,7 @@ static int sbc_sync_cache(int host_no, struct scsi_cmd *cmd)
 	uint8_t key = ILLEGAL_REQUEST, asc;
 
 	if (cmd->dev) {
-		if (device_reserved(cmd->cmd_nexus_id, cmd->dev->lun, host_no))
+		if (device_reserved(cmd->c_target->tid, cmd->dev->lun, host_no))
 			return SAM_STAT_RESERVATION_CONFLICT;
 	} else {
 		asc = 0x25;
@@ -266,7 +266,7 @@ static int sbc_mode_sense(int host_no, struct scsi_cmd *cmd)
 	unsigned char key = ILLEGAL_REQUEST, asc = 0x25;
 
 	if (cmd->dev) {
-		if (device_reserved(cmd->cmd_nexus_id, cmd->dev->lun, host_no))
+		if (device_reserved(cmd->cmd_itn_id, cmd->dev->lun, host_no))
 			return SAM_STAT_RESERVATION_CONFLICT;
 	} else
 		goto sense;

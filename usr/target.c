@@ -68,6 +68,7 @@ static struct it_nexus *it_nexus_lookup(int tid, uint64_t itn_id)
 
 int it_nexus_create(int tid, uint64_t itn_id, char *info)
 {
+	int i;
 	struct target *target;
 	struct it_nexus *itn;
 
@@ -84,6 +85,9 @@ int it_nexus_create(int tid, uint64_t itn_id, char *info)
 	itn->itn_id = itn_id;
 	itn->nexus_target = target;
 	itn->info = info;
+
+	for (i = 0; i < ARRAY_SIZE(itn->cmd_hash_list); i++)
+		INIT_LIST_HEAD(&itn->cmd_hash_list[i]);
 
 	list_add_tail(&itn->nexus_siblings, &target->it_nexus_list);
 
@@ -113,20 +117,25 @@ static struct scsi_lu *device_lookup(struct target *target, uint64_t lun)
 	return NULL;
 }
 
-static struct scsi_cmd *cmd_lookup(struct target *target, uint64_t tag)
+static struct scsi_cmd *cmd_lookup(int tid, uint64_t itn_id, uint64_t tag)
 {
 	struct scsi_cmd *cmd;
-	struct list_head *list = &target->cmd_hash_list[hashfn(tag)];
-	list_for_each_entry(cmd, list, c_hlist) {
+	struct it_nexus *itn;
+
+	itn = it_nexus_lookup(tid, itn_id);
+	if (!itn)
+		return NULL;
+
+	list_for_each_entry(cmd, &itn->cmd_hash_list[hashfn(tag)], c_hlist) {
 		if (cmd->tag == tag)
 			return cmd;
 	}
 	return NULL;
 }
 
-static void cmd_hlist_insert(struct target *target, struct scsi_cmd *cmd)
+static void cmd_hlist_insert(struct it_nexus *itn, struct scsi_cmd *cmd)
 {
-	struct list_head *list = &target->cmd_hash_list[hashfn(cmd->tag)];
+	struct list_head *list = &itn->cmd_hash_list[hashfn(cmd->tag)];
 	list_add(&cmd->c_hlist, list);
 }
 
@@ -385,17 +394,17 @@ int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 {
 	struct target *target;
 	struct tgt_cmd_queue *q;
-	struct it_nexus *nexus;
+	struct it_nexus *itn;
 	int result, enabled = 0;
-	uint64_t dev_id, nid = cmd->cmd_nexus_id;
+	uint64_t dev_id, itn_id = cmd->cmd_itn_id;
 
-	nexus = it_nexus_lookup(tid, nid);
-	if (!nexus) {
-		eprintf("invalid nexus %d %" PRIx64 "\n", tid, nid);
+	itn = it_nexus_lookup(tid, itn_id);
+	if (!itn) {
+		eprintf("invalid nexus %d %" PRIx64 "\n", tid, itn_id);
 		return -ENOENT;
 	}
 
-	cmd->c_target = target = nexus->nexus_target;
+	cmd->c_target = target = itn->nexus_target;
 
 	dev_id = scsi_get_devid(target->lid, cmd->lun);
 	dprintf("%p %x %" PRIx64 "\n", cmd, cmd->scb[0], dev_id);
@@ -407,7 +416,7 @@ int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 	    (cmd->dev && cmd->dev->lu_state != SCSI_LU_RUNNING))
 		return -EBUSY;
 
-	cmd_hlist_insert(target, cmd);
+	cmd_hlist_insert(itn, cmd);
 
 	if (cmd->dev)
 		q = &cmd->dev->cmd_queue;
@@ -418,7 +427,7 @@ int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 	dprintf("%p %x %" PRIx64 " %d\n", cmd, cmd->scb[0], dev_id, enabled);
 
 	if (enabled) {
-		result = scsi_cmd_perform(nexus->host_no, cmd);
+		result = scsi_cmd_perform(itn->host_no, cmd);
 
 		cmd_post_perform(q, cmd);
 
@@ -428,7 +437,7 @@ int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 
 		set_cmd_processed(cmd);
 		if (!cmd->async)
-			tgt_drivers[target->lid]->cmd_end_notify(nid, result, cmd);
+			tgt_drivers[target->lid]->cmd_end_notify(itn_id, result, cmd);
 	} else {
 		set_cmd_queued(cmd);
 		dprintf("blocked %" PRIx64 " %x %" PRIu64 " %d\n",
@@ -443,7 +452,7 @@ int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 
 void target_cmd_io_done(struct scsi_cmd *cmd, int result)
 {
-	tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->cmd_nexus_id,
+	tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->cmd_itn_id,
 							result, cmd);
 	return;
 }
@@ -458,9 +467,9 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 		if (enabled) {
 			struct it_nexus *nexus;
 
-			nexus = it_nexus_lookup(cmd->c_target->tid, cmd->cmd_nexus_id);
+			nexus = it_nexus_lookup(cmd->c_target->tid, cmd->cmd_itn_id);
 			if (!nexus)
-				eprintf("BUG: %" PRIu64 "\n", cmd->cmd_nexus_id);
+				eprintf("BUG: %" PRIu64 "\n", cmd->cmd_itn_id);
 
 			list_del(&cmd->qlist);
 			dprintf("perform %" PRIx64 " %x\n", cmd->tag, cmd->attribute);
@@ -469,7 +478,7 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 			set_cmd_processed(cmd);
 			if (!cmd->async) {
 				tgt_drivers[cmd->c_target->lid]->cmd_end_notify(
-					cmd->cmd_nexus_id, result, cmd);
+					cmd->cmd_itn_id, result, cmd);
 			}
 		} else
 			break;
@@ -505,16 +514,9 @@ static void __cmd_done(struct target *target, struct scsi_cmd *cmd)
 
 struct scsi_cmd *target_cmd_lookup(int tid, uint64_t itn_id, uint64_t tag)
 {
-	struct target *target;
 	struct scsi_cmd *cmd;
 
-	target = target_lookup(tid);
-	if (!target) {
-		eprintf("invalid nid %u %" PRIx64 "\n", tid, itn_id);
-		return NULL;
-	}
-
-	cmd = cmd_lookup(target, tag);
+	cmd = cmd_lookup(tid, itn_id, tag);
 	if (!cmd)
 		eprintf("Cannot find cmd %d %" PRIx64 " %" PRIx64 "\n",
 			tid, itn_id, tag);
@@ -529,7 +531,7 @@ void target_cmd_done(struct scsi_cmd *cmd)
 	mreq = cmd->mreq;
 	if (mreq && !--mreq->busy) {
 		int err = mreq->function == ABORT_TASK ? -EEXIST : 0;
-		tgt_drivers[cmd->c_target->lid]->mgmt_end_notify(cmd->cmd_nexus_id,
+		tgt_drivers[cmd->c_target->lid]->mgmt_end_notify(cmd->cmd_itn_id,
 								 mreq->mid, err);
 		free(mreq);
 	}
@@ -554,34 +556,36 @@ static int abort_cmd(struct target* target, struct mgmt_req *mreq,
 		err = -EBUSY;
 	} else {
 		__cmd_done(target, cmd);
-		tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->cmd_nexus_id,
+		tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->cmd_itn_id,
 								TASK_ABORTED, cmd);
 	}
 	return err;
 }
 
 static int abort_task_set(struct mgmt_req *mreq, struct target* target,
-			  uint64_t nexus_id, uint64_t tag, uint8_t *lun, int all)
+			  uint64_t itn_id, uint64_t tag, uint8_t *lun, int all)
 {
 	struct scsi_cmd *cmd, *tmp;
+	struct it_nexus *itn;
 	int i, err, count = 0;
 
 	eprintf("found %" PRIx64 " %d\n", tag, all);
 
-	for (i = 0; i < ARRAY_SIZE(target->cmd_hash_list); i++) {
-		struct list_head *list = &target->cmd_hash_list[i];
-		list_for_each_entry_safe(cmd, tmp, list, c_hlist) {
-			if ((all && cmd->cmd_nexus_id == nexus_id) ||
-			    (cmd->tag == tag && cmd->cmd_nexus_id == nexus_id) ||
-			    (lun && !memcmp(cmd->lun, lun, sizeof(cmd->lun)))) {
-				err = abort_cmd(target, mreq, cmd);
-				if (err)
-					mreq->busy++;
-				count++;
+	list_for_each_entry(itn, &target->it_nexus_list, nexus_siblings) {
+		for (i = 0; i < ARRAY_SIZE(itn->cmd_hash_list); i++) {
+			struct list_head *list = &itn->cmd_hash_list[i];
+			list_for_each_entry_safe(cmd, tmp, list, c_hlist) {
+				if ((all && itn->itn_id == itn_id) ||
+				    (cmd->tag == tag && itn->itn_id == itn_id) ||
+				    (lun && !memcmp(cmd->lun, lun, sizeof(cmd->lun)))) {
+					err = abort_cmd(target, mreq, cmd);
+					if (err)
+						mreq->busy++;
+					count++;
+				}
 			}
 		}
 	}
-
 	return count;
 }
 
@@ -1121,7 +1125,6 @@ char *tgt_targetname(int tid)
 
 int tgt_target_create(int lld, int tid, char *args, int t_type)
 {
-	int i;
 	struct target *target, *pos;
 	char *p, *q, *targetname = NULL;
 
@@ -1186,8 +1189,6 @@ int tgt_target_create(int lld, int tid, char *args, int t_type)
 	target->account.max_inaccount = DEFAULT_NR_ACCOUNT;
 
 	target->tid = tid;
-	for (i = 0; i < ARRAY_SIZE(target->cmd_hash_list); i++)
-		INIT_LIST_HEAD(&target->cmd_hash_list[i]);
 
 	INIT_LIST_HEAD(&target->device_list);
 

@@ -38,8 +38,6 @@ struct target {
 
 	struct list_head device_list;
 
-	struct list_head cmd_hash_list[1 << HASH_ORDER];
-
 	struct list_head it_nexus_list;
 
 	struct tgt_cmd_queue cmd_queue;
@@ -56,6 +54,8 @@ struct target {
 
 struct it_nexus {
 	uint64_t itn_id;
+
+	struct list_head cmd_hash_list[1 << HASH_ORDER];
 
 	struct target *nexus_target;
 
