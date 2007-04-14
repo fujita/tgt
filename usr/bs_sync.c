@@ -292,7 +292,7 @@ static int bs_sync_cmd_submit(struct scsi_cmd *cmd)
 	return 0;
 }
 
-static int bs_sync_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
+static int bs_sync_cmd_done(struct scsi_cmd *cmd)
 {
 	return 0;
 }

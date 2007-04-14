@@ -50,7 +50,7 @@ static void spt_sg_close(struct scsi_lu *lu)
 	close(lu->fd);
 }
 
-static int spt_sg_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
+static int spt_sg_cmd_done(struct scsi_cmd *cmd)
 {
 	return 0;
 }

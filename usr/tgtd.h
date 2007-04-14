@@ -94,7 +94,7 @@ struct backingstore_template {
 	int (*bs_open)(struct scsi_lu *dev, char *path, int *fd, uint64_t *size);
 	void (*bs_close)(struct scsi_lu *dev);
 	int (*bs_cmd_submit)(struct scsi_cmd *cmd);
-	int (*bs_cmd_done) (int do_munmap, int do_free, uint64_t uaddr, int len);
+	int (*bs_cmd_done) (struct scsi_cmd *cmd);
 };
 
 #ifdef USE_KERNEL

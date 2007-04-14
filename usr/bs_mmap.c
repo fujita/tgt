@@ -72,19 +72,21 @@ static int bs_mmap_cmd_submit(struct scsi_cmd *cmd)
 	return err;
 }
 
-static int bs_mmap_cmd_done(int do_munmap, int do_free, uint64_t uaddr, int len)
+static int bs_mmap_cmd_done(struct scsi_cmd *cmd)
 {
 	int err = 0;
+	uint64_t uaddr = cmd->uaddr;
+	int len = cmd->len;
 
-	dprintf("%d %d %" PRIx64 " %d\n", do_munmap, do_free, uaddr, len);
+	dprintf("%d %" PRIx64 " %d\n", cmd->mmapped, uaddr, len);
 
-	if (do_munmap) {
+	if (cmd->mmapped) {
 		len = pgcnt(len, (uaddr & (pagesize - 1))) << pageshift;
 		uaddr &= ~(pagesize - 1);
 		err = munmap((void *) (unsigned long) uaddr, len);
 		if (err)
 			eprintf("%" PRIx64 " %d\n", uaddr, len);
-	} else if (do_free)
+	} else
 		free((void *) (unsigned long) uaddr);
 
 	return err;

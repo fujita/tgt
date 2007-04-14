@@ -495,23 +495,11 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 static void __cmd_done(struct target *target, struct scsi_cmd *cmd)
 {
 	struct tgt_cmd_queue *q;
-	int err, do_munmap;
+	int err;
 
 	cmd_hlist_remove(cmd);
 
-	do_munmap = cmd->mmapped;
-	if (do_munmap) {
-		if (!cmd->dev) {
-			eprintf("device is null\n");
-			exit(1);
-		}
-
-		if (cmd->dev->addr)
-			do_munmap = 0;
-	}
-	err = target->bst->bs_cmd_done(do_munmap,
-				       !cmd->mmapped,
-				       cmd->uaddr, cmd->len);
+	err = target->bst->bs_cmd_done(cmd);
 
 	dprintf("%d %" PRIx64 " %u %d\n", cmd->mmapped, cmd->uaddr, cmd->len, err);
 
