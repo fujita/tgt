@@ -100,15 +100,20 @@ int it_nexus_create(int tid, uint64_t itn_id, char *info)
 
 int it_nexus_destroy(int tid, uint64_t itn_id)
 {
+	int i;
 	struct it_nexus *itn;
 
 	itn = it_nexus_lookup(tid, itn_id);
-	if (itn) {
-		list_del(&itn->nexus_siblings);
-		free(itn);
-		return 0;
-	} else
+	if (!itn)
 		return -ENOENT;
+
+	for (i = 0; i < ARRAY_SIZE(itn->cmd_hash_list); i++)
+		if (!list_empty(&itn->cmd_hash_list[i]))
+			return -EBUSY;
+
+	list_del(&itn->nexus_siblings);
+	free(itn);
+	return 0;
 }
 
 static struct scsi_lu *device_lookup(struct target *target, uint64_t lun)
