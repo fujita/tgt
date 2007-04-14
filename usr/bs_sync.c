@@ -143,9 +143,9 @@ static void *bs_sync_worker_fn(void *arg)
 		    cmd->scb[0] == SYNCHRONIZE_CACHE_16)
 			ret = fsync(fd);
 		else if (cmd->rw == READ)
-			ret = pread(fd, buf, cmd->len, cmd->offset);
+			ret = pread64(fd, buf, cmd->len, cmd->offset);
 		else
-			ret = pwrite(fd, buf, cmd->len, cmd->offset);
+			ret = pwrite64(fd, buf, cmd->len, cmd->offset);
 
 		dprintf("io done %p %x %d %d\n", cmd, cmd->scb[0], ret, cmd->len);
 
