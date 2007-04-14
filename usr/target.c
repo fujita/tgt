@@ -72,6 +72,10 @@ int it_nexus_create(int tid, uint64_t itn_id, char *info)
 	struct target *target;
 	struct it_nexus *itn;
 
+	/* for reserve/release code */
+	if (!itn_id)
+		return -EINVAL;
+
 	itn = it_nexus_lookup(tid, itn_id);
 	if (itn)
 		return -EEXIST;
