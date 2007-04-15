@@ -32,8 +32,10 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
-
+#include <linux/types.h>
+#ifndef aligned_u64
 #define aligned_u64 unsigned long long __attribute__((aligned(8)))
+#endif
 #include <scsi/scsi_tgt_if.h>
 
 #include "list.h"
@@ -86,22 +88,34 @@ static int kreq_send(struct tgt_event *p)
 	return 0;
 }
 
-int kspace_send_tsk_mgmt_res(uint64_t nid, uint64_t mid, int result)
+int kspace_send_tsk_mgmt_res(struct mgmt_req *mreq)
 {
 	struct tgt_event ev;
 
 	memset(&ev, 0, sizeof(ev));
 
 	ev.hdr.type = TGT_UEVENT_TSK_MGMT_RSP;
-	ev.p.tsk_mgmt_rsp.host_no = it_nexus_to_host_no(nid);
-	ev.p.tsk_mgmt_rsp.mid = mid;
-	ev.p.tsk_mgmt_rsp.result = result;
+	ev.p.tsk_mgmt_rsp.host_no = mreq->host_no;
+	ev.p.tsk_mgmt_rsp.itn_id = mreq->itn_id;
+	ev.p.tsk_mgmt_rsp.mid = mreq->mid;
+	ev.p.tsk_mgmt_rsp.result = mreq->result;
 
 	return kreq_send(&ev);
 }
 
+struct kscsi_cmd {
+	int host_no;
+	struct scsi_cmd scmd;
+};
+
+static inline struct kscsi_cmd *KCMD(struct scsi_cmd *cmd)
+{
+	return container_of(cmd, struct kscsi_cmd, scmd);
+}
+
 int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *cmd)
 {
+	struct kscsi_cmd *kcmd;
 	struct tgt_event ev;
 
 	memset(&ev, 0, sizeof(ev));
@@ -109,8 +123,11 @@ int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *cmd)
 	dprintf("%p %u %d %" PRIx64 " %u %" PRIu64 "\n", cmd,
 		cmd->len, result, cmd->uaddr, cmd->rw, cmd->tag);
 
+	kcmd = KCMD(cmd);
+
 	ev.hdr.type = TGT_UEVENT_CMD_RSP;
-	ev.p.cmd_rsp.host_no = it_nexus_to_host_no(nid);
+	ev.p.cmd_rsp.host_no = kcmd->host_no;
+	ev.p.cmd_rsp.itn_id = cmd->cmd_itn_id;
 	ev.p.cmd_rsp.len = cmd->len;
 	ev.p.cmd_rsp.uaddr = cmd->uaddr;
 	ev.p.cmd_rsp.sense_len = cmd->sense_len;
@@ -122,18 +139,29 @@ int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *cmd)
 	return kreq_send(&ev);
 }
 
-static int kern_queue_cmd(struct tgt_event *ev)
+static void kern_queue_cmd(struct tgt_event *ev)
 {
+	int ret, tid, scb_len = 16;
+	struct kscsi_cmd *kcmd;
 	struct scsi_cmd *cmd;
-	int scb_len = 16;
+
+	tid = tgt_bound_target_lookup(ev->p.cmd_req.host_no);
+	if (tid < 0) {
+		eprintf("can't find a bound target %d\n",
+			ev->p.cmd_req.host_no);
+		return;
+	}
 
 	/* TODO: define scsi_kcmd and move mmap stuff */
+	kcmd = zalloc(sizeof(*kcmd) + scb_len);
+	if (!kcmd) {
+		eprintf("oom %d\n", ev->p.cmd_req.host_no);
+		return;
+	}
 
-	cmd = zalloc(sizeof(*cmd) + scb_len);
-	if (!cmd)
-		return ENOMEM;
-
-	cmd->cmd_nexus_id = host_no_to_it_nexus(ev->p.cmd_req.host_no);
+	kcmd->host_no = ev->p.cmd_req.host_no;
+	cmd = &kcmd->scmd;
+	cmd->cmd_itn_id = ev->p.cmd_req.itn_id;
 	cmd->scb = (char *)cmd + sizeof(*cmd);
 	memcpy(cmd->scb, ev->p.cmd_req.scb, scb_len);
 	cmd->scb_len = scb_len;
@@ -145,17 +173,94 @@ static int kern_queue_cmd(struct tgt_event *ev)
 /* 	cmd->uaddr = ev->k.cmd_req.uaddr; */
 	cmd->uaddr = 0;
 
-	return target_cmd_queue(cmd);
+	ret = target_cmd_queue(tid, cmd);
+	if (ret) {
+		eprintf("can't queue this command %d\n", ret);
+		free(kcmd);
+	}
+}
+
+static void kern_cmd_done(struct tgt_event *ev)
+{
+	int tid;
+	/* temp hack */
+	struct scsi_cmd *cmd;
+
+	tid = tgt_bound_target_lookup(ev->p.cmd_done.host_no);
+	if (tid < 0) {
+		eprintf("can't find a bound target %d\n",
+			ev->p.cmd_done.host_no);
+		return;
+	}
+
+	cmd = target_cmd_lookup(tid, ev->p.cmd_done.itn_id, ev->p.cmd_done.tag);
+	if (cmd) {
+		target_cmd_done(cmd);
+		free(KCMD(cmd));
+	} else
+		eprintf("unknow command %d %" PRIu64 " %" PRIu64 "\n",
+			tid, ev->p.cmd_done.itn_id, ev->p.cmd_done.tag);
+}
+
+static int kspace_send_it_nexus_res(int host_no, uint64_t itn_id,
+				    uint32_t function, int result)
+{
+	struct tgt_event ev;
+
+	memset(&ev, 0, sizeof(ev));
+
+	ev.hdr.type = TGT_UEVENT_IT_NEXUS_RSP;
+	ev.p.it_nexus_rsp.host_no = host_no;
+	ev.p.it_nexus_rsp.itn_id = itn_id;
+	ev.p.it_nexus_rsp.function = function;
+	ev.p.it_nexus_rsp.result = result;
+
+	return kreq_send(&ev);
+}
+
+static void kern_it_nexus_request(struct tgt_event *ev)
+{
+	int tid, ret, host_no;
+	uint32_t function = ev->p.it_nexus_req.function;
+	uint64_t itn_id = ev->p.it_nexus_req.itn_id;
+
+	host_no = ev->p.it_nexus_req.host_no;
+	tid = tgt_bound_target_lookup(host_no);
+	if (tid < 0) {
+		eprintf("can't find a bound target %d\n", host_no);
+		return;
+	}
+
+	if (function)
+		ret = it_nexus_destroy(tid, itn_id);
+	else
+		ret = it_nexus_create(tid, itn_id, host_no, NULL);
+
+	kspace_send_it_nexus_res(host_no, itn_id, function, ret);
+}
+
+static void kern_mgmt_request(struct tgt_event *ev)
+{
+	int tid;
+
+	tid = tgt_bound_target_lookup(ev->p.tsk_mgmt_req.host_no);
+	if (tid < 0) {
+		eprintf("can't find a bound target %d\n",
+			ev->p.tsk_mgmt_req.host_no);
+		return;
+	}
+
+	target_mgmt_request(tid, ev->p.tsk_mgmt_req.itn_id,
+			    ev->p.tsk_mgmt_req.mid,
+			    ev->p.tsk_mgmt_req.function,
+			    ev->p.tsk_mgmt_req.lun,
+			    ev->p.tsk_mgmt_req.tag,
+			    ev->p.cmd_done.host_no);
 }
 
 static void kern_event_handler(int fd, int events, void *data)
 {
-	int ret;
-	uint64_t nid;
 	struct tgt_event *ev;
-	/* temp hack */
-	struct scsi_cmd *cmd;
-
 retry:
 	ev = head_ring_hdr(&kuring);
 	if (!ev->hdr.status)
@@ -165,26 +270,16 @@ retry:
 
 	switch (ev->hdr.type) {
 	case TGT_KEVENT_CMD_REQ:
-		ret = kern_queue_cmd(ev);
-		if (ret)
-			eprintf("can't queue this command %d\n", ret);
+		kern_queue_cmd(ev);
 		break;
 	case TGT_KEVENT_CMD_DONE:
-		nid = host_no_to_it_nexus(ev->p.cmd_done.host_no);
-		cmd = target_cmd_lookup(nid, ev->p.cmd_done.tag);
-		if (cmd) {
-			target_cmd_done(cmd);
-			free(cmd);
-		} else
-			eprintf("unknow command %" PRIu64 " %" PRIu64 "\n", nid,
-				ev->p.cmd_done.tag);
+		kern_cmd_done(ev);
+		break;
+	case TGT_KEVENT_IT_NEXUS_REQ:
+		kern_it_nexus_request(ev);
 		break;
 	case TGT_KEVENT_TSK_MGMT_REQ:
-		target_mgmt_request(host_no_to_it_nexus(ev->p.cmd_req.host_no),
-				    ev->p.tsk_mgmt_req.mid,
-				    ev->p.tsk_mgmt_req.function,
-				    ev->p.tsk_mgmt_req.lun,
-				    ev->p.tsk_mgmt_req.tag);
+		kern_mgmt_request(ev);
 		break;
 	default:
 		eprintf("unknown event %u\n", ev->hdr.type);

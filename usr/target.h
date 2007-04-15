@@ -20,12 +20,6 @@ struct tgt_account {
 	int *in_aids;
 };
 
-struct mgmt_req {
-	uint64_t mid;
-	int busy;
-	int function;
-};
-
 struct target {
 	char *name;
 

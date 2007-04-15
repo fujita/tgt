@@ -66,12 +66,13 @@ static struct it_nexus *it_nexus_lookup(int tid, uint64_t itn_id)
 	return NULL;
 }
 
-int it_nexus_create(int tid, uint64_t itn_id, char *info)
+int it_nexus_create(int tid, uint64_t itn_id, int host_no, char *info)
 {
 	int i;
 	struct target *target;
 	struct it_nexus *itn;
 
+	dprintf("%d %" PRIu64 "%d\n", tid, itn_id, host_no);
 	/* for reserve/release code */
 	if (!itn_id)
 		return -EINVAL;
@@ -87,6 +88,7 @@ int it_nexus_create(int tid, uint64_t itn_id, char *info)
 		return -ENOMEM;
 
 	itn->itn_id = itn_id;
+	itn->host_no = host_no;
 	itn->nexus_target = target;
 	itn->info = info;
 
@@ -102,6 +104,8 @@ int it_nexus_destroy(int tid, uint64_t itn_id)
 {
 	int i;
 	struct it_nexus *itn;
+
+	dprintf("%d %" PRIu64 "\n", tid, itn_id);
 
 	itn = it_nexus_lookup(tid, itn_id);
 	if (!itn)
@@ -542,9 +546,9 @@ void target_cmd_done(struct scsi_cmd *cmd)
 
 	mreq = cmd->mreq;
 	if (mreq && !--mreq->busy) {
-		int err = mreq->function == ABORT_TASK ? -EEXIST : 0;
-		tgt_drivers[cmd->c_target->lid]->mgmt_end_notify(cmd->cmd_itn_id,
-								 mreq->mid, err);
+		mreq->result = mreq->function == ABORT_TASK ? -EEXIST : 0;
+		mreq->itn_id = cmd->cmd_itn_id;
+		tgt_drivers[cmd->c_target->lid]->mgmt_end_notify(mreq);
 		free(mreq);
 	}
 
@@ -602,7 +606,7 @@ static int abort_task_set(struct mgmt_req *mreq, struct target* target,
 }
 
 void target_mgmt_request(int tid, uint64_t itn_id, uint64_t req_id,
-			 int function, uint8_t *lun, uint64_t tag)
+			 int function, uint8_t *lun, uint64_t tag, int host_no)
 {
 	struct target *target;
 	struct mgmt_req *mreq;
@@ -618,7 +622,9 @@ void target_mgmt_request(int tid, uint64_t itn_id, uint64_t req_id,
 	if (!mreq)
 		return;
 	mreq->mid = req_id;
+	mreq->itn_id = itn_id;
 	mreq->function = function;
+	mreq->host_no = host_no;
 
 	switch (function) {
 	case ABORT_TASK:
@@ -651,7 +657,8 @@ void target_mgmt_request(int tid, uint64_t itn_id, uint64_t req_id,
 	}
 
 	if (send) {
-		tgt_drivers[target->lid]->mgmt_end_notify(itn_id, req_id, err);
+		mreq->result = err;
+		tgt_drivers[target->lid]->mgmt_end_notify(mreq);
 		free(mreq);
 	}
 }
@@ -936,53 +943,78 @@ char *acl_get(int tid, int idx)
 	return NULL;
 }
 
-#if 0
-/* totally broken. kill this after done it_nexus kernel code */
-int it_nexus_to_host_no(uint64_t nid)
-{
-	struct it_nexus *nexus;
-	nexus = it_nexus_lookup(nid);
-	return nexus->host_no;
-}
+/*
+ * if we have lots of host, use something like radix tree for
+ * efficiency.
+ */
+static LIST_HEAD(bound_host_list);
 
-uint64_t host_no_to_it_nexus(int host_no)
+struct bound_host {
+	int host_no;
+	struct target *target;
+	struct list_head bhost_siblings;
+};
+
+int tgt_bind_host_to_target(int tid, int host_no)
 {
 	struct target *target;
-	struct it_nexus *nexus;
+	struct bound_host *bhost;
 
-	list_for_each_entry(target, &target_list, target_siblings) {
-		list_for_each_entry(nexus, &target->it_nexus_list, nexus_siblings) {
-			if (nexus->host_no == host_no)
-				return NID64(target->tid, nexus->nexus_id);
+	target = target_lookup(tid);
+	if (!target) {
+		eprintf("can't find a target %d\n", tid);
+		return -ENOENT;
+	}
+
+	list_for_each_entry(bhost, &bound_host_list, bhost_siblings) {
+		if (bhost->host_no == host_no) {
+			eprintf("already bound %d\n", host_no);
+			return -EINVAL;
 		}
 	}
-	return UINT64_MAX;
+
+	bhost = malloc(sizeof(*bhost));
+	if (!bhost)
+		return -ENOMEM;
+
+	bhost->host_no = host_no;
+	bhost->target = target;
+
+	list_add(&bhost->bhost_siblings, &bound_host_list);
+
+	dprintf("bound the scsi host %d to the target %d\n", host_no, host_no);
+
+	return 0;
 }
 
-int tgt_target_bind(int tid, int host_no, int lid)
+int tgt_unbind_host_to_target(int tid, int host_no)
 {
-	int err;
-	uint64_t nexus_id;
-	struct it_nexus *nexus;
+	struct bound_host *bhost;
 
-	err = it_nexus_create(tid, NULL, &nexus_id);
-	if (err) {
-		eprintf("fail to bind %d %d\n", tid, host_no);
-		return TGTADM_INVALID_REQUEST;
+	list_for_each_entry(bhost, &bound_host_list, bhost_siblings) {
+		if (bhost->host_no == host_no) {
+			if (!list_empty(&bhost->target->it_nexus_list)) {
+				eprintf("the target has IT_nexus\n");
+				return -EBUSY;
+			}
+			list_del(&bhost->bhost_siblings);
+			free(bhost);
+			return 0;
+		}
+	}
+	return -ENOENT;
+}
+
+int tgt_bound_target_lookup(int host_no)
+{
+	struct bound_host *bhost;
+
+	list_for_each_entry(bhost, &bound_host_list, bhost_siblings) {
+		if (bhost->host_no == host_no)
+			return bhost->target->tid;
 	}
 
-	nexus = it_nexus_lookup(nexus_id);
-	nexus->host_no = host_no;
-
-	dprintf("Succeed to bind the target %d to the scsi host %d\n",
-		tid, host_no);
-
-	return 0;
-}
-#endif
-int tgt_target_bind(int tid, int host_no, int lid)
-{
-	return 0;
+	return -ENOENT;
 }
 
 enum scsi_target_state tgt_get_target_state(int tid)

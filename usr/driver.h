@@ -15,7 +15,7 @@ struct tgt_driver {
 	uint64_t (*scsi_get_lun)(uint8_t *);
 
 	int (*cmd_end_notify)(uint64_t nid, int result, struct scsi_cmd *);
-	int (*mgmt_end_notify)(uint64_t nid, uint64_t mid, int result);
+	int (*mgmt_end_notify)(struct mgmt_req *);
 
 	struct backingstore_template *default_bst;
 };

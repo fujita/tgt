@@ -1106,11 +1106,13 @@ no_queuing:
 	return err;
 }
 
-static int iscsi_tm_done(uint64_t nid, uint64_t mid, int result)
+static int iscsi_tm_done(struct mgmt_req *mreq)
 {
-	struct iscsi_task *task = (struct iscsi_task *) (unsigned long) mid;
+	struct iscsi_task *task;
 
-	switch (result) {
+	task = (struct iscsi_task *) (unsigned long) mreq->mid;
+
+	switch (mreq->result) {
 	case 0:
 		task->result = ISCSI_TMF_RSP_COMPLETE;
 		break;
@@ -1171,7 +1173,7 @@ static int iscsi_tm_execute(struct iscsi_task *task)
 		task->result = err;
 	else
 		target_mgmt_request(conn->session->target->tid, conn->session->tsih,
-				    (unsigned long) task, fn, req->lun, req->itt);
+				    (unsigned long) task, fn, req->lun, req->itt, 0);
 	return err;
 }
 

@@ -88,7 +88,7 @@ static int target_mgmt(int lld_no, struct mgmt_task *mtask)
 	case OP_BIND:
 		/* FIXME */
 		if (req->len == sizeof(*req))
-			err = tgt_target_bind(req->tid, req->host_no, lld_no);
+			err = tgt_bind_host_to_target(req->tid, req->host_no);
 		else {
 			char *p;
 
@@ -99,7 +99,7 @@ static int target_mgmt(int lld_no, struct mgmt_task *mtask)
 		break;
 	case OP_UNBIND:
 		if (req->len == sizeof(*req))
-			;
+			err = tgt_unbind_host_to_target(req->tid, req->host_no);
 		else {
 			char *p;
 

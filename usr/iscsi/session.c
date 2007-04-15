@@ -109,7 +109,7 @@ int session_create(struct iscsi_connection *conn)
 		 _TAB3 "Connection: %u\n"
 		 _TAB4 "%s\n", session->initiator, conn->cid, addr);
 
-	err = it_nexus_create(target->tid, tsih, session->info);
+	err = it_nexus_create(target->tid, tsih, 0, session->info);
 	if (err) {
 		free(session->initiator);
 		free(session->info);
