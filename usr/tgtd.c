@@ -23,7 +23,6 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <inttypes.h>
-#include <libaio.h>
 #include <sched.h>
 #include <signal.h>
 #include <stdint.h>
