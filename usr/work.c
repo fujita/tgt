@@ -27,23 +27,24 @@
 #include "log.h"
 #include "work.h"
 
-int stop_daemon;
-
 static unsigned int jiffies;
 static LIST_HEAD(active_work_list);
 static LIST_HEAD(inactive_work_list);
 
-void enqueue_work(struct tgt_work *work, unsigned int second)
+void add_work(struct tgt_work *work, unsigned int second)
 {
 	unsigned int when;
 	struct tgt_work *ent;
 
-	when = second * SCHED_HZ;
+	if (second) {
+		when = second / TGTD_TICK_PERIOD;
+		if (!when)
+			when = 1;
 
-	if (when) {
+		work->when = when + jiffies;
 
 		list_for_each_entry(ent, &inactive_work_list, entry) {
-			if (before(when, ent->when))
+			if (before(work->when, ent->when))
 				break;
 		}
 
@@ -52,7 +53,7 @@ void enqueue_work(struct tgt_work *work, unsigned int second)
 		list_add_tail(&work->entry, &active_work_list);
 }
 
-void dequeue_work(struct tgt_work *work)
+void del_work(struct tgt_work *work)
 {
 	list_del(&work->entry);
 }
@@ -63,20 +64,21 @@ void dequeue_work(struct tgt_work *work)
  */
 void schedule(void)
 {
-	struct tgt_work *work;
+	struct tgt_work *work, *n;
 
-	jiffies++;
-
-	list_for_each_entry(work, &inactive_work_list, entry) {
-		if (after(work->when, jiffies)) {
+	list_for_each_entry_safe(work, n, &inactive_work_list, entry) {
+		if (after(jiffies, work->when)) {
 			list_del(&work->entry);
-			enqueue_work(work, 0);
+			list_add_tail(&work->entry, &active_work_list);
 		} else
 			break;
 	}
 
 	while (!list_empty(&active_work_list)) {
 		work = list_entry(active_work_list.next, struct tgt_work, entry);
+		list_del(&work->entry);
 		work->func(work->data);
 	}
+
+	jiffies++;
 }

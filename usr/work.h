@@ -1,7 +1,7 @@
 #ifndef __SCHED_H
 #define __SCHED_H
 
-#define SCHED_HZ 5
+#define TGTD_TICK_PERIOD 2
 
 struct tgt_work {
 	struct list_head entry;
@@ -11,9 +11,7 @@ struct tgt_work {
 };
 
 extern void schedule(void);
-extern void enqueue_work(struct tgt_work *work, unsigned int second);
-extern void dequeue_work(struct tgt_work *work);
-
-extern int stop_daemon;
+extern void add_work(struct tgt_work *work, unsigned int second);
+extern void del_work(struct tgt_work *work);
 
 #endif

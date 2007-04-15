@@ -174,12 +174,12 @@ int tgt_event_modify(int fd, int events)
 
 static void event_loop(void)
 {
-	int nevent, i;
+	int nevent, i, timeout = TGTD_TICK_PERIOD * 1000;
 	struct epoll_event events[1024];
 	struct tgt_event *tev;
 
 retry:
-	nevent = epoll_wait(ep_fd, events, ARRAY_SIZE(events), -1);
+	nevent = epoll_wait(ep_fd, events, ARRAY_SIZE(events), timeout);
 	if (nevent < 0) {
 		if (errno != EINTR) {
 			eprintf("%m\n");
@@ -193,8 +193,7 @@ retry:
 	} else
 		schedule();
 
-	if (!stop_daemon)
-		goto retry;
+	goto retry;
 }
 
 static int lld_init(int *use_kernel)
