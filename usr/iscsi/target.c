@@ -38,7 +38,7 @@
 #include "tgtd.h"
 #include "target.h"
 
-static LIST_HEAD(targets_list);
+LIST_HEAD(iscsi_targets_list);
 
 static int netmask_match_v6(struct sockaddr *sa1, struct sockaddr *sa2, uint32_t mbit)
 {
@@ -195,11 +195,14 @@ void target_list_build(struct iscsi_connection *conn, char *addr, char *name)
 {
 	struct iscsi_target *target;
 
-	list_for_each_entry(target, &targets_list, tlist) {
+	list_for_each_entry(target, &iscsi_targets_list, tlist) {
 		if (name && strcmp(tgt_targetname(target->tid), name))
 			continue;
 
 		if (ip_acl(target->tid, conn->fd))
+			continue;
+
+		if (isns_scn_access(target->tid, conn->initiator))
 			continue;
 
 		text_key_add(conn, "TargetName", tgt_targetname(target->tid));
@@ -211,7 +214,7 @@ struct iscsi_target *target_find_by_name(const char *name)
 {
 	struct iscsi_target *target;
 
-	list_for_each_entry(target, &targets_list, tlist) {
+	list_for_each_entry(target, &iscsi_targets_list, tlist) {
 		if (!strcmp(tgt_targetname(target->tid), name))
 			return target;
 	}
@@ -223,7 +226,7 @@ struct iscsi_target* target_find_by_id(int tid)
 {
 	struct iscsi_target *target;
 
-	list_for_each_entry(target, &targets_list, tlist) {
+	list_for_each_entry(target, &iscsi_targets_list, tlist) {
 		if (target->tid == tid)
 			return target;
 	}
@@ -249,6 +252,8 @@ int iscsi_target_destroy(int tid)
 	list_del(&target->tlist);
 
 	free(target);
+
+	isns_target_deregister(tgt_targetname(tid));
 
 	return 0;
 }
@@ -290,9 +295,11 @@ int iscsi_target_create(struct target *t)
 
 	INIT_LIST_HEAD(&target->tlist);
 	INIT_LIST_HEAD(&target->sessions_list);
+	INIT_LIST_HEAD(&target->isns_list);
 	target->tid = tid;
-	list_add(&target->tlist, &targets_list);
+	list_add_tail(&target->tlist, &iscsi_targets_list);
 
+	isns_target_register(tgt_targetname(tid));
 	return 0;
 }
 
@@ -316,23 +323,32 @@ static int iscsi_session_param_update(struct iscsi_target* target, int idx, char
 	return 0;
 }
 
-int iscsi_target_update(int tid, char *name)
+int iscsi_target_update(int mode, int tid, char *name)
 {
 	int idx, err = -EINVAL;
 	char *str;
 	struct iscsi_target* target;
 
-	target = target_find_by_id(tid);
-	if (!target)
-		return -ENOENT;
+	switch (mode) {
+	case MODE_SYSTEM:
+		err = isns_update(name);
+		break;
+	case MODE_TARGET:
+		target = target_find_by_id(tid);
+		if (!target)
+			return -ENOENT;
 
-	str = name + strlen(name) + 1;
+		str = name + strlen(name) + 1;
 
-	dprintf("%s:%s\n", name, str);
+		dprintf("%s:%s\n", name, str);
 
-	idx = param_index_by_name(name, session_keys);
-	if (idx >= 0)
-		err = iscsi_session_param_update(target, idx, str);
+		idx = param_index_by_name(name, session_keys);
+		if (idx >= 0)
+			err = iscsi_session_param_update(target, idx, str);
+		break;
+	default:
+		break;
+	}
 	return err;
 }
 
@@ -369,14 +385,19 @@ static int iscsi_target_show_session(struct iscsi_target* target, uint64_t sid,
 int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid, uint64_t lun,
 		      char *buf, int rest)
 {
-	struct iscsi_target* target;
+	struct iscsi_target* target = NULL;
 	int len, total = 0;
 
-	target = target_find_by_id(tid);
-	if (!target)
-		return 0;
+	if (mode != MODE_SYSTEM) {
+	    target = target_find_by_id(tid);
+	    if (!target)
+		    return 0;
+	}
 
 	switch (mode) {
+	case MODE_SYSTEM:
+		total = isns_show(buf, rest);
+		break;
 	case MODE_TARGET:
 		len = show_iscsi_param(buf, target->session_param, rest);
 		total += len;

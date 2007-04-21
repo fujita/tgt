@@ -24,6 +24,7 @@
 #include <inttypes.h>
 #include <sys/types.h>
 
+#include "iscsid.h"
 #include "transport.h"
 
 struct iscsi_transport *iscsi_transports[] = {
@@ -44,5 +45,6 @@ int iscsi_init(int index)
 		if (!err)
 			nr++;
 	}
+
 	return !nr;
 }

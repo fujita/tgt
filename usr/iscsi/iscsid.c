@@ -398,6 +398,13 @@ static void login_start(struct iscsi_connection *conn)
 			return;
 		}
 
+		if (isns_scn_access(conn->tid, name)) {
+			rsp->status_class = ISCSI_STATUS_CLS_INITIATOR_ERR;
+			rsp->status_detail = ISCSI_LOGIN_STATUS_TGT_NOT_FOUND;
+			conn->state = STATE_EXIT;
+			return;
+		}
+
 /* 		if (conn->target->max_sessions && */
 /* 		    (++conn->target->session_cnt > conn->target->max_sessions)) { */
 /* 			conn->target->session_cnt--; */
@@ -1841,7 +1848,8 @@ struct tgt_driver iscsi = {
 	.init			= iscsi_init,
 	.target_create		= iscsi_target_create,
 	.target_destroy		= iscsi_target_destroy,
-	.target_update		= iscsi_target_update,
+
+	.update			= iscsi_target_update,
 	.show			= iscsi_target_show,
 	.cmd_end_notify		= iscsi_scsi_cmd_done,
 	.mgmt_end_notify	= iscsi_tm_done,

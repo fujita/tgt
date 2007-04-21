@@ -311,7 +311,9 @@ static int target_type(char *str)
 
 static int str_to_mode(char *str)
 {
-	if (!strcmp("target", str) || !strcmp("tgt", str))
+	if (!strcmp("system", str) || !strcmp("sys", str))
+		return MODE_SYSTEM;
+	else if (!strcmp("target", str) || !strcmp("tgt", str))
 		return MODE_TARGET;
 	else if (!strcmp("logicalunit", str) || !strcmp("lu", str))
 		return MODE_DEVICE;

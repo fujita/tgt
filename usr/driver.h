@@ -4,13 +4,13 @@ struct tgt_driver {
 	const char *name;
 	int use_kernel;
 
-	int (*init) (int);
+	int (*init)(int);
 
-	int (*target_create) (struct target *);
-	int (*target_destroy) (int);
-	int (*target_update) (int, char *);
+	int (*target_create)(struct target *);
+	int (*target_destroy)(int);
 
-	int (*show) (int, int, uint64_t, uint32_t, uint64_t, char *, int);
+	int (*update)(int, int, char *);
+	int (*show)(int, int, uint64_t, uint32_t, uint64_t, char *, int);
 
 	uint64_t (*scsi_get_lun)(uint8_t *);
 

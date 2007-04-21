@@ -238,6 +238,8 @@ struct iscsi_target {
 
 	int max_nr_sessions;
 	int nr_sessions;
+
+	struct list_head isns_list;
 };
 
 enum task_flags {
@@ -249,6 +251,7 @@ enum task_flags {
 #define task_pending(t)		((t)->flags & (1 << TASK_pending))
 
 extern int lld_index;
+extern struct list_head iscsi_targets_list;
 
 /* chap.c */
 extern int cmnd_exec_auth_chap(struct iscsi_connection *conn);
@@ -287,13 +290,22 @@ extern int iscsi_target_create(struct target *);
 extern int iscsi_target_destroy(int);
 extern int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid,
 			     uint64_t lun, char *buf, int rest);
-extern int iscsi_target_update(int, char *);
+extern int iscsi_target_update(int, int, char *);
 
 /* param.c */
 int param_index_by_name(char *name, struct iscsi_key *keys);
 
 /* transport.c */
 extern int iscsi_init(int);
+
+/* isns.c */
+extern int isns_init(void);
+extern void isns_exit(void);
+extern int isns_show(char *buf, int rest);
+extern int isns_update(char *params);
+extern int isns_scn_access(int tid, char *name);
+extern int isns_target_register(char *name);
+extern int isns_target_deregister(char *name);
 
 #define buffer_check(buf, total, len, rest)	\
 ({						\

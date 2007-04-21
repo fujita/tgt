@@ -35,7 +35,7 @@ endif
 ifneq ($(ISCSI),)
 CFLAGS += -DISCSI
 TGTD_OBJS += $(addprefix iscsi/, conn.o param.o session.o iscsid.o target.o \
-	chap.o transport.o iscsi_tcp.o)
+	chap.o transport.o iscsi_tcp.o isns.o)
 TGTD_OBJS += bs_sync.o
 LIBS += -lcrypto -lpthread
 endif

@@ -120,8 +120,8 @@ static int target_mgmt(int lld_no, struct mgmt_task *mtask)
 
 		if (!strcmp(mtask->buf, "state"))
 			err = tgt_set_target_state(req->tid, p);
-		else if (tgt_drivers[lld_no]->target_update)
-			err = tgt_drivers[lld_no]->target_update(req->tid, mtask->buf);
+		else if (tgt_drivers[lld_no]->update)
+			err = tgt_drivers[lld_no]->update(req->mode, req->tid, mtask->buf);
 		break;
 	}
 	case OP_SHOW:
@@ -247,6 +247,36 @@ out:
 	return err;
 }
 
+static int sys_mgmt(int lld_no, struct mgmt_task *mtask)
+{
+	struct tgtadm_req *req = &mtask->req;
+	struct tgtadm_rsp *rsp = &mtask->rsp;
+	int err = TGTADM_INVALID_REQUEST, len = mtask->bsize;
+
+	switch (req->op) {
+	case OP_UPDATE:
+		if (tgt_drivers[lld_no]->update)
+			err = tgt_drivers[lld_no]->update(req->mode, req->tid, mtask->buf);
+
+		rsp->err = err;
+		rsp->len = sizeof(*rsp);
+		break;
+	case OP_SHOW:
+		if (tgt_drivers[lld_no]->show) {
+			err = tgt_drivers[lld_no]->show(req->mode,
+							req->tid, req->sid,
+							req->cid, req->lun,
+							mtask->buf, len);
+			set_show_results(rsp, &err);
+		}
+		break;
+	default:
+		break;
+	}
+
+	return err;
+}
+
 static int tgt_mgmt(struct mgmt_task *mtask)
 {
 	struct tgtadm_req *req = &mtask->req;
@@ -267,6 +297,7 @@ static int tgt_mgmt(struct mgmt_task *mtask)
 
 	switch (req->mode) {
 	case MODE_SYSTEM:
+		err = sys_mgmt(lld_no, mtask);
 		break;
 	case MODE_TARGET:
 		err = target_mgmt(lld_no, mtask);
