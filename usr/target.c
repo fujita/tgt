@@ -344,8 +344,8 @@ enum {
 };
 
 static match_table_t tokens = {
-	{Opt_scsiid, "Scsi_id=%s"},
-	{Opt_scsisn, "Scsi_sn=%s"},
+	{Opt_scsiid, "scsi_id=%s"},
+	{Opt_scsisn, "scsi_sn=%s"},
 	{Opt_err, NULL},
 };
 
