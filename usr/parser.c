@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "parser.h"
+#include "util.h"
 
 /**
  * match_one: - Determines if a string matches a simple pattern
@@ -193,10 +194,13 @@ int match_hex(substring_t *s, int *result)
  * &substring_t @s to the c-style string @to. Caller guarantees that @to is
  * large enough to hold the characters of @s.
  */
-void match_strcpy(char *to, substring_t *s)
+char *match_strncpy(char *to, substring_t *s, size_t n)
 {
-	memcpy(to, s->from, s->to - s->from);
-	to[s->to - s->from] = '\0';
+	size_t len = s->to - s->from;
+	memcpy(to, s->from, min(len, n));
+	if (n > len)
+		to[len] = '\0';
+	return to;
 }
 
 /**
@@ -209,8 +213,10 @@ void match_strcpy(char *to, substring_t *s)
  */
 char *match_strdup(substring_t *s)
 {
-	char *p = malloc(s->to - s->from + 1);
+	size_t n = s->to - s->from + 1;
+	char *p = malloc(n);
 	if (p)
-		match_strcpy(p, s);
+		match_strncpy(p, s, n);
+
 	return p;
 }
