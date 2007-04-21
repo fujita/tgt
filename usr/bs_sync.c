@@ -60,6 +60,8 @@ struct bs_sync_info {
 
 	int command_fd[2];
 	int done_fd[2];
+
+	int stop;
 };
 
 static void *bs_sync_ack_fn(void *arg)
@@ -125,6 +127,10 @@ static void *bs_sync_worker_fn(void *arg)
 	retest:
 		if (list_empty(&info->pending_list)) {
 			pthread_cond_wait(&info->pending_cond, &info->pending_lock);
+			if (info->stop) {
+				pthread_mutex_unlock(&info->pending_lock);
+				break;
+			}
 			goto retest;
 		}
 
@@ -164,6 +170,8 @@ static void *bs_sync_worker_fn(void *arg)
 
 		pthread_cond_signal(&info->finished_cond);
 	}
+
+	return NULL;
 }
 
 static void bs_sync_handler(int fd, int events, void *data)
@@ -264,10 +272,11 @@ static void bs_sync_close(struct scsi_lu *lu)
 	pthread_cancel(info->ack_thread);
 	pthread_join(info->ack_thread, NULL);
 
-	for (i = 0; i < ARRAY_SIZE(info->worker_thread); i++) {
-		pthread_cancel(info->worker_thread[i]);
+	info->stop = 1;
+	pthread_cond_broadcast(&info->pending_cond);
+
+	for (i = 0; i < ARRAY_SIZE(info->worker_thread); i++)
 		pthread_join(info->worker_thread[i], NULL);
-	}
 
 	pthread_cond_destroy(&info->finished_cond);
 	pthread_cond_destroy(&info->pending_cond);

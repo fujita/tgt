@@ -1295,6 +1295,7 @@ int tgt_target_destroy(int lld_no, int tid)
 	int ret;
 	struct target *target;
 	struct acl_entry *acl, *tmp;
+	struct scsi_lu *lu;
 
 	target = target_lookup(tid);
 	if (!target)
@@ -1303,6 +1304,12 @@ int tgt_target_destroy(int lld_no, int tid)
 	if (!list_empty(&target->it_nexus_list)) {
 		eprintf("target %d still has it nexus\n", tid);
 		return TGTADM_TARGET_ACTIVE;
+	}
+
+	while (!list_empty(&target->device_list)) {
+		lu = list_entry(target->device_list.next, struct scsi_lu,
+				device_siblings);
+		tgt_device_destroy(tid, lu->lun);
 	}
 
 	if (tgt_drivers[lld_no]->target_destroy) {
