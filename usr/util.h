@@ -14,6 +14,7 @@
 #define __be16_to_cpu(x) bswap_16(x)
 #define __be32_to_cpu(x) bswap_32(x)
 #define __be64_to_cpu(x) bswap_64(x)
+#define __cpu_to_le32(x) (x)
 #else
 #define __cpu_to_be16(x) (x)
 #define __cpu_to_be32(x) (x)
@@ -21,6 +22,7 @@
 #define __be16_to_cpu(x) (x)
 #define __be32_to_cpu(x) (x)
 #define __be64_to_cpu(x) (x)
+#define __cpu_to_le32(x) bswap_32(x)
 #endif
 
 #define	DEFDMODE	(S_IRUSR|S_IWUSR|S_IXUSR|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH)
