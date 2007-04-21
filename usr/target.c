@@ -29,6 +29,7 @@
 #include <sys/socket.h>
 
 #include "list.h"
+#include "parser.h"
 #include "util.h"
 #include "tgtd.h"
 #include "driver.h"
@@ -338,9 +339,20 @@ int device_reserved(struct scsi_cmd *cmd)
 	return -EBUSY;
 }
 
-int tgt_device_update(int tid, uint64_t dev_id, char *name)
+enum {
+	Opt_scsiid, Opt_scsisn, Opt_err,
+};
+
+static match_table_t tokens = {
+	{Opt_scsiid, "Scsi_id=%s"},
+	{Opt_scsisn, "Scsi_sn=%s"},
+	{Opt_err, NULL},
+};
+
+int tgt_device_update(int tid, uint64_t dev_id, char *params)
 {
 	int err = 0;
+	char *p;
 	struct target *target;
 	struct scsi_lu *lu;
 
@@ -354,12 +366,26 @@ int tgt_device_update(int tid, uint64_t dev_id, char *name)
 		return TGTADM_NO_LUN;
 	}
 
-	if (!strncmp(name, "scsi_id=", 8))
-		memcpy(lu->scsi_id, name + 8, sizeof(lu->scsi_id) - 1);
-	else if (!strncmp(name, "scsi_sn=", 8))
-		memcpy(lu->scsi_sn, name + 8, sizeof(lu->scsi_sn) - 1);
-	else
-		err = TGTADM_INVALID_REQUEST;
+	while ((p = strsep(&params, ",")) != NULL) {
+		substring_t args[MAX_OPT_ARGS];
+		int token;
+		if (!*p)
+			continue;
+		token = match_token(p, tokens, args);
+
+		switch (token) {
+		case Opt_scsiid:
+			match_strncpy(lu->scsi_id, &args[0],
+				      sizeof(lu->scsi_id) - 1);
+			break;
+		case Opt_scsisn:
+			match_strncpy(lu->scsi_sn, &args[0],
+				      sizeof(lu->scsi_sn) - 1);
+			break;
+		default:
+			err = TGTADM_INVALID_REQUEST;
+		}
+	}
 
 	return err;
 }
