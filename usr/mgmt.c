@@ -81,9 +81,7 @@ static int target_mgmt(int lld_no, struct mgmt_task *mtask)
 					req->target_type);
 		break;
 	case OP_DELETE:
-		err = tgt_target_destroy(req->tid);
-		if (!err && tgt_drivers[lld_no]->target_destroy)
-			tgt_drivers[lld_no]->target_destroy(req->tid);
+		err = tgt_target_destroy(lld_no, req->tid);
 		break;
 	case OP_BIND:
 		/* FIXME */

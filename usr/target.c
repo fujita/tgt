@@ -1290,8 +1290,9 @@ int tgt_target_create(int lld, int tid, char *args, int t_type)
 	return 0;
 }
 
-int tgt_target_destroy(int tid)
+int tgt_target_destroy(int lld_no, int tid)
 {
+	int ret;
 	struct target *target;
 	struct acl_entry *acl, *tmp;
 
@@ -1299,13 +1300,16 @@ int tgt_target_destroy(int tid)
 	if (!target)
 		return TGTADM_NO_TARGET;
 
-	if (!list_empty(&target->device_list)) {
-		eprintf("target %d still has devices\n", tid);
+	if (!list_empty(&target->it_nexus_list)) {
+		eprintf("target %d still has it nexus\n", tid);
 		return TGTADM_TARGET_ACTIVE;
 	}
 
-	if (!list_empty(&target->cmd_queue.queue))
-		return TGTADM_TARGET_ACTIVE;
+	if (tgt_drivers[lld_no]->target_destroy) {
+		ret = tgt_drivers[lld_no]->target_destroy(tid);
+		if (ret)
+			return ret;
+	}
 
 	list_del(&target->target_siblings);
 
