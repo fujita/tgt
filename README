@@ -21,7 +21,7 @@ The code is under the GNU General Public License version 2.
 
 Preparation
 -------------
-The iSCSI target driver can works with any 2.6.X kernels.
+The iSCSI target driver can works with the 2.6.X kernels.
 
 host:~/tgt/usr$ make ISCSI=1
 
@@ -48,6 +48,3 @@ development rules):
 
 http://lxr.linux.no/source/Documentation/CodingStyle
 http://lxr.linux.no/source/Documentation/SubmittingPatches
-
-The commits to the subversion repository go to the stgt-svn mailing
-list (stgt-svn@lists.berlios.de).
