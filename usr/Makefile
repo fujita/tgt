@@ -17,7 +17,6 @@ TGTD_OBJS += $(addprefix xen/, xen.o xs_api.o xenbus.o)
 TGTD_OBJS += tgtif.o bs_xen.o
 else
 INCLUDES += -I../include -I$(KERNELSRC)/include
-LIBS += -laio
 endif
 
 ifneq ($(SGV4),)
