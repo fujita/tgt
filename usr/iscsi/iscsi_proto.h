@@ -44,18 +44,18 @@
  * iSCSI Template Message Header
  */
 struct iscsi_hdr {
-	uint8_t		opcode;
-	uint8_t		flags;		/* Final bit */
-	uint8_t		rsvd2[2];
-	uint8_t		hlength;	/* AHSs total length */
-	uint8_t		dlength[3];	/* Data length */
-	uint8_t		lun[8];
-	__be32		itt;		/* Initiator Task Tag */
-	__be32		ttt;		/* Target Task Tag */
-	__be32		statsn;
-	__be32		exp_statsn;
-	__be32		max_statsn;
-	uint8_t		other[12];
+	uint8_t opcode;
+	uint8_t flags;		/* Final bit */
+	uint8_t rsvd2[2];
+	uint8_t hlength;	/* AHSs total length */
+	uint8_t dlength[3];	/* Data length */
+	uint8_t lun[8];
+	uint32_t itt;		/* Initiator Task Tag */
+	uint32_t ttt;		/* Target Task Tag */
+	uint32_t statsn;
+	uint32_t exp_statsn;
+	uint32_t max_statsn;
+	uint8_t	 other[12];
 };
 
 /************************* RFC 3720 Begin *****************************/
@@ -95,7 +95,7 @@ struct iscsi_hdr {
 #define ISCSI_OP_REJECT			0x3f
 
 struct iscsi_ahs_hdr {
-	__be16 ahslength;
+	uint16_t ahslength;
 	uint8_t ahstype;
 	uint8_t ahspec[5];
 };
@@ -107,14 +107,14 @@ struct iscsi_ahs_hdr {
 struct iscsi_cmd {
 	uint8_t opcode;
 	uint8_t flags;
-	__be16 rsvd2;
+	uint16_t rsvd2;
 	uint8_t hlength;
 	uint8_t dlength[3];
 	uint8_t lun[8];
-	__be32 itt;	/* Initiator Task Tag */
-	__be32 data_length;
-	__be32 cmdsn;
-	__be32 exp_statsn;
+	uint32_t itt;	/* Initiator Task Tag */
+	uint32_t data_length;
+	uint32_t cmdsn;
+	uint32_t exp_statsn;
 	uint8_t cdb[16];	/* SCSI Command Block */
 	/* Additional Data (Command Dependent) */
 };
@@ -133,15 +133,15 @@ struct iscsi_cmd {
 #define ISCSI_ATTR_ACA			4
 
 struct iscsi_rlength_ahdr {
-	__be16 ahslength;
+	uint16_t ahslength;
 	uint8_t ahstype;
 	uint8_t reserved;
-	__be32 read_length;
+	uint32_t read_length;
 };
 
 /* Extended CDB AHS */
 struct iscsi_ecdb_ahdr {
-	__be16 ahslength; /* CDB length - 15, including reserved byte */
+	uint16_t ahslength; /* CDB length - 15, including reserved byte */
 	uint8_t ahstype;
 	uint8_t reserved;
 	uint8_t ecdb[260 - 16]; /* 4-byte aligned extended CDB spillover */
@@ -156,14 +156,14 @@ struct iscsi_cmd_rsp {
 	uint8_t hlength;
 	uint8_t dlength[3];
 	uint8_t rsvd[8];
-	__be32	itt;	/* Initiator Task Tag */
-	__be32	rsvd1;
-	__be32	statsn;
-	__be32	exp_cmdsn;
-	__be32	max_cmdsn;
-	__be32	exp_datasn;
-	__be32	bi_residual_count;
-	__be32	residual_count;
+	uint32_t itt;	/* Initiator Task Tag */
+	uint32_t rsvd1;
+	uint32_t statsn;
+	uint32_t exp_cmdsn;
+	uint32_t max_cmdsn;
+	uint32_t exp_datasn;
+	uint32_t bi_residual_count;
+	uint32_t residual_count;
 	/* Response or Sense Data (optional) */
 };
 
@@ -187,14 +187,14 @@ struct iscsi_async {
 	uint8_t dlength[3];
 	uint8_t lun[8];
 	uint8_t rsvd4[8];
-	__be32	statsn;
-	__be32	exp_cmdsn;
-	__be32	max_cmdsn;
+	uint32_t statsn;
+	uint32_t exp_cmdsn;
+	uint32_t max_cmdsn;
 	uint8_t async_event;
 	uint8_t async_vcode;
-	__be16	param1;
-	__be16	param2;
-	__be16	param3;
+	uint16_t param1;
+	uint16_t param2;
+	uint16_t param3;
 	uint8_t rsvd5[4];
 };
 
@@ -210,14 +210,14 @@ struct iscsi_async {
 struct iscsi_nopout {
 	uint8_t opcode;
 	uint8_t flags;
-	__be16	rsvd2;
+	uint16_t rsvd2;
 	uint8_t rsvd3;
 	uint8_t dlength[3];
 	uint8_t lun[8];
-	__be32	itt;	/* Initiator Task Tag */
-	__be32	ttt;	/* Target Transfer Tag */
-	__be32	cmdsn;
-	__be32	exp_statsn;
+	uint32_t itt;	/* Initiator Task Tag */
+	uint32_t ttt;	/* Target Transfer Tag */
+	uint32_t cmdsn;
+	uint32_t exp_statsn;
 	uint8_t rsvd4[16];
 };
 
@@ -225,15 +225,15 @@ struct iscsi_nopout {
 struct iscsi_nopin {
 	uint8_t opcode;
 	uint8_t flags;
-	__be16	rsvd2;
+	uint16_t rsvd2;
 	uint8_t rsvd3;
 	uint8_t dlength[3];
 	uint8_t lun[8];
-	__be32	itt;	/* Initiator Task Tag */
-	__be32	ttt;	/* Target Transfer Tag */
-	__be32	statsn;
-	__be32	exp_cmdsn;
-	__be32	max_cmdsn;
+	uint32_t itt;	/* Initiator Task Tag */
+	uint32_t ttt;	/* Target Transfer Tag */
+	uint32_t statsn;
+	uint32_t exp_cmdsn;
+	uint32_t max_cmdsn;
 	uint8_t rsvd4[12];
 };
 
@@ -245,12 +245,12 @@ struct iscsi_tm {
 	uint8_t hlength;
 	uint8_t dlength[3];
 	uint8_t lun[8];
-	__be32	itt;	/* Initiator Task Tag */
-	__be32	rtt;	/* Reference Task Tag */
-	__be32	cmdsn;
-	__be32	exp_statsn;
-	__be32	refcmdsn;
-	__be32	exp_datasn;
+	uint32_t itt;	/* Initiator Task Tag */
+	uint32_t rtt;	/* Reference Task Tag */
+	uint32_t cmdsn;
+	uint32_t exp_statsn;
+	uint32_t refcmdsn;
+	uint32_t exp_datasn;
 	uint8_t rsvd2[8];
 };
 
@@ -275,11 +275,11 @@ struct iscsi_tm_rsp {
 	uint8_t hlength;
 	uint8_t dlength[3];
 	uint8_t rsvd2[8];
-	__be32	itt;	/* Initiator Task Tag */
-	__be32	rtt;	/* Reference Task Tag */
-	__be32	statsn;
-	__be32	exp_cmdsn;
-	__be32	max_cmdsn;
+	uint32_t itt;	/* Initiator Task Tag */
+	uint32_t rtt;	/* Reference Task Tag */
+	uint32_t statsn;
+	uint32_t exp_cmdsn;
+	uint32_t max_cmdsn;
 	uint8_t rsvd3[12];
 };
 
@@ -301,14 +301,14 @@ struct iscsi_r2t_rsp {
 	uint8_t	hlength;
 	uint8_t	dlength[3];
 	uint8_t lun[8];
-	__be32	itt;	/* Initiator Task Tag */
-	__be32	ttt;	/* Target Transfer Tag */
-	__be32	statsn;
-	__be32	exp_cmdsn;
-	__be32	max_cmdsn;
-	__be32	r2tsn;
-	__be32	data_offset;
-	__be32	data_length;
+	uint32_t itt;	/* Initiator Task Tag */
+	uint32_t ttt;	/* Target Transfer Tag */
+	uint32_t statsn;
+	uint32_t exp_cmdsn;
+	uint32_t max_cmdsn;
+	uint32_t r2tsn;
+	uint32_t data_offset;
+	uint32_t data_length;
 };
 
 /* SCSI Data Hdr */
@@ -319,14 +319,14 @@ struct iscsi_data {
 	uint8_t rsvd3;
 	uint8_t dlength[3];
 	uint8_t lun[8];
-	__be32	itt;
-	__be32	ttt;
-	__be32	rsvd4;
-	__be32	exp_statsn;
-	__be32	rsvd5;
-	__be32	datasn;
-	__be32	offset;
-	__be32	rsvd6;
+	uint32_t itt;
+	uint32_t ttt;
+	uint32_t rsvd4;
+	uint32_t exp_statsn;
+	uint32_t rsvd5;
+	uint32_t datasn;
+	uint32_t offset;
+	uint32_t rsvd6;
 	/* Payload */
 };
 
@@ -339,14 +339,14 @@ struct iscsi_data_rsp {
 	uint8_t hlength;
 	uint8_t dlength[3];
 	uint8_t lun[8];
-	__be32	itt;
-	__be32	ttt;
-	__be32	statsn;
-	__be32	exp_cmdsn;
-	__be32	max_cmdsn;
-	__be32	datasn;
-	__be32	offset;
-	__be32	residual_count;
+	uint32_t itt;
+	uint32_t ttt;
+	uint32_t statsn;
+	uint32_t exp_cmdsn;
+	uint32_t max_cmdsn;
+	uint32_t datasn;
+	uint32_t offset;
+	uint32_t residual_count;
 };
 
 /* Data Response PDU flags */
@@ -363,10 +363,10 @@ struct iscsi_text {
 	uint8_t hlength;
 	uint8_t dlength[3];
 	uint8_t rsvd4[8];
-	__be32	itt;
-	__be32	ttt;
-	__be32	cmdsn;
-	__be32	exp_statsn;
+	uint32_t itt;
+	uint32_t ttt;
+	uint32_t cmdsn;
+	uint32_t exp_statsn;
 	uint8_t rsvd5[16];
 	/* Text - key=value pairs */
 };
@@ -381,11 +381,11 @@ struct iscsi_text_rsp {
 	uint8_t hlength;
 	uint8_t dlength[3];
 	uint8_t rsvd4[8];
-	__be32	itt;
-	__be32	ttt;
-	__be32	statsn;
-	__be32	exp_cmdsn;
-	__be32	max_cmdsn;
+	uint32_t itt;
+	uint32_t ttt;
+	uint32_t statsn;
+	uint32_t exp_cmdsn;
+	uint32_t max_cmdsn;
 	uint8_t rsvd5[12];
 	/* Text Response - key:value pairs */
 };
@@ -399,12 +399,12 @@ struct iscsi_login {
 	uint8_t hlength;
 	uint8_t dlength[3];
 	uint8_t isid[6];	/* Initiator Session ID */
-	__be16	tsih;	/* Target Session Handle */
-	__be32	itt;	/* Initiator Task Tag */
-	__be16	cid;
-	__be16	rsvd3;
-	__be32	cmdsn;
-	__be32	exp_statsn;
+	uint16_t tsih;	/* Target Session Handle */
+	uint32_t itt;	/* Initiator Task Tag */
+	uint16_t cid;
+	uint16_t rsvd3;
+	uint32_t cmdsn;
+	uint32_t exp_statsn;
 	uint8_t rsvd5[16];
 };
 
@@ -428,12 +428,12 @@ struct iscsi_login_rsp {
 	uint8_t hlength;
 	uint8_t dlength[3];
 	uint8_t isid[6];	/* Initiator Session ID */
-	__be16	tsih;	/* Target Session Handle */
-	__be32	itt;	/* Initiator Task Tag */
-	__be32	rsvd3;
-	__be32	statsn;
-	__be32	exp_cmdsn;
-	__be32	max_cmdsn;
+	uint16_t tsih;	/* Target Session Handle */
+	uint32_t itt;	/* Initiator Task Tag */
+	uint32_t rsvd3;
+	uint32_t statsn;
+	uint32_t exp_cmdsn;
+	uint32_t max_cmdsn;
 	uint8_t status_class;	/* see Login RSP ststus classes below */
 	uint8_t status_detail;	/* see Login RSP Status details below */
 	uint8_t rsvd4[10];
@@ -486,11 +486,11 @@ struct iscsi_logout {
 	uint8_t hlength;
 	uint8_t dlength[3];
 	uint8_t rsvd2[8];
-	__be32	itt;	/* Initiator Task Tag */
-	__be16	cid;
+	uint32_t itt;	/* Initiator Task Tag */
+	uint16_t cid;
 	uint8_t rsvd3[2];
-	__be32	cmdsn;
-	__be32	exp_statsn;
+	uint32_t cmdsn;
+	uint32_t exp_statsn;
 	uint8_t rsvd4[16];
 };
 
@@ -513,15 +513,15 @@ struct iscsi_logout_rsp {
 	uint8_t hlength;
 	uint8_t dlength[3];
 	uint8_t rsvd3[8];
-	__be32	itt;	/* Initiator Task Tag */
-	__be32	rsvd4;
-	__be32	statsn;
-	__be32	exp_cmdsn;
-	__be32	max_cmdsn;
-	__be32	rsvd5;
-	__be16	t2wait;
-	__be16	t2retain;
-	__be32	rsvd6;
+	uint32_t itt;	/* Initiator Task Tag */
+	uint32_t rsvd4;
+	uint32_t statsn;
+	uint32_t exp_cmdsn;
+	uint32_t max_cmdsn;
+	uint32_t rsvd5;
+	uint16_t t2wait;
+	uint16_t t2retain;
+	uint32_t rsvd6;
 };
 
 /* logout response status values */
@@ -536,12 +536,12 @@ struct iscsi_snack {
 	uint8_t opcode;
 	uint8_t flags;
 	uint8_t rsvd2[14];
-	__be32	itt;
-	__be32	begrun;
-	__be32	runlength;
-	__be32	exp_statsn;
-	__be32	rsvd3;
-	__be32	exp_datasn;
+	uint32_t itt;
+	uint32_t begrun;
+	uint32_t runlength;
+	uint32_t exp_statsn;
+	uint32_t rsvd3;
+	uint32_t exp_datasn;
 	uint8_t rsvd6[8];
 };
 
@@ -557,12 +557,12 @@ struct iscsi_reject {
 	uint8_t hlength;
 	uint8_t dlength[3];
 	uint8_t rsvd3[8];
-	__be32  ffffffff;
+	uint32_t ffffffff;
 	uint8_t rsvd4[4];
-	__be32	statsn;
-	__be32	exp_cmdsn;
-	__be32	max_cmdsn;
-	__be32	datasn;
+	uint32_t statsn;
+	uint32_t exp_cmdsn;
+	uint32_t max_cmdsn;
+	uint32_t datasn;
 	uint8_t rsvd5[8];
 	/* Text - Rejected hdr */
 };

@@ -31,13 +31,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <scsi/scsi.h>
 #include <sys/epoll.h>
 
 #include "iscsid.h"
 #include "tgtd.h"
 #include "util.h"
 #include "driver.h"
+#include "scsi.h"
 
 #define MAX_QUEUE_CMD	32
 
@@ -1004,14 +1004,14 @@ static int cmd_attr(struct iscsi_task *task)
 	switch (req->flags & ISCSI_FLAG_CMD_ATTR_MASK) {
 	case ISCSI_ATTR_UNTAGGED:
 	case ISCSI_ATTR_SIMPLE:
-		attr = SIMPLE_QUEUE_TAG;
+		attr = MSG_SIMPLE_TAG;
 		break;
 	case ISCSI_ATTR_HEAD_OF_QUEUE:
-		attr = HEAD_OF_QUEUE_TAG;
+		attr = MSG_HEAD_TAG;
 		break;
 	case ISCSI_ATTR_ORDERED:
 	default:
-		attr = ORDERED_QUEUE_TAG;
+		attr = MSG_ORDERED_TAG;
 	}
 	return attr;
 }

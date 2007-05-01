@@ -39,8 +39,6 @@
  * MODULE_LICENSE("GPL");
 */
 
-#define __attribute_pure__		__attribute__((pure))
-
 #define CRC32C_POLY_BE 0x1EDC6F41
 #define CRC32C_POLY_LE 0x82F63B78
 
@@ -65,7 +63,7 @@
  * loop below with crc32 and vary the POLY if we don't find value in terms
  * of space and maintainability in keeping the two modules separate.
  */
-uint32_t __attribute_pure__
+uint32_t __attribute__((pure))
 crc32c_le(uint32_t crc, unsigned char const *p, size_t len)
 {
 	int i;
@@ -159,7 +157,7 @@ static const uint32_t crc32c_table[256] = {
  * crc using table.
  */
 
-uint32_t __attribute_pure__
+uint32_t __attribute__((pure))
 crc32c_le(uint32_t seed, unsigned char const *data, size_t length)
 {
 	uint32_t crc = __cpu_to_le32(seed);
@@ -174,7 +172,7 @@ crc32c_le(uint32_t seed, unsigned char const *data, size_t length)
 #endif	/* CRC_LE_BITS == 8 */
 
 #if CRC_BE_BITS == 1
-uint32_t __attribute_pure__
+uint32_t __attribute__((pure))
 crc32c_be(uint32_t crc, unsigned char const *p, size_t len)
 {
 	int i;

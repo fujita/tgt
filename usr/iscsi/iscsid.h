@@ -21,7 +21,6 @@
 
 #include <stdint.h>
 #include <inttypes.h>
-#include <linux/types.h>
 
 #include "transport.h"
 #include "list.h"
