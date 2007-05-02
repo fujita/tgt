@@ -38,8 +38,52 @@
 #include "util.h"
 #include "driver.h"
 #include "scsi.h"
+#include "crc32c.h"
 
 #define MAX_QUEUE_CMD	32
+
+enum {
+	IOSTATE_FREE,
+
+	IOSTATE_RX_BHS,
+	IOSTATE_RX_INIT_AHS,
+	IOSTATE_RX_AHS,
+	IOSTATE_RX_INIT_HDIGEST,
+	IOSTATE_RX_HDIGEST,
+	IOSTATE_RX_CHECK_HDIGEST,
+	IOSTATE_RX_INIT_DATA,
+	IOSTATE_RX_DATA,
+	IOSTATE_RX_INIT_DDIGEST,
+	IOSTATE_RX_DDIGEST,
+	IOSTATE_RX_CHECK_DDIGEST,
+	IOSTATE_RX_END,
+
+	IOSTATE_TX_BHS,
+	IOSTATE_TX_INIT_AHS,
+	IOSTATE_TX_AHS,
+	IOSTATE_TX_INIT_HDIGEST,
+	IOSTATE_TX_HDIGEST,
+	IOSTATE_TX_INIT_DATA,
+	IOSTATE_TX_DATA,
+	IOSTATE_TX_INIT_DDIGEST,
+	IOSTATE_TX_DDIGEST,
+	IOSTATE_TX_END,
+};
+
+void conn_read_pdu(struct iscsi_connection *conn)
+{
+	conn->rx_iostate = IOSTATE_RX_BHS;
+	conn->rx_buffer = (void *)&conn->req.bhs;
+	conn->rx_size = BHS_SIZE;
+}
+
+static void conn_write_pdu(struct iscsi_connection *conn)
+{
+	conn->tx_iostate = IOSTATE_TX_BHS;
+	memset(&conn->rsp, 0, sizeof(conn->rsp));
+	conn->tx_buffer = (void *)&conn->rsp.bhs;
+	conn->tx_size = BHS_SIZE;
+}
 
 static struct iscsi_key login_keys[] = {
 	{"InitiatorName",},
@@ -1265,9 +1309,7 @@ found:
 		task->r2t_count,
 		ntoh24(req->dlength), be32_to_cpu(req->offset));
 
-	conn->rx_buffer = task->data;
-	conn->rx_buffer += be32_to_cpu(req->offset);
-	conn->rx_size = roundup(ntoh24(req->dlength), 4);
+	conn->req.data = task->data + be32_to_cpu(req->offset);
 
 	task->offset += ntoh24(req->dlength);
 	task->r2t_count -= ntoh24(req->dlength);
@@ -1357,12 +1399,10 @@ static int iscsi_scsi_cmd_rx_start(struct iscsi_connection *conn)
 	if (ahs_len) {
 		task->ahs = task->data + sizeof(req->cdb);
 		task->data = task->ahs + ahs_len;
-		conn->rx_buffer = task->ahs;
- 		conn->rx_size = ahs_len + imm_len;
-	} else if (data_len) {
- 		conn->rx_buffer = task->data;
-		conn->rx_size = imm_len;
- 	}
+		conn->req.ahs = task->ahs;
+		conn->req.data = task->data;
+	} else if (data_len)
+		conn->req.data = task->data;
 
 	if (req->flags & ISCSI_FLAG_CMD_WRITE) {
 		task->offset = ntoh24(req->dlength);
@@ -1414,9 +1454,8 @@ static int iscsi_noop_out_rx_start(struct iscsi_connection *conn)
 	}
 
 	if (len) {
-		conn->rx_size = len;
 		task->len = len;
-		conn->rx_buffer = task->data;
+		conn->req.data = task->data;
 	}
 out:
 	return err;
@@ -1662,167 +1701,320 @@ nodata:
 	return -EAGAIN;
 }
 
+static int do_recv(int fd, struct iscsi_connection *conn, int next_state)
+{
+	int ret;
+
+	ret = conn->tp->ep_read(fd, conn->rx_buffer, conn->rx_size);
+	if (!ret) {
+		conn->state = STATE_CLOSE;
+		return 0;
+	} else if (ret < 0) {
+		if (errno == EINTR || errno == EAGAIN)
+			return 0;
+		else
+			return -EIO;
+	}
+
+	conn->rx_size -= ret;
+	conn->rx_buffer += ret;
+	if (!conn->rx_size)
+		conn->rx_iostate = next_state;
+
+	return ret;
+}
+
 static void iscsi_rx_handler(int fd, struct iscsi_connection *conn)
 {
-	int res;
+	int ret = 0, hdigest, ddigest;
+	uint32_t crc;
 
+	if (conn->state == STATE_SCSI) {
+		struct param *p = conn->session_param;
+		hdigest = p[ISCSI_PARAM_HDRDGST_EN].val & DIGEST_CRC32C;
+		ddigest = p[ISCSI_PARAM_DATADGST_EN].val & DIGEST_CRC32C;
+	} else
+		hdigest = ddigest = 0;
+again:
 	switch (conn->rx_iostate) {
-	case IOSTATE_READ_BHS:
-	case IOSTATE_READ_AHS_DATA:
-	read_again:
-		res = conn->tp->ep_read(fd, conn->rx_buffer, conn->rx_size);
-		if (!res) {
-			conn->state = STATE_CLOSE;
+	case IOSTATE_RX_BHS:
+		ret = do_recv(fd, conn, IOSTATE_RX_INIT_AHS);
+		if (ret <= 0 || conn->rx_iostate != IOSTATE_RX_INIT_AHS)
 			break;
-		} else if (res < 0) {
-			if (errno == EINTR)
-				goto read_again;
-			else if (errno == EAGAIN)
-				break;
-			else {
+	case IOSTATE_RX_INIT_AHS:
+		if (conn->state == STATE_SCSI) {
+			ret = iscsi_task_rx_start(conn);
+			if (ret) {
 				conn->state = STATE_CLOSE;
-				dprintf("%d %d, %m\n", res, errno);
+				break;
 			}
+		} else {
+			conn->rx_buffer = conn->req_buffer;
+			conn->req.ahs = conn->rx_buffer;
+			conn->req.data = conn->rx_buffer
+				+ roundup(conn->req.bhs.hlength * 4, 4);
+		}
+		conn->req.ahssize = conn->req.bhs.hlength * 4;
+		conn->req.datasize = ntoh24(conn->req.bhs.dlength);
+		conn->rx_size = roundup(conn->req.ahssize, 4);
+		if (conn->rx_size) {
+			conn->rx_buffer = conn->req.ahs;
+			conn->rx_iostate = IOSTATE_RX_AHS;
+		} else
+			conn->rx_iostate = hdigest ?
+				IOSTATE_RX_INIT_HDIGEST : IOSTATE_RX_INIT_DATA;
+
+		/*
+		 * if the datasize is zero, we must go to
+		 * IOSTATE_RX_END via IOSTATE_RX_INIT_DATA now. Note
+		 * iscsi_rx_handler will not called since tgtd doesn't
+		 * have data to read.
+		 */
+		if (conn->rx_iostate == IOSTATE_RX_INIT_DATA)
+			goto again;
+		else if (conn->rx_iostate != IOSTATE_RX_AHS)
+			break;
+	case IOSTATE_RX_AHS:
+		ret = do_recv(fd, conn, hdigest ?
+			      IOSTATE_RX_INIT_HDIGEST : IOSTATE_RX_INIT_DATA);
+		if (ret <= 0 || conn->rx_iostate != IOSTATE_RX_INIT_HDIGEST)
+			break;
+	case IOSTATE_RX_INIT_HDIGEST:
+		conn->rx_buffer = conn->rx_digest;
+		conn->rx_size = sizeof(conn->rx_digest);
+		conn->rx_iostate = IOSTATE_RX_HDIGEST;
+	case IOSTATE_RX_HDIGEST:
+		ret = do_recv(fd, conn, IOSTATE_RX_CHECK_HDIGEST);
+		if (ret <= 0 || conn->rx_iostate != IOSTATE_RX_CHECK_HDIGEST)
+			break;
+	case IOSTATE_RX_CHECK_HDIGEST:
+		crc = ~0;
+		crc = crc32c(crc, &conn->req.bhs, BHS_SIZE);
+		if (conn->req.ahssize)
+			crc = crc32c(crc, conn->req.ahs,
+				     roundup(conn->req.ahssize, 4));
+		crc = ~__cpu_to_le32(crc);
+		if (*((uint32_t *)conn->rx_digest) != crc) {
+			eprintf("rx hdr digest error 0x%x calc 0x%x\n",
+				*((uint32_t *)conn->rx_digest), crc);
+			conn->state = STATE_CLOSE;
+		}
+		conn->rx_iostate = IOSTATE_RX_INIT_DATA;
+	case IOSTATE_RX_INIT_DATA:
+		conn->rx_size = roundup(conn->req.datasize, 4);
+		if (conn->rx_size) {
+			conn->rx_iostate = IOSTATE_RX_DATA;
+			conn->rx_buffer = conn->req.data;
+		} else {
+			conn->rx_iostate = IOSTATE_RX_END;
 			break;
 		}
-		conn->rx_size -= res;
-		conn->rx_buffer += res;
-		if (conn->rx_size)
+	case IOSTATE_RX_DATA:
+		ret = do_recv(fd, conn, ddigest ?
+			      IOSTATE_RX_INIT_DDIGEST : IOSTATE_RX_END);
+		if (ret <= 0 || conn->rx_iostate != IOSTATE_RX_INIT_DDIGEST)
 			break;
-
-		switch (conn->rx_iostate) {
-		case IOSTATE_READ_BHS:
-			conn->req.ahssize = conn->req.bhs.hlength * 4;
-			conn->req.datasize = ntoh24(conn->req.bhs.dlength);
-
-			if (conn->state == STATE_SCSI) {
-				res = iscsi_task_rx_start(conn);
-				if (res) {
-					conn->state = STATE_CLOSE;
-					break;
-				}
-			} else {
-				conn->rx_buffer = conn->req_buffer;
-				conn->req.ahs = conn->rx_buffer;
-				conn->rx_size = roundup(conn->req.ahssize, 4);
-				conn->req.data = conn->rx_buffer + conn->rx_size;
-				conn->rx_size += roundup(conn->req.datasize, 4);
-			}
-
-			if (conn->rx_size) {
-				conn->rx_iostate = IOSTATE_READ_AHS_DATA;
-				goto read_again;
-			}
-
-		case IOSTATE_READ_AHS_DATA:
-			if (conn->state == STATE_SCSI) {
-				res = iscsi_task_rx_done(conn);
-				if (!res)
-					conn_read_pdu(conn);
-			} else {
-				conn_write_pdu(conn);
-				tgt_event_modify(fd, EPOLLOUT);
-				res = cmnd_execute(conn);
-			}
-
-			if (res)
-				conn->state = STATE_CLOSE;
+	case IOSTATE_RX_INIT_DDIGEST:
+		conn->rx_buffer = conn->rx_digest;
+		conn->rx_size = sizeof(conn->rx_digest);
+		conn->rx_iostate = IOSTATE_RX_DDIGEST;
+	case IOSTATE_RX_DDIGEST:
+		ret = do_recv(fd, conn, IOSTATE_RX_CHECK_DDIGEST);
+		if (ret <= 0 || conn->rx_iostate != IOSTATE_RX_CHECK_DDIGEST)
 			break;
+	case IOSTATE_RX_CHECK_DDIGEST:
+		crc = ~0;
+		crc = crc32c(crc, conn->req.data, roundup(conn->req.datasize, 4));
+		crc = ~__cpu_to_le32(crc);
+		conn->rx_iostate = IOSTATE_RX_END;
+		if (*((uint32_t *)conn->rx_digest) != crc) {
+			eprintf("rx hdr digest error 0x%x calc 0x%x\n",
+				*((uint32_t *)conn->rx_digest), crc);
+			conn->state = STATE_CLOSE;
 		}
 		break;
+	default:
+		eprintf("error %d %d\n", conn->state, conn->rx_iostate);
+		exit(1);
 	}
+
+	if (ret < 0 ||
+	    conn->rx_iostate != IOSTATE_RX_END ||
+	    conn->state == STATE_CLOSE)
+		return;
+
+	if (conn->rx_size) {
+		eprintf("error %d %d %d\n", conn->state, conn->rx_iostate,
+			conn->rx_size);
+		exit(1);
+	}
+
+	if (conn->state == STATE_SCSI) {
+		ret = iscsi_task_rx_done(conn);
+		if (ret)
+			conn->state = STATE_CLOSE;
+		else
+			conn_read_pdu(conn);
+	} else {
+		conn_write_pdu(conn);
+		tgt_event_modify(fd, EPOLLOUT);
+		ret = cmnd_execute(conn);
+		if (ret)
+			conn->state = STATE_CLOSE;
+	}
+}
+
+static int do_send(int fd, struct iscsi_connection *conn, int next_state)
+{
+	int ret;
+again:
+	ret = conn->tp->ep_write_begin(fd, conn->tx_buffer, conn->tx_size);
+	if (ret < 0) {
+		if (errno != EINTR && errno != EAGAIN)
+			conn->state = STATE_CLOSE;
+		else if (errno == EINTR || errno == EAGAIN)
+			goto again;
+
+		return -EIO;
+	}
+
+	conn->tx_size -= ret;
+	conn->tx_buffer += ret;
+	if (conn->tx_size)
+		goto again;
+	conn->tx_iostate = next_state;
+
+	return 0;
 }
 
 static void iscsi_tx_handler(int fd, struct iscsi_connection *conn)
 {
-	int res;
+	int ret = 0, hdigest, ddigest;
+	uint32_t crc;
+
+	if (conn->state == STATE_SCSI) {
+		struct param *p = conn->session_param;
+		hdigest = p[ISCSI_PARAM_HDRDGST_EN].val & DIGEST_CRC32C;
+		ddigest = p[ISCSI_PARAM_DATADGST_EN].val & DIGEST_CRC32C;
+	} else
+		hdigest = ddigest = 0;
 
 	if (conn->state == STATE_SCSI && !conn->tx_task) {
-		res = iscsi_task_tx_start(conn);
-		if (res)
+		ret = iscsi_task_tx_start(conn);
+		if (ret)
 			return;
 	}
 
 	switch (conn->tx_iostate) {
-	case IOSTATE_WRITE_BHS:
-	case IOSTATE_WRITE_AHS:
-	case IOSTATE_WRITE_DATA:
-	write_again:
-		res = conn->tp->ep_write_begin(fd, conn->tx_buffer,
-					       conn->tx_size);
-		if (res < 0) {
-			if (errno != EINTR && errno != EAGAIN)
-				conn->state = STATE_CLOSE;
-			else if (errno == EINTR)
-				goto write_again;
+	case IOSTATE_TX_BHS:
+		ret = do_send(fd, conn, IOSTATE_TX_INIT_AHS);
+		if (ret < 0)
 			break;
-		}
+	case IOSTATE_TX_INIT_AHS:
+		if (conn->rsp.ahssize) {
+			conn->tx_iostate = IOSTATE_TX_AHS;
+			conn->tx_buffer = conn->rsp.ahs;
+			conn->tx_size = conn->rsp.ahssize;
 
-		conn->tx_size -= res;
-		conn->tx_buffer += res;
-		if (conn->tx_size)
-			goto write_again;
+			conn->tx_iostate = IOSTATE_TX_AHS;
+		} else
+			conn->tx_iostate = hdigest ?
+				IOSTATE_TX_INIT_HDIGEST : IOSTATE_TX_INIT_DATA;
 
-		switch (conn->tx_iostate) {
-		case IOSTATE_WRITE_BHS:
-			if (conn->rsp.ahssize) {
-				conn->tx_iostate = IOSTATE_WRITE_AHS;
-				conn->tx_buffer = conn->rsp.ahs;
-				conn->tx_size = conn->rsp.ahssize;
-				goto write_again;
-			}
-		case IOSTATE_WRITE_AHS:
-			if (conn->rsp.datasize) {
-				int pad;
-
-				conn->tx_iostate = IOSTATE_WRITE_DATA;
-				conn->tx_buffer = conn->rsp.data;
-				conn->tx_size = conn->rsp.datasize;
-				pad = conn->tx_size & (PAD_WORD_LEN - 1);
-				if (pad) {
-					pad = PAD_WORD_LEN - pad;
-					memset(conn->tx_buffer + conn->tx_size,
-					       0, pad);
-					conn->tx_size += pad;
-				}
-				goto write_again;
-			}
-		case IOSTATE_WRITE_DATA:
-			conn->tp->ep_write_end(fd);
-			cmnd_finish(conn);
-
-			switch (conn->state) {
-			case STATE_KERNEL:
-				res = conn_take_fd(conn, fd);
-				if (res)
-					conn->state = STATE_CLOSE;
-				else {
-					conn->state = STATE_SCSI;
-					conn_read_pdu(conn);
-					tgt_event_modify(fd, EPOLLIN);
-				}
-				break;
-			case STATE_EXIT:
-			case STATE_CLOSE:
-				break;
-			case STATE_SCSI:
-				iscsi_task_tx_done(conn);
-				break;
-			default:
-				conn_read_pdu(conn);
-				tgt_event_modify(fd, EPOLLIN);
-				break;
-			}
+		if (conn->tx_iostate != IOSTATE_TX_AHS)
 			break;
-		}
+	case IOSTATE_TX_AHS:
+		conn->tx_iostate = hdigest ?
+			IOSTATE_TX_INIT_HDIGEST : IOSTATE_TX_INIT_DATA;
+		if (conn->tx_iostate != IOSTATE_TX_INIT_HDIGEST)
+			break;
+	case IOSTATE_TX_INIT_HDIGEST:
+		crc = ~0;
+		crc = crc32c(crc, &conn->rsp.bhs, BHS_SIZE);
+		*(uint32_t *)conn->tx_digest = ~__cpu_to_le32(crc);
+		conn->tx_iostate = IOSTATE_TX_HDIGEST;
+		conn->tx_buffer = conn->tx_digest;
+		conn->tx_size = sizeof(conn->tx_digest);
+	case IOSTATE_TX_HDIGEST:
+		ret = do_send(fd, conn, IOSTATE_TX_INIT_DATA);
+		if (ret < 0)
+			break;
+	case IOSTATE_TX_INIT_DATA:
+		if (conn->rsp.datasize) {
+			int pad;
 
+			conn->tx_iostate = IOSTATE_TX_DATA;
+			conn->tx_buffer = conn->rsp.data;
+			conn->tx_size = conn->rsp.datasize;
+			pad = conn->tx_size & (PAD_WORD_LEN - 1);
+			if (pad) {
+				pad = PAD_WORD_LEN - pad;
+				memset(conn->tx_buffer + conn->tx_size, 0, pad);
+				conn->tx_size += pad;
+			}
+		} else
+			conn->tx_iostate = IOSTATE_TX_END;
+		if (conn->tx_iostate != IOSTATE_TX_DATA)
+			break;
+	case IOSTATE_TX_DATA:
+		ret = do_send(fd, conn, ddigest ?
+			      IOSTATE_TX_INIT_DDIGEST : IOSTATE_TX_END);
+		if (ret < 0)
+			return;
+		if (conn->tx_iostate != IOSTATE_TX_INIT_DDIGEST)
+			break;
+	case IOSTATE_TX_INIT_DDIGEST:
+		crc = ~0;
+		crc = crc32c(crc, conn->rsp.data,
+			     roundup(conn->rsp.datasize, 4));
+		*(uint32_t *)conn->tx_digest = ~__cpu_to_le32(crc);
+		conn->tx_iostate = IOSTATE_TX_DDIGEST;
+		conn->tx_buffer = conn->tx_digest;
+		conn->tx_size = sizeof(conn->tx_digest);
+	case IOSTATE_TX_DDIGEST:
+		ret = do_send(fd, conn, IOSTATE_TX_END);
 		break;
 	default:
-		eprintf("illegal iostate %d %d\n", conn->tx_iostate,
-			conn->tx_iostate);
-		conn->state = STATE_CLOSE;
+		eprintf("error %d %d\n", conn->state, conn->tx_iostate);
+		exit(1);
 	}
 
+	if (ret < 0 ||
+	    conn->tx_iostate != IOSTATE_TX_END ||
+	    conn->state == STATE_CLOSE)
+		return;
+
+	if (conn->tx_size) {
+		eprintf("error %d %d %d\n", conn->state, conn->tx_iostate,
+			conn->tx_size);
+		exit(1);
+	}
+
+	conn->tp->ep_write_end(fd);
+	cmnd_finish(conn);
+
+	switch (conn->state) {
+	case STATE_KERNEL:
+		ret = conn_take_fd(conn, fd);
+		if (ret)
+			conn->state = STATE_CLOSE;
+		else {
+			conn->state = STATE_SCSI;
+			conn_read_pdu(conn);
+			tgt_event_modify(fd, EPOLLIN);
+		}
+		break;
+	case STATE_EXIT:
+	case STATE_CLOSE:
+		break;
+	case STATE_SCSI:
+		iscsi_task_tx_done(conn);
+		break;
+	default:
+		conn_read_pdu(conn);
+		tgt_event_modify(fd, EPOLLIN);
+		break;
+	}
 }
 
 void iscsi_event_handler(int fd, int events, void *data)
@@ -1838,8 +2030,10 @@ void iscsi_event_handler(int fd, int events, void *data)
 	if (conn->state != STATE_CLOSE && events & EPOLLOUT)
 		iscsi_tx_handler(fd, conn);
 
-	if (conn->state == STATE_CLOSE)
+	if (conn->state == STATE_CLOSE) {
 		conn_close(conn, fd);
+		dprintf("connection closed\n");
+	}
 }
 
 struct tgt_driver iscsi = {

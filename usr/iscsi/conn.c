@@ -176,18 +176,3 @@ int conn_take_fd(struct iscsi_connection *conn, int fd)
 
 	return 0;
 }
-
-void conn_read_pdu(struct iscsi_connection *conn)
-{
-	conn->rx_iostate = IOSTATE_READ_BHS;
-	conn->rx_buffer = (void *)&conn->req.bhs;
-	conn->rx_size = BHS_SIZE;
-}
-
-void conn_write_pdu(struct iscsi_connection *conn)
-{
-	conn->tx_iostate = IOSTATE_WRITE_BHS;
-	memset(&conn->rsp, 0, sizeof(conn->rsp));
-	conn->tx_buffer = (void *)&conn->rsp.bhs;
-	conn->tx_size = BHS_SIZE;
-}

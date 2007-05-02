@@ -173,6 +173,9 @@ struct iscsi_connection {
 
 	struct list_head tx_clist;
 
+	unsigned char rx_digest[4];
+	unsigned char tx_digest[4];
+
 	int auth_state;
 	union {
 		struct {
@@ -185,13 +188,6 @@ struct iscsi_connection {
 
 	struct iscsi_transport *tp;
 };
-
-#define IOSTATE_FREE		0
-#define IOSTATE_READ_BHS	1
-#define IOSTATE_READ_AHS_DATA	2
-#define IOSTATE_WRITE_BHS	3
-#define IOSTATE_WRITE_AHS	4
-#define IOSTATE_WRITE_DATA	5
 
 #define STATE_FREE		0
 #define STATE_SECURITY		1
@@ -262,14 +258,13 @@ extern void conn_put(struct iscsi_connection *conn);
 extern int conn_get(struct iscsi_connection *conn);
 extern struct iscsi_connection * conn_find(struct iscsi_session *session, uint32_t cid);
 extern int conn_take_fd(struct iscsi_connection *conn, int fd);
-extern void conn_read_pdu(struct iscsi_connection *conn);
-extern void conn_write_pdu(struct iscsi_connection *conn);
 extern void conn_add_to_session(struct iscsi_connection *conn, struct iscsi_session *session);
 
 /* iscsid.c */
 extern void iscsi_event_handler(int fd, int events, void *data);
 extern char *text_key_find(struct iscsi_connection *conn, char *searchKey);
 extern void text_key_add(struct iscsi_connection *conn, char *key, char *value);
+extern void conn_read_pdu(struct iscsi_connection *conn);
 
 /* iscsid.c iscsi_task */
 extern void iscsi_free_task(struct iscsi_task *task);
