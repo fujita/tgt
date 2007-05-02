@@ -21,7 +21,8 @@ The code is under the GNU General Public License version 2.
 
 Preparation
 -------------
-The iSCSI target driver can works with the 2.6.X kernels.
+The iSCSI target driver can works with the 2.6.X kernels. It requires
+OpenSSL library (libssl-dev for debian, openssl-devel for Fedora).
 
 host:~/tgt/usr$ make ISCSI=1
 

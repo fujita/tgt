@@ -1,8 +1,6 @@
 Preface
 -------------
-This show a simple example to set up some targets. If you are
-interested in advanced management, please refer to
-README.iscsi.advance.
+This show a simple example to set up some targets.
 
 
 Starting the daemon
@@ -194,6 +192,35 @@ IFMarkInt=Reject
 MaxConnections=1
 
 
+The following is another example to enable header digest:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --mode target --op update --tid 1 --name HeaderDigest -value CRC32C
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target --tid 1
+MaxRecvDataSegmentLength=16384
+MaxXmitDataSegmentLength=8192
+HeaderDigest=CRC32C
+DataDigest=None
+InitialR2T=Yes
+MaxOutstandingR2T=1
+ImmediateData=Yes
+FirstBurstLength=65536
+MaxBurstLength=262144
+DataPDUInOrder=Yes
+DataSequenceInOrder=Yes
+ErrorRecoveryLevel=0
+IFMarker=No
+OFMarker=No
+DefaultTime2Wait=2
+DefaultTime2Retain=20
+OFMarkInt=Reject
+IFMarkInt=Reject
+MaxConnections=1
+
+The target accepts CRC32C and None. Currently, there is no way to
+configure a target to accept only CRC32C.
+
+
 Authentication
 -------------
 Let's create a new account:
@@ -259,7 +286,7 @@ Initiator Information
 After the target accepts initiators, the system information would be
 something like the followings:
 
-host:~/tgt# ./tgt/usr/tgtadm --lld iscsi --op show --mode target
+host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target
 Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
     System information:
         Driver: iscsi
@@ -283,7 +310,7 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
 
 One initiator (192.168.11.5) logs in now. Let's try again:
 
-host:~/tgt# ./tgt/usr/tgtadm --lld iscsi --op show --mode target
+host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target
 Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
     System information:
         Driver: iscsi
@@ -312,7 +339,7 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
 Now we have two initiators. You can see the parameters that the target
 and initiator negotiated (use the values follows "I_T nexus:"):
 
-host:~/tgt# ./tgt/usr/tgtadm --lld iscsi --op show --mode session --tid 1 --sid 3
+host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode session --tid 1 --sid 3
 MaxRecvDataSegmentLength=8192
 MaxXmitDataSegmentLength=8192
 HeaderDigest=None
@@ -338,11 +365,32 @@ Shutdown
 -------------
 host:~/tgt# killall -9 tgtd
 
-
 We will support better methods later.
 
 
-Status
+iSNS
 -------------
-It should work under normal circumstances (good initiator, no network
-problem, etc). However, don't play with important data.
+iSNS support is still experimental.
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode sys
+iSNS:
+    iSNS=Off
+    iSNSServerIP=
+    iSNSServerPort=3205
+    iSNSAccessControl=Off
+
+host:~/tgt# ./usr/tgtadm --op update --mode sys --name iSNSServerIP -v 192.168.11.133
+
+host:~/tgt# ./usr/tgtadm --op update --mode sys --name iSNS -v On
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode sys
+iSNS:
+    iSNS=On
+    iSNSServerIP=192.168.11.133
+    iSNSServerPort=3205
+    iSNSAccessControl=Off
+
+Now you are ready to add targets. Now there are some limitations:
+
+- once you enable iSNS, you can't disable it.
+- you need to enable iSNS before adding targets.
