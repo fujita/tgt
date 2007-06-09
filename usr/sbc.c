@@ -337,11 +337,31 @@ sense:
 	return SAM_STAT_CHECK_CONDITION;
 }
 
+static int sbc_lu_init(struct scsi_lu *lu)
+{
+	if (spc_lu_init(lu))
+		return -ENOMEM;
+
+	memcpy(lu->attrs->product_id, "VIRTUAL-DISK", 16);
+	lu->attrs->version_desc[0] = 0x04C0; /* SBC-3 no version claimed */
+	lu->attrs->version_desc[1] = 0x0960; /* iSCSI */
+	lu->attrs->version_desc[2] = 0x0300; /* SPC-3 */
+
+	return 0;
+}
+
+static int sbc_lu_exit(struct scsi_lu *lu)
+{
+	return 0;
+}
+
 struct device_type_template sbc_template = {
-	.type	= TYPE_DISK,
-	.name	= "disk",
-	.pid	= "VIRTUAL-DISK",
-	.ops	= {
+	.type		= TYPE_DISK,
+	.name		= "disk",
+	.lu_init	= sbc_lu_init,
+	.lu_exit	= sbc_lu_exit,
+	.lu_config	= spc_lu_config,
+	.ops		= {
 		{spc_test_unit,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},

@@ -96,7 +96,7 @@ int spt_sg_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 		goto close_fd;
 	}
 
-	if(!S_ISBLK(st.st_mode)) {
+	if (!S_ISBLK(st.st_mode)) {
 		eprintf("only scsi devices are supported %s\n", path);
 		err = -EINVAL;
 		goto close_fd;

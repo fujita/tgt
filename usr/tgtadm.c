@@ -103,6 +103,7 @@ struct option const long_options[] = {
 	{"initiator-address", required_argument, NULL, 'I'},
 	{"user", required_argument, NULL, 'u'},
 	{"password", required_argument, NULL, 'p'},
+	{"params", required_argument, NULL, 'P'},
 
 	{"bus", required_argument, NULL, 'B'},
 	{"target-type", required_argument, NULL, 'Y'},
@@ -110,7 +111,7 @@ struct option const long_options[] = {
 	{NULL, 0, NULL, 0},
 };
 
-static char *short_options = "dhL:o:m:t:s:c:l:n:v:b:T:I:u:p:B:Y:O";
+static char *short_options = "dhL:o:m:t:s:c:l:n:v:b:T:I:u:p:P:B:Y:O";
 
 static void usage(int status)
 {
@@ -355,7 +356,7 @@ int main(int argc, char **argv)
 	int op, total, tid, rest, mode, t_type, ac_dir;
 	uint32_t cid, hostno;
 	uint64_t sid, lun;
-	char *name, *value, *path, *targetname, *params, *address;
+	char *name, *value, *path, *targetname, *params, *address, *targetOps;
 	char *user, *password;
 	char buf[BUFSIZE + sizeof(struct tgtadm_req)];
 	struct tgtadm_req *req;
@@ -365,7 +366,7 @@ int main(int argc, char **argv)
 	t_type = TYPE_DISK;
 	ac_dir = ACCOUNT_TYPE_INCOMING;
 	rest = BUFSIZE;
-	name = value = path = targetname = address = NULL;
+	name = value = path = targetname = address = targetOps = NULL;
 	user = password = NULL;
 
 	memset(buf, 0, sizeof(buf));
@@ -395,6 +396,9 @@ int main(int argc, char **argv)
 			break;
 		case 'l':
 			lun = strtoull(optarg, NULL, 10);
+			break;
+		case 'P':
+			targetOps = optarg;
 			break;
 		case 'n':
 			name = optarg;
@@ -570,6 +574,10 @@ int main(int argc, char **argv)
 	if (password)
 		shprintf(total, params, rest, "%spassword=%s",
 			 rest == BUFSIZE ? "" : ",", password);
+	/* Trailing ',' makes parsing params in modules easier.. */
+	if (targetOps)
+		shprintf(total, params, rest, "%stargetOps %s,",
+			 rest == BUFSIZE ? "" : ",", targetOps);
 
 	req->len = sizeof(*req) + total;
 

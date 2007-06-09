@@ -5,6 +5,7 @@
 
 #define SCSI_ID_LEN	24
 #define SCSI_SN_LEN	8
+#define VERSION_DESCRIPTOR_LEN 8
 
 #define VENDOR_ID	"IET"
 
@@ -29,13 +30,27 @@ struct tgt_cmd_queue {
 	struct list_head queue;
 };
 
+struct lu_phy_attr {
+	char scsi_id[SCSI_ID_LEN];
+	char scsi_sn[SCSI_SN_LEN];
+
+	/* SCSI Inquiry Params */
+	char vendor_id[9];
+	char product_id[17];
+	char product_rev[5];
+	uint16_t version_desc[VERSION_DESCRIPTOR_LEN];
+
+	char is_removable;	/* Removable media */
+	char online;		/* Logical Unit online ? */
+	char reset;		/* Power-on or reset has occured */
+	char sense_format;	/* Descrptor format sense data supported */
+};
+
 struct scsi_lu {
 	int fd;
 	uint64_t addr; /* persistent mapped address */
 	uint64_t size;
 	uint64_t lun;
-	char scsi_id[SCSI_ID_LEN];
-	char scsi_sn[SCSI_SN_LEN];
 	char *path;
 
 	/* the list of devices belonging to a target */
@@ -48,7 +63,7 @@ struct scsi_lu {
 	uint64_t reserve_id;
 
 	/* TODO: needs a structure for lots of device parameters */
-	uint8_t d_sense;
+	struct lu_phy_attr *attrs;
 };
 
 struct scsi_cmd {
@@ -121,7 +136,9 @@ struct device_type_template {
 	char *name;
 	char *pid;
 
-	void (*device_init)(struct scsi_lu *dev);
+	int (*lu_init)(struct scsi_lu *lu);
+	int (*lu_exit)(struct scsi_lu *lu);
+	int (*lu_config)(struct scsi_lu *lu, char *arg);
 
 	struct device_type_operations ops[256];
 };

@@ -29,7 +29,6 @@
 #include <sys/socket.h>
 
 #include "list.h"
-#include "parser.h"
 #include "util.h"
 #include "tgtd.h"
 #include "driver.h"
@@ -247,13 +246,17 @@ int tgt_device_create(int tid, uint64_t lun, char *args)
 	lu->lun = lun;
 	lu->lu_state = SCSI_LU_RUNNING;
 
-	snprintf(lu->scsi_id, sizeof(lu->scsi_id),
-		 "deadbeaf%d:%" PRIu64, tid, lun);
-
 	tgt_cmd_queue_init(&lu->cmd_queue);
 
-	if (target->dev_type_template.device_init)
-		target->dev_type_template.device_init(lu);
+	if (target->dev_type_template.lu_init)
+		err = target->dev_type_template.lu_init(lu);
+
+	if (!err) {
+		snprintf(lu->attrs->scsi_id, sizeof(lu->attrs->scsi_id),
+			 "deadbeaf%d:%" PRIu64, tid, lun);
+		snprintf(lu->attrs->scsi_sn, sizeof(lu->attrs->scsi_sn),
+			 "beaf%d%" PRIu64, tid, lun);
+	}
 
 	list_for_each_entry(pos, &target->device_list, device_siblings) {
 		if (lu->lun < pos->lun)
@@ -262,13 +265,14 @@ int tgt_device_create(int tid, uint64_t lun, char *args)
 	list_add_tail(&lu->device_siblings, &pos->device_siblings);
 
 	dprintf("Add a logical unit %" PRIu64 " to the target %d\n", lun, tid);
-	return 0;
+	return err;
 }
 
 int tgt_device_destroy(int tid, uint64_t lun)
 {
 	struct target *target;
 	struct scsi_lu *lu;
+	int err;
 
 	dprintf("%u %" PRIu64 "\n", tid, lun);
 
@@ -281,12 +285,14 @@ int tgt_device_destroy(int tid, uint64_t lun)
 	if (!list_empty(&lu->cmd_queue.queue) || lu->cmd_queue.active_cmd)
 		return TGTADM_LUN_ACTIVE;
 
+	err = target->dev_type_template.lu_exit(lu);
+
 	free(lu->path);
 	list_del(&lu->device_siblings);
 
 	target->bst->bs_close(lu);
 	free(lu);
-	return 0;
+	return err;
 }
 
 int device_reserve(struct scsi_cmd *cmd)
@@ -339,20 +345,9 @@ int device_reserved(struct scsi_cmd *cmd)
 	return -EBUSY;
 }
 
-enum {
-	Opt_scsiid, Opt_scsisn, Opt_err,
-};
-
-static match_table_t tokens = {
-	{Opt_scsiid, "scsi_id=%s"},
-	{Opt_scsisn, "scsi_sn=%s"},
-	{Opt_err, NULL},
-};
-
 int tgt_device_update(int tid, uint64_t dev_id, char *params)
 {
-	int err = 0;
-	char *p;
+	int err = TGTADM_INVALID_REQUEST;
 	struct target *target;
 	struct scsi_lu *lu;
 
@@ -366,26 +361,8 @@ int tgt_device_update(int tid, uint64_t dev_id, char *params)
 		return TGTADM_NO_LUN;
 	}
 
-	while ((p = strsep(&params, ",")) != NULL) {
-		substring_t args[MAX_OPT_ARGS];
-		int token;
-		if (!*p)
-			continue;
-		token = match_token(p, tokens, args);
-
-		switch (token) {
-		case Opt_scsiid:
-			match_strncpy(lu->scsi_id, &args[0],
-				      sizeof(lu->scsi_id) - 1);
-			break;
-		case Opt_scsisn:
-			match_strncpy(lu->scsi_sn, &args[0],
-				      sizeof(lu->scsi_sn) - 1);
-			break;
-		default:
-			err = TGTADM_INVALID_REQUEST;
-		}
-	}
+	if (target->dev_type_template.lu_config)
+		err = target->dev_type_template.lu_config(lu, params);
 
 	return err;
 }
@@ -474,8 +451,8 @@ int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 		cmd_post_perform(q, cmd);
 
 		dprintf("%" PRIx64 " %x %" PRIx64 " %" PRIu64 " %u %d %d\n",
-			cmd->tag, cmd->scb[0], cmd->uaddr, cmd->offset, cmd->len,
-			result, cmd->async);
+			cmd->tag, cmd->scb[0], cmd->uaddr, cmd->offset,
+			cmd->len, result, cmd->async);
 
 		set_cmd_processed(cmd);
 		if (!cmd->async)
@@ -483,7 +460,8 @@ int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 	} else {
 		set_cmd_queued(cmd);
 		dprintf("blocked %" PRIx64 " %x %" PRIu64 " %d\n",
-			cmd->tag, cmd->scb[0], cmd->dev ? cmd->dev->lun : UINT64_MAX,
+			cmd->tag, cmd->scb[0],
+			cmd->dev ? cmd->dev->lun : UINT64_MAX,
 			q->active_cmd);
 
 		list_add_tail(&cmd->qlist, &q->queue);
@@ -1148,8 +1126,8 @@ int tgt_target_show_all(char *buf, int rest)
 				 _TAB3 "Size: %s\n"
 				 _TAB3 "Backing store: %s\n",
 				 lu->lun,
-				 lu->scsi_id,
-				 lu->scsi_sn,
+				 lu->attrs->scsi_id,
+				 lu->attrs->scsi_sn,
 				 print_disksize(lu->size),
 				 lu->path);
 

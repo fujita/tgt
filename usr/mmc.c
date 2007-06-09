@@ -121,11 +121,32 @@ static int mmc_read_capacity(int host_no, struct scsi_cmd *cmd)
 	return SAM_STAT_GOOD;
 }
 
+static int mmc_lu_init(struct scsi_lu *lu)
+{
+	if (spc_lu_init(lu))
+		return -ENOMEM;
+
+	memcpy(lu->attrs->product_id, "VIRTUAL-CDROM", 16);
+	lu->attrs->sense_format = 0;
+	lu->attrs->version_desc[0] = 0x02A0; /* MMC3, no version claimed */
+	lu->attrs->version_desc[1] = 0x0960; /* iSCSI */
+	lu->attrs->version_desc[2] = 0x0300; /* SPC-3 */
+
+	return 0;
+}
+
+static int mmc_lu_exit(struct scsi_lu *lu)
+{
+	return 0;
+}
+
 struct device_type_template mmc_template = {
-	.type	= TYPE_ROM,
-	.name	= "cdrom/dvd",
-	.pid	= "VIRTUAL-CDROM",
-	.ops	= {
+	.type		= TYPE_ROM,
+	.name		= "cdrom/dvd",
+	.lu_init	= mmc_lu_init,
+	.lu_exit	= mmc_lu_exit,
+	.lu_config	= spc_lu_config,
+	.ops		= {
 		{spc_test_unit,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
