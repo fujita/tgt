@@ -40,7 +40,7 @@
 #include "scsi.h"
 #include "crc32c.h"
 
-#define MAX_QUEUE_CMD	32
+#define MAX_QUEUE_CMD	128
 
 enum {
 	IOSTATE_FREE,
