@@ -126,7 +126,7 @@ static int mmc_lu_init(struct scsi_lu *lu)
 	if (spc_lu_init(lu))
 		return -ENOMEM;
 
-	memcpy(lu->attrs.product_id, "VIRTUAL-CDROM", 16);
+	strncpy(lu->attrs.product_id, "VIRTUAL-CDROM", sizeof(lu->attrs.product_id));
 	lu->attrs.sense_format = 0;
 	lu->attrs.version_desc[0] = 0x02A0; /* MMC3, no version claimed */
 	lu->attrs.version_desc[1] = 0x0960; /* iSCSI */

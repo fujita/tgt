@@ -1,0 +1,76 @@
+#!/bin/bash
+
+# Parent directory for data files..
+HOME=/d/01
+
+P=`ps -ef|grep -v grep|grep tgtd|wc -l`
+if [ "X"$P == "X0" ]; then
+	tgtd -d 1
+	sleep 1
+fi
+
+if [ ! -d $HOME ]; then
+	mkdir -p $HOME
+fi
+
+if [ ! -f $HOME/hd_block ]; then
+	dd if=/dev/zero of=$HOME/hd_block bs=1M count=8
+fi
+if [ ! -f $HOME/cd_block0 ]; then
+	dd if=/dev/zero of=$HOME/cd_block0 bs=1M count=8
+fi
+if [ ! -f $HOME/cd_block1 ]; then
+	dd if=/dev/zero of=$HOME/cd_block1 bs=1M count=8
+fi
+if [ ! -f $HOME/cd_block2 ]; then
+	dd if=/dev/zero of=$HOME/cd_block2 bs=1M count=8
+fi
+
+set -x
+
+###################################################################################
+# Set up SBC HDD device
+###################################################################################
+TID=1
+
+tgtadm --lld iscsi --mode target --op new --tid $TID \
+		-T iqn.2007-03:marks-vtl_sbc:`hostname` --target-type disk
+
+sleep 1
+tgtadm --lld iscsi --mode logicalunit --op new --tid $TID --lun 0 -b $HOME/hd_block
+
+tgtadm --lld iscsi --mode logicalunit --op update --tid $TID --lun 0 --params scsi_sn=FRED00,scsi_id=Fred
+
+tgtadm --lld iscsi --mode logicalunit --op update --tid $TID --lun 0 \
+	--params vendor_id=QUANTUM,product_id=HD100,product_rev=0010,removable=1,sense_format=0
+
+
+tgtadm --lld iscsi --mode target --op bind --tid $TID -I ALL
+
+
+###################################################################################
+# Set up MMC CD/DVD device
+###################################################################################
+TID=2
+
+tgtadm --lld iscsi --mode target --op new --tid $TID \
+		-T iqn.2007-03:marks-vtl_mmc:`hostname` --target-type cd
+
+sleep 1
+tgtadm --lld iscsi --mode logicalunit --op new --tid $TID --lun 0 -b $HOME/cd_block0
+tgtadm --lld iscsi --mode logicalunit --op update --tid $TID --lun 0 \
+	--params vendor_id=VirtualCD,product_id=CD101,product_rev=0010,scsi_sn=XYZZY10,removable=1
+
+tgtadm --lld iscsi --mode logicalunit --op new --tid $TID --lun 1 -b $HOME/cd_block1
+tgtadm --lld iscsi --mode logicalunit --op update --tid $TID --lun 1 \
+	--params vendor_id=VirtualCD,product_id=CD101,product_rev=0010,scsi_sn=XYZZY11,removable=1
+
+tgtadm --lld iscsi --mode logicalunit --op new --tid $TID --lun 2 -b $HOME/cd_block2
+tgtadm --lld iscsi --mode logicalunit --op update --tid $TID --lun 2 \
+	--params vendor_id=VirtualCD,product_id=CD101,product_rev=0010,scsi_sn=XYZZY12,removable=1
+
+tgtadm --lld iscsi --mode target --op bind --tid $TID -I ALL
+
+tgtadm --lld iscsi --mode target --op show
+
+

@@ -286,18 +286,29 @@ int spc_illegal_op(int host_no, struct scsi_cmd *cmd)
 }
 
 enum {
-	Opt_scsi_id, Opt_scsi_sn, Opt_err,
+	Opt_scsi_id, Opt_scsi_sn,
+	Opt_vendor_id, Opt_product_id,
+	Opt_product_rev, Opt_sense_format,
+	Opt_removable, Opt_online,
+	Opt_err,
 };
 
 static match_table_t tokens = {
 	{Opt_scsi_id, "scsi_id=%s"},
 	{Opt_scsi_sn, "scsi_sn=%s"},
+	{Opt_vendor_id, "vendor_id=%s"},
+	{Opt_product_id, "product_id=%s"},
+	{Opt_product_rev, "product_rev=%s"},
+	{Opt_sense_format, "sense_format=%s"},
+	{Opt_removable, "removable=%s"},
+	{Opt_online, "online=%s"},
 	{Opt_err, NULL},
 };
 
 int spc_lu_config(struct scsi_lu *lu, char *params) {
 	int err = 0;
 	char *p;
+	char buf[20];
 
 	if (!strncmp("targetOps", params, 9))
 		params = params + 10;
@@ -307,7 +318,6 @@ int spc_lu_config(struct scsi_lu *lu, char *params) {
 		int token;
 		if (!*p)
 			continue;
-		dprintf("*p : %s\n", p);
 		token = match_token(p, tokens, args);
 		switch (token) {
 		case Opt_scsi_id:
@@ -317,6 +327,30 @@ int spc_lu_config(struct scsi_lu *lu, char *params) {
 		case Opt_scsi_sn:
 			match_strncpy(lu->attrs.scsi_sn, &args[0],
 				      sizeof(lu->attrs.scsi_sn) - 1);
+			break;
+		case Opt_vendor_id:
+			match_strncpy(lu->attrs.vendor_id, &args[0],
+					sizeof(lu->attrs.vendor_id));
+			break;
+		case Opt_product_id:
+			match_strncpy(lu->attrs.product_id, &args[0],
+					sizeof(lu->attrs.product_id));
+			break;
+		case Opt_product_rev:
+			match_strncpy(lu->attrs.product_rev, &args[0],
+					sizeof(lu->attrs.product_rev));
+			break;
+		case Opt_sense_format:
+			match_strncpy(buf, &args[0],  sizeof(buf));
+			lu->attrs.sense_format = atoi(buf);
+			break;
+		case Opt_removable:
+			match_strncpy(buf, &args[0],  sizeof(buf));
+			lu->attrs.removable = atoi(buf);
+			break;
+		case Opt_online:
+			match_strncpy(buf, &args[0],  sizeof(buf));
+			lu->attrs.online = atoi(buf);
 			break;
 		default:
 			err = TGTADM_INVALID_REQUEST;

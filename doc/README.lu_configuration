@@ -1,0 +1,69 @@
+Preface
+--------------
+This show a simple example to set up some logical units (lu).
+Please refer to README.iscsi on instructions to create logical unit(s).
+
+tgtadm options
+--------------
+You are able to modify some logical unit parameters as well as
+modify behaviour of SCSI Sense op code.
+
+NOTE: It is not recommended to change these parameters after the
+target/logical unit has been enabled to accept initiators.
+
+It is currently possible to change/modify the following:
+
+ Vendor Identification
+ Product Identification
+ Product Revision
+ Format of returned 'sense data'
+ Define if the lu is capable of supporting removable media
+ Define/set if the lu is online / offline.
+ Params are passed using the 'tgtadm' utility:
+
+Format of options are:
+ vendor_id="string"
+ product_id="string"
+ product_rev="string"
+ removable=<0|1> - 0 = non-removable, 1 = removable media
+ sense_format=<0|1> - 0 = Clasic sense format, 1 = Support descriptor format
+ online=<0|1> - 0 == Unit offline, 1 == Unit Online
+
+The options are passed to the logical unit via the "--params" switch to tgtadm
+
+e.g.
+tgtadm --lld iscsi --mode logicalunit --op update --tid <TID> --lun <LUN> \
+            --params vendor_id=QUANTUM,product_id=HD100,product_rev=0010
+tgtadm --lld iscsi --mode logicalunit --op update --tid <TID> --lun <LUN> \
+            --params removable=1,sense_format=1,online=1
+
+Or it can be performed in one go:
+tgtadm --lld iscsi --mode logicalunit --op update --tid <TID> --lun <LUN> \
+    --params vendor_id=QUANTUM,product_id=HD100,product_rev=0010,scsi_sn=FRED00,removable=1,sense_format=0,online=1
+
+
+# sg_inq -v /dev/sg5
+    inquiry cdb: 12 00 00 00 24 00
+standard INQUIRY:
+    inquiry cdb: 12 00 00 00 42 00
+  PQual=0  Device_type=0  RMB=1  version=0x05  [SPC-3]
+  [AERC=0]  [TrmTsk=1]  NormACA=0  HiSUP=0  Resp_data_format=2
+  SCCS=0  ACC=0  TGPS=0  3PC=0  Protect=0  BQue=0
+  EncServ=0  MultiP=0  [MChngr=0]  [ACKREQQ=0]  Addr16=0
+  [RelAdr=0]  WBus16=0  Sync=0  Linked=0  [TranDis=0]  CmdQue=1
+  Clocking=0x0  QAS=0  IUS=0
+    length=66 (0x42)   Peripheral device type: disk
+ Vendor identification: QUANTUM
+ Product identification: HD100
+ Product revision level: 0010
+    inquiry cdb: 12 01 00 00 fc 00
+    inquiry: requested 252 bytes but got 7 bytes
+    inquiry cdb: 12 01 80 00 fc 00
+    inquiry: requested 252 bytes but got 12 bytes
+ Unit serial number: FRED00
+
+As can be seen from above 'sg_inq' output, the RMB (removable) bit is set to 1.
+The Unit serial number page updated with 'FRED00'
+
+Please refer to scripts/tgt-core-test for a working example.
+
