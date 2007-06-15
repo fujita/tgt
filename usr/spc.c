@@ -64,19 +64,19 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 		uint16_t *desc;
 
 		data[0] = device_type;
-		data[1] = (cmd->dev->attrs->is_removable) ? 0x80 : 0;
+		data[1] = (cmd->dev->attrs.removable) ? 0x80 : 0;
 		data[2] = 5;	/* SPC-3 */
 		data[3] = 0x42;
 		data[7] = 0x02;
 
 		memset(data + 8, 0x20, 28);
-		strncpy((char *)data + 8, cmd->dev->attrs->vendor_id, 8);
-		strncpy((char *)data + 16, cmd->dev->attrs->product_id, 16);
-		strncpy((char *)data + 32, cmd->dev->attrs->product_rev, 4);
+		strncpy((char *)data + 8, cmd->dev->attrs.vendor_id, 8);
+		strncpy((char *)data + 16, cmd->dev->attrs.product_id, 16);
+		strncpy((char *)data + 32, cmd->dev->attrs.product_rev, 4);
 
 		desc = (uint16_t *)(data + 58);
-		for (i = 0; i < ARRAY_SIZE(cmd->dev->attrs->version_desc); i++)
-			*desc++ = __cpu_to_be16(cmd->dev->attrs->version_desc[i]);
+		for (i = 0; i < ARRAY_SIZE(cmd->dev->attrs.version_desc); i++)
+			*desc++ = __cpu_to_be16(cmd->dev->attrs.version_desc[i]);
 
 		len = 66;
 		data[4] = len - 5;	/* Additional Length */
@@ -108,12 +108,12 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 			len = 4 + SCSI_SN_LEN;
 			ret = SAM_STAT_GOOD;
 
-			if (cmd->dev && strlen(cmd->dev->attrs->scsi_sn)) {
+			if (cmd->dev && strlen(cmd->dev->attrs.scsi_sn)) {
 				uint8_t *p;
 				char *q;
 
 				p = data + 4 + tmp - 1;
-				q = cmd->dev->attrs->scsi_sn + SCSI_SN_LEN - 1;
+				q = cmd->dev->attrs.scsi_sn + SCSI_SN_LEN - 1;
 				for (; tmp > 0; tmp--, q)
 					*(p--) = *(q--);
 			}
@@ -127,7 +127,7 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 			data[7] = tmp;
 			if (cmd->dev)
 				strncpy((char *) data + 8,
-					cmd->dev->attrs->scsi_id, SCSI_ID_LEN);
+					cmd->dev->attrs.scsi_id, SCSI_ID_LEN);
 
 			len = tmp + 8;
 			ret = SAM_STAT_GOOD;
@@ -286,12 +286,12 @@ int spc_illegal_op(int host_no, struct scsi_cmd *cmd)
 }
 
 enum {
-	Opt_scsiid, Opt_scsisn, Opt_err,
+	Opt_scsi_id, Opt_scsi_sn, Opt_err,
 };
 
 static match_table_t tokens = {
-	{Opt_scsiid, "scsi_id=%s"},
-	{Opt_scsisn, "scsi_sn=%s"},
+	{Opt_scsi_id, "scsi_id=%s"},
+	{Opt_scsi_sn, "scsi_sn=%s"},
 	{Opt_err, NULL},
 };
 
@@ -310,13 +310,13 @@ int spc_lu_config(struct scsi_lu *lu, char *params) {
 		dprintf("*p : %s\n", p);
 		token = match_token(p, tokens, args);
 		switch (token) {
-		case Opt_scsiid:
-			match_strncpy(lu->attrs->scsi_id, &args[0],
-				      sizeof(lu->attrs->scsi_id) - 1);
+		case Opt_scsi_id:
+			match_strncpy(lu->attrs.scsi_id, &args[0],
+				      sizeof(lu->attrs.scsi_id) - 1);
 			break;
-		case Opt_scsisn:
-			match_strncpy(lu->attrs->scsi_sn, &args[0],
-				      sizeof(lu->attrs->scsi_sn) - 1);
+		case Opt_scsi_sn:
+			match_strncpy(lu->attrs.scsi_sn, &args[0],
+				      sizeof(lu->attrs.scsi_sn) - 1);
 			break;
 		default:
 			err = TGTADM_INVALID_REQUEST;
@@ -327,16 +327,12 @@ int spc_lu_config(struct scsi_lu *lu, char *params) {
 
 int spc_lu_init(struct scsi_lu *lu)
 {
-	lu->attrs = zalloc(sizeof(struct lu_phy_attr));
-	if (!lu->attrs)
-		return -ENOMEM;
-
-	memcpy(lu->attrs->vendor_id, VENDOR_ID, 8);
-	memcpy(lu->attrs->product_rev, "0001", 4);
-	lu->attrs->is_removable = 0;
-	lu->attrs->sense_format = 0;
-	lu->attrs->online = 0;
-	lu->attrs->reset = 1;
+	strncpy(lu->attrs.vendor_id, VENDOR_ID, strlen(VENDOR_ID));
+	memcpy(lu->attrs.product_rev, "0001", 4);
+	lu->attrs.removable = 0;
+	lu->attrs.sense_format = 0;
+	lu->attrs.online = 0;
+	lu->attrs.reset = 1;
 
 	return 0;
 }

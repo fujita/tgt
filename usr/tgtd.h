@@ -40,8 +40,8 @@ struct lu_phy_attr {
 	char product_rev[5];
 	uint16_t version_desc[VERSION_DESCRIPTOR_LEN];
 
-	char is_removable;	/* Removable media */
-	char online;		/* Logical Unit online ? */
+	char removable;		/* Removable media */
+	char online;		/* Logical Unit online */
 	char reset;		/* Power-on or reset has occured */
 	char sense_format;	/* Descrptor format sense data supported */
 };
@@ -63,7 +63,7 @@ struct scsi_lu {
 	uint64_t reserve_id;
 
 	/* TODO: needs a structure for lots of device parameters */
-	struct lu_phy_attr *attrs;
+	struct lu_phy_attr attrs;
 };
 
 struct scsi_cmd {

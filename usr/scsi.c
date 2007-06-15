@@ -40,7 +40,7 @@
 
 void sense_data_build(struct scsi_cmd *cmd, uint8_t key, uint8_t asc, uint8_t asq)
 {
-	if (cmd->dev && cmd->dev->attrs->sense_format) {
+	if (cmd->dev && cmd->dev->attrs.sense_format) {
 		/* descriptor format */
 
 		cmd->sense_buffer[0] = 0x72;  /* current, not deferred */

@@ -126,11 +126,11 @@ static int mmc_lu_init(struct scsi_lu *lu)
 	if (spc_lu_init(lu))
 		return -ENOMEM;
 
-	memcpy(lu->attrs->product_id, "VIRTUAL-CDROM", 16);
-	lu->attrs->sense_format = 0;
-	lu->attrs->version_desc[0] = 0x02A0; /* MMC3, no version claimed */
-	lu->attrs->version_desc[1] = 0x0960; /* iSCSI */
-	lu->attrs->version_desc[2] = 0x0300; /* SPC-3 */
+	memcpy(lu->attrs.product_id, "VIRTUAL-CDROM", 16);
+	lu->attrs.sense_format = 0;
+	lu->attrs.version_desc[0] = 0x02A0; /* MMC3, no version claimed */
+	lu->attrs.version_desc[1] = 0x0960; /* iSCSI */
+	lu->attrs.version_desc[2] = 0x0300; /* SPC-3 */
 
 	return 0;
 }

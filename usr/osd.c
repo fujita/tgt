@@ -56,11 +56,11 @@ static int osd_lu_init(struct scsi_lu *lu)
 	if (spc_lu_init(lu))
 		return -ENOMEM;
 
-	memcpy(lu->attrs->product_id, "OSD", 16);
-	lu->attrs->sense_format = 1;
-	lu->attrs->version_desc[0] = 0x0340; /* OSD */
-	lu->attrs->version_desc[1] = 0x0960; /* iSCSI */
-	lu->attrs->version_desc[2] = 0x0300; /* SPC-3 */
+	memcpy(lu->attrs.product_id, "OSD", 16);
+	lu->attrs.sense_format = 1;
+	lu->attrs.version_desc[0] = 0x0340; /* OSD */
+	lu->attrs.version_desc[1] = 0x0960; /* iSCSI */
+	lu->attrs.version_desc[2] = 0x0300; /* SPC-3 */
 
 	return 0;
 }

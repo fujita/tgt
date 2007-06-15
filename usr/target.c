@@ -252,9 +252,9 @@ int tgt_device_create(int tid, uint64_t lun, char *args)
 		err = target->dev_type_template.lu_init(lu);
 
 	if (!err) {
-		snprintf(lu->attrs->scsi_id, sizeof(lu->attrs->scsi_id),
+		snprintf(lu->attrs.scsi_id, sizeof(lu->attrs.scsi_id),
 			 "deadbeaf%d:%" PRIu64, tid, lun);
-		snprintf(lu->attrs->scsi_sn, sizeof(lu->attrs->scsi_sn),
+		snprintf(lu->attrs.scsi_sn, sizeof(lu->attrs.scsi_sn),
 			 "beaf%d%" PRIu64, tid, lun);
 	}
 
@@ -1126,8 +1126,8 @@ int tgt_target_show_all(char *buf, int rest)
 				 _TAB3 "Size: %s\n"
 				 _TAB3 "Backing store: %s\n",
 				 lu->lun,
-				 lu->attrs->scsi_id,
-				 lu->attrs->scsi_sn,
+				 lu->attrs.scsi_id,
+				 lu->attrs.scsi_sn,
 				 print_disksize(lu->size),
 				 lu->path);
 
