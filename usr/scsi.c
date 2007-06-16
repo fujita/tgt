@@ -40,7 +40,7 @@
 
 void sense_data_build(struct scsi_cmd *cmd, uint8_t key, uint8_t asc, uint8_t asq)
 {
-	if (cmd->dev && cmd->dev->attrs.sense_format) {
+	if (cmd->dev->attrs.sense_format) {
 		/* descriptor format */
 
 		cmd->sense_buffer[0] = 0x72;  /* current, not deferred */
@@ -119,11 +119,7 @@ uint64_t scsi_rw_offset(uint8_t *scb)
 int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd)
 {
 	unsigned char op = cmd->scb[0];
-	if (!cmd->dev) {
-		cmd->len = 0;
-		sense_data_build(cmd, NOT_READY, 0x44, 0); /* Internal target failure */
-		return SAM_STAT_CHECK_CONDITION;
-	}
+
 	return cmd->dev->dev_type_template.ops[op].cmd_perform(host_no, cmd);
 }
 

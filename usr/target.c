@@ -37,7 +37,7 @@
 #include "tgtadm.h"
 
 extern struct device_type_template sbc_template, mmc_template, osd_template,
-	spt_template;
+	spt_template, scc_template;
 
 static LIST_HEAD(target_list);
 
@@ -206,10 +206,10 @@ __device_lookup(int tid, uint64_t lun, struct target **t)
 	return lu;
 }
 
-int tgt_device_create(int tid, uint64_t lun, char *args, int l_type)
+int tgt_device_create(int tid, uint64_t lun, char *args, int l_type, int backing)
 {
-	char *p;
-	int err;
+	char *p = NULL;
+	int err = 0;
 	struct target *target;
 	struct scsi_lu *lu, *pos;
 
@@ -225,13 +225,15 @@ int tgt_device_create(int tid, uint64_t lun, char *args, int l_type)
 		return TGTADM_LUN_EXIST;
 	}
 
-	if (!*args)
-		return TGTADM_INVALID_REQUEST;
+	if (backing) {
+		if (!*args)
+			return TGTADM_INVALID_REQUEST;
 
-	p = strchr(args, '=');
-	if (!p)
-		return TGTADM_INVALID_REQUEST;
-	p++;
+		p = strchr(args, '=');
+		if (!p)
+			return TGTADM_INVALID_REQUEST;
+		p++;
+	}
 
 	if (l_type == TYPE_SPT)
 		lu = zalloc(sizeof(*lu) + sg_bst.bs_datasize);
@@ -242,6 +244,10 @@ int tgt_device_create(int tid, uint64_t lun, char *args, int l_type)
 		return TGTADM_NOMEM;
 
 	switch (l_type) {
+	case TYPE_RAID:
+		lu->dev_type_template = scc_template;
+		lu->bst = target->bst;
+		break;
 	case TYPE_DISK:
 		lu->dev_type_template = sbc_template;
 		lu->bst = target->bst;
@@ -264,10 +270,12 @@ int tgt_device_create(int tid, uint64_t lun, char *args, int l_type)
 		return TGTADM_INVALID_REQUEST;
 	}
 
-	err = tgt_device_path_update(target, lu, p);
-	if (err) {
-		free(lu);
-		return err;
+	if (backing) {
+		err = tgt_device_path_update(target, lu, p);
+		if (err) {
+			free(lu);
+			return err;
+		}
 	}
 
 	lu->lun = lun;
@@ -287,6 +295,9 @@ int tgt_device_create(int tid, uint64_t lun, char *args, int l_type)
   		lu->attrs.device_type = l_type;
   		lu->attrs.qualifier = 0x0;
 	}
+
+	if (tgt_drivers[target->lid]->lu_create)
+		tgt_drivers[target->lid]->lu_create(lu);
 
 	list_for_each_entry(pos, &target->device_list, device_siblings) {
 		if (lu->lun < pos->lun)
@@ -456,21 +467,22 @@ int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 	cmd->c_target = target = itn->nexus_target;
 
 	dev_id = scsi_get_devid(target->lid, cmd->lun);
+	cmd->dev_id = dev_id;
 	dprintf("%p %x %" PRIx64 "\n", cmd, cmd->scb[0], dev_id);
-
 	cmd->dev = device_lookup(target, dev_id);
+	/* use LUN0 */
+	if (!cmd->dev)
+		cmd->dev = list_entry(target->device_list.next, struct scsi_lu,
+				      device_siblings);
 
 	/* service delivery or target failure */
 	if (target->target_state != SCSI_TARGET_RUNNING ||
-	    (cmd->dev && cmd->dev->lu_state != SCSI_LU_RUNNING))
+	    (cmd->dev->lu_state != SCSI_LU_RUNNING))
 		return -EBUSY;
 
 	cmd_hlist_insert(itn, cmd);
 
-	if (cmd->dev)
-		q = &cmd->dev->cmd_queue;
-	else
-		q = &target->cmd_queue;
+	q = &cmd->dev->cmd_queue;
 
 	enabled = cmd_enabled(q, cmd);
 	dprintf("%p %x %" PRIx64 " %d\n", cmd, cmd->scb[0], dev_id, enabled);
@@ -490,9 +502,7 @@ int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 	} else {
 		set_cmd_queued(cmd);
 		dprintf("blocked %" PRIx64 " %x %" PRIu64 " %d\n",
-			cmd->tag, cmd->scb[0],
-			cmd->dev ? cmd->dev->lun : UINT64_MAX,
-			q->active_cmd);
+			cmd->tag, cmd->scb[0], cmd->dev->lun, q->active_cmd);
 
 		list_add_tail(&cmd->qlist, &q->queue);
 	}
@@ -546,11 +556,7 @@ static void __cmd_done(struct target *target, struct scsi_cmd *cmd)
 
 	dprintf("%d %" PRIx64 " %u %d\n", cmd->mmapped, cmd->uaddr, cmd->len, err);
 
-	if (cmd->dev)
-		q = &cmd->dev->cmd_queue;
-	else
-		q = &target->cmd_queue;
-
+	q = &cmd->dev->cmd_queue;
 	q->active_cmd--;
 	switch (cmd->attribute) {
 	case MSG_ORDERED_TAG:
@@ -1194,7 +1200,7 @@ int tgt_target_show_all(char *buf, int rest)
 				 lu->attrs.scsi_id,
 				 lu->attrs.scsi_sn,
 				 print_disksize(lu->size),
-				 lu->path);
+				 lu->path ? : "No backing store");
 
 		if (!strcmp(tgt_drivers[target->lid]->name, "iscsi")) {
 			int i, aid;
@@ -1292,8 +1298,6 @@ int tgt_target_create(int lld, int tid, char *args, int t_type)
 	target->target_state = SCSI_TARGET_RUNNING;
 	target->lid = lld;
 
-	tgt_cmd_queue_init(&target->cmd_queue);
-
 	list_for_each_entry(pos, &target_list, target_siblings)
 		if (target->tid < pos->tid)
 			break;
@@ -1303,10 +1307,12 @@ int tgt_target_create(int lld, int tid, char *args, int t_type)
 	INIT_LIST_HEAD(&target->acl_list);
 	INIT_LIST_HEAD(&target->it_nexus_list);
 
-	dprintf("Succeed to create a new target %d\n", tid);
+	tgt_device_create(tid, 0, NULL, TYPE_RAID, 0);
 
 	if (tgt_drivers[lld]->target_create)
 		tgt_drivers[lld]->target_create(target);
+
+	dprintf("Succeed to create a new target %d\n", tid);
 
 	return 0;
 }

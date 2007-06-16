@@ -106,6 +106,8 @@ struct scsi_cmd {
 	struct list_head c_hlist;
 	struct list_head qlist;
 
+	uint64_t dev_id;
+
 	uint64_t uaddr;
 	uint32_t len;
 	int mmapped;
@@ -157,7 +159,7 @@ extern int kspace_send_tsk_mgmt_res(struct mgmt_req *mreq);
 extern int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *);
 
 extern int ipc_init(void);
-extern int tgt_device_create(int tid, uint64_t lun, char *args, int l_type);
+extern int tgt_device_create(int tid, uint64_t lun, char *args, int l_type, int backing);
 extern int tgt_device_destroy(int tid, uint64_t lun);
 extern int tgt_device_update(int tid, uint64_t dev_id, char *name);
 extern int device_reserve(struct scsi_cmd *cmd);

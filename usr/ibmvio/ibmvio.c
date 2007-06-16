@@ -76,8 +76,11 @@ static int __ibmvio_inquiry(int host_no, struct scsi_cmd *cmd, uint8_t *data)
 	char system_id[256], path[256], buf[32];
 	int fd, err, partition_number;
 	unsigned int unit_address;
-	unsigned char device_type = cmd->c_target->dev_type_template.type;
+	unsigned char device_type;
 	uint64_t lun = *((uint64_t *) cmd->lun);
+
+	device_type = (cmd->dev->attrs->qualifier & 0x7 ) << 5;
+	device_type |= (cmd->dev->attrs->device_type & 0x1f);
 
 	snprintf(path, sizeof(path), IBMVSTGT_HOSTDIR "%d/system_id", host_no);
 	fd = open(path, O_RDONLY);
@@ -164,7 +167,7 @@ static int ibmvio_inquiry(int host_no, struct scsi_cmd *cmd)
 	cmd->len = min_t(int, cmd->len, scb[4]);
 	cmd->uaddr = (unsigned long) data;
 
-	if (!cmd->dev)
+	if (cmd->dev->lun != cmd->dev_id)
 		data[0] = TYPE_NO_LUN;
 
 	return SAM_STAT_GOOD;
@@ -257,14 +260,11 @@ static uint64_t scsi_lun_to_int(uint8_t *p)
 		return GETTARGET(lun);
 }
 
-static int ibmvio_target_create(struct target *target)
+static int ibmvio_lu_create(struct scsi_lu *lu)
 {
-	unsigned char device_type = target->dev_type_template.type;
-	struct device_type_operations *ops = target->dev_type_template.ops;
+	struct device_type_operations *ops =  lu->dev_type_template.ops;
 
-	if (device_type == TYPE_DISK || device_type == TYPE_ROM)
-		ops[INQUIRY].cmd_perform = ibmvio_inquiry;
-
+	ops[INQUIRY].cmd_perform = ibmvio_inquiry;
 	ops[REPORT_LUNS].cmd_perform = ibmvio_report_luns;
 
 	return 0;
@@ -274,7 +274,7 @@ struct tgt_driver ibmvio = {
 	.name			= "ibmvio",
 	.use_kernel		= 1,
 	.scsi_get_lun		= scsi_lun_to_int,
-	.target_create		= ibmvio_target_create,
+	.lu_create		= ibmvio_lu_create,
 	.cmd_end_notify		= kspace_send_cmd_res,
 	.mgmt_end_notify	= kspace_send_tsk_mgmt_res,
 	.default_bst		= &mmap_bst,

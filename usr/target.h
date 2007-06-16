@@ -34,8 +34,6 @@ struct target {
 
 	struct list_head it_nexus_list;
 
-	struct tgt_cmd_queue cmd_queue;
-
 	struct backingstore_template *bst;
 
 	struct list_head acl_list;

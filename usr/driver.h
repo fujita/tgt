@@ -9,6 +9,8 @@ struct tgt_driver {
 	int (*target_create)(struct target *);
 	int (*target_destroy)(int);
 
+	int (*lu_create)(struct scsi_lu *);
+
 	int (*update)(int, int, char *);
 	int (*show)(int, int, uint64_t, uint32_t, uint64_t, char *, int);
 

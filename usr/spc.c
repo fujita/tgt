@@ -59,12 +59,10 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 
 	dprintf("%x %x\n", scb[1], scb[2]);
 
- 	if (cmd->dev) {
- 		devtype = (cmd->dev->attrs.qualifier & 0x7 ) << 5;
- 		devtype |= (cmd->dev->attrs.device_type & 0x1f);
- 	}
+	devtype = (cmd->dev->attrs.qualifier & 0x7 ) << 5;
+	devtype |= (cmd->dev->attrs.device_type & 0x1f);
 
-	if (!(scb[1] & 0x3) && cmd->dev) {
+	if (!(scb[1] & 0x3)) {
 		int i;
 		uint16_t *desc;
 
@@ -113,7 +111,7 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 			len = 4 + SCSI_SN_LEN;
 			ret = SAM_STAT_GOOD;
 
-			if (cmd->dev && strlen(cmd->dev->attrs.scsi_sn)) {
+			if (strlen(cmd->dev->attrs.scsi_sn)) {
 				uint8_t *p;
 				char *q;
 
@@ -130,9 +128,8 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 			data[4] = 0x1;
 			data[5] = 0x1;
 			data[7] = tmp;
-			if (cmd->dev)
-				strncpy((char *) data + 8,
-					cmd->dev->attrs.scsi_id, SCSI_ID_LEN);
+			strncpy((char *) data + 8,
+				cmd->dev->attrs.scsi_id, SCSI_ID_LEN);
 
 			len = tmp + 8;
 			ret = SAM_STAT_GOOD;
@@ -145,7 +142,7 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 	cmd->len = min_t(int, len, scb[4]);
 	cmd->uaddr = (unsigned long) data;
 
-	if (!cmd->dev)
+	if (cmd->dev->lun != cmd->dev_id)
 		data[0] = TYPE_NO_LUN;
 
 	return SAM_STAT_GOOD;
@@ -215,32 +212,20 @@ int spc_start_stop(int host_no, struct scsi_cmd *cmd)
 {
 	cmd->len = 0;
 
-	if (cmd->dev) {
-		if (device_reserved(cmd))
-			return SAM_STAT_RESERVATION_CONFLICT;
-	} else {
-		sense_data_build(cmd, ILLEGAL_REQUEST, 0x25, 0);
-		return SAM_STAT_CHECK_CONDITION;
-	}
-	return SAM_STAT_GOOD;
+	if (device_reserved(cmd))
+		return SAM_STAT_RESERVATION_CONFLICT;
+	else
+		return SAM_STAT_GOOD;
 }
 
 int spc_test_unit(int host_no, struct scsi_cmd *cmd)
 {
-	int ret = SAM_STAT_GOOD;
-
 	/* how should we test a backing-storage file? */
 
-	if (cmd->dev) {
-		ret = device_reserved(cmd);
-		if (ret)
-			ret = SAM_STAT_RESERVATION_CONFLICT;
-	} else {
-		cmd->len = 0;
-		sense_data_build(cmd, ILLEGAL_REQUEST, 0x24, 0);
-		ret = SAM_STAT_CHECK_CONDITION;
-	}
-	return ret;
+	if (device_reserved(cmd))
+		return SAM_STAT_RESERVATION_CONFLICT;
+	else
+		return SAM_STAT_GOOD;
 }
 
 int spc_request_sense(int host_no, struct scsi_cmd *cmd)

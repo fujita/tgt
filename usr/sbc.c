@@ -46,14 +46,9 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 	int ret;
 	unsigned char key = ILLEGAL_REQUEST, asc = 0x25;
 
-	if (cmd->dev) {
-		ret = device_reserved(cmd);
-		if (ret)
-			return SAM_STAT_RESERVATION_CONFLICT;
-	} else {
-		ret = SAM_STAT_CHECK_CONDITION;
-		goto sense;
-	}
+	ret = device_reserved(cmd);
+	if (ret)
+		return SAM_STAT_RESERVATION_CONFLICT;
 
 	switch (cmd->scb[0]) {
 	case WRITE_6:
@@ -75,7 +70,7 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 		cmd->mmapped = 1;
 		return SAM_STAT_GOOD;
 	}
-sense:
+
 	cmd->rw = READ;
 	cmd->offset = 0;
 	cmd->len = 0;
@@ -85,39 +80,20 @@ sense:
 
 static int sbc_reserve(int host_no, struct scsi_cmd *cmd)
 {
-	int ret;
-
-	if (cmd->dev) {
-		ret = device_reserve(cmd);
-		if (ret)
-			ret = SAM_STAT_RESERVATION_CONFLICT;
-		else
-			ret = SAM_STAT_GOOD;
-	} else {
-		cmd->len = 0;
-		sense_data_build(cmd, ILLEGAL_REQUEST, 0x25, 0);
-		ret = SAM_STAT_CHECK_CONDITION;
-	}
-	return ret;
+	if (device_reserve(cmd))
+		return SAM_STAT_RESERVATION_CONFLICT ;
+	else
+		return SAM_STAT_GOOD;
 }
 
 static int sbc_release(int host_no, struct scsi_cmd *cmd)
 {
 	int ret;
 
-	if (cmd->dev) {
-		ret = device_release(cmd->c_target->tid, cmd->cmd_itn_id,
-				     cmd->dev->lun, 0);
-		if (ret)
-			ret = SAM_STAT_RESERVATION_CONFLICT;
-		else
-			ret = SAM_STAT_GOOD;
-	} else {
-		cmd->len = 0;
-		sense_data_build(cmd, ILLEGAL_REQUEST, 0x25, 0);
-		ret = SAM_STAT_CHECK_CONDITION;
-	}
-	return ret;
+	ret = device_release(cmd->c_target->tid, cmd->cmd_itn_id,
+			     cmd->dev->lun, 0);
+
+	return ret ? SAM_STAT_RESERVATION_CONFLICT : SAM_STAT_GOOD;
 }
 
 static int sbc_read_capacity(int host_no, struct scsi_cmd *cmd)
@@ -127,11 +103,8 @@ static int sbc_read_capacity(int host_no, struct scsi_cmd *cmd)
 	uint8_t *scb = cmd->scb;
 	unsigned char key = ILLEGAL_REQUEST, asc = 0x25;
 
-	if (cmd->dev) {
-		if (device_reserved(cmd))
-			return SAM_STAT_RESERVATION_CONFLICT;
-	} else
-		goto sense;
+	if (device_reserved(cmd))
+		return SAM_STAT_RESERVATION_CONFLICT;
 
 	if (!(scb[8] & 0x1) & (scb[2] | scb[3] | scb[4] | scb[5])) {
 		asc = 0x24;
@@ -165,13 +138,8 @@ static int sbc_sync_cache(int host_no, struct scsi_cmd *cmd)
 	int ret, len;
 	uint8_t key = ILLEGAL_REQUEST, asc;
 
-	if (cmd->dev) {
-		if (device_reserved(cmd))
-			return SAM_STAT_RESERVATION_CONFLICT;
-	} else {
-		asc = 0x25;
-		goto sense;
-	}
+	if (device_reserved(cmd))
+		return SAM_STAT_RESERVATION_CONFLICT;
 
 	ret = cmd->dev->bst->bs_cmd_submit(cmd);
 	switch (ret) {
@@ -266,11 +234,8 @@ static int sbc_mode_sense(int host_no, struct scsi_cmd *cmd)
 	uint8_t *data = NULL;
 	unsigned char key = ILLEGAL_REQUEST, asc = 0x25;
 
-	if (cmd->dev) {
-		if (device_reserved(cmd))
-			return SAM_STAT_RESERVATION_CONFLICT;
-	} else
-		goto sense;
+	if (device_reserved(cmd))
+		return SAM_STAT_RESERVATION_CONFLICT;
 
 	data = valloc(pagesize);
 	if (!data) {
