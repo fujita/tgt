@@ -40,10 +40,39 @@ struct lu_phy_attr {
 	char product_rev[5];
 	uint16_t version_desc[VERSION_DESCRIPTOR_LEN];
 
+ 	char device_type;	/* Peripheral device type */
+ 	char qualifier;		/* Peripheral Qualifier */
 	char removable;		/* Removable media */
 	char online;		/* Logical Unit online */
 	char reset;		/* Power-on or reset has occured */
 	char sense_format;	/* Descrptor format sense data supported */
+};
+
+struct scsi_lu;
+struct scsi_cmd;
+
+struct device_type_operations {
+	int (*cmd_perform)(int host_no, struct scsi_cmd *cmd);
+};
+
+struct device_type_template {
+	unsigned char type;
+	char *name;
+	char *pid;
+
+	int (*lu_init)(struct scsi_lu *lu);
+	int (*lu_exit)(struct scsi_lu *lu);
+	int (*lu_config)(struct scsi_lu *lu, char *arg);
+
+	struct device_type_operations ops[256];
+};
+
+struct backingstore_template {
+	int bs_datasize;
+	int (*bs_open)(struct scsi_lu *dev, char *path, int *fd, uint64_t *size);
+	void (*bs_close)(struct scsi_lu *dev);
+	int (*bs_cmd_submit)(struct scsi_cmd *cmd);
+	int (*bs_cmd_done) (struct scsi_cmd *cmd);
 };
 
 struct scsi_lu {
@@ -61,6 +90,11 @@ struct scsi_lu {
 	enum scsi_lu_state lu_state;
 
 	uint64_t reserve_id;
+
+	/* we don't use a pointer because a lld could change this. */
+	struct device_type_template dev_type_template;
+
+	struct backingstore_template *bst;
 
 	/* TODO: needs a structure for lots of device parameters */
 	struct lu_phy_attr attrs;
@@ -110,14 +144,6 @@ struct mgmt_req {
 	uint64_t itn_id;
 };
 
-struct backingstore_template {
-	int bs_datasize;
-	int (*bs_open)(struct scsi_lu *dev, char *path, int *fd, uint64_t *size);
-	void (*bs_close)(struct scsi_lu *dev);
-	int (*bs_cmd_submit)(struct scsi_cmd *cmd);
-	int (*bs_cmd_done) (struct scsi_cmd *cmd);
-};
-
 #ifdef USE_KERNEL
 extern int kreq_init(void);
 #else
@@ -127,27 +153,11 @@ static inline int kreq_init(void)	\
 }
 #endif
 
-struct device_type_operations {
-	int (*cmd_perform)(int host_no, struct scsi_cmd *cmd);
-};
-
-struct device_type_template {
-	unsigned char type;
-	char *name;
-	char *pid;
-
-	int (*lu_init)(struct scsi_lu *lu);
-	int (*lu_exit)(struct scsi_lu *lu);
-	int (*lu_config)(struct scsi_lu *lu, char *arg);
-
-	struct device_type_operations ops[256];
-};
-
 extern int kspace_send_tsk_mgmt_res(struct mgmt_req *mreq);
 extern int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *);
 
 extern int ipc_init(void);
-extern int tgt_device_create(int tid, uint64_t lun, char *args);
+extern int tgt_device_create(int tid, uint64_t lun, char *args, int l_type);
 extern int tgt_device_destroy(int tid, uint64_t lun);
 extern int tgt_device_update(int tid, uint64_t dev_id, char *name);
 extern int device_reserve(struct scsi_cmd *cmd);

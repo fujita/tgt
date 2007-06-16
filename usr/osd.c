@@ -48,7 +48,7 @@ static int osd_varlen_cdb(int host_no, struct scsi_cmd *cmd)
 	}
 
 /* 	return SAM_STAT_GOOD; */
-	return cmd->c_target->bst->bs_cmd_submit(cmd);
+	return cmd->dev->bst->bs_cmd_submit(cmd);
 }
 
 static int osd_lu_init(struct scsi_lu *lu)

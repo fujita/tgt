@@ -67,8 +67,9 @@ static int spt_cmd_perform(int host_no, struct scsi_cmd *cmd)
 	struct device_type_operations *ops;
 
 	if (!cmd->dev) {
-		ops = cmd->c_target->dev_type_template.ops;
-		return ops[cmd->scb[0]].cmd_perform(host_no, cmd);
+		cmd->len = 0;
+		sense_data_build(cmd, NOT_READY, 0x44, 0); /* Internal target failure */
+		return SAM_STAT_CHECK_CONDITION;
 	}
 
 	ret = spt_sg_perform(cmd);

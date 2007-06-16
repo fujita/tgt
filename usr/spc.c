@@ -43,8 +43,8 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 	int len, ret = SAM_STAT_CHECK_CONDITION;
 	uint8_t *data;
 	uint8_t *scb = cmd->scb;
-	unsigned char device_type = cmd->c_target->dev_type_template.type;
 	unsigned char key = ILLEGAL_REQUEST, asc = 0x24;
+	uint8_t devtype = 0;
 
 	if (((scb[1] & 0x3) == 0x3) || (!(scb[1] & 0x3) && scb[2]))
 		goto sense;
@@ -59,11 +59,16 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 
 	dprintf("%x %x\n", scb[1], scb[2]);
 
+ 	if (cmd->dev) {
+ 		devtype = (cmd->dev->attrs.qualifier & 0x7 ) << 5;
+ 		devtype |= (cmd->dev->attrs.device_type & 0x1f);
+ 	}
+
 	if (!(scb[1] & 0x3) && cmd->dev) {
 		int i;
 		uint16_t *desc;
 
-		data[0] = device_type;
+		data[0] = devtype;
 		data[1] = (cmd->dev->attrs.removable) ? 0x80 : 0;
 		data[2] = 5;	/* SPC-3 */
 		data[3] = 0x42;
@@ -91,7 +96,7 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 	} else if (scb[1] & 0x1) {
 		/* EVPD bit set */
 		if (scb[2] == 0x0) {
-			data[0] = device_type;
+			data[0] = devtype;
 			data[1] = 0x0;
 			data[3] = 3;
 			data[4] = 0x0;

@@ -174,7 +174,7 @@ static int tgt_device_path_update(struct target *target,
 	if (!path)
 		return TGTADM_NOMEM;
 
-	err = target->bst->bs_open(lu, path, &dev_fd, &size);
+	err = lu->bst->bs_open(lu, path, &dev_fd, &size);
 	if (err) {
 		free(path);
 		return TGTADM_INVALID_REQUEST;
@@ -206,7 +206,7 @@ __device_lookup(int tid, uint64_t lun, struct target **t)
 	return lu;
 }
 
-int tgt_device_create(int tid, uint64_t lun, char *args)
+int tgt_device_create(int tid, uint64_t lun, char *args, int l_type)
 {
 	char *p;
 	int err;
@@ -233,9 +233,36 @@ int tgt_device_create(int tid, uint64_t lun, char *args)
 		return TGTADM_INVALID_REQUEST;
 	p++;
 
-	lu = zalloc(sizeof(*lu) + target->bst->bs_datasize);
+	if (l_type == TYPE_SPT)
+		lu = zalloc(sizeof(*lu) + sg_bst.bs_datasize);
+	else
+		lu = zalloc(sizeof(*lu) + target->bst->bs_datasize);
+
 	if (!lu)
 		return TGTADM_NOMEM;
+
+	switch (l_type) {
+	case TYPE_DISK:
+		lu->dev_type_template = sbc_template;
+		lu->bst = target->bst;
+		break;
+	case TYPE_ROM:
+		lu->dev_type_template = mmc_template;
+		lu->bst = target->bst;
+		break;
+	case TYPE_OSD:
+		lu->dev_type_template = osd_template;
+		lu->bst = target->bst;
+		break;
+	case TYPE_SPT:
+		lu->dev_type_template = spt_template;
+		lu->bst = &sg_bst;
+		break;
+	default:
+		dprintf("Unknown device type %d\n", l_type);
+		free(lu);
+		return TGTADM_INVALID_REQUEST;
+	}
 
 	err = tgt_device_path_update(target, lu, p);
 	if (err) {
@@ -248,14 +275,17 @@ int tgt_device_create(int tid, uint64_t lun, char *args)
 
 	tgt_cmd_queue_init(&lu->cmd_queue);
 
-	if (target->dev_type_template.lu_init)
-		err = target->dev_type_template.lu_init(lu);
+ 	if (lu->dev_type_template.lu_init)
+ 		err = lu->dev_type_template.lu_init(lu);
 
 	if (!err) {
 		snprintf(lu->attrs.scsi_id, sizeof(lu->attrs.scsi_id),
 			 "deadbeaf%d:%" PRIu64, tid, lun);
 		snprintf(lu->attrs.scsi_sn, sizeof(lu->attrs.scsi_sn),
 			 "beaf%d%" PRIu64, tid, lun);
+
+  		lu->attrs.device_type = l_type;
+  		lu->attrs.qualifier = 0x0;
 	}
 
 	list_for_each_entry(pos, &target->device_list, device_siblings) {
@@ -285,12 +315,12 @@ int tgt_device_destroy(int tid, uint64_t lun)
 	if (!list_empty(&lu->cmd_queue.queue) || lu->cmd_queue.active_cmd)
 		return TGTADM_LUN_ACTIVE;
 
-	err = target->dev_type_template.lu_exit(lu);
+	err = lu->dev_type_template.lu_exit(lu);
 
 	free(lu->path);
 	list_del(&lu->device_siblings);
 
-	target->bst->bs_close(lu);
+	lu->bst->bs_close(lu);
 	free(lu);
 	return err;
 }
@@ -361,8 +391,8 @@ int tgt_device_update(int tid, uint64_t dev_id, char *params)
 		return TGTADM_NO_LUN;
 	}
 
-	if (target->dev_type_template.lu_config)
-		err = target->dev_type_template.lu_config(lu, params);
+	if (lu->dev_type_template.lu_config)
+		err = lu->dev_type_template.lu_config(lu, params);
 
 	return err;
 }
@@ -1087,6 +1117,41 @@ static char *print_disksize(uint64_t size)
 	return buf;
 }
 
+static struct {
+	int value;
+	char *name;
+} disk_type_names[] = {
+	{ TYPE_DISK, "disk" },
+	{ TYPE_TAPE, "tape" },
+	{ TYPE_PRINTER, "printer" },
+	{ TYPE_PROCESSOR, "processor" },
+	{ TYPE_WORM, "worm" },
+	{ TYPE_SCANNER, "scanner" },
+	{ TYPE_MOD, "optical" },
+	{ TYPE_MEDIUM_CHANGER, "changer" },
+	{ TYPE_COMM, "comm" },
+	{ TYPE_RAID, "raid" },
+	{ TYPE_ENCLOSURE, "enc" },
+	{ TYPE_RBC, "rbc" },
+	{ TYPE_OSD, "osd" },
+	{ TYPE_NO_LUN, "No LUN" }
+};
+
+static char *print_type(int type)
+{
+	int i;
+	char *name = NULL;
+
+	for (i = 0; i < ARRAY_SIZE(disk_type_names); i++) {
+		if (disk_type_names[i].value == type) {
+			name = disk_type_names[i].name;
+			break;
+		}
+	}
+	return name;
+}
+
+
 int tgt_target_show_all(char *buf, int rest)
 {
 	int total = 0, max = rest;
@@ -1099,12 +1164,10 @@ int tgt_target_show_all(char *buf, int rest)
 		shprintf(total, buf, rest,
 			 "Target %d: %s\n"
 			 _TAB1 "System information:\n"
-			 _TAB2 "Type: %s\n"
 			 _TAB2 "Driver: %s\n"
 			 _TAB2 "Status: %s\n",
 			 target->tid,
 			 target->name,
-			 target->dev_type_template.name,
 			 tgt_drivers[target->lid]->name,
 			 target_state_name(target->target_state));
 
@@ -1121,11 +1184,13 @@ int tgt_target_show_all(char *buf, int rest)
 		list_for_each_entry(lu, &target->device_list, device_siblings)
 			shprintf(total, buf, rest,
 				 _TAB2 "LUN: %" PRIu64 "\n"
+  				 _TAB3 "Type: %s\n"
 				 _TAB3 "SCSI ID: %s\n"
 				 _TAB3 "SCSI SN: %s\n"
 				 _TAB3 "Size: %s\n"
 				 _TAB3 "Backing store: %s\n",
 				 lu->lun,
+  				 print_type(lu->attrs.device_type),
 				 lu->attrs.scsi_id,
 				 lu->attrs.scsi_sn,
 				 print_disksize(lu->size),
@@ -1204,24 +1269,6 @@ int tgt_target_create(int lld, int tid, char *args, int t_type)
 	if (!target)
 		return TGTADM_NOMEM;
 
-	switch (t_type) {
-	case TYPE_DISK:
-		target->dev_type_template = sbc_template;
-		break;
-	case TYPE_ROM:
-		target->dev_type_template = mmc_template;
-		break;
-	case TYPE_OSD:
-		target->dev_type_template = osd_template;
-		break;
-	case TYPE_SPT:
-		target->dev_type_template = spt_template;
-		break;
-	default:
-		free(target);
-		return TGTADM_INVALID_REQUEST;
-	}
-
 	target->name = strdup(targetname);
 	if (!target->name) {
 		free(target);
@@ -1240,11 +1287,7 @@ int tgt_target_create(int lld, int tid, char *args, int t_type)
 
 	INIT_LIST_HEAD(&target->device_list);
 
-	/* FIXME */
-	if (t_type == TYPE_SPT)
-		target->bst = &sg_bst;
-	else
-		target->bst = tgt_drivers[lld]->default_bst;
+	target->bst = tgt_drivers[lld]->default_bst;
 
 	target->target_state = SCSI_TARGET_RUNNING;
 	target->lid = lld;

@@ -162,7 +162,7 @@ static void kern_queue_cmd(struct tgt_event *ev)
 	kcmd->host_no = ev->p.cmd_req.host_no;
 	cmd = &kcmd->scmd;
 	cmd->cmd_itn_id = ev->p.cmd_req.itn_id;
-	cmd->scb = (char *)cmd + sizeof(*cmd);
+	cmd->scb = (unsigned char *)cmd + sizeof(*cmd);
 	memcpy(cmd->scb, ev->p.cmd_req.scb, scb_len);
 	cmd->scb_len = scb_len;
 	memcpy(cmd->lun, ev->p.cmd_req.lun, sizeof(cmd->lun));
