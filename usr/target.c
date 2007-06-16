@@ -1242,7 +1242,7 @@ char *tgt_targetname(int tid)
 
 #define DEFAULT_NR_ACCOUNT 16
 
-int tgt_target_create(int lld, int tid, char *args, int t_type)
+int tgt_target_create(int lld, int tid, char *args)
 {
 	struct target *target, *pos;
 	char *p, *q, *targetname = NULL;

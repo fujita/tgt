@@ -77,8 +77,7 @@ static int target_mgmt(int lld_no, struct mgmt_task *mtask)
 
 	switch (req->op) {
 	case OP_NEW:
-		err = tgt_target_create(lld_no, req->tid, mtask->buf,
-					req->target_type);
+		err = tgt_target_create(lld_no, req->tid, mtask->buf);
 		break;
 	case OP_DELETE:
 		err = tgt_target_destroy(lld_no, req->tid);
