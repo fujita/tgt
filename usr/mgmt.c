@@ -166,7 +166,8 @@ static int device_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 
 	switch (req->op) {
 	case OP_NEW:
-		err = tgt_device_create(req->tid, req->lun, params, req->target_type, 1);
+		err = tgt_device_create(req->tid, req->lun, params,
+					req->device_type, 1);
 		break;
 	case OP_DELETE:
 		err = tgt_device_destroy(req->tid, req->lun);

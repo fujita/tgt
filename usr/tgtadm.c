@@ -106,7 +106,7 @@ struct option const long_options[] = {
 	{"params", required_argument, NULL, 'P'},
 
 	{"bus", required_argument, NULL, 'B'},
-	{"target-type", required_argument, NULL, 'Y'},
+	{"device-type", required_argument, NULL, 'Y'},
 	{"outgoing", no_argument, NULL, 'O'},
 	{NULL, 0, NULL, 0},
 };
@@ -291,7 +291,7 @@ static int bus_to_host(char *bus)
 	return host;
 }
 
-static int target_type(char *str)
+static int str_to_device_type(char *str)
 {
 	if (!strcmp(str, "disk"))
 		return TYPE_DISK;
@@ -353,7 +353,7 @@ static int str_to_op(char *str)
 int main(int argc, char **argv)
 {
 	int ch, longindex;
-	int op, total, tid, rest, mode, t_type, ac_dir;
+	int op, total, tid, rest, mode, dev_type, ac_dir;
 	uint32_t cid, hostno;
 	uint64_t sid, lun;
 	char *name, *value, *path, *targetname, *params, *address, *targetOps;
@@ -363,7 +363,7 @@ int main(int argc, char **argv)
 
 	op = tid = mode = -1;
 	total = cid = hostno = sid = lun = 0;
-	t_type = TYPE_DISK;
+	dev_type = TYPE_DISK;
 	ac_dir = ACCOUNT_TYPE_INCOMING;
 	rest = BUFSIZE;
 	name = value = path = targetname = address = targetOps = NULL;
@@ -425,7 +425,7 @@ int main(int argc, char **argv)
 			hostno = bus_to_host(optarg);
 			break;
 		case 'Y':
-			t_type = target_type(optarg);
+			dev_type = str_to_device_type(optarg);
 			break;
 		case 'O':
 			ac_dir = ACCOUNT_TYPE_OUTGOING;
@@ -552,7 +552,7 @@ int main(int argc, char **argv)
 	req->lun = lun;
 	req->mode = mode;
 	req->host_no = hostno;
-	req->target_type = t_type;
+	req->device_type = dev_type;
 	req->ac_dir = ac_dir;
 
 	params = buf + sizeof(*req);
