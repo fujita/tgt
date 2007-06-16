@@ -137,7 +137,6 @@ static int mmc_lu_init(struct scsi_lu *lu)
 
 struct device_type_template mmc_template = {
 	.type		= TYPE_ROM,
-	.name		= "cdrom/dvd",
 	.lu_init	= mmc_lu_init,
 	.lu_config	= spc_lu_config,
 	.ops		= {

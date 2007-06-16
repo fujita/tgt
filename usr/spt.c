@@ -82,7 +82,6 @@ static int spt_cmd_perform(int host_no, struct scsi_cmd *cmd)
 }
 
 struct device_type_template spt_template = {
-	.name	= "passthrough",
 	.ops	= {
 		[0x00 ... 0x9f] = {spt_cmd_perform,},
 

@@ -51,7 +51,6 @@ static int scc_lu_init(struct scsi_lu *lu)
 
 struct device_type_template scc_template = {
 	.type		= TYPE_RAID,
-	.name		= "controler",
 	.lu_init	= scc_lu_init,
 	.lu_config	= spc_lu_config,
 	.ops		= {

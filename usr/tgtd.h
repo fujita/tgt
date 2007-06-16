@@ -57,8 +57,6 @@ struct device_type_operations {
 
 struct device_type_template {
 	unsigned char type;
-	char *name;
-	char *pid;
 
 	int (*lu_init)(struct scsi_lu *lu);
 	void (*lu_exit)(struct scsi_lu *lu);

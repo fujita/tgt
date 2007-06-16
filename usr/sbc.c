@@ -317,7 +317,6 @@ static int sbc_lu_init(struct scsi_lu *lu)
 
 struct device_type_template sbc_template = {
 	.type		= TYPE_DISK,
-	.name		= "disk",
 	.lu_init	= sbc_lu_init,
 	.lu_config	= spc_lu_config,
 	.ops		= {
