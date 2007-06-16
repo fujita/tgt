@@ -79,8 +79,8 @@ static int __ibmvio_inquiry(int host_no, struct scsi_cmd *cmd, uint8_t *data)
 	unsigned char device_type;
 	uint64_t lun = *((uint64_t *) cmd->lun);
 
-	device_type = (cmd->dev->attrs->qualifier & 0x7 ) << 5;
-	device_type |= (cmd->dev->attrs->device_type & 0x1f);
+	device_type = (cmd->dev->attrs.qualifier & 0x7 ) << 5;
+	device_type |= (cmd->dev->attrs.device_type & 0x1f);
 
 	snprintf(path, sizeof(path), IBMVSTGT_HOSTDIR "%d/system_id", host_no);
 	fd = open(path, O_RDONLY);
