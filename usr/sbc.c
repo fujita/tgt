@@ -315,16 +315,10 @@ static int sbc_lu_init(struct scsi_lu *lu)
 	return 0;
 }
 
-static int sbc_lu_exit(struct scsi_lu *lu)
-{
-	return 0;
-}
-
 struct device_type_template sbc_template = {
 	.type		= TYPE_DISK,
 	.name		= "disk",
 	.lu_init	= sbc_lu_init,
-	.lu_exit	= sbc_lu_exit,
 	.lu_config	= spc_lu_config,
 	.ops		= {
 		{spc_test_unit,},

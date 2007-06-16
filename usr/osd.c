@@ -65,16 +65,10 @@ static int osd_lu_init(struct scsi_lu *lu)
 	return 0;
 }
 
-static int osd_lu_exit(struct scsi_lu *lu)
-{
-	return 0;
-}
-
 struct device_type_template osd_template = {
 	.type		= TYPE_OSD,
 	.name		= "osd",
 	.lu_init	= osd_lu_init,
-	.lu_exit	= osd_lu_exit,
 	.ops		= {
 		[0x00 ... 0x0f] = {spc_illegal_op},
 

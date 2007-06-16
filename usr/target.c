@@ -313,7 +313,6 @@ int tgt_device_destroy(int tid, uint64_t lun)
 {
 	struct target *target;
 	struct scsi_lu *lu;
-	int err;
 
 	dprintf("%u %" PRIu64 "\n", tid, lun);
 
@@ -326,14 +325,16 @@ int tgt_device_destroy(int tid, uint64_t lun)
 	if (!list_empty(&lu->cmd_queue.queue) || lu->cmd_queue.active_cmd)
 		return TGTADM_LUN_ACTIVE;
 
-	err = lu->dev_type_template.lu_exit(lu);
+	if (lu->dev_type_template.lu_exit)
+		lu->dev_type_template.lu_exit(lu);
 
 	free(lu->path);
 	list_del(&lu->device_siblings);
 
 	lu->bst->bs_close(lu);
 	free(lu);
-	return err;
+
+	return 0;
 }
 
 int device_reserve(struct scsi_cmd *cmd)

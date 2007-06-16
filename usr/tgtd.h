@@ -61,7 +61,7 @@ struct device_type_template {
 	char *pid;
 
 	int (*lu_init)(struct scsi_lu *lu);
-	int (*lu_exit)(struct scsi_lu *lu);
+	void (*lu_exit)(struct scsi_lu *lu);
 	int (*lu_config)(struct scsi_lu *lu, char *arg);
 
 	struct device_type_operations ops[256];

@@ -49,16 +49,10 @@ static int scc_lu_init(struct scsi_lu *lu)
 	return 0;
 }
 
-static int scc_lu_exit(struct scsi_lu *lu)
-{
-	return 0;
-}
-
 struct device_type_template scc_template = {
 	.type		= TYPE_RAID,
 	.name		= "controler",
 	.lu_init	= scc_lu_init,
-	.lu_exit	= scc_lu_exit,
 	.lu_config	= spc_lu_config,
 	.ops		= {
 		{spc_test_unit,},
