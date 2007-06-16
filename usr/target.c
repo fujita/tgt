@@ -1127,20 +1127,20 @@ static struct {
 	int value;
 	char *name;
 } disk_type_names[] = {
-	{ TYPE_DISK, "disk" },
-	{ TYPE_TAPE, "tape" },
-	{ TYPE_PRINTER, "printer" },
-	{ TYPE_PROCESSOR, "processor" },
-	{ TYPE_WORM, "worm" },
-	{ TYPE_SCANNER, "scanner" },
-	{ TYPE_MOD, "optical" },
-	{ TYPE_MEDIUM_CHANGER, "changer" },
-	{ TYPE_COMM, "comm" },
-	{ TYPE_RAID, "raid" },
-	{ TYPE_ENCLOSURE, "enc" },
-	{ TYPE_RBC, "rbc" },
-	{ TYPE_OSD, "osd" },
-	{ TYPE_NO_LUN, "No LUN" }
+	{TYPE_DISK, "disk"},
+	{TYPE_TAPE, "tape"},
+	{TYPE_PRINTER, "printer"},
+	{TYPE_PROCESSOR, "processor"},
+	{TYPE_WORM, "worm"},
+	{TYPE_SCANNER, "scanner"},
+	{TYPE_MOD, "optical"},
+	{TYPE_MEDIUM_CHANGER, "changer"},
+	{TYPE_COMM, "comm"},
+	{TYPE_RAID, "raid"},
+	{TYPE_ENCLOSURE, "enc"},
+	{TYPE_RBC, "rbc"},
+	{TYPE_OSD, "osd"},
+	{TYPE_NO_LUN, "No LUN"}
 };
 
 static char *print_type(int type)
