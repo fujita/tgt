@@ -3,7 +3,7 @@
 
 #include <limits.h>
 #define BITS_PER_LONG (ULONG_MAX == 0xFFFFFFFFUL ? 32 : 64)
-#include <linux/hash.h>
+#include "hash.h"
 
 #define	HASH_ORDER	4
 #define	hashfn(val)	hash_long((unsigned long) (val), HASH_ORDER)
