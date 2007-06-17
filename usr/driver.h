@@ -7,7 +7,7 @@ struct tgt_driver {
 	int (*init)(int);
 
 	int (*target_create)(struct target *);
-	int (*target_destroy)(int);
+	void (*target_destroy)(int);
 
 	int (*lu_create)(struct scsi_lu *);
 

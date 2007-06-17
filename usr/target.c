@@ -1340,16 +1340,16 @@ int tgt_target_destroy(int lld_no, int tid)
 	}
 
 	while (!list_empty(&target->device_list)) {
-		lu = list_entry(target->device_list.next, struct scsi_lu,
+		/* we remove lun0 last */
+		lu = list_entry(target->device_list.prev, struct scsi_lu,
 				device_siblings);
-		tgt_device_destroy(tid, lu->lun, 1);
-	}
-
-	if (tgt_drivers[lld_no]->target_destroy) {
-		ret = tgt_drivers[lld_no]->target_destroy(tid);
+		ret = tgt_device_destroy(tid, lu->lun, 1);
 		if (ret)
 			return ret;
 	}
+
+	if (tgt_drivers[lld_no]->target_destroy)
+		tgt_drivers[lld_no]->target_destroy(tid);
 
 	list_del(&target->target_siblings);
 

@@ -234,28 +234,30 @@ struct iscsi_target* target_find_by_id(int tid)
 	return NULL;
 }
 
-int iscsi_target_destroy(int tid)
+void iscsi_target_destroy(int tid)
 {
 	struct iscsi_target* target;
 
-	if (!(target = target_find_by_id(tid)))
-		return -ENOENT;
+	target = target_find_by_id(tid);
+	if (!target) {
+		eprintf("can't find the target %d\n", tid);
+		return;
+	}
 
-	if (target->nr_sessions)
-		return -EBUSY;
-
+	if (target->nr_sessions) {
+		eprintf("the target %d still has sessions\n", tid);
+		return;
+	}
 	if (!list_empty(&target->sessions_list)) {
 		eprintf("bug still have sessions %d\n", tid);
 		exit(-1);
 	}
 
 	list_del(&target->tlist);
-
 	free(target);
-
 	isns_target_deregister(tgt_targetname(tid));
 
-	return 0;
+	return;
 }
 
 int iscsi_target_create(struct target *t)
