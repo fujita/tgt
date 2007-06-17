@@ -351,7 +351,7 @@ int spc_lu_config(struct scsi_lu *lu, char *params) {
 
 int spc_lu_init(struct scsi_lu *lu)
 {
-	strncpy(lu->attrs.vendor_id, VENDOR_ID, strlen(VENDOR_ID));
+	strncpy(lu->attrs.vendor_id, VENDOR_ID, sizeof(lu->attrs.vendor_id));
 	memcpy(lu->attrs.product_rev, "0001", 4);
 	lu->attrs.removable = 0;
 	lu->attrs.sense_format = 0;
