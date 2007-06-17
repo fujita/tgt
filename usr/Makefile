@@ -54,10 +54,8 @@ tgtd: $(TGTD_OBJS)
 tgtadm: tgtadm.o
 	$(CC) $^ -o $@
 
-ifneq ($(XEN),)
 install: $(PROGRAMS)
 	install -m 0755 $(PROGRAMS) $(DESTDIR)/usr/sbin
-endif
 
 clean:
 	rm -f *.o $(PROGRAMS) iscsi/*.o ibmvio/*.o xen/*.o
