@@ -49,7 +49,7 @@ static int scc_lu_init(struct scsi_lu *lu)
 	return 0;
 }
 
-struct device_type_template scc_template = {
+static struct device_type_template scc_template = {
 	.type		= TYPE_RAID,
 	.lu_init	= scc_lu_init,
 	.lu_config	= spc_lu_config,
@@ -155,3 +155,8 @@ struct device_type_template scc_template = {
 		[0xb0 ... 0xff] = {spc_illegal_op},
 	}
 };
+
+__attribute__((constructor)) static void scc_init(void)
+{
+	device_type_register(&scc_template);
+}

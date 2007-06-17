@@ -81,7 +81,8 @@ static int spt_cmd_perform(int host_no, struct scsi_cmd *cmd)
 		return SAM_STAT_GOOD;
 }
 
-struct device_type_template spt_template = {
+static struct device_type_template spt_template = {
+	.type	= TYPE_SPT,
 	.ops	= {
 		[0x00 ... 0x9f] = {spt_cmd_perform,},
 
@@ -107,3 +108,8 @@ struct device_type_template spt_template = {
 		[0xb0 ... 0xff] = {spt_cmd_perform},
 	}
 };
+
+__attribute__((constructor)) static void spt_init(void)
+{
+	device_type_register(&spt_template);
+}

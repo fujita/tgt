@@ -135,7 +135,7 @@ static int mmc_lu_init(struct scsi_lu *lu)
 	return 0;
 }
 
-struct device_type_template mmc_template = {
+static struct device_type_template mmc_template = {
 	.type		= TYPE_ROM,
 	.lu_init	= mmc_lu_init,
 	.lu_config	= spc_lu_config,
@@ -241,3 +241,8 @@ struct device_type_template mmc_template = {
 		[0xb0 ... 0xff] = {spc_illegal_op},
 	}
 };
+
+__attribute__((constructor)) static void mmc_init(void)
+{
+	device_type_register(&mmc_template);
+}

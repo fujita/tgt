@@ -63,6 +63,8 @@ struct device_type_template {
 	int (*lu_config)(struct scsi_lu *lu, char *arg);
 
 	struct device_type_operations ops[256];
+
+	struct list_head device_type_siblings;
 };
 
 struct backingstore_template {
@@ -208,5 +210,7 @@ extern int account_available(int tid, int dir);
 
 extern int it_nexus_create(int tid, uint64_t itn_id, int host_no, char *info);
 extern int it_nexus_destroy(int tid, uint64_t itn_id);
+
+extern int device_type_register(struct device_type_template *);
 
 #endif

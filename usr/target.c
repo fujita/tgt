@@ -36,8 +36,24 @@
 #include "scsi.h"
 #include "tgtadm.h"
 
-extern struct device_type_template sbc_template, mmc_template, osd_template,
-	spt_template, scc_template;
+static LIST_HEAD(device_type_list);
+
+int device_type_register(struct device_type_template *t)
+{
+	list_add_tail(&t->device_type_siblings, &device_type_list);
+	return 0;
+}
+
+static struct device_type_template *device_type_lookup(int type)
+{
+	struct device_type_template *t;
+
+	list_for_each_entry(t, &device_type_list, device_type_siblings) {
+		if (t->type == type)
+			return t;
+	}
+	return NULL;
+}
 
 static LIST_HEAD(target_list);
 
@@ -212,6 +228,7 @@ int tgt_device_create(int tid, uint64_t lun, char *args, int l_type, int backing
 	int err = 0;
 	struct target *target;
 	struct scsi_lu *lu, *pos;
+	struct device_type_template *t;
 
 	dprintf("%d %" PRIu64 "\n", tid, lun);
 
@@ -243,28 +260,11 @@ int tgt_device_create(int tid, uint64_t lun, char *args, int l_type, int backing
 	if (!lu)
 		return TGTADM_NOMEM;
 
-	switch (l_type) {
-	case TYPE_RAID:
-		lu->dev_type_template = scc_template;
+	t = device_type_lookup(l_type);
+	if (t) {
+		lu->dev_type_template = *t;
 		lu->bst = target->bst;
-		break;
-	case TYPE_DISK:
-		lu->dev_type_template = sbc_template;
-		lu->bst = target->bst;
-		break;
-	case TYPE_ROM:
-		lu->dev_type_template = mmc_template;
-		lu->bst = target->bst;
-		break;
-	case TYPE_OSD:
-		lu->dev_type_template = osd_template;
-		lu->bst = target->bst;
-		break;
-	case TYPE_SPT:
-		lu->dev_type_template = spt_template;
-		lu->bst = &sg_bst;
-		break;
-	default:
+	} else {
 		dprintf("Unknown device type %d\n", l_type);
 		free(lu);
 		return TGTADM_INVALID_REQUEST;

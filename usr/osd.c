@@ -65,7 +65,7 @@ static int osd_lu_init(struct scsi_lu *lu)
 	return 0;
 }
 
-struct device_type_template osd_template = {
+static struct device_type_template osd_template = {
 	.type		= TYPE_OSD,
 	.lu_init	= osd_lu_init,
 	.ops		= {
@@ -135,3 +135,8 @@ struct device_type_template osd_template = {
 		[0xb0 ... 0xff] = {spc_illegal_op},
 	}
 };
+
+__attribute__((constructor)) static void osd_init(void)
+{
+	device_type_register(&osd_template);
+}

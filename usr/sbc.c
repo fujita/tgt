@@ -315,7 +315,7 @@ static int sbc_lu_init(struct scsi_lu *lu)
 	return 0;
 }
 
-struct device_type_template sbc_template = {
+static struct device_type_template sbc_template = {
 	.type		= TYPE_DISK,
 	.lu_init	= sbc_lu_init,
 	.lu_config	= spc_lu_config,
@@ -457,3 +457,8 @@ struct device_type_template sbc_template = {
 		[0xb0 ... 0xff] = {spc_illegal_op},
 	}
 };
+
+__attribute__((constructor)) static void sbc_init(void)
+{
+	device_type_register(&sbc_template);
+}
