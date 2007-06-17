@@ -160,7 +160,7 @@ extern int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *);
 
 extern int ipc_init(void);
 extern int tgt_device_create(int tid, int dev_type, uint64_t lun, char *args, int backing);
-extern int tgt_device_destroy(int tid, uint64_t lun);
+extern int tgt_device_destroy(int tid, uint64_t lun, int force);
 extern int tgt_device_update(int tid, uint64_t dev_id, char *name);
 extern int device_reserve(struct scsi_cmd *cmd);
 extern int device_release(int tid, uint64_t itn_id, uint64_t lun, int force);

@@ -307,12 +307,16 @@ free_lu:
 	return ret;
 }
 
-int tgt_device_destroy(int tid, uint64_t lun)
+int tgt_device_destroy(int tid, uint64_t lun, int force)
 {
 	struct target *target;
 	struct scsi_lu *lu;
 
 	dprintf("%u %" PRIu64 "\n", tid, lun);
+
+	/* lun0 is special */
+	if (!lun && !force)
+		return TGTADM_INVALID_REQUEST;
 
 	lu = __device_lookup(tid, lun, &target);
 	if (!lu) {
@@ -326,10 +330,12 @@ int tgt_device_destroy(int tid, uint64_t lun)
 	if (lu->dev_type_template.lu_exit)
 		lu->dev_type_template.lu_exit(lu);
 
-	free(lu->path);
-	list_del(&lu->device_siblings);
+	if (lu->path) {
+		free(lu->path);
+		lu->bst->bs_close(lu);
+	}
 
-	lu->bst->bs_close(lu);
+	list_del(&lu->device_siblings);
 	free(lu);
 
 	return 0;
@@ -1336,7 +1342,7 @@ int tgt_target_destroy(int lld_no, int tid)
 	while (!list_empty(&target->device_list)) {
 		lu = list_entry(target->device_list.next, struct scsi_lu,
 				device_siblings);
-		tgt_device_destroy(tid, lu->lun);
+		tgt_device_destroy(tid, lu->lun, 1);
 	}
 
 	if (tgt_drivers[lld_no]->target_destroy) {
