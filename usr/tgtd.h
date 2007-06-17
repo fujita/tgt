@@ -60,7 +60,7 @@ struct device_type_template {
 
 	int (*lu_init)(struct scsi_lu *lu);
 	void (*lu_exit)(struct scsi_lu *lu);
-	int (*lu_config)(struct scsi_lu *lu, char *arg);
+	int (*lu_config)(struct scsi_lu *lu, char *args);
 
 	struct device_type_operations ops[256];
 
@@ -159,7 +159,7 @@ extern int kspace_send_tsk_mgmt_res(struct mgmt_req *mreq);
 extern int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *);
 
 extern int ipc_init(void);
-extern int tgt_device_create(int tid, uint64_t lun, char *args, int l_type, int backing);
+extern int tgt_device_create(int tid, int dev_type, uint64_t lun, char *args, int backing);
 extern int tgt_device_destroy(int tid, uint64_t lun);
 extern int tgt_device_update(int tid, uint64_t dev_id, char *name);
 extern int device_reserve(struct scsi_cmd *cmd);

@@ -222,10 +222,10 @@ __device_lookup(int tid, uint64_t lun, struct target **t)
 	return lu;
 }
 
-int tgt_device_create(int tid, uint64_t lun, char *args, int l_type, int backing)
+int tgt_device_create(int tid, int dev_type, uint64_t lun, char *args, int backing)
 {
 	char *p = NULL;
-	int err = 0;
+	int ret = 0;
 	struct target *target;
 	struct scsi_lu *lu, *pos;
 	struct device_type_template *t;
@@ -242,6 +242,34 @@ int tgt_device_create(int tid, uint64_t lun, char *args, int l_type, int backing
 		return TGTADM_LUN_EXIST;
 	}
 
+	if (dev_type == TYPE_SPT)
+		lu = zalloc(sizeof(*lu) + sg_bst.bs_datasize);
+	else
+		lu = zalloc(sizeof(*lu) + target->bst->bs_datasize);
+
+	if (!lu)
+		return TGTADM_NOMEM;
+
+	t = device_type_lookup(dev_type);
+	if (t) {
+		lu->dev_type_template = *t;
+		lu->bst = target->bst;
+	} else {
+		eprintf("Unknown device type %d\n", dev_type);
+		ret = TGTADM_INVALID_REQUEST;
+		goto free_lu;
+	}
+
+	lu->lun = lun;
+	lu->lu_state = SCSI_LU_RUNNING;
+	tgt_cmd_queue_init(&lu->cmd_queue);
+
+ 	if (lu->dev_type_template.lu_init) {
+ 		ret = lu->dev_type_template.lu_init(lu);
+		if (ret)
+			goto free_lu;
+	}
+
 	if (backing) {
 		if (!*args)
 			return TGTADM_INVALID_REQUEST;
@@ -250,51 +278,18 @@ int tgt_device_create(int tid, uint64_t lun, char *args, int l_type, int backing
 		if (!p)
 			return TGTADM_INVALID_REQUEST;
 		p++;
+
+		ret = tgt_device_path_update(target, lu, p);
+		if (ret)
+			goto free_lu;
 	}
 
-	if (l_type == TYPE_SPT)
-		lu = zalloc(sizeof(*lu) + sg_bst.bs_datasize);
-	else
-		lu = zalloc(sizeof(*lu) + target->bst->bs_datasize);
-
-	if (!lu)
-		return TGTADM_NOMEM;
-
-	t = device_type_lookup(l_type);
-	if (t) {
-		lu->dev_type_template = *t;
-		lu->bst = target->bst;
-	} else {
-		dprintf("Unknown device type %d\n", l_type);
-		free(lu);
-		return TGTADM_INVALID_REQUEST;
-	}
-
-	if (backing) {
-		err = tgt_device_path_update(target, lu, p);
-		if (err) {
-			free(lu);
-			return err;
-		}
-	}
-
-	lu->lun = lun;
-	lu->lu_state = SCSI_LU_RUNNING;
-
-	tgt_cmd_queue_init(&lu->cmd_queue);
-
- 	if (lu->dev_type_template.lu_init)
- 		err = lu->dev_type_template.lu_init(lu);
-
-	if (!err) {
-		snprintf(lu->attrs.scsi_id, sizeof(lu->attrs.scsi_id),
-			 "deadbeaf%d:%" PRIu64, tid, lun);
-		snprintf(lu->attrs.scsi_sn, sizeof(lu->attrs.scsi_sn),
-			 "beaf%d%" PRIu64, tid, lun);
-
-  		lu->attrs.device_type = l_type;
-  		lu->attrs.qualifier = 0x0;
-	}
+	lu->attrs.device_type = lu->dev_type_template.type;
+	lu->attrs.qualifier = 0x0;
+	snprintf(lu->attrs.scsi_id, sizeof(lu->attrs.scsi_id),
+		 "deadbeaf%d:%" PRIu64, tid, lun);
+	snprintf(lu->attrs.scsi_sn, sizeof(lu->attrs.scsi_sn),
+		 "beaf%d%" PRIu64, tid, lun);
 
 	if (tgt_drivers[target->lid]->lu_create)
 		tgt_drivers[target->lid]->lu_create(lu);
@@ -306,7 +301,10 @@ int tgt_device_create(int tid, uint64_t lun, char *args, int l_type, int backing
 	list_add_tail(&lu->device_siblings, &pos->device_siblings);
 
 	dprintf("Add a logical unit %" PRIu64 " to the target %d\n", lun, tid);
-	return err;
+	return ret;
+free_lu:
+	free(lu);
+	return ret;
 }
 
 int tgt_device_destroy(int tid, uint64_t lun)
@@ -1309,7 +1307,7 @@ int tgt_target_create(int lld, int tid, char *args)
 	INIT_LIST_HEAD(&target->acl_list);
 	INIT_LIST_HEAD(&target->it_nexus_list);
 
-	tgt_device_create(tid, 0, NULL, TYPE_RAID, 0);
+	tgt_device_create(tid, TYPE_RAID, 0, NULL, 0);
 
 	if (tgt_drivers[lld]->target_create)
 		tgt_drivers[lld]->target_create(target);
