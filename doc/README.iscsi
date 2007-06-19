@@ -17,14 +17,12 @@ Everyting is configured via the tgtadm management tool.
 
 The following example creates a target with id 1 (the iqn is
 iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz) and adds a
-logical unit (backed by /dev/hdc1) with lun 0.
+logical unit (backed by /dev/hdc1) with lun 1.
 
-Let's create one target devce and add a logical unit to it:
+Let's create one target devce.
 
 host:~/tgt$ su
 host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode target --tid 1 -T iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
-host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 0 -b /dev/hdc1
-
 
 You can get the current configuration:
 
@@ -36,11 +34,43 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
     I_T nexus information:
     LUN information:
         LUN: 0
+            Type: controller
             SCSI ID: deadbeaf1:0
-            SCSI SN:
+            SCSI SN: beaf10
+            Size: 0
+            Backing store: No backing store
+    Account information:
+    ACL information:
+
+
+The controller device for management with lun 0 was created
+automatically. You can't remove it.
+
+Now it's time to add a logical unit to the target:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 1 -b /dev/hdc1
+
+You can get the current configuration:
+
+host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target
+Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
+    System information:
+        Driver: iscsi
+        Status: running
+    I_T nexus information:
+    LUN information:
+        LUN: 0
+            Type: controller
+            SCSI ID: deadbeaf1:0
+            SCSI SN: beaf10
+            Size: 0
+            Backing store: No backing store
+        LUN: 1
+            Type: disk
+            SCSI ID: deadbeaf1:1
+            SCSI SN: beaf11
             Size: 55G
             Backing store: /dev/hdc1
-            Backing store type: file
     Account information:
     ACL information:
 
@@ -57,11 +87,17 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
     I_T nexus information:
     LUN information:
         LUN: 0
+            Type: controller
             SCSI ID: deadbeaf1:0
-            SCSI SN:
+            SCSI SN: beaf10
+            Size: 0
+            Backing store: No backing store
+        LUN: 1
+            Type: disk
+            SCSI ID: deadbeaf1:1
+            SCSI SN: beaf11
             Size: 55G
             Backing store: /dev/hdc1
-            Backing store type: file
     Account information:
     ACL information:
         ALL
@@ -82,11 +118,17 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
     I_T nexus information:
     LUN information:
         LUN: 0
+            Type: controller
             SCSI ID: deadbeaf1:0
-            SCSI SN:
+            SCSI SN: beaf10
+            Size: 0
+            Backing store: No backing store
+        LUN: 1
+            Type: disk
+            SCSI ID: deadbeaf1:1
+            SCSI SN: beaf11
             Size: 55G
             Backing store: /dev/hdc1
-            Backing store type: file
     Account information:
     ACL information:
 
@@ -103,11 +145,17 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
     I_T nexus information:
     LUN information:
         LUN: 0
+            Type: controller
             SCSI ID: deadbeaf1:0
-            SCSI SN:
+            SCSI SN: beaf10
+            Size: 0
+            Backing store: No backing store
+        LUN: 1
+            Type: disk
+            SCSI ID: deadbeaf1:1
+            SCSI SN: beaf11
             Size: 55G
             Backing store: /dev/hdc1
-            Backing store type: file
     Account information:
     ACL information:
         192.168.2.29
@@ -116,27 +164,34 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
 
 You can add lots of logical units:
 
-host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 1 -b /dev/hdd1
+host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 2 -b /dev/hdd1
 host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target
 Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
     System information:
         Driver: iscsi
-        Status: suspended
+        Status: running
+    I_T nexus information:
     LUN information:
         LUN: 0
+            Type: controller
             SCSI ID: deadbeaf1:0
-            SCSI SN: 
-            Size: 1G
-            Backing store: /dev/hdc1
-            Backing store type: file
+            SCSI SN: beaf10
+            Size: 0
+            Backing store: No backing store
         LUN: 1
+            Type: disk
             SCSI ID: deadbeaf1:1
-            SCSI SN: 
-            Size: 20G
+            SCSI SN: beaf11
+            Size: 55G
+            Backing store: /dev/hdc1
+        LUN: 2
+            Type: disk
+            SCSI ID: deadbeaf1:2
+            SCSI SN: beaf12
+            Size: 55G
             Backing store: /dev/hdd1
-            Backing store type: file
-    I_T nexus information:
     Account information:
+    ACL information:
 
 
 You can get iSCSI parameters of the target:
@@ -241,11 +296,17 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
     I_T nexus information:
     LUN information:
         LUN: 0
+            Type: controller
             SCSI ID: deadbeaf1:0
-            SCSI SN:
-            Size: 1G
-            Backing store: /var/tmp/image
-            Backing store type: file
+            SCSI SN: beaf10
+            Size: 0
+            Backing store: No backing store
+        LUN: 1
+            Type: disk
+            SCSI ID: deadbeaf1:1
+            SCSI SN: beaf11
+            Size: 55G
+            Backing store: /dev/hdc1
     Account information:
         fujita
     ACL information:
@@ -269,11 +330,17 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
     I_T nexus information:
     LUN information:
         LUN: 0
+            Type: controller
             SCSI ID: deadbeaf1:0
-            SCSI SN:
-            Size: 1G
-            Backing store: /var/tmp/image
-            Backing store type: file
+            SCSI SN: beaf10
+            Size: 0
+            Backing store: No backing store
+        LUN: 1
+            Type: disk
+            SCSI ID: deadbeaf1:1
+            SCSI SN: beaf11
+            Size: 55G
+            Backing store: /dev/hdc1
     Account information:
         fujita
         hoge (outgoing)
@@ -298,11 +365,17 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
                 IP Address: 192.168.11.5
     LUN information:
         LUN: 0
+            Type: controller
             SCSI ID: deadbeaf1:0
-            SCSI SN:
-            Size: 1G
-            Backing store: /var/tmp/image
-            Backing store type: file
+            SCSI SN: beaf10
+            Size: 0
+            Backing store: No backing store
+        LUN: 1
+            Type: disk
+            SCSI ID: deadbeaf1:1
+            SCSI SN: beaf11
+            Size: 55G
+            Backing store: /dev/hdc1
     Account information:
     ACL information:
         ALL
@@ -326,11 +399,17 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
                 IP Address: 192.168.11.133
     LUN information:
         LUN: 0
+            Type: controller
             SCSI ID: deadbeaf1:0
-            SCSI SN:
-            Size: 1G
-            Backing store: /var/tmp/image
-            Backing store type: file
+            SCSI SN: beaf10
+            Size: 0
+            Backing store: No backing store
+        LUN: 1
+            Type: disk
+            SCSI ID: deadbeaf1:1
+            SCSI SN: beaf11
+            Size: 55G
+            Backing store: /dev/hdc1
     Account information:
     ACL information:
         ALL
