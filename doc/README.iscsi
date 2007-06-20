@@ -249,7 +249,7 @@ MaxConnections=1
 
 The following is another example to enable header digest:
 
-host:~/tgt# ./usr/tgtadm --lld iscsi --mode target --op update --tid 1 --name HeaderDigest -value CRC32C
+host:~/tgt# ./usr/tgtadm --lld iscsi --mode target --op update --tid 1 --name HeaderDigest --value CRC32C
 
 host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target --tid 1
 MaxRecvDataSegmentLength=16384
