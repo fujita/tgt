@@ -40,7 +40,7 @@ static int scc_lu_init(struct scsi_lu *lu)
 	if (spc_lu_init(lu))
 		return -ENOMEM;
 
-	strncpy(lu->attrs.product_id, "Controler",
+	strncpy(lu->attrs.product_id, "Controller",
 		sizeof(lu->attrs.product_id));
 	lu->attrs.version_desc[0] = 0x04C0; /* SBC-3 no version claimed */
 	lu->attrs.version_desc[1] = 0x0960; /* iSCSI */
