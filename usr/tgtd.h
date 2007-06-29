@@ -190,8 +190,7 @@ extern void target_cmd_io_done(struct scsi_cmd *cmd, int result);
 
 extern uint64_t scsi_get_devid(int lid, uint8_t *pdu);
 extern int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd);
-extern void sense_data_build(struct scsi_cmd *cmd, uint8_t key, uint8_t asc,
-			     uint8_t asq);
+extern void sense_data_build(struct scsi_cmd *cmd, uint8_t key, uint16_t asc);
 extern uint64_t scsi_rw_offset(uint8_t *scb);
 
 extern enum scsi_target_state tgt_get_target_state(int tid);

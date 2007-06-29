@@ -37,6 +37,7 @@
 #include "util.h"
 #include "tgtd.h"
 #include "scsi.h"
+#include "sense_codes.h"
 
 #define NR_WORKER_THREADS	4
 
@@ -161,7 +162,7 @@ static void *bs_sync_worker_fn(void *arg)
 			eprintf("io error %p %x %d %d %" PRIu64 ", %m\n",
 				cmd, cmd->scb[0], ret, cmd->len, cmd->offset);
 			cmd->result = SAM_STAT_CHECK_CONDITION;
-			sense_data_build(cmd, MEDIUM_ERROR, 0x11, 0x0);
+			sense_data_build(cmd, MEDIUM_ERROR, ASC_READ_ERROR);
 		}
 
 		pthread_mutex_lock(&info->finished_lock);

@@ -34,6 +34,7 @@
 #include "tgtadm_error.h"
 #include "scsi.h"
 #include "spc.h"
+#include "sense_codes.h"
 
 #define PRODUCT_REV	"0"
 #define BLK_SHIFT	9
@@ -43,7 +44,8 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 	int len, ret = SAM_STAT_CHECK_CONDITION;
 	uint8_t *data;
 	uint8_t *scb = cmd->scb;
-	unsigned char key = ILLEGAL_REQUEST, asc = 0x24;
+	unsigned char key = ILLEGAL_REQUEST;
+	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 	uint8_t devtype = 0;
 
 	if (((scb[1] & 0x3) == 0x3) || (!(scb[1] & 0x3) && scb[2]))
@@ -52,7 +54,7 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 	data = valloc(pagesize);
 	if (!data) {
 		key = HARDWARE_ERROR;
-		asc = 0;
+		asc = ASC_INTERNAL_TGT_FAILURE;
 		goto sense;
 	}
 	memset(data, 0, pagesize);
@@ -148,7 +150,7 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 	return SAM_STAT_GOOD;
 sense:
 	cmd->len = 0;
-	sense_data_build(cmd, key, asc, 0);
+	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
 }
 
@@ -158,7 +160,8 @@ int spc_report_luns(int host_no, struct scsi_cmd *cmd)
 	struct list_head *dev_list = &cmd->c_target->device_list;
 	uint64_t lun, *data;
 	int idx, alen, oalen, nr_luns, rbuflen = 4096, overflow;
-	unsigned char key = ILLEGAL_REQUEST, asc = 0x24;
+	unsigned char key = ILLEGAL_REQUEST;
+	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 
 	alen = __be32_to_cpu(*(uint32_t *)&cmd->scb[6]);
 	if (alen < 16)
@@ -167,7 +170,7 @@ int spc_report_luns(int host_no, struct scsi_cmd *cmd)
 	data = valloc(pagesize);
 	if (!data) {
 		key = HARDWARE_ERROR;
-		asc = 0;
+		asc = ASC_INTERNAL_TGT_FAILURE;
 		goto sense;
 	}
 	memset(data, 0, pagesize);
@@ -204,7 +207,7 @@ int spc_report_luns(int host_no, struct scsi_cmd *cmd)
 	return SAM_STAT_GOOD;
 sense:
 	cmd->len = 0;
-	sense_data_build(cmd, key, asc, 0);
+	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
 }
 
@@ -231,7 +234,7 @@ int spc_test_unit(int host_no, struct scsi_cmd *cmd)
 int spc_request_sense(int host_no, struct scsi_cmd *cmd)
 {
 	cmd->len = 0;
-	sense_data_build(cmd, NO_SENSE, 0, 0);
+	sense_data_build(cmd, NO_SENSE, NO_ADDITIONAL_SENSE);
 	return SAM_STAT_GOOD;
 }
 
@@ -271,7 +274,7 @@ int spc_illegal_op(int host_no, struct scsi_cmd *cmd)
 {
 	dump_cdb(cmd);
 	cmd->len = 0;
-	sense_data_build(cmd, ILLEGAL_REQUEST, 0x20, 0);
+	sense_data_build(cmd, ILLEGAL_REQUEST, ASC_INVALID_OP_CODE);
 	return SAM_STAT_CHECK_CONDITION;
 }
 

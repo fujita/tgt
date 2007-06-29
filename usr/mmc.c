@@ -41,6 +41,7 @@
 #include "driver.h"
 #include "scsi.h"
 #include "spc.h"
+#include "sense_codes.h"
 
 #define MMC_BLK_SHIFT 11
 
@@ -53,7 +54,7 @@ static int mmc_rw(int host_no, struct scsi_cmd *cmd)
 	if (ret) {
 		cmd->offset = 0;
 		cmd->len = 0;
-		sense_data_build(cmd, ILLEGAL_REQUEST, 0x25, 0);
+		sense_data_build(cmd, ILLEGAL_REQUEST, ASC_LUN_NOT_SUPPORTED);
 		return SAM_STAT_CHECK_CONDITION;
 	} else {
 		cmd->mmapped = 1;
@@ -69,7 +70,7 @@ static int mmc_read_toc(int host_no, struct scsi_cmd *cmd)
 	data = valloc(pagesize);
 	if (!data) {
 		cmd->len = 0;
-		sense_data_build(cmd, HARDWARE_ERROR, 0, 0);
+		sense_data_build(cmd, HARDWARE_ERROR, ASC_INTERNAL_TGT_FAILURE);
 		return SAM_STAT_CHECK_CONDITION;
 	}
 	memset(data, 0, pagesize);
@@ -105,7 +106,7 @@ static int mmc_read_capacity(int host_no, struct scsi_cmd *cmd)
 	data = valloc(pagesize);
 	if (!data) {
 		cmd->len = 0;
-		sense_data_build(cmd, HARDWARE_ERROR, 0, 0);
+		sense_data_build(cmd, HARDWARE_ERROR, ASC_INTERNAL_TGT_FAILURE);
 		return SAM_STAT_CHECK_CONDITION;
 	}
 	memset(data, 0, pagesize);

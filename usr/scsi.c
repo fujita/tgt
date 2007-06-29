@@ -38,25 +38,24 @@
 #include "scsi.h"
 #include "spc.h"
 
-void sense_data_build(struct scsi_cmd *cmd, uint8_t key, uint8_t asc, uint8_t asq)
+void sense_data_build(struct scsi_cmd *cmd, uint8_t key, uint16_t asc)
 {
+
 	if (cmd->dev->attrs.sense_format) {
 		/* descriptor format */
-
 		cmd->sense_buffer[0] = 0x72;  /* current, not deferred */
 		cmd->sense_buffer[1] = key;
-		cmd->sense_buffer[2] = asc;
-		cmd->sense_buffer[3] = asq;
+		cmd->sense_buffer[2] = (asc >> 8) & 0xff;
+		cmd->sense_buffer[3] = asc & 0xff;
 		cmd->sense_len = 8;
 	} else {
 		/* fixed format */
-
 		int len = 0xa;
-		cmd->sense_buffer[0] = 0x70;
+		cmd->sense_buffer[0] = 0x70;  /* current, not deferred */
 		cmd->sense_buffer[2] = key;
 		cmd->sense_buffer[7] = len;
-		cmd->sense_buffer[12] = asc;
-		cmd->sense_buffer[13] = asq;
+		cmd->sense_buffer[12] = (asc >> 8) & 0xff;
+		cmd->sense_buffer[13] = asc & 0xff;
 		cmd->sense_len = len + 8;
 	}
 }

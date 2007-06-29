@@ -44,6 +44,7 @@
 #include "target.h"
 #include "driver.h"
 #include "spc.h"
+#include "sense_codes.h"
 
 #define GETTARGET(x) ((int)((((uint64_t)(x)) >> 56) & 0x003f))
 #define GETBUS(x) ((int)((((uint64_t)(x)) >> 53) & 0x0007))
@@ -140,7 +141,8 @@ static int ibmvio_inquiry(int host_no, struct scsi_cmd *cmd)
 {
 	int ret = SAM_STAT_CHECK_CONDITION;
 	uint8_t *data, *scb = cmd->scb;
-	unsigned char key = ILLEGAL_REQUEST, asc = 0x24;
+	unsigned char key = ILLEGAL_REQUEST;
+	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 
 	if (((scb[1] & 0x3) == 0x3) || (!(scb[1] & 0x3) && scb[2]))
 		goto sense;
@@ -148,7 +150,7 @@ static int ibmvio_inquiry(int host_no, struct scsi_cmd *cmd)
 	data = valloc(pagesize);
 	if (!data) {
 		key = HARDWARE_ERROR;
-		asc = 0;
+		asc = ASC_INTERNAL_TGT_FAILURE;
 		goto sense;
 	}
 	memset(data, 0, pagesize);
@@ -173,7 +175,7 @@ static int ibmvio_inquiry(int host_no, struct scsi_cmd *cmd)
 	return SAM_STAT_GOOD;
 sense:
 	cmd->len = 0;
-	sense_data_build(cmd, key, asc, 0);
+	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
 }
 
@@ -194,7 +196,8 @@ static int ibmvio_report_luns(int host_no, struct scsi_cmd *cmd)
 	int idx, alen, oalen, nr_luns, rbuflen = 4096;
 	int *len = &cmd->len;
 	uint8_t *lun_buf = cmd->lun;
-	unsigned char key = ILLEGAL_REQUEST, asc = 0x24;
+	unsigned char key = ILLEGAL_REQUEST;
+	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 
 	alen = __be32_to_cpu(*(uint32_t *)&cmd->scb[6]);
 	if (alen < 16)
@@ -203,7 +206,7 @@ static int ibmvio_report_luns(int host_no, struct scsi_cmd *cmd)
 	data = valloc(pagesize);
 	if (!data) {
 		key = HARDWARE_ERROR;
-		asc = 0;
+		asc = ASC_INTERNAL_TGT_FAILURE;
 		goto sense;
 	}
 	memset(data, 0, pagesize);
@@ -241,7 +244,7 @@ done:
 	return SAM_STAT_GOOD;
 sense:
 	*len = 0;
-	sense_data_build(cmd, key, asc, 0);
+	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
 }
 

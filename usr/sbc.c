@@ -38,13 +38,15 @@
 #include "driver.h"
 #include "scsi.h"
 #include "spc.h"
+#include "sense_codes.h"
 
 #define BLK_SHIFT	9
 
 static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 {
 	int ret;
-	unsigned char key = ILLEGAL_REQUEST, asc = 0x25;
+	unsigned char key = ILLEGAL_REQUEST;
+	uint16_t asc = ASC_LUN_NOT_SUPPORTED;
 
 	ret = device_reserved(cmd);
 	if (ret)
@@ -65,7 +67,7 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 	ret = cmd->dev->bst->bs_cmd_submit(cmd);
 	if (ret) {
 		key = HARDWARE_ERROR;
-		asc = 0;
+		asc = ASC_INTERNAL_TGT_FAILURE;
 	} else {
 		cmd->mmapped = 1;
 		return SAM_STAT_GOOD;
@@ -74,7 +76,7 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 	cmd->rw = READ;
 	cmd->offset = 0;
 	cmd->len = 0;
-	sense_data_build(cmd, key, asc, 0);
+	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
 }
 
@@ -101,20 +103,21 @@ static int sbc_read_capacity(int host_no, struct scsi_cmd *cmd)
 	uint32_t *data;
 	uint64_t size;
 	uint8_t *scb = cmd->scb;
-	unsigned char key = ILLEGAL_REQUEST, asc = 0x25;
+	unsigned char key = ILLEGAL_REQUEST;
+	uint16_t asc = ASC_LUN_NOT_SUPPORTED;
 
 	if (device_reserved(cmd))
 		return SAM_STAT_RESERVATION_CONFLICT;
 
 	if (!(scb[8] & 0x1) & (scb[2] | scb[3] | scb[4] | scb[5])) {
-		asc = 0x24;
+		asc = ASC_INVALID_FIELD_IN_CDB;
 		goto sense;
 	}
 
 	data = valloc(pagesize);
 	if (!data) {
 		key = HARDWARE_ERROR;
-		asc = 0;
+		asc = ASC_INTERNAL_TGT_FAILURE;
 		goto sense;
 	}
 	cmd->uaddr = (unsigned long) data;
@@ -129,14 +132,15 @@ static int sbc_read_capacity(int host_no, struct scsi_cmd *cmd)
 	return SAM_STAT_GOOD;
 sense:
 	cmd->len = 0;
-	sense_data_build(cmd, key, asc, 0);
+	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
 }
 
 static int sbc_sync_cache(int host_no, struct scsi_cmd *cmd)
 {
 	int ret, len;
-	uint8_t key = ILLEGAL_REQUEST, asc;
+	uint8_t key = ILLEGAL_REQUEST;
+	uint16_t asc = ASC_LUN_NOT_SUPPORTED;
 
 	if (device_reserved(cmd))
 		return SAM_STAT_RESERVATION_CONFLICT;
@@ -152,7 +156,7 @@ static int sbc_sync_cache(int host_no, struct scsi_cmd *cmd)
 		 * what should I put for the asc/ascq?
 		 */
 		key = HARDWARE_ERROR;
-		asc = 0;
+		asc = ASC_INTERNAL_TGT_FAILURE;
 		goto sense;
 	default:
 		len = 0;
@@ -161,7 +165,7 @@ static int sbc_sync_cache(int host_no, struct scsi_cmd *cmd)
 
 sense:
 	cmd->len = 0;
-	sense_data_build(cmd, key, asc, 0);
+	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
 }
 
@@ -232,7 +236,8 @@ static int sbc_mode_sense(int host_no, struct scsi_cmd *cmd)
 	uint8_t pcode = cmd->scb[2] & 0x3f;
 	uint64_t size;
 	uint8_t *data = NULL;
-	unsigned char key = ILLEGAL_REQUEST, asc = 0x25;
+	unsigned char key = ILLEGAL_REQUEST;
+	uint16_t asc = ASC_LUN_NOT_SUPPORTED;
 
 	if (device_reserved(cmd))
 		return SAM_STAT_RESERVATION_CONFLICT;
@@ -240,7 +245,7 @@ static int sbc_mode_sense(int host_no, struct scsi_cmd *cmd)
 	data = valloc(pagesize);
 	if (!data) {
 		key = HARDWARE_ERROR;
-		asc = 0;
+		asc = ASC_INTERNAL_TGT_FAILURE;
 		goto sense;
 	}
 	memset(data, 0, pagesize);
@@ -288,7 +293,7 @@ static int sbc_mode_sense(int host_no, struct scsi_cmd *cmd)
 		len += insert_iec_m_pg(data + len);
 		break;
 	default:
-		asc = 0x24;
+		asc = ASC_INVALID_FIELD_IN_CDB;
 		goto sense;
 	}
 
@@ -298,7 +303,7 @@ static int sbc_mode_sense(int host_no, struct scsi_cmd *cmd)
 	return ret;
 sense:
 	cmd->len = 0;
-	sense_data_build(cmd, key, asc, 0);
+	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
 }
 

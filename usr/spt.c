@@ -40,6 +40,7 @@
 #include "target.h"
 #include "scsi.h"
 #include "spc.h"
+#include "sense_codes.h"
 
 extern int spt_sg_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size);
 extern int spt_sg_perform(struct scsi_cmd *cmd);
@@ -68,14 +69,14 @@ static int spt_cmd_perform(int host_no, struct scsi_cmd *cmd)
 
 	if (!cmd->dev) {
 		cmd->len = 0;
-		sense_data_build(cmd, NOT_READY, 0x44, 0); /* Internal target failure */
+		sense_data_build(cmd, NOT_READY, ASC_INTERNAL_TGT_FAILURE);
 		return SAM_STAT_CHECK_CONDITION;
 	}
 
 	ret = spt_sg_perform(cmd);
 	if (ret) {
 		cmd->len = 0;
-		sense_data_build(cmd, ILLEGAL_REQUEST, 0x25, 0);
+		sense_data_build(cmd, ILLEGAL_REQUEST, ASC_LUN_NOT_SUPPORTED);
 		return SAM_STAT_CHECK_CONDITION;
 	} else
 		return SAM_STAT_GOOD;
