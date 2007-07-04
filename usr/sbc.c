@@ -38,7 +38,6 @@
 #include "driver.h"
 #include "scsi.h"
 #include "spc.h"
-#include "sense_codes.h"
 
 #define BLK_SHIFT	9
 

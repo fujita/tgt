@@ -34,7 +34,6 @@
 #include "tgtadm_error.h"
 #include "scsi.h"
 #include "spc.h"
-#include "sense_codes.h"
 
 #define PRODUCT_REV	"0"
 #define BLK_SHIFT	9

@@ -40,7 +40,6 @@
 #include "target.h"
 #include "scsi.h"
 #include "spc.h"
-#include "sense_codes.h"
 
 extern int spt_sg_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size);
 extern int spt_sg_perform(struct scsi_cmd *cmd);

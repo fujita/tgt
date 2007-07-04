@@ -44,7 +44,7 @@
 #include "target.h"
 #include "driver.h"
 #include "spc.h"
-#include "sense_codes.h"
+#include "scsi.h"
 
 #define GETTARGET(x) ((int)((((uint64_t)(x)) >> 56) & 0x003f))
 #define GETBUS(x) ((int)((((uint64_t)(x)) >> 53) & 0x0007))

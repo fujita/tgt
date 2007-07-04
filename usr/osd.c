@@ -33,7 +33,6 @@
 #include "driver.h"
 #include "scsi.h"
 #include "spc.h"
-#include "sense_codes.h"
 
 static int osd_varlen_cdb(int host_no, struct scsi_cmd *cmd)
 {

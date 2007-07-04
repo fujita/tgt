@@ -37,7 +37,6 @@
 #include "util.h"
 #include "tgtd.h"
 #include "scsi.h"
-#include "sense_codes.h"
 
 #define NR_WORKER_THREADS	4
 

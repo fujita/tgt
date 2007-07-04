@@ -41,7 +41,6 @@
 #include "driver.h"
 #include "scsi.h"
 #include "spc.h"
-#include "sense_codes.h"
 
 #define MMC_BLK_SHIFT 11
 
