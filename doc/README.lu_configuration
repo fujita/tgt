@@ -65,5 +65,25 @@ standard INQUIRY:
 As can be seen from above 'sg_inq' output, the RMB (removable) bit is set to 1.
 The Unit serial number page updated with 'FRED00'
 
+Mode Page Creation
+------------------
+Create mode page '2', subpage 0 and 14 bytes of data.
+tgtadm --mode logicalunit --op update --tid 1 --lun 2 \
+         --params mode_page=2:0:14:0x80:0x80:0:0xa:0:0:0:0:0:0:0:0:0:0
+
+Create mode page '3', subpage 0 and 22 bytes of data.
+tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 \
+         --params mode_page=3:0:22:0:0:0:0:0:0:0:0:1:0:2:0:0:0:0:0:0:0:0:13:0:0
+
+Create mode page '10', subpage 0 and 10 bytes of data.
+tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 \
+         --params mode_page=10:0:10:2:0:0:0:0:0:0:0:2:0
+
+Create mode page '0x1c', subpage 0 and 10 bytes of data.
+tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 \
+         --params mode_page=0x1c:0:10:8:0:0:0:0:0:0:0:0:0
+
+
+
 Please refer to scripts/tgt-core-test for a working example.
 

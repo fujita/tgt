@@ -3,6 +3,7 @@
 # Parent directory for data files..
 HOME=/d/01
 
+# Start tgtd if not running..
 P=`ps -ef|grep -v grep|grep tgtd|wc -l`
 if [ "X"$P == "X0" ]; then
 	tgtd -d 1
@@ -35,7 +36,7 @@ TID=1
 
 # Create Target ID 1..
 tgtadm --lld iscsi --mode target --op new --tid $TID \
-		-T iqn.2007-03:marks-vtl_sbc:`hostname`
+		-T iqn.2007-03:marks-vtl_tgt:`hostname`
 sleep 1
 
 # Create first LUN - Disk
@@ -48,23 +49,58 @@ tgtadm --lld iscsi --mode logicalunit --op update --tid $TID --lun $LUN \
 tgtadm --lld iscsi --mode logicalunit --op update --tid $TID --lun $LUN \
 	--params vendor_id=QUANTUM,product_id=HD100,product_rev=0010,removable=1,sense_format=0
 
-# Create 2nd LUN - CD/ROM
-LUN=2
-tgtadm --lld iscsi --mode logicalunit --op new --tid $TID --lun $LUN -b $HOME/cd_block0 --device-type=cd
+#### Set up mode pages ####
+# First try a couple of attempts with incorrect data..
+# i.e. Expect the first two to fail!
+# - Length too long & Incorrect value (300) as one if the params...
 tgtadm --lld iscsi --mode logicalunit --op update --tid $TID --lun $LUN \
-	--params vendor_id=VirtualCD,product_id=CD101,product_rev=0010,scsi_sn=XYZZY11,removable=1
+	--params mode_page=2:0:14:0x80:0x80:0:0xa:0:300:0:0:0:0:0:0:0:0:3
+# - Length too short...
+tgtadm --lld iscsi --mode logicalunit --op update --tid $TID --lun $LUN \
+	--params mode_page=2:0:14:0x80:0x80:0:0xa:0:0:0:0:0:0:0:0:0
+#
+# From here on - should work OK..
+#
 
-# Create 3rd LUN - CD/ROM
-LUN=3
-tgtadm --lld iscsi --mode logicalunit --op new --tid $TID --lun $LUN -b $HOME/cd_block1 --device-type=cd
+# Vendor Uniq - Mode page 0..
 tgtadm --lld iscsi --mode logicalunit --op update --tid $TID --lun $LUN \
-	--params vendor_id=VirtualCD,product_id=CD101,product_rev=0010,scsi_sn=XYZZY12,removable=1
+	--params mode_page=0:0:0
+# Disconnect page
+tgtadm --lld iscsi --mode logicalunit --op update --tid $TID --lun $LUN \
+	--params mode_page=2:0:14:0x80:0x80:0:0xa:0:0:0:0:0:0:0:0:0:0
+# Format mode page
+tgtadm --lld iscsi --mode logicalunit --op update --tid $TID --lun $LUN \
+	--params mode_page=3:0:22:0:0:0:0:0:0:0:0:1:0:2:0:0:0:0:0:0:0:0:13:0:0
+# Geo mode page
+tgtadm --lld iscsi --mode logicalunit --op update --tid $TID --lun $LUN \
+	--params mode_page=4:0:22:0:0:0:0x40:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0x3a:0x98:0:0
+# Caching Page
+tgtadm --lld iscsi --mode logicalunit --op update --tid $TID --lun $LUN \
+	--params mode_page=8:0:18:0x14:0:0xff:0xff:0:0:0xff:0xff:0xff:0xff:0x80:0x14:0:0:0:0:0:0
+# ctrl mode page
+tgtadm --lld iscsi --mode logicalunit --op update --tid $TID --lun $LUN \
+	--params mode_page=10:0:10:2:0:0:0:0:0:0:0:2:0
+# Informational Exceptions Control Mode Page
+tgtadm --lld iscsi --mode logicalunit --op update --tid $TID --lun $LUN \
+	--params mode_page=0x1c:0:10:8:0:0:0:0:0:0:0:0:0
 
-# Create 4th LUN - CD/ROM
-LUN=4
-tgtadm --lld iscsi --mode logicalunit --op new --tid $TID --lun $LUN -b $HOME/cd_block1 --device-type=cd
-tgtadm --lld iscsi --mode logicalunit --op update --tid $TID --lun $LUN \
-	--params vendor_id=VirtualCD,product_id=CD101,product_rev=0010,scsi_sn=XYZZY13,removable=1
+
+
+for LUN in 2 3 4; do
+	# Create LUN - CD/ROM
+	tgtadm --lld iscsi --mode logicalunit --op new --tid $TID --lun $LUN -b $HOME/cd_block0 --device-type=cd
+	tgtadm --lld iscsi --mode logicalunit --op update --tid $TID --lun $LUN \
+		--params vendor_id=VirtualCD,product_id=CD101,product_rev=0010,scsi_sn=XYZZY1$LUN,removable=1
+	# Vendor Uniq - Mode page 0..
+	tgtadm --lld iscsi --mode logicalunit --op update --tid $TID --lun $LUN \
+		--params mode_page=0:0:0
+	# ctrl mode page
+	tgtadm --lld iscsi --mode logicalunit --op update --tid $TID --lun $LUN \
+		--params mode_page=10:0:10:2:0:0:0:0:0:0:0:2:0
+	# Informational Exceptions Control Mode Page
+	tgtadm --lld iscsi --mode logicalunit --op update --tid $TID --lun $LUN \
+		--params mode_page=0x1c:0:10:8:0:0:0:0:0:0:0:0:0
+done
 
 # Allow ALL initiators to connect to this target
 tgtadm --lld iscsi --mode target --op bind --tid $TID -I ALL

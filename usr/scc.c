@@ -33,12 +33,13 @@
 #include "target.h"
 #include "driver.h"
 #include "scsi.h"
+#include "tgtadm_error.h"
 #include "spc.h"
 
 static int scc_lu_init(struct scsi_lu *lu)
 {
 	if (spc_lu_init(lu))
-		return -ENOMEM;
+		return TGTADM_NOMEM;
 
 	strncpy(lu->attrs.product_id, "Controller",
 		sizeof(lu->attrs.product_id));

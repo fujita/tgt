@@ -5,6 +5,7 @@
 
 #define SCSI_ID_LEN	24
 #define SCSI_SN_LEN	8
+#define BLOCK_DESCRIPTOR_LEN 8
 #define VERSION_DESCRIPTOR_LEN 8
 
 #define VENDOR_ID	"IET"
@@ -75,6 +76,13 @@ struct backingstore_template {
 	int (*bs_cmd_done) (struct scsi_cmd *cmd);
 };
 
+struct mode_pg {
+	uint8_t pcode;		/* Page code */
+	uint8_t subpcode;	/* Sub page code */
+	int16_t pcode_size;	/* Size of page code data. */
+	uint8_t mode_data[0];	/* Rest of mode page info */
+};
+
 struct scsi_lu {
 	int fd;
 	uint64_t addr; /* persistent mapped address */
@@ -95,6 +103,9 @@ struct scsi_lu {
 	struct device_type_template dev_type_template;
 
 	struct backingstore_template *bst;
+
+	uint8_t	mode_block_descriptor[BLOCK_DESCRIPTOR_LEN];
+	struct mode_pg *mode_pgs[0x3f];
 
 	/* TODO: needs a structure for lots of device parameters */
 	struct lu_phy_attr attrs;

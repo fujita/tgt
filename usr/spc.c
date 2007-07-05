@@ -230,11 +230,192 @@ int spc_test_unit(int host_no, struct scsi_cmd *cmd)
 		return SAM_STAT_GOOD;
 }
 
+/*
+ * Copy mode page data from list into SCSI data so it can be returned
+ * to the initiator
+ *
+ * *data -> target address (destination)
+ * pg -> Pointer to mode page information (source)
+ *
+ * Returns number of bytes copied.
+ */
+static int build_mode_page(uint8_t *data, struct mode_pg *pg)
+{
+	uint8_t *p;
+	int len;
+
+	data[0] = pg->pcode;
+	len = pg->pcode_size;
+	data[1] = len;
+	p = &data[2];
+	len += 2;
+	memcpy(p, pg->mode_data, pg->pcode_size);
+
+	return len;
+}
+
+int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
+{
+	int len = 0;
+	uint8_t *data, *scb, mode6, dbd, pcode, subpcode;
+	uint16_t alloc_len;
+	unsigned char key = ILLEGAL_REQUEST;
+	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
+	struct mode_pg *pg;
+
+	/*
+	 * Reference : SPC4r11
+	 * 6.11 - MODE SENSE(6)
+	 * 6.12 - MODE SENSE(10)
+	 */
+
+	scb = cmd->scb;
+	mode6 = (scb[0] == 0x1a);
+	dbd = scb[1] & 0x8; /* Disable Block Descriptors */
+	pcode = scb[2] & 0x3f;
+	subpcode = scb[3];
+
+	/* Currently not implemented */
+	if (subpcode)
+		goto sense;
+
+	data = valloc(pagesize);
+	if (!data) {
+		key = HARDWARE_ERROR;
+		asc = ASC_INTERNAL_TGT_FAILURE;
+		goto sense;
+	}
+	memset(data, 0, pagesize);
+
+	if (mode6) {
+		alloc_len = scb[4];
+		len = 4;
+	} else {
+		alloc_len = (scb[7] << 8) + scb[8];
+		len = 8;
+	}
+
+	if (alloc_len > pagesize)
+		goto sense;
+
+	if (!dbd) {
+		memcpy(data + len, cmd->dev->mode_block_descriptor,
+				BLOCK_DESCRIPTOR_LEN);
+		len += 8;
+	}
+
+	if (pcode == 0x3f) {
+		int i;
+		for (i = 0; i < ARRAY_SIZE(cmd->dev->mode_pgs); i++) {
+			pg = cmd->dev->mode_pgs[i];
+			if (pg)
+				len += build_mode_page(data + len, pg);
+		}
+	} else {
+		pg = cmd->dev->mode_pgs[pcode];
+		if (!pg)
+			goto sense;
+		len += build_mode_page(data + len, pg);
+	}
+
+	if (mode6) {
+		data[0] = len - 1;
+		data[3] = dbd ? 0 : BLOCK_DESCRIPTOR_LEN;
+	} else {
+		*(uint16_t *)(data) = __cpu_to_be16(len - 3);
+		data[7] = dbd ? 0 : BLOCK_DESCRIPTOR_LEN;
+	}
+
+	cmd->len = len;
+	cmd->uaddr = (unsigned long)data;
+	return SAM_STAT_GOOD;
+
+sense:
+	cmd->len = 0;
+	sense_data_build(cmd, key, asc);
+	return SAM_STAT_CHECK_CONDITION;
+}
+
 int spc_request_sense(int host_no, struct scsi_cmd *cmd)
 {
 	cmd->len = 0;
 	sense_data_build(cmd, NO_SENSE, NO_ADDITIONAL_SENSE);
 	return SAM_STAT_GOOD;
+}
+
+static struct mode_pg *alloc_mode_pg(uint8_t pcode, uint8_t subpcode,
+				     uint16_t size)
+{
+	struct mode_pg *pg;
+
+	pg = zalloc(sizeof(*pg) + size);
+	if (!pg)
+		return NULL;
+
+	pg->pcode = pcode;
+	pg->subpcode = subpcode;
+	pg->pcode_size = size;
+
+	return pg;
+}
+
+int add_mode_page(struct scsi_lu *lu, char *p)
+{
+	int i, tmp, ret = TGTADM_SUCCESS;
+	uint8_t pcode, subpcode, *data;
+	uint16_t size;
+	struct mode_pg *pg;
+
+	pcode = subpcode = i = size = 0;
+	data = NULL;
+
+	for (i = 0; p; i++) {
+		switch (i) {
+		case 0:
+			pcode = strtol(p, NULL, 0);
+			break;
+		case 1:
+			subpcode = strtol(p, NULL, 0);
+			break;
+		case 2:
+			size = strtol(p, NULL, 0);
+
+			if (lu->mode_pgs[pcode])
+				free(lu->mode_pgs[pcode]);
+
+			pg = alloc_mode_pg(pcode, subpcode, size);
+			if (!pg) {
+				ret = TGTADM_NOMEM;
+				goto exit;
+			}
+
+			lu->mode_pgs[pcode] = pg;
+			data = pg->mode_data;
+			break;
+		default:
+			if (i < (size + 3)) {
+				tmp = strtol(p, NULL, 0);
+				if (tmp > UINT8_MAX)
+					eprintf("Incorrect value %d "
+						"Mode page %d (0x%02x), index: %d\n",
+						tmp, pcode, subpcode, i - 3);
+				data[i - 3] = (uint8_t)tmp;
+			}
+			break;
+		}
+
+		p = strchr(p, ':');
+		if (p)
+			p++;
+	}
+
+	if (i != size + 3) {
+		ret = TGTADM_INVALID_REQUEST;
+		eprintf("Mode Page %d (0x%02x): param_count %d != "
+			"MODE PAGE size : %d\n", pcode, subpcode, i, size + 3);
+	}
+exit:
+	return ret;
 }
 
 void dump_cdb(struct scsi_cmd *cmd)
@@ -282,6 +463,7 @@ enum {
 	Opt_vendor_id, Opt_product_id,
 	Opt_product_rev, Opt_sense_format,
 	Opt_removable, Opt_online,
+	Opt_mode_page,
 	Opt_err,
 };
 
@@ -294,13 +476,14 @@ static match_table_t tokens = {
 	{Opt_sense_format, "sense_format=%s"},
 	{Opt_removable, "removable=%s"},
 	{Opt_online, "online=%s"},
+	{Opt_mode_page, "mode_page=%s"},
 	{Opt_err, NULL},
 };
 
 int spc_lu_config(struct scsi_lu *lu, char *params) {
 	int err = 0;
 	char *p;
-	char buf[20];
+	char buf[256];
 
 	if (!strncmp("targetOps", params, 9))
 		params = params + 10;
@@ -344,6 +527,10 @@ int spc_lu_config(struct scsi_lu *lu, char *params) {
 			match_strncpy(buf, &args[0],  sizeof(buf));
 			lu->attrs.online = atoi(buf);
 			break;
+		case Opt_mode_page:
+			match_strncpy(buf, &args[0], sizeof(buf));
+			err = add_mode_page(lu, buf);
+			break;
 		default:
 			err = TGTADM_INVALID_REQUEST;
 		}
@@ -351,6 +538,11 @@ int spc_lu_config(struct scsi_lu *lu, char *params) {
 	return err;
 }
 
+/*
+ * Set initial power-on defaults for lu
+ *
+ * Currently always return '0'
+ */
 int spc_lu_init(struct scsi_lu *lu)
 {
 	strncpy(lu->attrs.vendor_id, VENDOR_ID, sizeof(lu->attrs.vendor_id));

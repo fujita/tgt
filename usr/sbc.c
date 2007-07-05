@@ -38,6 +38,7 @@
 #include "driver.h"
 #include "scsi.h"
 #include "spc.h"
+#include "tgtadm_error.h"
 
 #define BLK_SHIFT	9
 
@@ -168,153 +169,42 @@ sense:
 	return SAM_STAT_CHECK_CONDITION;
 }
 
-static int insert_disconnect_pg(uint8_t *ptr)
-{
-	unsigned char disconnect_pg[] = {0x02, 0x0e, 0x80, 0x80, 0x00, 0x0a, 0x00, 0x00,
-                                         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-
-	memcpy(ptr, disconnect_pg, sizeof(disconnect_pg));
-	return sizeof(disconnect_pg);
-}
-
-static int insert_caching_pg(uint8_t *ptr)
-{
-	unsigned char caching_pg[] = {0x08, 0x12, 0x14, 0x00, 0xff, 0xff, 0x00, 0x00,
-				      0xff, 0xff, 0xff, 0xff, 0x80, 0x14, 0x00, 0x00,
-				      0x00, 0x00, 0x00, 0x00};
-
-	memcpy(ptr, caching_pg, sizeof(caching_pg));
-	return sizeof(caching_pg);
-}
-
-static int insert_ctrl_m_pg(uint8_t *ptr)
-{
-	unsigned char ctrl_m_pg[] = {0x0a, 0x0a, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
-				     0x00, 0x00, 0x02, 0x4b};
-
-	memcpy(ptr, ctrl_m_pg, sizeof(ctrl_m_pg));
-	return sizeof(ctrl_m_pg);
-}
-
-static int insert_iec_m_pg(uint8_t *ptr)
-{
-	unsigned char iec_m_pg[] = {0x1c, 0xa, 0x08, 0x00, 0x00, 0x00, 0x00,
-				    0x00, 0x00, 0x00, 0x00, 0x00};
-
-	memcpy(ptr, iec_m_pg, sizeof(iec_m_pg));
-	return sizeof(iec_m_pg);
-}
-
-static int insert_format_m_pg(uint8_t *ptr)
-{
-	unsigned char format_m_pg[] = {0x03, 0x16, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-				       0x00, 0x00, 0x01, 0x00, 0x02, 0x00, 0x00, 0x00,
-				       0x00, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x00};
-	memcpy(ptr, format_m_pg, sizeof(format_m_pg));
-	return sizeof(format_m_pg);
-}
-
-static int insert_geo_m_pg(uint8_t *ptr, uint64_t sec)
-{
-	unsigned char geo_m_pg[] = {0x04, 0x16, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00,
-				    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-				    0x00, 0x00, 0x00, 0x00, 0x3a, 0x98, 0x00, 0x00};
-	uint32_t ncyl, *p;
-
-	/* assume 0xff heads, 15krpm. */
-	memcpy(ptr, geo_m_pg, sizeof(geo_m_pg));
-	ncyl = sec >> 14; /* 256 * 64 */
-	p = (uint32_t *)(ptr + 1);
-	*p = *p | __cpu_to_be32(ncyl);
-	return sizeof(geo_m_pg);
-}
-
-static int sbc_mode_sense(int host_no, struct scsi_cmd *cmd)
-{
-	int ret = SAM_STAT_GOOD, len;
-	uint8_t pcode = cmd->scb[2] & 0x3f;
-	uint64_t size;
-	uint8_t *data = NULL;
-	unsigned char key = ILLEGAL_REQUEST;
-	uint16_t asc = ASC_LUN_NOT_SUPPORTED;
-
-	if (device_reserved(cmd))
-		return SAM_STAT_RESERVATION_CONFLICT;
-
-	data = valloc(pagesize);
-	if (!data) {
-		key = HARDWARE_ERROR;
-		asc = ASC_INTERNAL_TGT_FAILURE;
-		goto sense;
-	}
-	memset(data, 0, pagesize);
-
-	len = 4;
-	size = cmd->dev->size >> BLK_SHIFT;
-
-	if ((cmd->scb[1] & 0x8))
-		data[3] = 0;
-	else {
-		data[3] = 8;
-		len += 8;
-		*(uint32_t *)(data + 4) = (size >> 32) ?
-			__cpu_to_be32(0xffffffff) : __cpu_to_be32(size);
-		*(uint32_t *)(data + 8) = __cpu_to_be32(1 << BLK_SHIFT);
-	}
-
-	switch (pcode) {
-	case 0x0:
-		break;
-	case 0x2:
-		len += insert_disconnect_pg(data + len);
-		break;
-	case 0x3:
-		len += insert_format_m_pg(data + len);
-		break;
-	case 0x4:
-		len += insert_geo_m_pg(data + len, size);
-		break;
-	case 0x8:
-		len += insert_caching_pg(data + len);
-		break;
-	case 0xa:
-		len += insert_ctrl_m_pg(data + len);
-		break;
-	case 0x1c:
-		len += insert_iec_m_pg(data + len);
-		break;
-	case 0x3f:
-		len += insert_disconnect_pg(data + len);
-		len += insert_format_m_pg(data + len);
-		len += insert_geo_m_pg(data + len, size);
-		len += insert_caching_pg(data + len);
-		len += insert_ctrl_m_pg(data + len);
-		len += insert_iec_m_pg(data + len);
-		break;
-	default:
-		asc = ASC_INVALID_FIELD_IN_CDB;
-		goto sense;
-	}
-
-	data[0] = len - 1;
-	cmd->len = len;
-	cmd->uaddr = (unsigned long) data;
-	return ret;
-sense:
-	cmd->len = 0;
-	sense_data_build(cmd, key, asc);
-	return SAM_STAT_CHECK_CONDITION;
-}
-
 static int sbc_lu_init(struct scsi_lu *lu)
 {
+	uint64_t size;
+	uint8_t *data;
+
 	if (spc_lu_init(lu))
-		return -ENOMEM;
+		return TGTADM_NOMEM;
 
 	strncpy(lu->attrs.product_id, "VIRTUAL-DISK", sizeof(lu->attrs.product_id));
 	lu->attrs.version_desc[0] = 0x04C0; /* SBC-3 no version claimed */
 	lu->attrs.version_desc[1] = 0x0960; /* iSCSI */
 	lu->attrs.version_desc[2] = 0x0300; /* SPC-3 */
+
+	data = lu->mode_block_descriptor;
+	size = lu->size >> BLK_SHIFT;
+
+	*(uint32_t *)(data) = (size >> 32) ?
+			__cpu_to_be32(0xffffffff) : __cpu_to_be32(size);
+	*(uint32_t *)(data + 4) = __cpu_to_be32(1 << BLK_SHIFT);
+
+	/* Vendor uniq - However most apps seem to call for mode page 0*/
+	add_mode_page(lu, "0:0:0");
+	/* Disconnect page */
+	add_mode_page(lu, "2:0:14:0x80:0x80:0:0xa:0:0:0:0:0:0:0:0:0:0");
+	/* Format page */
+	add_mode_page(lu, "3:0:22:0:0:0:0:0:0:0:0:1:0:2:0:0:0:0:0:0:0:0:13:0:0");
+	/* GEO page */
+	add_mode_page(lu, "4:0:22:0:0:0:0x40:0:0:0:0:0:"
+		      "0:0:0:0:0:0:0:0:0:0x3a:0x98:0:0");
+	/* Caching Page */
+	add_mode_page(lu, "8:0:18:0x14:0:0xff:0xff:0:0:"
+		      "0xff:0xff:0xff:0xff:0x80:0x14:0:0:0:0:0:0");
+	/* Control page */
+	add_mode_page(lu, "10:0:10:2:0:0:0:0:0:0:0:2:0");
+	/* Informational Exceptions Control page */
+	add_mode_page(lu, "0x1c:0:10:8:0:0:0:0:0:0:0:0:0");
 
 	return 0;
 }
@@ -354,7 +244,7 @@ static struct device_type_template sbc_template = {
 
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{sbc_mode_sense,},
+		{spc_mode_sense,},
 		{spc_start_stop,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
@@ -399,7 +289,28 @@ static struct device_type_template sbc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 
-		[0x40 ... 0x7f] = {spc_illegal_op,},
+		[0x40 ... 0x4f] = {spc_illegal_op,},
+
+		/* 0x50 */
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_mode_sense,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+
+		[0x60 ... 0x7f] = {spc_illegal_op,},
 
 		/* 0x80 */
 		{spc_illegal_op,},

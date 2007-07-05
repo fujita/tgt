@@ -33,6 +33,7 @@
 #include "driver.h"
 #include "scsi.h"
 #include "spc.h"
+#include "tgtadm_error.h"
 
 static int osd_varlen_cdb(int host_no, struct scsi_cmd *cmd)
 {
@@ -52,7 +53,7 @@ static int osd_varlen_cdb(int host_no, struct scsi_cmd *cmd)
 static int osd_lu_init(struct scsi_lu *lu)
 {
 	if (spc_lu_init(lu))
-		return -ENOMEM;
+		return TGTADM_NOMEM;
 
 	strncpy(lu->attrs.product_id, "OSD", sizeof(lu->attrs.product_id));
 	lu->attrs.sense_format = 1;

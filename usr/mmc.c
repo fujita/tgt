@@ -41,6 +41,7 @@
 #include "driver.h"
 #include "scsi.h"
 #include "spc.h"
+#include "tgtadm_error.h"
 
 #define MMC_BLK_SHIFT 11
 
@@ -121,16 +122,52 @@ static int mmc_read_capacity(int host_no, struct scsi_cmd *cmd)
 	return SAM_STAT_GOOD;
 }
 
+static int mmc_mode_sense(int host_no, struct scsi_cmd *cmd)
+{
+	uint8_t *scb = cmd->scb;
+
+	/* MMC devices always return descriptor block */
+	scb[1] |= 8;
+	return spc_mode_sense(host_no, cmd);
+}
+
 static int mmc_lu_init(struct scsi_lu *lu)
 {
 	if (spc_lu_init(lu))
-		return -ENOMEM;
+		return TGTADM_NOMEM;
 
 	strncpy(lu->attrs.product_id, "VIRTUAL-CDROM", sizeof(lu->attrs.product_id));
 	lu->attrs.sense_format = 0;
 	lu->attrs.version_desc[0] = 0x02A0; /* MMC3, no version claimed */
 	lu->attrs.version_desc[1] = 0x0960; /* iSCSI */
 	lu->attrs.version_desc[2] = 0x0300; /* SPC-3 */
+
+	/*
+	 * Set up default mode pages
+	 * Ref: mmc6r00.pdf 7.2.2 (Table 649)
+	 */
+
+	/* Vendor uniq - However most apps seem to call for mode page 0*/
+	add_mode_page(lu, "0:0:0");
+	/* Read/Write Error Recovery */
+	add_mode_page(lu, "1:0:10:0:8:0:0:0:0:8:0:0:0");
+	/* MRW */
+	add_mode_page(lu, "3:0:6:0:0:0:0:0:0");
+	/* Write Parameter
+	 * Somebody who knows more about this mode page should be setting
+	 * defaults.
+	add_mode_page(lu, "5:0:0");
+	 */
+	/* Caching Page */
+	add_mode_page(lu, "8:0:10:0:0:0:0:0:0:0:0:0:0");
+	/* Control page */
+	add_mode_page(lu, "10:0:10:2:0:0:0:0:0:0:0:2:0");
+	/* Power Condition */
+	add_mode_page(lu, "0x1a:0:10:8:0:0:0:0:0:0:0:0:0");
+	/* Informational Exceptions Control page */
+	add_mode_page(lu, "0x1c:0:10:8:0:0:0:0:0:0:0:0:0");
+	/* Timeout & Protect */
+	add_mode_page(lu, "0x1d:0:10:0:0:7:0:0:2:0:2:0:20");
 
 	return 0;
 }
@@ -217,7 +254,26 @@ static struct device_type_template mmc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 
-		[0x50 ... 0x9f] = {spc_illegal_op,},
+		/* 0x50 */
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{mmc_mode_sense,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+
+		[0x60 ... 0x9f] = {spc_illegal_op,},
 
 		/* 0xA0 */
 		{spc_report_luns,},
