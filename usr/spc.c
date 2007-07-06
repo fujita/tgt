@@ -46,6 +46,7 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 	unsigned char key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 	uint8_t devtype = 0;
+	struct lu_phy_attr *attrs;
 
 	if (((scb[1] & 0x3) == 0x3) || (!(scb[1] & 0x3) && scb[2]))
 		goto sense;
@@ -60,27 +61,29 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 
 	dprintf("%x %x\n", scb[1], scb[2]);
 
-	devtype = (cmd->dev->attrs.qualifier & 0x7 ) << 5;
-	devtype |= (cmd->dev->attrs.device_type & 0x1f);
+	attrs = &cmd->dev->attrs;
+
+	devtype = (attrs->qualifier & 0x7) << 5;
+	devtype |= (attrs->device_type & 0x1f);
 
 	if (!(scb[1] & 0x3)) {
 		int i;
 		uint16_t *desc;
 
 		data[0] = devtype;
-		data[1] = (cmd->dev->attrs.removable) ? 0x80 : 0;
+		data[1] = (attrs->removable) ? 0x80 : 0;
 		data[2] = 5;	/* SPC-3 */
 		data[3] = 0x42;
 		data[7] = 0x02;
 
 		memset(data + 8, 0x20, 28);
-		strncpy((char *)data + 8, cmd->dev->attrs.vendor_id, 8);
-		strncpy((char *)data + 16, cmd->dev->attrs.product_id, 16);
-		strncpy((char *)data + 32, cmd->dev->attrs.product_rev, 4);
+		strncpy((char *)data + 8, attrs->vendor_id, VENDOR_ID_LEN);
+		strncpy((char *)data + 16, attrs->product_id, PRODUCT_ID_LEN);
+		strncpy((char *)data + 32, attrs->product_rev, PRODUCT_REV_LEN);
 
 		desc = (uint16_t *)(data + 58);
-		for (i = 0; i < ARRAY_SIZE(cmd->dev->attrs.version_desc); i++)
-			*desc++ = __cpu_to_be16(cmd->dev->attrs.version_desc[i]);
+		for (i = 0; i < ARRAY_SIZE(attrs->version_desc); i++)
+			*desc++ = __cpu_to_be16(attrs->version_desc[i]);
 
 		len = 66;
 		data[4] = len - 5;	/* Additional Length */
@@ -112,12 +115,12 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 			len = 4 + SCSI_SN_LEN;
 			ret = SAM_STAT_GOOD;
 
-			if (strlen(cmd->dev->attrs.scsi_sn)) {
+			if (strlen(attrs->scsi_sn)) {
 				uint8_t *p;
 				char *q;
 
 				p = data + 4 + tmp - 1;
-				q = cmd->dev->attrs.scsi_sn + SCSI_SN_LEN - 1;
+				q = attrs->scsi_sn + SCSI_SN_LEN - 1;
 				for (; tmp > 0; tmp--, q)
 					*(p--) = *(q--);
 			}
@@ -129,8 +132,7 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 			data[4] = 0x1;
 			data[5] = 0x1;
 			data[7] = tmp;
-			strncpy((char *) data + 8,
-				cmd->dev->attrs.scsi_id, SCSI_ID_LEN);
+			strncpy((char *) data + 8, attrs->scsi_id, SCSI_ID_LEN);
 
 			len = tmp + 8;
 			ret = SAM_STAT_GOOD;
@@ -559,9 +561,10 @@ int spc_lu_config(struct scsi_lu *lu, char *params)
 
 int spc_lu_init(struct scsi_lu *lu)
 {
-	snprintf(lu->attrs.vendor_id, sizeof(lu->attrs.vendor_id) - 1,
-							"%-16s", VENDOR_ID);
-	snprintf(lu->attrs.product_rev, 4, "%s", "0001");
+	snprintf(lu->attrs.vendor_id, sizeof(lu->attrs.vendor_id),
+		 "%-16s", VENDOR_ID);
+	snprintf(lu->attrs.product_rev, sizeof(lu->attrs.product_rev),
+		 "%s", "0001");
 	lu->attrs.removable = 0;
 	lu->attrs.sense_format = 0;
 	lu->attrs.online = 0;

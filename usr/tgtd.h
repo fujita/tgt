@@ -3,10 +3,15 @@
 
 #include "log.h"
 
-#define SCSI_ID_LEN	24
-#define SCSI_SN_LEN	8
-#define BLOCK_DESCRIPTOR_LEN 8
-#define VERSION_DESCRIPTOR_LEN 8
+#define SCSI_ID_LEN		24
+#define SCSI_SN_LEN		8
+
+#define VENDOR_ID_LEN		8
+#define PRODUCT_ID_LEN		16
+#define PRODUCT_REV_LEN		4
+
+#define BLOCK_DESCRIPTOR_LEN	8
+#define VERSION_DESCRIPTOR_LEN	8
 
 #define VENDOR_ID	"IET"
 
@@ -32,13 +37,13 @@ struct tgt_cmd_queue {
 };
 
 struct lu_phy_attr {
-	char scsi_id[SCSI_ID_LEN];
-	char scsi_sn[SCSI_SN_LEN];
+	char scsi_id[SCSI_ID_LEN + 1];
+	char scsi_sn[SCSI_SN_LEN + 1];
 
-	/* SCSI Inquiry Params */
-	char vendor_id[9];
-	char product_id[17];
-	char product_rev[5];
+	char vendor_id[VENDOR_ID_LEN + 1];
+	char product_id[PRODUCT_ID_LEN + 1];
+	char product_rev[PRODUCT_REV_LEN + 1];
+
 	uint16_t version_desc[VERSION_DESCRIPTOR_LEN];
 
  	char device_type;	/* Peripheral device type */
