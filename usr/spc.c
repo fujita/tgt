@@ -226,16 +226,28 @@ int spc_test_unit(int host_no, struct scsi_cmd *cmd)
 
 	if (device_reserved(cmd))
 		return SAM_STAT_RESERVATION_CONFLICT;
-	else
+	if (cmd->dev->attrs.reset) {
+		cmd->dev->attrs.reset = 0;
+		sense_data_build(cmd, UNIT_ATTENTION, ASC_POWERON_RESET);
+		return SAM_STAT_CHECK_CONDITION;
+	}
+	if (cmd->dev->attrs.online)
 		return SAM_STAT_GOOD;
+	if (cmd->dev->attrs.removable)
+		sense_data_build(cmd, NOT_READY, ASC_MEDIUM_NOT_PRESENT);
+	else
+		sense_data_build(cmd, NOT_READY, ASC_BECOMING_READY);
+
+	return SAM_STAT_CHECK_CONDITION;
 }
 
-/*
- * Copy mode page data from list into SCSI data so it can be returned
- * to the initiator
+/**
+ * build_mode_page - static routine used by spc_mode_sense()
+ * @data:	destination pointer
+ * @m:		struct mode pointer (src of data)
  *
- * *data -> target address (destination)
- * pg -> Pointer to mode page information (source)
+ * Description: Copy mode page data from list into SCSI data so it can
+ * be returned to the initiator
  *
  * Returns number of bytes copied.
  */
@@ -254,6 +266,13 @@ static int build_mode_page(uint8_t *data, struct mode_pg *pg)
 	return len;
 }
 
+/**
+ * spc_mode_sense - Implement SCSI op MODE SENSE(6) and MODE SENSE(10)
+ *
+ * Reference : SPC4r11
+ * 6.11 - MODE SENSE(6)
+ * 6.12 - MODE SENSE(10)
+ */
 int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 {
 	int len = 0;
@@ -262,12 +281,6 @@ int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 	unsigned char key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 	struct mode_pg *pg;
-
-	/*
-	 * Reference : SPC4r11
-	 * 6.11 - MODE SENSE(6)
-	 * 6.12 - MODE SENSE(10)
-	 */
 
 	scb = cmd->scb;
 	mode6 = (scb[0] == 0x1a);
@@ -480,8 +493,9 @@ static match_table_t tokens = {
 	{Opt_err, NULL},
 };
 
-int spc_lu_config(struct scsi_lu *lu, char *params) {
-	int err = 0;
+int lu_config(struct scsi_lu *lu, char *params, match_fn_t *fn)
+{
+	int err = TGTADM_SUCCESS;
 	char *p;
 	char buf[256];
 
@@ -505,15 +519,15 @@ int spc_lu_config(struct scsi_lu *lu, char *params) {
 			break;
 		case Opt_vendor_id:
 			match_strncpy(lu->attrs.vendor_id, &args[0],
-					sizeof(lu->attrs.vendor_id));
+					sizeof(lu->attrs.vendor_id) - 1);
 			break;
 		case Opt_product_id:
 			match_strncpy(lu->attrs.product_id, &args[0],
-					sizeof(lu->attrs.product_id));
+					sizeof(lu->attrs.product_id) - 1);
 			break;
 		case Opt_product_rev:
 			match_strncpy(lu->attrs.product_rev, &args[0],
-					sizeof(lu->attrs.product_rev));
+					sizeof(lu->attrs.product_rev) - 1);
 			break;
 		case Opt_sense_format:
 			match_strncpy(buf, &args[0],  sizeof(buf));
@@ -532,21 +546,22 @@ int spc_lu_config(struct scsi_lu *lu, char *params) {
 			err = add_mode_page(lu, buf);
 			break;
 		default:
-			err = TGTADM_INVALID_REQUEST;
+			err |= fn ? fn(lu, p) : TGTADM_INVALID_REQUEST;
 		}
 	}
 	return err;
 }
 
-/*
- * Set initial power-on defaults for lu
- *
- * Currently always return '0'
- */
+int spc_lu_config(struct scsi_lu *lu, char *params)
+{
+	return lu_config(lu, params, NULL);
+}
+
 int spc_lu_init(struct scsi_lu *lu)
 {
-	strncpy(lu->attrs.vendor_id, VENDOR_ID, sizeof(lu->attrs.vendor_id));
-	memcpy(lu->attrs.product_rev, "0001", 4);
+	snprintf(lu->attrs.vendor_id, sizeof(lu->attrs.vendor_id) - 1,
+							"%-16s", VENDOR_ID);
+	snprintf(lu->attrs.product_rev, 4, "%s", "0001");
 	lu->attrs.removable = 0;
 	lu->attrs.sense_format = 0;
 	lu->attrs.online = 0;

@@ -84,6 +84,53 @@ tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 \
          --params mode_page=0x1c:0:10:8:0:0:0:0:0:0:0:0:0
 
 
+SMC unique options
+------------------
+
+--params have several unique key=value pairs ontop of all other modules.
+ - element_type=<1|2|3|4>
+ - start_address=Number between 1 & 65535
+ - quantity=Number between 1 & 65535
+ - sides=1|2
+ - address=Number between 1 & 65535
+ - barcode="Char string up to 10 chars"
+ - tid=<number>
+ - lun=<number>
+ - media_home=/path/to/virtual/media
+   The 'barcode' of media is appended to this path specified in media_home and
+   it is this file which is used for the backing store when reading/writing to
+   DATA TRANSFER DEVICE at address 'tid=x lun=x'
+
+Several of these parameters 'work together'
+
+e.g. To add 'quantity' slots as 'element_type' starting at 'start_address'
+ - element_type=<1|2|3|4>
+ - start_address=Number between 1 & 65535
+ - quantity=Number between 1 & 65535
+
+Note: start_address + quantity should not overlap with any other slots..
+
+
+While 'configuring slot 'address' of 'element_type':
+ - Set barcode of meda (occupy slot)
+ - If element type is DATA TRANSFER DEVICE, then define TID & LUN of device.
+
+ - element_type=<1|2|3|4>
+ - address=Number between 1 & 65535
+ - barcode="String up to 10 chars"
+ - sides=<1|2>
+ - tid=<tid of device which belongs at this address>
+ - lun=<lun of device which belongs at this address>
+
+
+It is the responsibility of the user not to configure overlapping slots
+of differing types.
+
+Slot types:
+ 1 -> Medium Transport (picker arm)
+ 2 -> Storage Element
+ 3 -> Import/Export Element
+ 4 -> Data Transfer device (CD drive, tape drive, MO drive etc)
 
 Please refer to scripts/tgt-core-test for a working example.
 

@@ -34,6 +34,7 @@
 #include "list.h"
 #include "util.h"
 #include "tgtd.h"
+#include "tgtadm_error.h"
 #include "target.h"
 #include "driver.h"
 #include "scsi.h"

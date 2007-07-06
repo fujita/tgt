@@ -200,6 +200,7 @@ static int tgt_device_path_update(struct target *target,
 	lu->addr = 0;
 	lu->size = size;
 	lu->path = path;
+	lu->attrs.online = 1;
 
 	return 0;
 }
@@ -339,6 +340,61 @@ int tgt_device_destroy(int tid, uint64_t lun, int force)
 	free(lu);
 
 	return 0;
+}
+
+struct lu_phy_attr *lu_attr_lookup(int tid, uint64_t lun)
+{
+	struct target *target;
+	struct scsi_lu *lu;
+
+	lu = __device_lookup(tid, lun, &target);
+	if (!lu)
+		return NULL;
+	return &lu->attrs;
+}
+
+/**
+ * dtd_load_unload  --  Load / unload media
+ * @tid:	Target ID
+ * @lun:	LUN
+ * @load:	True if load, not true - unload
+ * @file:	filename of 'media' top open
+ *
+ * load/unload media from the DATA TRANSFER DEVICE.
+ */
+int dtd_load_unload(int tid, uint64_t lun, int load, char *file)
+{
+	struct target *target;
+	struct scsi_lu *lu;
+	int err = TGTADM_SUCCESS;
+
+	lu = __device_lookup(tid, lun, &target);
+	if (!lu)
+		return TGTADM_NO_LUN;
+
+	if (!lu->attrs.removable)
+		return TGTADM_INVALID_REQUEST;
+
+	if (lu->path) {
+		close(lu->fd);
+		free(lu->path);
+		lu->path = NULL;
+	}
+
+	lu->size = 0;
+	lu->fd = 0;
+	lu->attrs.online = 0;
+
+	if (load) {
+		lu->path = strdup(file);
+		if (!lu->path)
+			return TGTADM_NOMEM;
+		lu->fd = backed_file_open(file, O_RDWR|O_LARGEFILE, &lu->size);
+		if (lu->fd < 0)
+			return TGTADM_UNSUPPORTED_OPERATION;
+		lu->attrs.online = 1;
+	}
+	return err;
 }
 
 int device_reserve(struct scsi_cmd *cmd)
@@ -1200,12 +1256,18 @@ int tgt_target_show_all(char *buf, int rest)
 				 _TAB3 "SCSI ID: %s\n"
 				 _TAB3 "SCSI SN: %s\n"
 				 _TAB3 "Size: %s\n"
+				 _TAB3 "Online: %s\n"
+				 _TAB3 "Poweron/Reset: %s\n"
+				 _TAB3 "Removable media: %s\n"
 				 _TAB3 "Backing store: %s\n",
 				 lu->lun,
   				 print_type(lu->attrs.device_type),
 				 lu->attrs.scsi_id,
 				 lu->attrs.scsi_sn,
 				 print_disksize(lu->size),
+				 lu->attrs.online ? "Yes" : "No",
+				 lu->attrs.reset ? "Yes" : "No",
+				 lu->attrs.removable ? "Yes" : "No",
 				 lu->path ? : "No backing store");
 
 		if (!strcmp(tgt_drivers[target->lid]->name, "iscsi")) {

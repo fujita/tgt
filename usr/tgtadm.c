@@ -300,6 +300,8 @@ static int str_to_device_type(char *str)
 		exit(EINVAL);
 	} else if (!strcmp(str, "cd"))
 		return TYPE_ROM;
+	else if (!strcmp(str, "changer"))
+		return TYPE_MEDIUM_CHANGER;
 	else if (!strcmp(str, "osd"))
 		return TYPE_OSD;
 	else if (!strcmp(str, "pt"))

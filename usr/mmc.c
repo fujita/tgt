@@ -38,6 +38,7 @@
 #include "util.h"
 #include "tgtd.h"
 #include "target.h"
+#include "tgtadm_error.h"
 #include "driver.h"
 #include "scsi.h"
 #include "spc.h"

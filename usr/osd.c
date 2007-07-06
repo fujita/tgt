@@ -29,6 +29,7 @@
 #include "list.h"
 #include "util.h"
 #include "tgtd.h"
+#include "tgtadm_error.h"
 #include "target.h"
 #include "driver.h"
 #include "scsi.h"
@@ -67,6 +68,7 @@ static int osd_lu_init(struct scsi_lu *lu)
 static struct device_type_template osd_template = {
 	.type		= TYPE_OSD,
 	.lu_init	= osd_lu_init,
+	.lu_config	= spc_lu_config,
 	.ops		= {
 		[0x00 ... 0x0f] = {spc_illegal_op},
 

@@ -73,7 +73,7 @@ struct backingstore_template {
 	int (*bs_open)(struct scsi_lu *dev, char *path, int *fd, uint64_t *size);
 	void (*bs_close)(struct scsi_lu *dev);
 	int (*bs_cmd_submit)(struct scsi_cmd *cmd);
-	int (*bs_cmd_done) (struct scsi_cmd *cmd);
+	int (*bs_cmd_done)(struct scsi_cmd *cmd);
 };
 
 struct mode_pg {
@@ -107,8 +107,11 @@ struct scsi_lu {
 	uint8_t	mode_block_descriptor[BLOCK_DESCRIPTOR_LEN];
 	struct mode_pg *mode_pgs[0x3f];
 
-	/* TODO: needs a structure for lots of device parameters */
 	struct lu_phy_attr attrs;
+
+	/* TODO: needs a structure for lots of device parameters */
+	/* Currently only used by smc module */
+	void *smc_p;
 };
 
 struct scsi_cmd {
