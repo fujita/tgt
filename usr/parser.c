@@ -196,10 +196,7 @@ int match_hex(substring_t *s, int *result)
  */
 char *match_strncpy(char *to, substring_t *s, size_t n)
 {
-	size_t len = s->to - s->from;
-	memcpy(to, s->from, min(len, n));
-	if (n > len)
-		to[len] = '\0';
+	snprintf(to, n, "%s", s->from);
 	return to;
 }
 

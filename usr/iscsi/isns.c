@@ -1010,20 +1010,19 @@ int isns_update(char *params)
 				break;
 			}
 
-			match_strncpy(tmp, &args[0], sizeof(tmp) - 1);
+			match_strncpy(tmp, &args[0], sizeof(tmp));
 			use_isns = !strcmp(tmp, "On");
 			if (use_isns)
 				isns_init();
 			break;
 		case Opt_ip:
-			match_strncpy(isns_addr, &args[0],
-				      sizeof(isns_addr) - 1);
+			match_strncpy(isns_addr, &args[0], sizeof(isns_addr));
 			break;
 		case Opt_port:
 			if (match_int(&args[0], &isns_port))
 				ret = TGTADM_INVALID_REQUEST;
 		case Opt_ac:
-			match_strncpy(tmp, &args[0], sizeof(tmp) - 1);
+			match_strncpy(tmp, &args[0], sizeof(tmp));
 			use_isns_ac = !strcmp(tmp, "On");
 			break;
 		default:

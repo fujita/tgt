@@ -511,34 +511,34 @@ int lu_config(struct scsi_lu *lu, char *params, match_fn_t *fn)
 		switch (token) {
 		case Opt_scsi_id:
 			match_strncpy(lu->attrs.scsi_id, &args[0],
-				      sizeof(lu->attrs.scsi_id) - 1);
+				      sizeof(lu->attrs.scsi_id));
 			break;
 		case Opt_scsi_sn:
 			match_strncpy(lu->attrs.scsi_sn, &args[0],
-				      sizeof(lu->attrs.scsi_sn) - 1);
+				      sizeof(lu->attrs.scsi_sn));
 			break;
 		case Opt_vendor_id:
 			match_strncpy(lu->attrs.vendor_id, &args[0],
-					sizeof(lu->attrs.vendor_id) - 1);
+				      sizeof(lu->attrs.vendor_id));
 			break;
 		case Opt_product_id:
 			match_strncpy(lu->attrs.product_id, &args[0],
-					sizeof(lu->attrs.product_id) - 1);
+				      sizeof(lu->attrs.product_id));
 			break;
 		case Opt_product_rev:
 			match_strncpy(lu->attrs.product_rev, &args[0],
-					sizeof(lu->attrs.product_rev) - 1);
+				      sizeof(lu->attrs.product_rev));
 			break;
 		case Opt_sense_format:
-			match_strncpy(buf, &args[0],  sizeof(buf));
+			match_strncpy(buf, &args[0], sizeof(buf));
 			lu->attrs.sense_format = atoi(buf);
 			break;
 		case Opt_removable:
-			match_strncpy(buf, &args[0],  sizeof(buf));
+			match_strncpy(buf, &args[0], sizeof(buf));
 			lu->attrs.removable = atoi(buf);
 			break;
 		case Opt_online:
-			match_strncpy(buf, &args[0],  sizeof(buf));
+			match_strncpy(buf, &args[0], sizeof(buf));
 			lu->attrs.online = atoi(buf);
 			break;
 		case Opt_mode_page:

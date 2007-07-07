@@ -690,7 +690,7 @@ static int __smc_lu_config(struct scsi_lu *lu, char *params)
 			break;
 		case Opt_barcode:
 			match_strncpy(sv_param.barcode, &args[0],
-						sizeof(sv_param.barcode));
+				      sizeof(sv_param.barcode));
 			break;
 		case Opt_tid:
 			match_strncpy(buf, &args[0], sizeof(buf));
