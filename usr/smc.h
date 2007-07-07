@@ -1,7 +1,7 @@
 /*
  * SCSI Medium Changer Command
  *
- * Copyright (C) 2007 Mark Harvey markh794@gmail.com
+ * Copyright (C) 2007 Mark Harvey <markh794@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

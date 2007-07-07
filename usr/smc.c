@@ -47,22 +47,21 @@
 #include "smc.h"
 #include "media.h"
 
-struct slot *slot_lookup(struct list_head *head, int element_type, int address);
 static int set_slot_full(struct slot *s, uint16_t src, char *path);
 static void set_slot_empty(struct slot *s);
 static int test_slot_full(struct slot *s);
-struct lu_phy_attr *lu_attr_lookup(int tid, uint64_t lun);
-int dtd_load_unload(uint8_t tid, uint64_t lun, int flg, char *filename);
 
-/* ********************************************************
- * READ_ELEMENT_STATUS
+/**
+ * determine_element_sz  --  read element status
+ * @dvcid	Device ID - true, return device ID information
+ * @voltag	true, return Volume Tag (barcode)
  *
  * Ref: Working Draft SCSI Media Changer-3 (smc3r06.pdf), chapter 6.10
  *
- * The READ ELEMENT STATUS command request that the device server report the
- * status of its internal elements to the application client.
- * Support for READ ELEMENT STATUS command is mandatory.
- * ******************************************************** */
+ * The READ ELEMENT STATUS command request that the device server
+ * report the status of its internal elements to the application
+ * client.  Support for READ ELEMENT STATUS command is mandatory.
+ */
 static int determine_element_sz(uint8_t dvcid, uint8_t voltag)
 {
 	if (voltag)
@@ -85,7 +84,7 @@ static int determine_element_sz(uint8_t dvcid, uint8_t voltag)
  * DATA header is always 8 bytes long
  */
 static int element_status_data_hdr(uint8_t *data, uint8_t dvcid,
-					uint8_t voltag, int start, int count)
+				   uint8_t voltag, int start, int count)
 {
 	int element_sz;
 	int size;
@@ -103,11 +102,12 @@ static int element_status_data_hdr(uint8_t *data, uint8_t dvcid,
 	size = ((8 + (count * element_sz)) & 0xffffff);
 	*(uint32_t *)(data + 4) = __cpu_to_be32(size);
 
-return size;
+	return size;
 }
 
 static int add_element_descriptor(uint8_t *data, struct slot *s,
-			uint8_t element_type, uint8_t dvcid, uint8_t voltag)
+				  uint8_t element_type, uint8_t dvcid,
+				  uint8_t voltag)
 {
 	struct lu_phy_attr *attr = NULL;
 	int i;	/* data[] index */
@@ -119,22 +119,26 @@ static int add_element_descriptor(uint8_t *data, struct slot *s,
 	data[5] = s->asc & 0xff;	/* Additional Sense Code Qualifier */
 	/* [6], [7] & [8] reserved */
 	data[9] = (s->cart_type & 0xf);
+
 	if (s->last_addr) {	/* Source address is valid ? */
 		data[9] |= 0x80;
 		*(uint16_t *)(data + 10) = __cpu_to_be16(s->last_addr);
 	}
+
 	i = 12;
 	if (voltag) {
 		if (s->barcode[0] == ' ')
-			memset( &data[i], 0x20, 32);
+			memset(&data[i], 0x20, 32);
 		else
 			snprintf((char *)&data[i], 32, "%-32s", s->barcode);
 
 		/* Reserve additional 4 bytes if dvcid is set */
 		i += (dvcid) ? 36 : 32;
 	}
+
 	if (element_type == ELEMENT_DATA_TRANSFER)
 		attr = lu_attr_lookup(s->drive_tid, s->drive_lun);
+
 	if (dvcid && attr) {
 		data[i] = 2;	/* ASCII code set */
 		data[i + 1] = attr->device_type;
@@ -145,7 +149,7 @@ static int add_element_descriptor(uint8_t *data, struct slot *s,
 		snprintf((char *)&data[i + 28], 11, "%-10s", attr->scsi_sn);
 	}
 
-return determine_element_sz(dvcid, voltag);
+	return determine_element_sz(dvcid, voltag);
 }
 
 /**
@@ -162,9 +166,9 @@ return determine_element_sz(dvcid, voltag);
  * Return number of elements
  */
 static int build_element_descriptors(uint8_t *data, struct list_head *head,
-					uint8_t elem_type, int *first,
-					uint16_t start,
-					uint8_t dvcid, uint8_t voltag)
+				     uint8_t elem_type, int *first,
+				     uint16_t start, uint8_t dvcid,
+				     uint8_t voltag)
 {
 	struct slot *s;
 	int count = 0;
@@ -175,8 +179,9 @@ static int build_element_descriptors(uint8_t *data, struct list_head *head,
 		if (s->element_type == elem_type) {
 			if (s->slot_addr >= start) {
 				count++;
-				len += add_element_descriptor(&data[len],
-						s, elem_type, dvcid, voltag);
+				len += add_element_descriptor(&data[len], s,
+							      elem_type, dvcid,
+							      voltag);
 			}
 		}
 		if (count == 1)	/* Record first found slot Address */
@@ -191,7 +196,7 @@ static int build_element_descriptors(uint8_t *data, struct list_head *head,
 	/* Total number of bytes in all element descriptors */
 	*(uint32_t *)(data + 4) = __cpu_to_be32((elem_sz * count) & 0xffffff);
 
-return count;
+	return count;
 }
 
 /**
@@ -242,7 +247,9 @@ static int smc_read_element_status(int host_no, struct scsi_cmd *cmd)
 		asc = ASC_INTERNAL_TGT_FAILURE;
 		goto sense;
 	}
-	if ((data = valloc(pagesize)) == NULL) {
+
+	data = valloc(pagesize);
+	if (!data) {
 		dprintf("valloc(%lu) failed\n", pagesize);
 		key = HARDWARE_ERROR;
 		asc = ASC_INTERNAL_TGT_FAILURE;
@@ -257,48 +264,48 @@ static int smc_read_element_status(int host_no, struct scsi_cmd *cmd)
 	case ELEMENT_ANY:
 		/* Return element in type order */
 		count = build_element_descriptors(&data[len], &smc->slots,
-					ELEMENT_MEDIUM_TRANSPORT, &first,
-					req_start_elem,
-					dvcid, voltag);
+						  ELEMENT_MEDIUM_TRANSPORT,
+						  &first, req_start_elem,
+						  dvcid, voltag);
 		len = count * elementSize;
 		count += build_element_descriptors(&data[len], &smc->slots,
-					ELEMENT_STORAGE, &first,
-					req_start_elem,
-					dvcid, voltag);
+						   ELEMENT_STORAGE,
+						   &first, req_start_elem,
+						   dvcid, voltag);
 		len += count * elementSize;
 		count += build_element_descriptors(&data[len], &smc->slots,
-					ELEMENT_MAP, &first,
-					req_start_elem,
-					dvcid, voltag);
+						   ELEMENT_MAP,
+						   &first, req_start_elem,
+						   dvcid, voltag);
 		len += count * elementSize;
 		count += build_element_descriptors(&data[len], &smc->slots,
-					ELEMENT_DATA_TRANSFER, &first,
-					req_start_elem,
-					dvcid, voltag);
+						   ELEMENT_DATA_TRANSFER,
+						   &first, req_start_elem,
+						   dvcid, voltag);
 		break;
 	case ELEMENT_MEDIUM_TRANSPORT:
 		count = build_element_descriptors(&data[len], &smc->slots,
-					ELEMENT_MEDIUM_TRANSPORT, &first,
-					req_start_elem,
-					dvcid, voltag);
+						  ELEMENT_MEDIUM_TRANSPORT,
+						  &first, req_start_elem,
+						  dvcid, voltag);
 		break;
 	case ELEMENT_STORAGE:
 		count = build_element_descriptors(&data[len], &smc->slots,
-					ELEMENT_STORAGE, &first,
-					req_start_elem,
-					dvcid, voltag);
+						  ELEMENT_STORAGE,
+						  &first, req_start_elem,
+						  dvcid, voltag);
 		break;
 	case ELEMENT_MAP:
 		count = build_element_descriptors(&data[len], &smc->slots,
-					ELEMENT_MAP, &first,
-					req_start_elem,
-					dvcid, voltag);
+						  ELEMENT_MAP,
+						  &first, req_start_elem,
+						  dvcid, voltag);
 		break;
 	case ELEMENT_DATA_TRANSFER:
 		count = build_element_descriptors(&data[len], &smc->slots,
-					ELEMENT_DATA_TRANSFER, &first,
-					req_start_elem,
-					dvcid, voltag);
+						  ELEMENT_DATA_TRANSFER,
+						  &first, req_start_elem,
+						  dvcid, voltag);
 		break;
 	default:
 		goto sense;
@@ -383,6 +390,7 @@ static int smc_move_medium(int host_no, struct scsi_cmd *cmd)
 			memset(&dest_slot->barcode, ' ', sizeof(s->barcode));
 			goto sense;
 		}
+
 		if (set_slot_full(dest_slot, src, path)) {
 			key = HARDWARE_ERROR;
 			asc = ASC_MECHANICAL_POSITIONING_ERROR;
@@ -463,15 +471,15 @@ static int set_slot_full(struct slot *s, uint16_t src, char *path)
 		return err;
 
 	s->status |= 1;
-	s->last_addr=src;
+	s->last_addr = src;
 
 	return err;
 }
 
 static void set_slot_empty(struct slot *s)
 {
-	s-> status &= 0xfe;
-	s->last_addr=0;
+	s->status &= 0xfe;
+	s->last_addr = 0;
 	memset(s->barcode, ' ', sizeof(s->barcode));
 	if (s->element_type == ELEMENT_DATA_TRANSFER)
 		dtd_load_unload(s->drive_tid, s->drive_lun, UNLOAD, NULL);
@@ -486,7 +494,8 @@ static int slot_insert(struct list_head *head, int element_type, int address)
 {
 	struct slot *s;
 
-	if ((s = zalloc(sizeof(struct slot))) == NULL)
+	s = zalloc(sizeof(struct slot));
+	if (!s)
 		return TGTADM_NOMEM;
 
 	s->slot_addr = address;
@@ -514,7 +523,7 @@ struct slot *slot_lookup(struct list_head *head, int element_type, int address)
 	list_for_each_entry(s, head, slot_siblings) {
 		if (element_type && address) {
 			if ((s->slot_addr == address) &&
-					(s->element_type == element_type))
+			    (s->element_type == element_type))
 				return s;
 		} else if (element_type) {
 			if (s->element_type == element_type)
@@ -585,8 +594,7 @@ static int add_slt(struct scsi_lu *lu, struct tmp_param *tmp)
 		qnty_save  = __be16_to_cpu(element[1]);
 
 		if (sv_addr)
-			element[0] =
-				__cpu_to_be16(min_t(int, tmp->start_addr, sv_addr));
+			element[0] = __cpu_to_be16(min_t(int, tmp->start_addr, sv_addr));
 		else
 			element[0] = __cpu_to_be16(tmp->start_addr);
 		element[1] = __cpu_to_be16(tmp->quantity + qnty_save);
@@ -596,7 +604,7 @@ static int add_slt(struct scsi_lu *lu, struct tmp_param *tmp)
 			goto dont_do_slots;
 
 		ret = TGTADM_SUCCESS;
-		for(i=tmp->start_addr; i < (tmp->start_addr + tmp->quantity); i++)
+		for(i = tmp->start_addr; i < (tmp->start_addr + tmp->quantity); i++)
 			if (slot_insert(&smc->slots, tmp->element_type, i))
 				ret = TGTADM_INVALID_REQUEST;
 	}
@@ -623,7 +631,8 @@ static int config_slot(struct scsi_lu *lu, struct tmp_param *tmp)
 		break;
 	case ELEMENT_STORAGE:
 	case ELEMENT_MAP:
-		if ((s = slot_lookup(&smc->slots, tmp->element_type, tmp->address)) == NULL)
+		s = slot_lookup(&smc->slots, tmp->element_type, tmp->address);
+		if (!s)
 			break;	// Slot not found..
 		strncpy(s->barcode, tmp->barcode, sizeof(s->barcode));
 		set_slot_full(s, 0, NULL);
@@ -632,7 +641,8 @@ static int config_slot(struct scsi_lu *lu, struct tmp_param *tmp)
 	case ELEMENT_DATA_TRANSFER:
 		if (!tmp->tid)
 			break;	/* Fail if no TID specified */
-		if ((s = slot_lookup(&smc->slots, tmp->element_type, tmp->address)) == NULL)
+		s = slot_lookup(&smc->slots, tmp->element_type, tmp->address);
+		if (!s)
 			break;	// Slot not found..
 		s->asc  = NO_ADDITIONAL_SENSE;
 		s->drive_tid = tmp->tid;

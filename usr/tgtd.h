@@ -226,4 +226,7 @@ extern int it_nexus_destroy(int tid, uint64_t itn_id);
 
 extern int device_type_register(struct device_type_template *);
 
+extern struct lu_phy_attr *lu_attr_lookup(int tid, uint64_t lun);
+extern int dtd_load_unload(int tid, uint64_t lun, int load, char *file);
+
 #endif
