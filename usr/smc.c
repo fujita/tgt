@@ -47,9 +47,34 @@
 #include "smc.h"
 #include "media.h"
 
-static int set_slot_full(struct slot *s, uint16_t src, char *path);
-static void set_slot_empty(struct slot *s);
-static int test_slot_full(struct slot *s);
+static int set_slot_full(struct slot *s, uint16_t src, char *path)
+{
+	int err = 0;
+
+	if (path)
+		err = dtd_load_unload(s->drive_tid, s->drive_lun, LOAD, path);
+	if (err)
+		return err;
+
+	s->status |= 1;
+	s->last_addr = src;
+
+	return err;
+}
+
+static void set_slot_empty(struct slot *s)
+{
+	s->status &= 0xfe;
+	s->last_addr = 0;
+	memset(s->barcode, ' ', sizeof(s->barcode));
+	if (s->element_type == ELEMENT_DATA_TRANSFER)
+		dtd_load_unload(s->drive_tid, s->drive_lun, UNLOAD, NULL);
+}
+
+static int test_slot_full(struct slot *s)
+{
+	return s->status && 1;
+}
 
 /**
  * determine_element_sz  --  read element status
@@ -459,35 +484,6 @@ static void smc_lu_exit(struct scsi_lu *lu)
 	dprintf("Medium Changer shutdown() called\n");
 
 	free(smc);
-}
-
-static int set_slot_full(struct slot *s, uint16_t src, char *path)
-{
-	int err = 0;
-
-	if (path)
-		err = dtd_load_unload(s->drive_tid, s->drive_lun, LOAD, path);
-	if (err)
-		return err;
-
-	s->status |= 1;
-	s->last_addr = src;
-
-	return err;
-}
-
-static void set_slot_empty(struct slot *s)
-{
-	s->status &= 0xfe;
-	s->last_addr = 0;
-	memset(s->barcode, ' ', sizeof(s->barcode));
-	if (s->element_type == ELEMENT_DATA_TRANSFER)
-		dtd_load_unload(s->drive_tid, s->drive_lun, UNLOAD, NULL);
-}
-
-static int test_slot_full(struct slot *s)
-{
-	return s->status && 1;
 }
 
 static int slot_insert(struct list_head *head, int element_type, int address)
