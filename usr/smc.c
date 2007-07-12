@@ -73,7 +73,7 @@ static void set_slot_empty(struct slot *s)
 
 static int test_slot_full(struct slot *s)
 {
-	return s->status && 1;
+	return s->status & 1;
 }
 
 /**
