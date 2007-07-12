@@ -267,7 +267,8 @@ static int isns_scn_register(void)
 
 	scn_flags = ISNS_SCN_FLAG_INITIATOR | ISNS_SCN_FLAG_OBJECT_REMOVE |
 		ISNS_SCN_FLAG_OBJECT_ADDED | ISNS_SCN_FLAG_OBJECT_UPDATED;
-	scn_flags = htonl(set_scn_flag(scn_flags));
+	set_scn_flag(scn_flags);
+	scn_flags = htonl(scn_flags);
 
 	length += isns_tlv_set(&tlv, ISNS_ATTR_ISCSI_SCN_BITMAP,
 			       sizeof(scn_flags), &scn_flags);
