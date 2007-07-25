@@ -1777,7 +1777,11 @@ again:
 	case IOSTATE_RX_AHS:
 		ret = do_recv(fd, conn, hdigest ?
 			      IOSTATE_RX_INIT_HDIGEST : IOSTATE_RX_INIT_DATA);
-		if (ret <= 0 || conn->rx_iostate != IOSTATE_RX_INIT_HDIGEST)
+		if (ret <= 0)
+			break;
+		if (conn->rx_iostate == IOSTATE_RX_INIT_DATA)
+			goto again;
+		if (conn->rx_iostate != IOSTATE_RX_INIT_HDIGEST)
 			break;
 	case IOSTATE_RX_INIT_HDIGEST:
 		conn->rx_buffer = conn->rx_digest;
