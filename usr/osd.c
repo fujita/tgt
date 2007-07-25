@@ -51,6 +51,10 @@ static int osd_varlen_cdb(int host_no, struct scsi_cmd *cmd)
 	return cmd->dev->bst->bs_cmd_submit(cmd);
 }
 
+/*
+ * XXX: missing support for b0 and b1, in page 0 and in inquiry code.
+ * Figure out how to make spc_inquiry handle extra mode pages.
+ */
 static int osd_lu_init(struct scsi_lu *lu)
 {
 	if (spc_lu_init(lu))
@@ -70,7 +74,24 @@ static struct device_type_template osd_template = {
 	.lu_init	= osd_lu_init,
 	.lu_config	= spc_lu_config,
 	.ops		= {
-		[0x00 ... 0x0f] = {spc_illegal_op},
+		/* 0x00 */
+		{spc_test_unit,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_request_sense,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
 
 		/* 0x10 */
 		{spc_illegal_op,},
