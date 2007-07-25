@@ -77,7 +77,7 @@ retry:
 
 	ret = io_getevents(info->ctx, 1, MAX_AIO_REQS, info->events, NULL);
 	nr = ret;
-	dprintf("%d", ret);
+	dprintf("%d\n", ret);
 	if (nr > 0) {
 	rewrite:
 		ret = write(info->done_fd[1], &nr, sizeof(nr));
