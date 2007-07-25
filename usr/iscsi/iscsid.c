@@ -1379,7 +1379,7 @@ static int iscsi_scsi_cmd_rx_start(struct iscsi_connection *conn)
 
 	ahs_len = roundup(req->hlength * 4, 4);
 	imm_len = roundup(ntoh24(req->dlength), 4);
-	data_len = ntohl(req->data_length);
+	data_len = roundup(ntohl(req->data_length), 4);
 
 	dprintf("%u %x %d %d %d %x %x\n", conn->session->tsih,
 		req->cdb[0], ahs_len, imm_len, data_len,
@@ -1406,7 +1406,7 @@ static int iscsi_scsi_cmd_rx_start(struct iscsi_connection *conn)
 
 	if (req->flags & ISCSI_FLAG_CMD_WRITE) {
 		task->offset = ntoh24(req->dlength);
-		task->r2t_count = data_len - task->offset;
+		task->r2t_count = ntohl(req->data_length) - task->offset;
 		task->unsol_count = !(req->flags & ISCSI_FLAG_CMD_FINAL);
 
 		dprintf("%d %d %d %d\n", conn->rx_size, task->r2t_count,
