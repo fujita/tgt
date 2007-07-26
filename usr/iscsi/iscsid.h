@@ -60,10 +60,6 @@ struct iscsi_pdu {
 	unsigned int datasize;
 };
 
-#define KEY_STATE_START		0
-#define KEY_STATE_REQUEST	1
-#define KEY_STATE_DONE		2
-
 struct iscsi_session {
 	int refcount;
 

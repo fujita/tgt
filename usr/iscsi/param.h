@@ -26,6 +26,10 @@ struct param {
 	unsigned int val;
 };
 
+#define KEY_STATE_START		0
+#define KEY_STATE_REQUEST	1
+#define KEY_STATE_DONE		2
+
 struct iscsi_key_ops {
 	int (*val_to_str)(unsigned int, char *);
 	int (*str_to_val)(char *, unsigned int *);

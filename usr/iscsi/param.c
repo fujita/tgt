@@ -212,10 +212,10 @@ static int marker_val_to_str(unsigned int val, char *str)
 
 static int marker_set_val(struct param *param, int idx, unsigned int *val)
 {
-	if ((idx == ISCSI_OFMARKER_EN &&
-	     param[ISCSI_OFMARKER_EN].state == KEY_STATE_DONE) ||
-	    (idx == ISCSI_IFMARKER_EN &&
-	     param[ISCSI_IFMARKER_EN].state == KEY_STATE_DONE))
+	if ((idx == ISCSI_PARAM_OFMARKER_EN &&
+	     param[ISCSI_PARAM_OFMARKER_EN].state == KEY_STATE_DONE) ||
+	    (idx == ISCSI_PARAM_IFMARKER_EN &&
+	     param[ISCSI_PARAM_IFMARKER_EN].state == KEY_STATE_DONE))
 		*val = 0;
 	else
 		*val = 1;
@@ -297,25 +297,54 @@ static struct iscsi_key_ops marker_ops = {
 
 #define	SET_KEY_VALUES(x)	DEFAULT_NR_##x,MIN_NR_##x, MAX_NR_##x
 
+/*
+ * The defaults here are according to the spec and must not be changed,
+ * otherwise the initiator may make the wrong assumption.  If you want
+ * to change a value, edit the value in iscsi_target_create.
+ *
+ * The param MaxXmitDataSegmentLength doesn't really exist.  It's a way
+ * to remember the RDSL of the initiator, which defaults to 8k if he has
+ * not told us otherwise.
+ */
 struct iscsi_key session_keys[] = {
-	{"MaxRecvDataSegmentLength", 262144, 512, 16777215, &minimum_ops},
-	{"MaxXmitDataSegmentLength", 262144, 512, 16777215, &minimum_ops},
+	[ISCSI_PARAM_MAX_RECV_DLENGTH] =
+	{"MaxRecvDataSegmentLength", 8192, 512, 16777215, &minimum_ops},
+	[ISCSI_PARAM_MAX_XMIT_DLENGTH] =
+	{"MaxXmitDataSegmentLength", 8192, 512, 16777215, &minimum_ops},
+	[ISCSI_PARAM_HDRDGST_EN] =
 	{"HeaderDigest", DIGEST_NONE, DIGEST_NONE, DIGEST_ALL, &digest_ops},
+	[ISCSI_PARAM_DATADGST_EN] =
 	{"DataDigest", DIGEST_NONE, DIGEST_NONE, DIGEST_ALL, &digest_ops},
-	{"InitialR2T", 0, 0, 1, &or_ops},
+	[ISCSI_PARAM_INITIAL_R2T_EN] =
+	{"InitialR2T", 1, 0, 1, &or_ops},
+	[ISCSI_PARAM_MAX_R2T] =
 	{"MaxOutstandingR2T", 1, 1, 65535, &minimum_ops},
+	[ISCSI_PARAM_IMM_DATA_EN] =
 	{"ImmediateData", 1, 0, 1, &and_ops},
+	[ISCSI_PARAM_FIRST_BURST] =
 	{"FirstBurstLength", 65536, 512, 16777215, &minimum_ops},
+	[ISCSI_PARAM_MAX_BURST] =
 	{"MaxBurstLength", 262144, 512, 16777215, &minimum_ops},
+	[ISCSI_PARAM_PDU_INORDER_EN] =
 	{"DataPDUInOrder", 1, 0, 1, &or_ops},
+	[ISCSI_PARAM_DATASEQ_INORDER_EN] =
 	{"DataSequenceInOrder", 1, 0, 1, &or_ops},
+	[ISCSI_PARAM_ERL] =
 	{"ErrorRecoveryLevel", 0, 0, 2, &minimum_ops},
+	[ISCSI_PARAM_IFMARKER_EN] =
 	{"IFMarker", 0, 0, 1, &and_ops},
+	[ISCSI_PARAM_OFMARKER_EN] =
 	{"OFMarker", 0, 0, 1, &and_ops},
+	[ISCSI_PARAM_DEFAULTTIME2WAIT] =
 	{"DefaultTime2Wait", 2, 0, 3600, &maximum_ops},
+	[ISCSI_PARAM_DEFAULTTIME2RETAIN] =
 	{"DefaultTime2Retain", 20, 0, 3600, &minimum_ops},
+	[ISCSI_PARAM_OFMARKINT] =
 	{"OFMarkInt", 2048, 1, 65535, &marker_ops},
+	[ISCSI_PARAM_IFMARKINT] =
 	{"IFMarkInt", 2048, 1, 65535, &marker_ops},
+	[ISCSI_PARAM_MAXCONNECTIONS] =
 	{"MaxConnections", 1, 1, 65535, &minimum_ops},
+	[ISCSI_PARAM_MAX] =
 	{NULL,},
 };
