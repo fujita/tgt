@@ -26,7 +26,6 @@
 #include <netdb.h>
 #include <sys/stat.h>
 #include <sys/un.h>
-#include <linux/netlink.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
