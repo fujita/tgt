@@ -64,7 +64,6 @@ struct backingstore_template sg_bst = {
 static int spt_cmd_perform(int host_no, struct scsi_cmd *cmd)
 {
 	int ret;
-	struct device_type_operations *ops;
 
 	if (!cmd->dev) {
 		cmd->len = 0;
