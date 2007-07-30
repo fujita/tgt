@@ -966,9 +966,10 @@ iscsi_alloc_task(struct iscsi_connection *conn, int ext_len)
 	struct iscsi_hdr *req = (struct iscsi_hdr *) &conn->req.bhs;
 	struct iscsi_task *task;
 
-	task = zalloc(sizeof(*task) + ext_len);
+	task = malloc(sizeof(*task) + ext_len);
 	if (!task)
 		return NULL;
+	memset(task, 0, sizeof(*task));
 
 	memcpy(&task->req, req, sizeof(*req));
 	task->conn = conn;
