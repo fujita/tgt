@@ -40,7 +40,7 @@
 
 int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 {
-	int len, ret = SAM_STAT_CHECK_CONDITION;
+	int len = 0, ret = SAM_STAT_CHECK_CONDITION;
 	uint8_t *data;
 	uint8_t *scb = cmd->scb;
 	unsigned char key = ILLEGAL_REQUEST;

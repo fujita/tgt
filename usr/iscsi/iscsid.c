@@ -1190,7 +1190,7 @@ static int iscsi_tm_execute(struct iscsi_task *task)
 {
 	struct iscsi_connection *conn = task->conn;
 	struct iscsi_tm *req = (struct iscsi_tm *) &task->req;
-	int fn, err = 0;
+	int fn = 0, err = 0;
 
 	switch (req->flags & ISCSI_FLAG_TM_FUNC_MASK) {
 	case ISCSI_TM_FUNC_ABORT_TASK:
