@@ -44,8 +44,14 @@ Developer Notes
 The central resource for tgt development is the mailing list
 (stgt-devel@lists.berlios.de).
 
-Before submitting patches, please read (in short, follow Linux kernel
-development rules):
+First, please read the following documents (in short, follow Linux
+kernel development rules):
 
 http://lxr.linux.no/source/Documentation/CodingStyle
 http://lxr.linux.no/source/Documentation/SubmittingPatches
+
+Then, check your patches with the patch style checker prior to
+submission (scripts/checkpatch.pl) like the following example.
+
+fujita@arbre:~/git/tgt$ ./scripts/checkpatch.pl ~/0001-add-bidi-support.patch
+Your patch has no obvious style problems and is ready for submission.
