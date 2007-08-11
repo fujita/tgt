@@ -1643,8 +1643,10 @@ static int iscsi_task_tx_done(struct iscsi_connection *conn)
 {
 	struct iscsi_task *task = conn->tx_task;
 	int err;
+	uint8_t op;
 
-	switch (task->req.opcode & ISCSI_OPCODE_MASK) {
+	op = task->req.opcode & ISCSI_OPCODE_MASK;
+	switch (op) {
 	case ISCSI_OP_SCSI_CMD:
 		err = iscsi_scsi_cmd_tx_done(conn);
 		break;
@@ -1652,6 +1654,9 @@ static int iscsi_task_tx_done(struct iscsi_connection *conn)
 	case ISCSI_OP_LOGOUT:
 	case ISCSI_OP_SCSI_TMFUNC:
 		iscsi_free_task(task);
+
+		if (op == ISCSI_OP_LOGOUT)
+			conn->state = STATE_CLOSE;
 	}
 
 	conn->tx_task = NULL;
