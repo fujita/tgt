@@ -439,25 +439,25 @@ void dump_cdb(struct scsi_cmd *cmd)
 
 	switch(cmd->scb_len) {
 	case 6:
-		dprintf("SCSI CMD: %02x %02x %02x %02x %02d %02x",
+		dprintf("SCSI CMD: %02x %02x %02x %02x %02d %02x\n",
 			cdb[0], cdb[1], cdb[2], cdb[3], cdb[4], cdb[5]);
 		break;
 	case 10:
-		dprintf("SCSI CMD: %02x %02x %02x %02x %02d %02x"
+		dprintf("SCSI CMD: %02x %02x %02x %02x %02d %02x\n"
 				" %02x %02x %02x %02x",
 			cdb[0], cdb[1], cdb[2], cdb[3], cdb[4], cdb[5],
 			cdb[6], cdb[7], cdb[8], cdb[9]);
 		break;
 	case 12:
 		dprintf("SCSI CMD: %02x %02x %02x %02x %02d %02x"
-				" %02x %02x %02x %02x %02x %02x",
+				" %02x %02x %02x %02x %02x %02x\n",
 			cdb[0], cdb[1], cdb[2], cdb[3], cdb[4], cdb[5],
 			cdb[6], cdb[7], cdb[8], cdb[9], cdb[10], cdb[11]);
 		break;
 	case 16:
 		dprintf("SCSI CMD: %02x %02x %02x %02x %02d %02x"
 				" %02x %02x %02x %02x %02x %02x"
-				" %02x %02x %02x %02x",
+				" %02x %02x %02x %02x\n",
 			cdb[0], cdb[1], cdb[2], cdb[3], cdb[4], cdb[5],
 			cdb[6], cdb[7], cdb[8], cdb[9], cdb[10], cdb[11],
 			cdb[12], cdb[13], cdb[14], cdb[15]);
