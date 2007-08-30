@@ -103,6 +103,7 @@ struct option const long_options[] = {
 	{"initiator-address", required_argument, NULL, 'I'},
 	{"user", required_argument, NULL, 'u'},
 	{"password", required_argument, NULL, 'p'},
+	{"host", required_argument, NULL, 'H'},
 	{"params", required_argument, NULL, 'P'},
 
 	{"bus", required_argument, NULL, 'B'},
@@ -111,7 +112,7 @@ struct option const long_options[] = {
 	{NULL, 0, NULL, 0},
 };
 
-static char *short_options = "dhL:o:m:t:s:c:l:n:v:b:T:I:u:p:P:B:Y:O";
+static char *short_options = "dhL:o:m:t:s:c:l:n:v:b:T:I:u:p:H:P:B:Y:O";
 
 static void usage(int status)
 {
@@ -425,6 +426,9 @@ int main(int argc, char **argv)
 			break;
 		case 'B':
 			hostno = bus_to_host(optarg);
+			break;
+		case 'H':
+			hostno = strtol(optarg, NULL, 10);
 			break;
 		case 'Y':
 			dev_type = str_to_device_type(optarg);

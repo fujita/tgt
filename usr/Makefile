@@ -39,6 +39,12 @@ TGTD_OBJS += bs_sync.o
 LIBS += -lcrypto -lpthread
 endif
 
+ifneq ($(FC),)
+CFLAGS += -DFC -DUSE_KERNEL
+TGTD_OBJS += $(addprefix fc/, fc.o)
+TGTD_OBJS += bs_mmap.o tgtif.o
+endif
+
 INCLUDES += -I.
 CFLAGS += -Wall -g -O2 -Wstrict-prototypes -fPIC -D_LARGEFILE64_SOURCE $(INCLUDES)
 
@@ -59,4 +65,5 @@ install: $(PROGRAMS)
 	install -m 0755 $(PROGRAMS) $(DESTDIR)/usr/sbin
 
 clean:
-	rm -f *.o $(PROGRAMS) iscsi/*.o ibmvio/*.o xen/*.o
+	rm -f *.o $(PROGRAMS) iscsi/*.o ibmvio/*.o xen/*.o fc/*.o
+
