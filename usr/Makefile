@@ -7,7 +7,7 @@ INCLUDES += -I$(LINUX_ROOT)/include -I.
 LIBAIO_DIR = ../libaio/src
 AIOLIBS := $(LIBAIO_DIR)/libaio.a
 CFLAGS += -I$(XEN_LIBXC) -I$(LIBAIO_DIR)
-CFLAGS += $(INCLUDES) -I. -I../../xenstore 
+CFLAGS += $(INCLUDES) -I. -I../../xenstore
 CFLAGS += -DXEN -DUSE_KERNEL
 LIBS := -L. -L.. -L../lib
 LIBS += -L$(XEN_LIBXC)
@@ -33,8 +33,9 @@ endif
 
 ifneq ($(ISCSI),)
 CFLAGS += -DISCSI
-TGTD_OBJS += $(addprefix iscsi/, conn.o param.o session.o iscsid.o target.o \
-	chap.o transport.o iscsi_tcp.o isns.o libcrc32c.o)
+TGTD_OBJS += $(addprefix iscsi/, conn.o param.o session.o \
+		iscsid.o target.o chap.o transport.o iscsi_tcp.o \
+		isns.o libcrc32c.o)
 TGTD_OBJS += bs_sync.o
 LIBS += -lcrypto -lpthread
 endif
@@ -46,24 +47,39 @@ TGTD_OBJS += bs_mmap.o tgtif.o
 endif
 
 INCLUDES += -I.
-CFLAGS += -Wall -g -O2 -Wstrict-prototypes -fPIC -D_LARGEFILE64_SOURCE $(INCLUDES)
+
+CFLAGS += -D_LARGEFILE64_SOURCE
+CFLAGS += $(INCLUDES)
+CFLAGS += -g -O2 -Wall -Wstrict-prototypes -fPIC
 
 PROGRAMS += tgtd tgtadm
-TGTD_OBJS += tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o parser.o \
-		spc.o sbc.o mmc.o osd.o spt.o scc.o smc.o
+TGTD_OBJS += tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o \
+		parser.o spc.o sbc.o mmc.o osd.o spt.o scc.o smc.o
 
+TGTD_DEP = $(TGTD_OBJS:.o=.d)
 
+.PHONY:all
 all: $(PROGRAMS)
 
 tgtd: $(TGTD_OBJS)
 	$(CC) $^ -o $@ $(LIBS)
 
+-include $(TGTD_DEP)
+
 tgtadm: tgtadm.o
 	$(CC) $^ -o $@
 
+-include tgtadm.d
+
+%.o: %.c
+	$(CC) -c $(CFLAGS) $*.c -o $*.o
+	@$(CC) -MM $(CFLAGS) -MF $*.d -MT $*.o $*.c
+
+.PHONY: install
 install: $(PROGRAMS)
 	install -m 0755 $(PROGRAMS) $(DESTDIR)/usr/sbin
 
+.PHONY: clean
 clean:
-	rm -f *.o $(PROGRAMS) iscsi/*.o ibmvio/*.o xen/*.o fc/*.o
-
+	rm -f *.[od] $(PROGRAMS) iscsi/*.[od] ibmvio/*.[od] fc/*.[od] \
+		xen/*.[od]
