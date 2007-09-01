@@ -39,7 +39,7 @@ struct tgt_driver *tgt_drivers[] = {
 #ifdef XEN
 	&xen,
 #endif
-#ifdef FC
+#ifdef FCP
 	&fc,
 #endif
 	NULL,

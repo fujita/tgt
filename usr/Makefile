@@ -40,8 +40,8 @@ TGTD_OBJS += bs_sync.o
 LIBS += -lcrypto -lpthread
 endif
 
-ifneq ($(FC),)
-CFLAGS += -DFC -DUSE_KERNEL
+ifneq ($(FCP),)
+CFLAGS += -DFCP -DUSE_KERNEL
 TGTD_OBJS += $(addprefix fc/, fc.o)
 TGTD_OBJS += bs_mmap.o tgtif.o
 endif
