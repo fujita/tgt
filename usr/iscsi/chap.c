@@ -284,7 +284,7 @@ static int chap_decode_string(char *encoded, uint8_t *decode_buf, int buf_len, i
 
 	} else if (encoding_fmt == BASE64_FORMAT) {
 		if ((strlen(encoded) - 2) > ((buf_len - 1) / 3 + 1) * 4) {
-			eprintf("buf[%d] !sufficient to decode string[%d]",
+			eprintf("buf[%d] !sufficient to decode string[%d]\n",
 				buf_len, (int) strlen(encoded));
 			return CHAP_TARGET_ERROR;
 		}

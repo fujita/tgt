@@ -194,7 +194,7 @@ static int tgt_device_setup(struct xs_handle *h, char *bepath)
 
 	err = xs_printf(h, be->backpath, "info", "%d", be->frontend_id);
 	if (!err)
-		dprintf("ERROR: Failed writing info");
+		dprintf("ERROR: Failed writing info\n");
 
 	dprintf("[SETUP] Complete\n\n");
 

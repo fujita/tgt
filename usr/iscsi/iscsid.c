@@ -529,7 +529,8 @@ static void cmnd_exec_login(struct iscsi_connection *conn)
 
 	switch (ISCSI_LOGIN_CURRENT_STAGE(req->flags)) {
 	case ISCSI_SECURITY_NEGOTIATION_STAGE:
-		dprintf("Login request (security negotiation): %d", conn->state);
+		dprintf("Login request (security negotiation): %d\n",
+			conn->state);
 		rsp->flags = ISCSI_SECURITY_NEGOTIATION_STAGE << 2;
 
 		switch (conn->state) {
