@@ -1030,9 +1030,11 @@ static int iscsi_scsi_cmd_done(uint64_t nid, int result, struct scsi_cmd *scmd)
 	task->len = scmd->len;
 	task->rw = scmd->rw;
 
-	if (task->len > task->read_len) {
-		dprintf("shrinking target len %d to initiator len %d\n",
-		        task->len, task->read_len);
+	if (task->dir == WRITE)
+		task->len = 0;  /* no read result */
+	else if (task->len > task->read_len) {
+		dprintf("shrunk too big device read len %d > %u\n",
+			task->len, task->read_len);
 		task->len = task->read_len;
 	}
 
