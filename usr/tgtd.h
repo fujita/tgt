@@ -10,6 +10,9 @@
 #define PRODUCT_ID_LEN		16
 #define PRODUCT_REV_LEN		4
 
+#define PCODE_SHIFT		7
+#define PCODE_OFFSET(x) (x & ((1 << PCODE_SHIFT) - 1))
+
 #define BLOCK_DESCRIPTOR_LEN	8
 #define VERSION_DESCRIPTOR_LEN	8
 
@@ -36,6 +39,15 @@ struct tgt_cmd_queue {
 	struct list_head queue;
 };
 
+struct scsi_lu;
+struct scsi_cmd;
+
+struct vpd {
+	uint16_t size;
+	void (*vpd_update)(struct scsi_lu *lu, void *data);
+	uint8_t data[0];
+};
+
 struct lu_phy_attr {
 	char scsi_id[SCSI_ID_LEN + 1];
 	char scsi_sn[SCSI_SN_LEN + 1];
@@ -52,10 +64,10 @@ struct lu_phy_attr {
 	char online;		/* Logical Unit online */
 	char reset;		/* Power-on or reset has occured */
 	char sense_format;	/* Descrptor format sense data supported */
-};
 
-struct scsi_lu;
-struct scsi_cmd;
+	/* VPD pages 0x80 -> 0xff masked with 0x80*/
+	struct vpd *lu_vpd[1 << PCODE_SHIFT];
+};
 
 struct device_type_operations {
 	int (*cmd_perform)(int host_no, struct scsi_cmd *cmd);
@@ -108,6 +120,8 @@ struct scsi_lu {
 	struct device_type_template dev_type_template;
 
 	struct backingstore_template *bst;
+
+	struct target *tgt;
 
 	uint8_t	mode_block_descriptor[BLOCK_DESCRIPTOR_LEN];
 	struct mode_pg *mode_pgs[0x3f];

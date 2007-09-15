@@ -445,7 +445,8 @@ static int smc_lu_init(struct scsi_lu *lu)
 	else
 		return -ENOMEM;
 
-	spc_lu_init(lu);
+	if (spc_lu_init(lu))
+		return TGTADM_NOMEM;
 
 	strncpy(lu->attrs.product_id, "VIRTUAL-CHANGER",
 						sizeof(lu->attrs.product_id));

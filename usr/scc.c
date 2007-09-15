@@ -54,6 +54,7 @@ static struct device_type_template scc_template = {
 	.type		= TYPE_RAID,
 	.lu_init	= scc_lu_init,
 	.lu_config	= spc_lu_config,
+	.lu_exit	= spc_lu_exit,
 	.ops		= {
 		{spc_test_unit,},
 		{spc_illegal_op,},

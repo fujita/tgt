@@ -261,12 +261,14 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *args, int backi
 		goto free_lu;
 	}
 
+	lu->tgt = target;
+
 	lu->lun = lun;
 	lu->lu_state = SCSI_LU_RUNNING;
 	tgt_cmd_queue_init(&lu->cmd_queue);
 
  	if (lu->dev_type_template.lu_init) {
- 		ret = lu->dev_type_template.lu_init(lu);
+		ret = lu->dev_type_template.lu_init(lu);
 		if (ret)
 			goto free_lu;
 	}
@@ -284,13 +286,6 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *args, int backi
 		if (ret)
 			goto free_lu;
 	}
-
-	lu->attrs.device_type = lu->dev_type_template.type;
-	lu->attrs.qualifier = 0x0;
-	snprintf(lu->attrs.scsi_id, sizeof(lu->attrs.scsi_id),
-		 "deadbeaf%d:%" PRIu64, tid, lun);
-	snprintf(lu->attrs.scsi_sn, sizeof(lu->attrs.scsi_sn),
-		 "beaf%d%" PRIu64, tid, lun);
 
 	if (tgt_drivers[target->lid]->lu_create)
 		tgt_drivers[target->lid]->lu_create(lu);

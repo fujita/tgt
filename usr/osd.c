@@ -73,6 +73,7 @@ static struct device_type_template osd_template = {
 	.type		= TYPE_OSD,
 	.lu_init	= osd_lu_init,
 	.lu_config	= spc_lu_config,
+	.lu_exit	= spc_lu_exit,
 	.ops		= {
 		/* 0x00 */
 		{spc_test_unit,},
