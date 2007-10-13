@@ -1148,16 +1148,16 @@ static int iscsi_scsi_cmd_execute(struct iscsi_task *task)
 	int err = 0;
 
 	if (rw && task->r2t_count) {
-		if (!task->unsol_count) {
+		if (!task->unsol_count)
 			list_add_tail(&task->c_list, &task->conn->tx_clist);
-			tgt_event_modify(conn->fd, EPOLLIN | EPOLLOUT);
-		}
-		return err;
+		goto no_queuing;
 	}
 
 	task->offset = 0;  /* for use as transmit pointer for data-ins */
-	tgt_event_modify(conn->fd, EPOLLIN);
 	err = iscsi_target_cmd_queue(task);
+no_queuing:
+	tgt_event_modify(conn->fd, EPOLLIN|EPOLLOUT);
+
 	return err;
 }
 
