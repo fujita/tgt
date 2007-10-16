@@ -33,8 +33,10 @@
 
 #define cpu_to_be16(x)	__cpu_to_be16(x)
 #define cpu_to_be32(x)	__cpu_to_be32(x)
+#define cpu_to_be64(x)	__cpu_to_be64(x)
 #define be16_to_cpu(x)	__be16_to_cpu(x)
 #define be32_to_cpu(x)	__be32_to_cpu(x)
+#define be64_to_cpu(x)	__be64_to_cpu(x)
 
 #define ISCSI_NAME_LEN 256
 
