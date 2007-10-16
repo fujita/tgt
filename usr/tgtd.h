@@ -209,8 +209,12 @@ extern int tgt_unbind_host_to_target(int tid, int host_no);
 extern int tgt_bound_target_lookup(int host_no);
 
 typedef void (event_handler_t)(int fd, int events, void *data);
+typedef void (counter_event_handler_t)(int *counter, void *data);
 extern int tgt_event_add(int fd, int events, event_handler_t handler, void *data);
+extern int tgt_counter_event_add(int *counter, counter_event_handler_t handler,
+				 void *data);
 extern void tgt_event_del(int fd);
+extern void tgt_counter_event_del(int *counter);
 extern int tgt_event_modify(int fd, int events);
 extern int target_cmd_queue(int tid, struct scsi_cmd *cmd);
 extern void target_cmd_done(struct scsi_cmd *cmd);
