@@ -11,6 +11,7 @@ struct iscsi_transport {
 	void (*ep_write_end)(int ep);
 	size_t (*ep_close) (int ep);
 	int (*ep_show) (int ep, char *buf, int rest);
+	void (*ep_event_modify) (int ep, int events);
 };
 
 extern struct iscsi_transport iscsi_tcp;

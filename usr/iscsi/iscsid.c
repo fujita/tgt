@@ -1039,7 +1039,7 @@ static int iscsi_scsi_cmd_done(uint64_t nid, int result, struct scsi_cmd *scmd)
 	}
 
 	list_add_tail(&task->c_list, &task->conn->tx_clist);
-	tgt_event_modify(task->conn->fd, EPOLLIN | EPOLLOUT);
+	task->conn->tp->ep_event_modify(task->conn->fd, EPOLLIN | EPOLLOUT);
 
 	return 0;
 }
@@ -1156,7 +1156,7 @@ static int iscsi_scsi_cmd_execute(struct iscsi_task *task)
 	task->offset = 0;  /* for use as transmit pointer for data-ins */
 	err = iscsi_target_cmd_queue(task);
 no_queuing:
-	tgt_event_modify(conn->fd, EPOLLIN|EPOLLOUT);
+	conn->tp->ep_event_modify(conn->fd, EPOLLIN | EPOLLOUT);
 
 	return err;
 }
@@ -1186,7 +1186,7 @@ static int iscsi_tm_done(struct mgmt_req *mreq)
 		break;
 	}
 	list_add_tail(&task->c_list, &task->conn->tx_clist);
-	tgt_event_modify(task->conn->fd, EPOLLIN | EPOLLOUT);
+	task->conn->tp->ep_event_modify(task->conn->fd, EPOLLIN | EPOLLOUT);
 	return 0;
 }
 
@@ -1242,7 +1242,8 @@ static int iscsi_task_execute(struct iscsi_task *task)
 	case ISCSI_OP_NOOP_OUT:
 	case ISCSI_OP_LOGOUT:
 		list_add_tail(&task->c_list, &task->conn->tx_clist);
-		tgt_event_modify(task->conn->fd, EPOLLIN | EPOLLOUT);
+		task->conn->tp->ep_event_modify(task->conn->fd,
+						EPOLLIN | EPOLLOUT);
 		break;
 	case ISCSI_OP_SCSI_CMD:
 		/* convenient directionality for our internal use */
@@ -1262,7 +1263,8 @@ static int iscsi_task_execute(struct iscsi_task *task)
 		err = iscsi_tm_execute(task);
 		if (err) {
 			list_add_tail(&task->c_list, &task->conn->tx_clist);
-			tgt_event_modify(task->conn->fd, EPOLLIN | EPOLLOUT);
+			task->conn->tp->ep_event_modify(task->conn->fd,
+							EPOLLIN | EPOLLOUT);
 		}
 		break;
 	case ISCSI_OP_TEXT:
@@ -1706,7 +1708,7 @@ static int iscsi_task_tx_start(struct iscsi_connection *conn)
 
 nodata:
 	dprintf("no more data\n");
-	tgt_event_modify(conn->fd, EPOLLIN);
+	conn->tp->ep_event_modify(conn->fd, EPOLLIN);
 	return -EAGAIN;
 }
 
@@ -1870,7 +1872,7 @@ again:
 			conn_read_pdu(conn);
 	} else {
 		conn_write_pdu(conn);
-		tgt_event_modify(fd, EPOLLOUT);
+		conn->tp->ep_event_modify(fd, EPOLLOUT);
 		ret = cmnd_execute(conn);
 		if (ret)
 			conn->state = STATE_CLOSE;
@@ -2014,7 +2016,7 @@ static void iscsi_tx_handler(int fd, struct iscsi_connection *conn)
 		else {
 			conn->state = STATE_SCSI;
 			conn_read_pdu(conn);
-			tgt_event_modify(fd, EPOLLIN);
+			conn->tp->ep_event_modify(fd, EPOLLIN);
 		}
 		break;
 	case STATE_EXIT:
@@ -2025,7 +2027,7 @@ static void iscsi_tx_handler(int fd, struct iscsi_connection *conn)
 		break;
 	default:
 		conn_read_pdu(conn);
-		tgt_event_modify(fd, EPOLLIN);
+		conn->tp->ep_event_modify(fd, EPOLLIN);
 		break;
 	}
 }

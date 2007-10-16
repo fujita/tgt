@@ -232,13 +232,23 @@ static int iscsi_tcp_show(int ep, char *buf, int rest)
 	return total > 0 ? total : 0;
 }
 
+void iscsi_event_modify(int fd, int events)
+{
+	int ret;
+
+	ret = tgt_event_modify(fd, events);
+	if (ret)
+		eprintf("tgt_event_modify failed\n");
+}
+
 struct iscsi_transport iscsi_tcp = {
-	.name		= "iscsi",
-	.rdma		= 0,
-	.ep_init	= iscsi_tcp_init,
-	.ep_read	= iscsi_tcp_read,
-	.ep_write_begin	= iscsi_tcp_write_begin,
-	.ep_write_end	= iscsi_tcp_write_end,
-	.ep_close	= iscsi_tcp_close,
-	.ep_show	= iscsi_tcp_show,
+	.name			= "iscsi",
+	.rdma			= 0,
+	.ep_init		= iscsi_tcp_init,
+	.ep_read		= iscsi_tcp_read,
+	.ep_write_begin		= iscsi_tcp_write_begin,
+	.ep_write_end		= iscsi_tcp_write_end,
+	.ep_close		= iscsi_tcp_close,
+	.ep_show		= iscsi_tcp_show,
+	.ep_event_modify	= iscsi_event_modify,
 };
