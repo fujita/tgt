@@ -259,10 +259,12 @@ extern int conn_take_fd(struct iscsi_connection *conn, int fd);
 extern void conn_add_to_session(struct iscsi_connection *conn, struct iscsi_session *session);
 
 /* iscsid.c */
-extern void iscsi_event_handler(int fd, int events, void *data);
 extern char *text_key_find(struct iscsi_connection *conn, char *searchKey);
 extern void text_key_add(struct iscsi_connection *conn, char *key, char *value);
 extern void conn_read_pdu(struct iscsi_connection *conn);
+extern void iscsi_tx_handler(int fd, struct iscsi_connection *conn);
+extern void iscsi_rx_handler(int fd, struct iscsi_connection *conn);
+extern int iscsi_scsi_cmd_execute(struct iscsi_task *task);
 
 /* iscsid.c iscsi_task */
 extern void iscsi_free_task(struct iscsi_task *task);

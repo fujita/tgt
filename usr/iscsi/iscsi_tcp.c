@@ -40,6 +40,8 @@
 #define LISTEN_MAX		4
 #define INCOMING_MAX		32
 
+static void iscsi_tcp_event_handler(int fd, int events, void *data);
+
 static int set_keepalive(int fd)
 {
 	int ret, opt;
@@ -97,7 +99,7 @@ static void accept_connection(int afd, int events, void *data)
 	conn_read_pdu(conn);
 	set_non_blocking(fd);
 
-	err = tgt_event_add(fd, EPOLLIN, iscsi_event_handler, conn);
+	err = tgt_event_add(fd, EPOLLIN, iscsi_tcp_event_handler, conn);
 	if (err)
 		goto free_conn;
 
@@ -107,6 +109,25 @@ free_conn:
 out:
 	close(fd);
 	return;
+}
+
+static void iscsi_tcp_event_handler(int fd, int events, void *data)
+{
+	struct iscsi_connection *conn = (struct iscsi_connection *) data;
+
+	if (events & EPOLLIN)
+		iscsi_rx_handler(fd, conn);
+
+	if (conn->state == STATE_CLOSE)
+		dprintf("connection closed\n");
+
+	if (conn->state != STATE_CLOSE && events & EPOLLOUT)
+		iscsi_tx_handler(fd, conn);
+
+	if (conn->state == STATE_CLOSE) {
+		conn_close(conn, fd);
+		dprintf("connection closed\n");
+	}
 }
 
 static int iscsi_tcp_init(void)

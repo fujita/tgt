@@ -1140,7 +1140,7 @@ static int iscsi_target_cmd_queue(struct iscsi_task *task)
 	return target_cmd_queue(conn->session->target->tid, scmd);
 }
 
-static int iscsi_scsi_cmd_execute(struct iscsi_task *task)
+int iscsi_scsi_cmd_execute(struct iscsi_task *task)
 {
 	struct iscsi_connection *conn = task->conn;
 	struct iscsi_cmd *req = (struct iscsi_cmd *) &task->req;
@@ -1735,7 +1735,7 @@ static int do_recv(int fd, struct iscsi_connection *conn, int next_state)
 	return ret;
 }
 
-static void iscsi_rx_handler(int fd, struct iscsi_connection *conn)
+void iscsi_rx_handler(int fd, struct iscsi_connection *conn)
 {
 	int ret = 0, hdigest, ddigest;
 	uint32_t crc;
@@ -1902,7 +1902,7 @@ again:
 	return 0;
 }
 
-static void iscsi_tx_handler(int fd, struct iscsi_connection *conn)
+void iscsi_tx_handler(int fd, struct iscsi_connection *conn)
 {
 	int ret = 0, hdigest, ddigest;
 	uint32_t crc;
@@ -2029,25 +2029,6 @@ static void iscsi_tx_handler(int fd, struct iscsi_connection *conn)
 		conn_read_pdu(conn);
 		conn->tp->ep_event_modify(fd, EPOLLIN);
 		break;
-	}
-}
-
-void iscsi_event_handler(int fd, int events, void *data)
-{
-	struct iscsi_connection *conn = (struct iscsi_connection *) data;
-
-	if (events & EPOLLIN)
-		iscsi_rx_handler(fd, conn);
-
-	if (conn->state == STATE_CLOSE)
-		dprintf("connection closed\n");
-
-	if (conn->state != STATE_CLOSE && events & EPOLLOUT)
-		iscsi_tx_handler(fd, conn);
-
-	if (conn->state == STATE_CLOSE) {
-		conn_close(conn, fd);
-		dprintf("connection closed\n");
 	}
 }
 
