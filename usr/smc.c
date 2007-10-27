@@ -273,6 +273,9 @@ static int smc_read_element_status(int host_no, struct scsi_cmd *cmd)
 		goto sense;
 	}
 
+	if (scb[11])	/* Reserved byte */
+		goto sense;
+
 	data = valloc(pagesize);
 	if (!data) {
 		dprintf("valloc(%lu) failed\n", pagesize);
@@ -281,9 +284,6 @@ static int smc_read_element_status(int host_no, struct scsi_cmd *cmd)
 		goto sense;
 	}
 	memset(data, 0, pagesize);
-
-	if (scb[11])	/* Reserved byte */
-		goto sense;
 
 	switch(element_type) {
 	case ELEMENT_ANY:
@@ -333,6 +333,7 @@ static int smc_read_element_status(int host_no, struct scsi_cmd *cmd)
 						  dvcid, voltag);
 		break;
 	default:
+		free(data);
 		goto sense;
 		break;
 	}

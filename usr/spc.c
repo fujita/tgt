@@ -234,8 +234,10 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 		}
 	}
 
-	if (ret != SAM_STAT_GOOD)
+	if (ret != SAM_STAT_GOOD) {
+		free(data);
 		goto sense;
+	}
 
 	cmd->len = min_t(int, len, scb[4]);
 	cmd->uaddr = (unsigned long) data;
@@ -373,7 +375,7 @@ static int build_mode_page(uint8_t *data, struct mode_pg *pg)
 int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 {
 	int len = 0;
-	uint8_t *data, *scb, mode6, dbd, pcode, subpcode;
+	uint8_t *data = NULL, *scb, mode6, dbd, pcode, subpcode;
 	uint16_t alloc_len;
 	unsigned char key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
@@ -441,6 +443,8 @@ int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 	return SAM_STAT_GOOD;
 
 sense:
+	if (data)
+		free(data);
 	cmd->len = 0;
 	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
