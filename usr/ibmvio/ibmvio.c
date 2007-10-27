@@ -139,7 +139,6 @@ static int __ibmvio_inquiry(int host_no, struct scsi_cmd *cmd, uint8_t *data)
 
 static int ibmvio_inquiry(int host_no, struct scsi_cmd *cmd)
 {
-	int ret = SAM_STAT_CHECK_CONDITION;
 	uint8_t *data, *scb = cmd->scb;
 	unsigned char key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
@@ -157,15 +156,10 @@ static int ibmvio_inquiry(int host_no, struct scsi_cmd *cmd)
 
 	dprintf("%x %x\n", scb[1], scb[2]);
 
-	if (!(scb[1] & 0x3)) {
-		cmd->len = __ibmvio_inquiry(host_no, cmd, data);
-		ret = SAM_STAT_GOOD;
-	} else
+	if (scb[1] & 0x3)
 		return spc_inquiry(host_no, cmd);
 
-	if (ret != SAM_STAT_GOOD)
-		goto sense;
-
+	cmd->len = __ibmvio_inquiry(host_no, cmd, data);
 	cmd->len = min_t(int, cmd->len, scb[4]);
 	cmd->uaddr = (unsigned long) data;
 
