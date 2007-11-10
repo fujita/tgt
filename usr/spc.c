@@ -260,8 +260,10 @@ int spc_report_luns(int host_no, struct scsi_cmd *cmd)
 	int idx, alen, oalen, nr_luns, rbuflen = 4096, overflow;
 	unsigned char key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
+	uint8_t *scb = cmd->scb;
 
-	alen = __be32_to_cpu(*(uint32_t *)&cmd->scb[6]);
+	alen = (uint32_t)scb[6] << 24 | (uint32_t)scb[7] << 16 |
+		(uint32_t)scb[8] << 8 | (uint32_t)scb[9];
 	if (alen < 16)
 		goto sense;
 

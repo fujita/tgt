@@ -101,11 +101,15 @@ uint64_t scsi_rw_offset(uint8_t *scb)
 	case READ_10:
 	case WRITE_10:
 	case WRITE_VERIFY:
-		off = __be32_to_cpu(*(uint32_t *) &scb[2]);
+		off = (uint32_t)scb[2] << 24 | (uint32_t)scb[3] << 16 |
+			(uint32_t)scb[4] << 8 | (uint32_t)scb[5];
 		break;
 	case READ_16:
 	case WRITE_16:
-		off = __be64_to_cpu(*(uint64_t *) &scb[2]);
+		off = (uint64_t)scb[2] << 56 | (uint64_t)scb[3] << 48 |
+			(uint64_t)scb[4] << 40 | (uint64_t)scb[5] << 32 |
+			(uint64_t)scb[6] << 24 | (uint64_t)scb[7] << 16 |
+			(uint64_t)scb[8] << 8 | (uint64_t)scb[9];
 		break;
 	default:
 		off = 0;

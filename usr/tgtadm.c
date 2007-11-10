@@ -361,7 +361,7 @@ int main(int argc, char **argv)
 	uint64_t sid, lun;
 	char *name, *value, *path, *targetname, *params, *address, *targetOps;
 	char *user, *password;
-	char buf[BUFSIZE + sizeof(struct tgtadm_req)];
+	char *buf;
 	struct tgtadm_req *req;
 
 	op = tid = mode = -1;
@@ -371,6 +371,8 @@ int main(int argc, char **argv)
 	rest = BUFSIZE;
 	name = value = path = targetname = address = targetOps = NULL;
 	user = password = NULL;
+
+	buf = valloc(BUFSIZE + sizeof(struct tgtadm_req));
 
 	memset(buf, 0, sizeof(buf));
 	req = (struct tgtadm_req *) buf;
