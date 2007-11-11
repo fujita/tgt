@@ -154,6 +154,8 @@ struct scsi_cmd {
 	struct scsi_lu *dev;
 	unsigned long state;
 
+	uint32_t write_len;
+	uint32_t read_len;
 	enum data_direction data_dir;
 
 	uint64_t cmd_itn_id;
@@ -196,6 +198,26 @@ static inline void scsi_set_result(struct scsi_cmd *scmd,
 static inline int scsi_get_result(struct scsi_cmd *scmd)
 {
 	return scmd->result;
+}
+
+static inline void scsi_set_read_len(struct scsi_cmd *scmd, uint32_t read_len)
+{
+	scmd->read_len = read_len;
+}
+
+static inline uint32_t scsi_get_read_len(struct scsi_cmd *scmd)
+{
+	return scmd->read_len;
+}
+
+static inline void scsi_set_write_len(struct scsi_cmd *scmd, uint32_t write_len)
+{
+	scmd->write_len = write_len;
+}
+
+static inline uint32_t scsi_get_write_len(struct scsi_cmd *scmd)
+{
+	return scmd->write_len;
 }
 
 struct mgmt_req {
