@@ -966,24 +966,31 @@ static int iscsi_r2t_build(struct iscsi_task *task)
 	return 0;
 }
 
-static inline struct iscsi_task *
-iscsi_alloc_task(struct iscsi_connection *conn, int ext_len)
+static struct iscsi_task *iscsi_alloc_task(struct iscsi_connection *conn,
+					   int ext_len, int data_len)
 {
 	struct iscsi_hdr *req = (struct iscsi_hdr *) &conn->req.bhs;
 	struct iscsi_task *task;
+	void *buf;
 
 	task = malloc(sizeof(*task) + ext_len);
 	if (!task)
 		return NULL;
-	memset(task, 0, sizeof(*task));
+	memset(task, 0, sizeof(*task) + ext_len);
+
+	if (data_len) {
+		buf = valloc(data_len);
+		if (!buf) {
+			free(task);
+			return NULL;
+		}
+		task->data = buf;
+	}
 
 	memcpy(&task->req, req, sizeof(*req));
 	task->conn = conn;
 	INIT_LIST_HEAD(&task->c_hlist);
 	INIT_LIST_HEAD(&task->c_list);
-
-	if (ext_len)
-		task->data = task->extdata;
 
 	conn_get(conn);
 	return task;
@@ -993,6 +1000,8 @@ void iscsi_free_task(struct iscsi_task *task)
 {
 	struct iscsi_connection *conn = task->conn;
 
+	if (task->data)
+		free(task->data);
 	free(task);
 	/* from alloc */
 	conn_put(conn);
@@ -1375,7 +1384,7 @@ static int iscsi_scsi_cmd_rx_start(struct iscsi_connection *conn)
 {
 	struct iscsi_cmd *req = (struct iscsi_cmd *) &conn->req.bhs;
 	struct iscsi_task *task;
-	int ahs_len, imm_len, data_len, task_len;
+	int ahs_len, imm_len, data_len, ext_len;
 
 	ahs_len = roundup(req->hlength * 4, 4);
 	imm_len = roundup(ntoh24(req->dlength), 4);
@@ -1390,10 +1399,10 @@ static int iscsi_scsi_cmd_rx_start(struct iscsi_connection *conn)
 	 */
 	if (data_len < 4096)
 		data_len = 4096;
-	task_len = max(imm_len, data_len) +
-		(ahs_len ? sizeof(req->cdb) + ahs_len : 0);
 
-	task = iscsi_alloc_task(conn, task_len);
+	ext_len = ahs_len ? sizeof(req->cdb) + ahs_len : 0;
+
+	task = iscsi_alloc_task(conn, ext_len, max(imm_len, data_len));
 	if (task)
 		conn->rx_task = task;
 	else
@@ -1408,8 +1417,7 @@ static int iscsi_scsi_cmd_rx_start(struct iscsi_connection *conn)
 	task->tag = req->itt;
 
 	if (ahs_len) {
-		task->ahs = task->data + sizeof(req->cdb);
-		task->data = task->ahs + ahs_len;
+		task->ahs = task->extdata + sizeof(req->cdb);
 		conn->req.ahs = task->ahs;
 		conn->req.data = task->data;
 	} else if (data_len)
@@ -1456,7 +1464,7 @@ static int iscsi_noop_out_rx_start(struct iscsi_connection *conn)
 	conn->exp_stat_sn = be32_to_cpu(req->exp_statsn);
 
 	len = ntoh24(req->dlength);
-	task = iscsi_alloc_task(conn, len);
+	task = iscsi_alloc_task(conn, 0, len);
 	if (task)
 		conn->rx_task = task;
 	else {
@@ -1525,7 +1533,7 @@ static int iscsi_task_rx_start(struct iscsi_connection *conn)
 		break;
 	case ISCSI_OP_SCSI_TMFUNC:
 	case ISCSI_OP_LOGOUT:
-		task = iscsi_alloc_task(conn, 0);
+		task = iscsi_alloc_task(conn, 0, 0);
 		if (task)
 			conn->rx_task = task;
 		else
