@@ -281,6 +281,7 @@ extern uint64_t scsi_get_devid(int lid, uint8_t *pdu);
 extern int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd);
 extern void sense_data_build(struct scsi_cmd *cmd, uint8_t key, uint16_t asc);
 extern uint64_t scsi_rw_offset(uint8_t *scb);
+extern int scsi_is_io_cmd(unsigned char op);
 
 extern enum scsi_target_state tgt_get_target_state(int tid);
 extern int tgt_set_target_state(int tid, char *str);

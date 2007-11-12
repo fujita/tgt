@@ -113,14 +113,7 @@ static int sbc_read_capacity(int host_no, struct scsi_cmd *cmd)
 		goto sense;
 	}
 
-	data = valloc(pagesize);
-	if (!data) {
-		key = HARDWARE_ERROR;
-		asc = ASC_INTERNAL_TGT_FAILURE;
-		goto sense;
-	}
-	cmd->uaddr = (unsigned long) data;
-
+	data = (void *)(unsigned long)cmd->uaddr;
 	size = cmd->dev->size >> BLK_SHIFT;
 
 	data[0] = (size >> 32) ?

@@ -276,14 +276,7 @@ static int smc_read_element_status(int host_no, struct scsi_cmd *cmd)
 	if (scb[11])	/* Reserved byte */
 		goto sense;
 
-	data = valloc(pagesize);
-	if (!data) {
-		dprintf("valloc(%lu) failed\n", pagesize);
-		key = HARDWARE_ERROR;
-		asc = ASC_INTERNAL_TGT_FAILURE;
-		goto sense;
-	}
-	memset(data, 0, pagesize);
+	data = (void *)(unsigned long)cmd->uaddr;
 
 	switch(element_type) {
 	case ELEMENT_ANY:
@@ -333,7 +326,6 @@ static int smc_read_element_status(int host_no, struct scsi_cmd *cmd)
 						  dvcid, voltag);
 		break;
 	default:
-		free(data);
 		goto sense;
 		break;
 	}
@@ -342,7 +334,6 @@ static int smc_read_element_status(int host_no, struct scsi_cmd *cmd)
 	len = element_status_data_hdr(data, dvcid, voltag, first, count);
 
 	cmd->len = min_t(int, len, alloc_len);
-	cmd->uaddr = (unsigned long) data;
 
 	return SAM_STAT_GOOD;
 

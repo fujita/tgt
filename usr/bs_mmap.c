@@ -90,8 +90,7 @@ static int bs_mmap_cmd_done(struct scsi_cmd *cmd)
 		err = munmap((void *) (unsigned long) uaddr, len);
 		if (err)
 			eprintf("%" PRIx64 " %d\n", uaddr, len);
-	} else
-		free((void *) (unsigned long) uaddr);
+	}
 
 	return err;
 }

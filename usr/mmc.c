@@ -68,14 +68,7 @@ static int mmc_read_toc(int host_no, struct scsi_cmd *cmd)
 {
 	uint8_t *data;
 
-	data = valloc(pagesize);
-	if (!data) {
-		cmd->len = 0;
-		sense_data_build(cmd, HARDWARE_ERROR, ASC_INTERNAL_TGT_FAILURE);
-		return SAM_STAT_CHECK_CONDITION;
-	}
-	memset(data, 0, pagesize);
-	cmd->uaddr = (unsigned long) data;
+	data = (void *)(unsigned long)cmd->uaddr;
 
 	/* forged for single session data cd only. all iso file fall into this */
 	if (cmd->scb[1] & 0x2) {
@@ -104,14 +97,7 @@ static int mmc_read_capacity(int host_no, struct scsi_cmd *cmd)
 	uint64_t size;
 	uint32_t *data;
 
-	data = valloc(pagesize);
-	if (!data) {
-		cmd->len = 0;
-		sense_data_build(cmd, HARDWARE_ERROR, ASC_INTERNAL_TGT_FAILURE);
-		return SAM_STAT_CHECK_CONDITION;
-	}
-	memset(data, 0, pagesize);
-	cmd->uaddr = (unsigned long) data;
+	data = (void *)(unsigned long)cmd->uaddr;
 
 	size = cmd->dev->size >> MMC_BLK_SHIFT;
 

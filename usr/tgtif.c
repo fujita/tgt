@@ -171,13 +171,37 @@ static void kern_queue_cmd(struct tgt_event *ev)
 	cmd->attribute = ev->p.cmd_req.attribute;
 	cmd->tag = ev->p.cmd_req.tag;
 /* 	cmd->uaddr = ev->k.cmd_req.uaddr; */
-	cmd->uaddr = 0;
+
+	if (scsi_is_io_cmd(cmd->scb[0]))
+		cmd->uaddr = 0;
+	else {
+		char *buf;
+		uint32_t data_len;
+
+		data_len = ev->p.cmd_req.data_len;
+		/*
+		 * fix spc, sbc, etc. they assume that buffer is long
+		 * enough.
+		 */
+		if (data_len < 4096)
+			data_len = 4096;
+
+		buf = valloc(data_len);
+		if (!buf)
+			goto free_kcmd;
+		/* TODO: send sense properly*/
+		cmd->uaddr = (unsigned long)buf;
+		memset(buf, 0, data_len);
+	}
 
 	ret = target_cmd_queue(tid, cmd);
 	if (ret) {
 		eprintf("can't queue this command %d\n", ret);
-		free(kcmd);
+		goto free_kcmd;
 	}
+
+free_kcmd:
+	free(kcmd);
 }
 
 static void kern_cmd_done(struct tgt_event *ev)
@@ -196,6 +220,8 @@ static void kern_cmd_done(struct tgt_event *ev)
 	cmd = target_cmd_lookup(tid, ev->p.cmd_done.itn_id, ev->p.cmd_done.tag);
 	if (cmd) {
 		target_cmd_done(cmd);
+		if (!cmd->mmapped)
+			free((void *) (unsigned long)cmd->uaddr);
 		free(KCMD(cmd));
 	} else
 		eprintf("unknow command %d %" PRIu64 " %" PRIu64 "\n",

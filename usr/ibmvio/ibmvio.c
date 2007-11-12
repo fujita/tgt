@@ -151,17 +151,10 @@ static int ibmvio_inquiry(int host_no, struct scsi_cmd *cmd)
 	if (scb[1] & 0x3)
 		return spc_inquiry(host_no, cmd);
 
-	data = valloc(pagesize);
-	if (!data) {
-		key = HARDWARE_ERROR;
-		asc = ASC_INTERNAL_TGT_FAILURE;
-		goto sense;
-	}
-	memset(data, 0, pagesize);
+	data = (void *)(unsigned long)cmd->uaddr;
 
 	cmd->len = __ibmvio_inquiry(host_no, cmd, data);
 	cmd->len = min_t(int, cmd->len, scb[4]);
-	cmd->uaddr = (unsigned long) data;
 
 	if (cmd->dev->lun != cmd->dev_id)
 		data[0] = TYPE_NO_LUN;
@@ -188,7 +181,6 @@ static int ibmvio_report_luns(int host_no, struct scsi_cmd *cmd)
 	struct list_head *dev_list = &cmd->c_target->device_list;
 	uint64_t lun, *data;
 	int idx, alen, oalen, nr_luns, rbuflen = 4096;
-	int *len = &cmd->len;
 	uint8_t *lun_buf = cmd->lun;
 	unsigned char key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
@@ -197,14 +189,7 @@ static int ibmvio_report_luns(int host_no, struct scsi_cmd *cmd)
 	if (alen < 16)
 		goto sense;
 
-	data = valloc(pagesize);
-	if (!data) {
-		key = HARDWARE_ERROR;
-		asc = ASC_INTERNAL_TGT_FAILURE;
-		goto sense;
-	}
-	memset(data, 0, pagesize);
-	cmd->uaddr = (unsigned long)data;
+	data = (void *)(unsigned long)cmd->uaddr;
 
 	alen &= ~(8 - 1);
 	oalen = alen;
@@ -234,10 +219,10 @@ static int ibmvio_report_luns(int host_no, struct scsi_cmd *cmd)
 
 done:
 	*((uint32_t *) data) = __cpu_to_be32(nr_luns * 8);
-	*len = min(oalen, nr_luns * 8 + 8);
+	cmd->len = min(oalen, nr_luns * 8 + 8);
 	return SAM_STAT_GOOD;
 sense:
-	*len = 0;
+	cmd->len = 0;
 	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
 }

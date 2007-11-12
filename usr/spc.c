@@ -154,13 +154,7 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 	if (((scb[1] & 0x3) == 0x3) || (!(scb[1] & 0x3) && scb[2]))
 		goto sense;
 
-	data = valloc(pagesize);
-	if (!data) {
-		key = HARDWARE_ERROR;
-		asc = ASC_INTERNAL_TGT_FAILURE;
-		goto sense;
-	}
-	memset(data, 0, pagesize);
+	data = (void *)(unsigned long)cmd->uaddr;
 
 	dprintf("%x %x\n", scb[1], scb[2]);
 
@@ -188,8 +182,8 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 		for (i = 0; i < ARRAY_SIZE(attrs->version_desc); i++)
 			*desc++ = __cpu_to_be16(attrs->version_desc[i]);
 
-		len = 66;
 		data[4] = len - 5;	/* Additional Length */
+		len = 66;
 		ret = SAM_STAT_GOOD;
 	} else if (scb[1] & 0x2) {
 		/* CmdDt bit is set */
@@ -234,13 +228,10 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 		}
 	}
 
-	if (ret != SAM_STAT_GOOD) {
-		free(data);
+	if (ret != SAM_STAT_GOOD)
 		goto sense;
-	}
 
 	cmd->len = min_t(int, len, scb[4]);
-	cmd->uaddr = (unsigned long) data;
 
 	if (cmd->dev->lun != cmd->dev_id)
 		data[0] = TYPE_NO_LUN;
@@ -267,13 +258,7 @@ int spc_report_luns(int host_no, struct scsi_cmd *cmd)
 	if (alen < 16)
 		goto sense;
 
-	data = valloc(pagesize);
-	if (!data) {
-		key = HARDWARE_ERROR;
-		asc = ASC_INTERNAL_TGT_FAILURE;
-		goto sense;
-	}
-	memset(data, 0, pagesize);
+	data = (void *)(unsigned long)cmd->uaddr;
 
 	alen &= ~(8 - 1);
 	oalen = alen;
@@ -301,7 +286,6 @@ int spc_report_luns(int host_no, struct scsi_cmd *cmd)
 		}
 	}
 
-	cmd->uaddr = (unsigned long)data;
 	*((uint32_t *) data) = __cpu_to_be32(nr_luns * 8);
 	cmd->len = min(oalen, nr_luns * 8 + 8);
 	return SAM_STAT_GOOD;
@@ -393,13 +377,7 @@ int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 	if (subpcode)
 		goto sense;
 
-	data = valloc(pagesize);
-	if (!data) {
-		key = HARDWARE_ERROR;
-		asc = ASC_INTERNAL_TGT_FAILURE;
-		goto sense;
-	}
-	memset(data, 0, pagesize);
+	data = (void *)(unsigned long)cmd->uaddr;
 
 	if (mode6) {
 		alloc_len = scb[4];
@@ -441,12 +419,9 @@ int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 	}
 
 	cmd->len = len;
-	cmd->uaddr = (unsigned long)data;
 	return SAM_STAT_GOOD;
 
 sense:
-	if (data)
-		free(data);
 	cmd->len = 0;
 	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
