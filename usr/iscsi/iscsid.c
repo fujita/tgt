@@ -936,7 +936,7 @@ static int iscsi_data_rsp_build(struct iscsi_task *task)
 
 	conn->rsp.datasize = datalen;
 	hton24(rsp->dlength, datalen);
-	conn->rsp.data = (void *) (unsigned long) task->addr;
+	conn->rsp.data = scsi_get_read_buffer(&task->scmd);
 	conn->rsp.data += task->offset;
 
 	task->offset += datalen;
@@ -1027,7 +1027,6 @@ static int iscsi_scsi_cmd_done(uint64_t nid, int result, struct scsi_cmd *scmd)
 		return 0;
 	}
 
-	task->addr = scmd->uaddr;
 	task->len = scmd->len;
 
 	if (scsi_get_data_dir(scmd) == DATA_WRITE)
@@ -1069,7 +1068,6 @@ static int iscsi_target_cmd_queue(struct iscsi_task *task)
 	struct scsi_cmd *scmd = &task->scmd;
 	struct iscsi_connection *conn = task->conn;
 	struct iscsi_cmd *req = (struct iscsi_cmd *) &task->req;
-	unsigned long uaddr = (unsigned long) task->data;
 	uint32_t data_len;
 	uint8_t *ahs;
 	int ahslen;
@@ -1113,10 +1111,13 @@ static int iscsi_target_cmd_queue(struct iscsi_task *task)
 
 	data_len = ntohl(req->data_length);
 	/* figure out incoming (write) and outgoing (read) sizes */
-	if (dir == DATA_WRITE || dir == DATA_BIDIRECTIONAL)
+	if (dir == DATA_WRITE || dir == DATA_BIDIRECTIONAL) {
 		scsi_set_write_len(scmd, data_len);
-	else if (dir == DATA_READ)
+		scsi_set_write_buffer(scmd, task->data);
+	} else if (dir == DATA_READ) {
 		scsi_set_read_len(scmd, data_len);
+		scsi_set_read_buffer(scmd, task->data);
+	}
 
 	if (dir == DATA_BIDIRECTIONAL && ahslen >= 8) {
 		struct iscsi_rlength_ahdr *ahs_bidi = (void *) ahs;
@@ -1131,7 +1132,6 @@ static int iscsi_target_cmd_queue(struct iscsi_task *task)
 	scmd->len = data_len;
 	scmd->attribute = cmd_attr(task);
 	scmd->tag = req->itt;
-	scmd->uaddr = uaddr;
 
 	return target_cmd_queue(conn->session->target->tid, scmd);
 }
@@ -1402,7 +1402,7 @@ static int iscsi_scsi_cmd_rx_start(struct iscsi_connection *conn)
 	/*
 	 * fix spc, sbc, etc. they assume that buffer is zero'ed.
 	 */
-	if (data_len && !scsi_is_io_cmd(req->cdb[0]))
+	if (data_len && !scsi_is_io_opcode(req->cdb[0]))
 		memset(task->data, 0, data_len);
 
 	task->tag = req->itt;

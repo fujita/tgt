@@ -108,7 +108,6 @@ struct iscsi_task {
 
 	unsigned long flags;
 
-	uint64_t addr;
 	int result;
 	int len;
 

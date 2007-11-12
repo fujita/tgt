@@ -51,27 +51,28 @@ static int bs_mmap_cmd_submit(struct scsi_cmd *cmd)
 {
 	int fd = cmd->dev->fd, ret = 0;
 	void *p;
+	uint64_t addr;
 
 	if (cmd->scb[0] == SYNCHRONIZE_CACHE ||
 	    cmd->scb[0] == SYNCHRONIZE_CACHE_16)
 		return fsync(fd);
 
-	if (cmd->uaddr)
-		cmd->uaddr += cmd->offset;
-	else {
-		p = mmap64(NULL, pgcnt(cmd->len, cmd->offset) << pageshift,
-			   PROT_READ | PROT_WRITE, MAP_SHARED, fd,
-			   cmd->offset & ~((1ULL << pageshift) - 1));
-
-		cmd->uaddr = (unsigned long) p + (cmd->offset & (pagesize - 1));
-		if (p == MAP_FAILED) {
-			ret = -EINVAL;
-			eprintf("%" PRIx64 " %u %" PRIu64 "\n", cmd->uaddr,
-				cmd->len, cmd->offset);
-		}
+	p = mmap64(NULL, pgcnt(cmd->len, cmd->offset) << pageshift,
+		   PROT_READ | PROT_WRITE, MAP_SHARED, fd,
+		   cmd->offset & ~((1ULL << pageshift) - 1));
+	if (p == MAP_FAILED) {
+		ret = -EINVAL;
+		eprintf("%u %" PRIu64 "\n", cmd->len, cmd->offset);
 	}
 
-	dprintf("%" PRIx64 " %u %" PRIu64 "\n", cmd->uaddr, cmd->len, cmd->offset);
+	addr = (unsigned long)p + (cmd->offset & (pagesize - 1));
+
+	if (scsi_get_data_dir(cmd) == DATA_WRITE)
+		scsi_set_write_buffer(cmd, (void *)(unsigned long)addr);
+	else if (scsi_get_data_dir(cmd) == DATA_READ)
+		scsi_set_read_buffer(cmd, (void *)(unsigned long)addr);
+
+	dprintf("%" PRIx64 " %u %" PRIu64 "\n", addr, cmd->len, cmd->offset);
 
 	return ret;
 }
@@ -79,17 +80,24 @@ static int bs_mmap_cmd_submit(struct scsi_cmd *cmd)
 static int bs_mmap_cmd_done(struct scsi_cmd *cmd)
 {
 	int err = 0;
-	uint64_t uaddr = cmd->uaddr;
+	uint64_t addr;
 	int len = cmd->len;
 
-	dprintf("%d %" PRIx64 " %d\n", cmd->mmapped, uaddr, len);
+	if (scsi_get_data_dir(cmd) == DATA_WRITE)
+		addr = (unsigned long)scsi_get_write_buffer(cmd);
+	else if (scsi_get_data_dir(cmd) == DATA_READ)
+		addr = (unsigned long)scsi_get_read_buffer(cmd);
+	else
+		return 0;
+
+	dprintf("%d %" PRIx64 " %d\n", cmd->mmapped, addr, len);
 
 	if (cmd->mmapped) {
-		len = pgcnt(len, (uaddr & (pagesize - 1))) << pageshift;
-		uaddr &= ~(pagesize - 1);
-		err = munmap((void *) (unsigned long) uaddr, len);
+		len = pgcnt(len, (addr & (pagesize - 1))) << pageshift;
+		addr &= ~(pagesize - 1);
+		err = munmap((void *) (unsigned long) addr, len);
 		if (err)
-			eprintf("%" PRIx64 " %d\n", uaddr, len);
+			eprintf("%" PRIx64 " %d\n", addr, len);
 	}
 
 	return err;

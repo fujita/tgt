@@ -126,7 +126,7 @@ int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd)
 	return cmd->dev->dev_type_template.ops[op].cmd_perform(host_no, cmd);
 }
 
-int scsi_is_io_cmd(unsigned char op)
+int scsi_is_io_opcode(unsigned char op)
 {
 	int ret = 0;
 

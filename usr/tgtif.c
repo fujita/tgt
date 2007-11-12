@@ -120,8 +120,9 @@ int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *cmd)
 
 	memset(&ev, 0, sizeof(ev));
 
-	dprintf("%p %u %d %" PRIx64 " %u %" PRIu64 "\n", cmd,
-		cmd->len, result, cmd->uaddr, cmd->data_dir, cmd->tag);
+	dprintf("%p %u %d %p %p %u %" PRIu64 "\n", cmd, cmd->len, result,
+		scsi_get_write_buffer(cmd), scsi_get_read_buffer(cmd),
+		cmd->data_dir, cmd->tag);
 
 	kcmd = KCMD(cmd);
 
@@ -129,7 +130,10 @@ int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *cmd)
 	ev.p.cmd_rsp.host_no = kcmd->host_no;
 	ev.p.cmd_rsp.itn_id = cmd->cmd_itn_id;
 	ev.p.cmd_rsp.len = cmd->len;
-	ev.p.cmd_rsp.uaddr = cmd->uaddr;
+	if (scsi_get_data_dir(cmd) == DATA_WRITE)
+		ev.p.cmd_rsp.uaddr = (unsigned long)scsi_get_write_buffer(cmd);
+	else
+		ev.p.cmd_rsp.uaddr = (unsigned long)scsi_get_read_buffer(cmd);
 	ev.p.cmd_rsp.sense_len = cmd->sense_len;
 	ev.p.cmd_rsp.sense_uaddr = (unsigned long) cmd->sense_buffer;
 	ev.p.cmd_rsp.result = result;
@@ -141,7 +145,7 @@ int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *cmd)
 
 static void kern_queue_cmd(struct tgt_event *ev)
 {
-	int ret, tid, scb_len = 16;
+	int ret = -ENOMEM, tid, scb_len = 16;
 	struct kscsi_cmd *kcmd;
 	struct scsi_cmd *cmd;
 
@@ -170,11 +174,8 @@ static void kern_queue_cmd(struct tgt_event *ev)
 	cmd->len = ev->p.cmd_req.data_len;
 	cmd->attribute = ev->p.cmd_req.attribute;
 	cmd->tag = ev->p.cmd_req.tag;
-/* 	cmd->uaddr = ev->k.cmd_req.uaddr; */
 
-	if (scsi_is_io_cmd(cmd->scb[0]))
-		cmd->uaddr = 0;
-	else {
+	if (!scsi_is_io_opcode(cmd->scb[0])) {
 		char *buf;
 		uint32_t data_len;
 
@@ -189,18 +190,23 @@ static void kern_queue_cmd(struct tgt_event *ev)
 		buf = valloc(data_len);
 		if (!buf)
 			goto free_kcmd;
-		/* TODO: send sense properly*/
-		cmd->uaddr = (unsigned long)buf;
+
+		if (scsi_get_data_dir(cmd) == DATA_WRITE)
+			scsi_set_write_buffer(cmd, buf);
+		else
+			scsi_set_read_buffer(cmd, buf);
+
 		memset(buf, 0, data_len);
 	}
 
 	ret = target_cmd_queue(tid, cmd);
-	if (ret) {
-		eprintf("can't queue this command %d\n", ret);
+	if (ret)
 		goto free_kcmd;
-	}
 
+	return;
 free_kcmd:
+	/* TODO: send sense properly */
+	eprintf("can't queue this command %d\n", ret);
 	free(kcmd);
 }
 
@@ -220,8 +226,12 @@ static void kern_cmd_done(struct tgt_event *ev)
 	cmd = target_cmd_lookup(tid, ev->p.cmd_done.itn_id, ev->p.cmd_done.tag);
 	if (cmd) {
 		target_cmd_done(cmd);
-		if (!cmd->mmapped)
-			free((void *) (unsigned long)cmd->uaddr);
+		if (!cmd->mmapped) {
+			if (scsi_get_data_dir(cmd) == DATA_WRITE)
+				free(scsi_get_write_buffer(cmd));
+			else
+				free(scsi_get_read_buffer(cmd));
+		}
 		free(KCMD(cmd));
 	} else
 		eprintf("unknow command %d %" PRIu64 " %" PRIu64 "\n",

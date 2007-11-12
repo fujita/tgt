@@ -151,7 +151,7 @@ static int ibmvio_inquiry(int host_no, struct scsi_cmd *cmd)
 	if (scb[1] & 0x3)
 		return spc_inquiry(host_no, cmd);
 
-	data = (void *)(unsigned long)cmd->uaddr;
+	data = scsi_get_read_buffer(cmd);
 
 	cmd->len = __ibmvio_inquiry(host_no, cmd, data);
 	cmd->len = min_t(int, cmd->len, scb[4]);
@@ -189,7 +189,7 @@ static int ibmvio_report_luns(int host_no, struct scsi_cmd *cmd)
 	if (alen < 16)
 		goto sense;
 
-	data = (void *)(unsigned long)cmd->uaddr;
+	data = scsi_get_read_buffer(cmd);
 
 	alen &= ~(8 - 1);
 	oalen = alen;

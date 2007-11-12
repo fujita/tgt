@@ -105,18 +105,18 @@ int spt_sg_perform(struct scsi_cmd *cmd)
 	int ret;
 	struct sg_io_hdr hdr;
 
-	dprintf("%x %d %u %" PRIx64"\n", cmd->scb[0], cmd->data_dir, cmd->len,
-		cmd->uaddr);
 	memset(&hdr, 0, sizeof(hdr));
 	hdr.interface_id = 'S';
 	hdr.cmd_len = 16;
 	hdr.cmdp = cmd->scb;
-	if (scsi_get_data_dir(cmd) == DATA_WRITE)
+	if (scsi_get_data_dir(cmd) == DATA_WRITE) {
 		hdr.dxfer_direction = SG_DXFER_TO_DEV;
-	else
+		hdr.dxferp = scsi_get_write_buffer(cmd);
+	} else {
 		hdr.dxfer_direction = SG_DXFER_FROM_DEV;
+		hdr.dxferp = scsi_get_read_buffer(cmd);
+	}
 	hdr.dxfer_len = cmd->len;
-	hdr.dxferp = (void *)(unsigned long)cmd->uaddr;
 	hdr.mx_sb_len = sizeof(cmd->sense_buffer);
 	hdr.sbp = cmd->sense_buffer;
 	hdr.flags = SG_FLAG_DIRECT_IO;

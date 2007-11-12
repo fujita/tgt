@@ -220,6 +220,26 @@ static inline uint32_t scsi_get_write_len(struct scsi_cmd *scmd)
 	return scmd->write_len;
 }
 
+static inline void scsi_set_read_buffer(struct scsi_cmd *scmd, void *addr)
+{
+	scmd->uaddr = (unsigned long)addr;
+}
+
+static inline void *scsi_get_read_buffer(struct scsi_cmd *scmd)
+{
+	return (void *)(unsigned long)scmd->uaddr;
+}
+
+static inline void scsi_set_write_buffer(struct scsi_cmd *scmd, void *addr)
+{
+	scmd->uaddr = (unsigned long)addr;
+}
+
+static inline void *scsi_get_write_buffer(struct scsi_cmd *scmd)
+{
+	return (void *)(unsigned long)scmd->uaddr;
+}
+
 struct mgmt_req {
 	uint64_t mid;
 	int busy;
@@ -281,7 +301,8 @@ extern uint64_t scsi_get_devid(int lid, uint8_t *pdu);
 extern int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd);
 extern void sense_data_build(struct scsi_cmd *cmd, uint8_t key, uint16_t asc);
 extern uint64_t scsi_rw_offset(uint8_t *scb);
-extern int scsi_is_io_cmd(unsigned char op);
+extern int scsi_is_io_opcode(unsigned char op);
+extern enum data_direction scsi_data_dir_opcode(unsigned char op);
 
 extern enum scsi_target_state tgt_get_target_state(int tid);
 extern int tgt_set_target_state(int tid, char *str);

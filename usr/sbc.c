@@ -53,13 +53,16 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 	if (ret)
 		return SAM_STAT_RESERVATION_CONFLICT;
 
+	/* we need to set data dir for kernel drivers */
 	switch (cmd->scb[0]) {
 	case WRITE_6:
 	case WRITE_10:
 	case WRITE_16:
 	case WRITE_VERIFY:
+		scsi_set_data_dir(cmd, DATA_WRITE);
 		break;
 	default:
+		scsi_set_data_dir(cmd, DATA_READ);
 		break;
 	}
 
@@ -113,7 +116,7 @@ static int sbc_read_capacity(int host_no, struct scsi_cmd *cmd)
 		goto sense;
 	}
 
-	data = (void *)(unsigned long)cmd->uaddr;
+	data = scsi_get_read_buffer(cmd);
 	size = cmd->dev->size >> BLK_SHIFT;
 
 	data[0] = (size >> 32) ?
