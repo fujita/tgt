@@ -262,6 +262,16 @@ void iscsi_event_modify(int fd, int events)
 		eprintf("tgt_event_modify failed\n");
 }
 
+void *iscsi_tcp_alloc_data_buf(struct iscsi_connection *conn, size_t sz)
+{
+	return valloc(sz);
+}
+
+void iscsi_tcp_free_data_buf(struct iscsi_connection *conn, void *buf)
+{
+	free(buf);
+}
+
 struct iscsi_transport iscsi_tcp = {
 	.name			= "iscsi",
 	.rdma			= 0,
@@ -272,4 +282,6 @@ struct iscsi_transport iscsi_tcp = {
 	.ep_close		= iscsi_tcp_close,
 	.ep_show		= iscsi_tcp_show,
 	.ep_event_modify	= iscsi_event_modify,
+	.alloc_data_buf		= iscsi_tcp_alloc_data_buf,
+	.free_data_buf		= iscsi_tcp_free_data_buf,
 };

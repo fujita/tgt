@@ -1,6 +1,8 @@
 #ifndef __TRANSPORT_H
 #define __TRANSPORT_H
 
+struct iscsi_connection;
+
 struct iscsi_transport {
 	const char *name;
 	int rdma;
@@ -12,6 +14,8 @@ struct iscsi_transport {
 	size_t (*ep_close) (int ep);
 	int (*ep_show) (int ep, char *buf, int rest);
 	void (*ep_event_modify) (int ep, int events);
+	void *(*alloc_data_buf)(struct iscsi_connection *conn, size_t sz);
+	void (*free_data_buf)(struct iscsi_connection *conn, void *buf);
 };
 
 extern struct iscsi_transport iscsi_tcp;

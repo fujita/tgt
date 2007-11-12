@@ -979,7 +979,7 @@ static struct iscsi_task *iscsi_alloc_task(struct iscsi_connection *conn,
 	memset(task, 0, sizeof(*task) + ext_len);
 
 	if (data_len) {
-		buf = valloc(data_len);
+		buf = conn->tp->alloc_data_buf(conn, data_len);
 		if (!buf) {
 			free(task);
 			return NULL;
@@ -1001,7 +1001,7 @@ void iscsi_free_task(struct iscsi_task *task)
 	struct iscsi_connection *conn = task->conn;
 
 	if (task->data)
-		free(task->data);
+		conn->tp->free_data_buf(conn, task->data);
 	free(task);
 	/* from alloc */
 	conn_put(conn);
