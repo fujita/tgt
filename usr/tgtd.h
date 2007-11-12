@@ -159,7 +159,6 @@ struct scsi_cmd {
 	enum data_direction data_dir;
 
 	uint64_t cmd_itn_id;
-	uint32_t data_len;
 	uint64_t offset;
 	uint8_t *scb;
 	int scb_len;
