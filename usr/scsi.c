@@ -147,3 +147,25 @@ int scsi_is_io_opcode(unsigned char op)
 	}
 	return ret;
 }
+
+/* this isn't complete but good enough for what kernel drivers need */
+
+enum data_direction scsi_data_dir_opcode(unsigned char op)
+{
+	enum data_direction dir;
+
+	switch (op) {
+	case WRITE_6:
+	case WRITE_10:
+	case WRITE_VERIFY:
+	case WRITE_12:
+	case WRITE_16:
+		dir = DATA_WRITE;
+		break;
+	default:
+		dir = DATA_READ;
+		break;
+	}
+
+	return dir;
+}

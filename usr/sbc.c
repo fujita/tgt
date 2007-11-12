@@ -59,10 +59,8 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 	case WRITE_10:
 	case WRITE_16:
 	case WRITE_VERIFY:
-		scsi_set_data_dir(cmd, DATA_WRITE);
 		break;
 	default:
-		scsi_set_data_dir(cmd, DATA_READ);
 		break;
 	}
 

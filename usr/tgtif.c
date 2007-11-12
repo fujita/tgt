@@ -175,6 +175,8 @@ static void kern_queue_cmd(struct tgt_event *ev)
 	cmd->attribute = ev->p.cmd_req.attribute;
 	cmd->tag = ev->p.cmd_req.tag;
 
+	scsi_set_data_dir(cmd, scsi_data_dir_opcode(cmd->scb[0]));
+
 	if (!scsi_is_io_opcode(cmd->scb[0])) {
 		char *buf;
 		uint32_t data_len;
