@@ -238,7 +238,7 @@ static void kern_cmd_done(struct tgt_event *ev)
 	cmd = target_cmd_lookup(tid, ev->p.cmd_done.itn_id, ev->p.cmd_done.tag);
 	if (cmd) {
 		target_cmd_done(cmd);
-		if (!cmd->mmapped) {
+		if (!cmd_mmapio(cmd)) {
 			if (scsi_get_data_dir(cmd) == DATA_WRITE)
 				free(scsi_get_out_buffer(cmd));
 			else

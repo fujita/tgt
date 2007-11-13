@@ -70,7 +70,7 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 		key = HARDWARE_ERROR;
 		asc = ASC_INTERNAL_TGT_FAILURE;
 	} else {
-		cmd->mmapped = 1;
+		set_cmd_mmapio(cmd);
 		return SAM_STAT_GOOD;
 	}
 

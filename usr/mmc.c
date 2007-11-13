@@ -62,7 +62,7 @@ static int mmc_rw(int host_no, struct scsi_cmd *cmd)
 		sense_data_build(cmd, ILLEGAL_REQUEST, ASC_LUN_NOT_SUPPORTED);
 		return SAM_STAT_CHECK_CONDITION;
 	} else {
-		cmd->mmapped = 1;
+		set_cmd_mmapio(cmd);
 		return SAM_STAT_GOOD;
 	}
 	return 0;

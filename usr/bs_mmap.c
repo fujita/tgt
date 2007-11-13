@@ -96,9 +96,9 @@ static int bs_mmap_cmd_done(struct scsi_cmd *cmd)
 	} else
 		return 0;
 
-	dprintf("%d %" PRIx64 " %d\n", cmd->mmapped, addr, len);
+	dprintf("%d %" PRIx64 " %d\n", cmd_mmapio(cmd), addr, len);
 
-	if (cmd->mmapped) {
+	if (cmd_mmapio(cmd)) {
 		len = pgcnt(len, (addr & (pagesize - 1))) << pageshift;
 		addr &= ~(pagesize - 1);
 		err = munmap((void *) (unsigned long) addr, len);

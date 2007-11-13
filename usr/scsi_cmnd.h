@@ -25,7 +25,6 @@ struct scsi_cmd {
 	struct scsi_lu *dev;
 	unsigned long state;
 
-	int mmapped;
 	enum data_direction data_dir;
 	struct scsi_data_buffer in_sdb;
 	struct scsi_data_buffer out_sdb;
@@ -97,6 +96,7 @@ enum {
 	TGT_CMD_QUEUED,
 	TGT_CMD_PROCESSED,
 	TGT_CMD_ASYNC,
+	TGT_CMD_MMAPIO,
 };
 
 #define CMD_FNS(bit, name)						\
@@ -116,3 +116,4 @@ static inline int cmd_##name(const struct scsi_cmd *c)			\
 CMD_FNS(QUEUED, queued)
 CMD_FNS(PROCESSED, processed)
 CMD_FNS(ASYNC, async)
+CMD_FNS(MMAPIO, mmapio)
