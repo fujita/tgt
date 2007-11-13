@@ -142,6 +142,7 @@ static int ibmvio_inquiry(int host_no, struct scsi_cmd *cmd)
 	uint8_t *data, *scb = cmd->scb;
 	unsigned char key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
+	uint32_t len;
 
 	if (((scb[1] & 0x3) == 0x3) || (!(scb[1] & 0x3) && scb[2]))
 		goto sense;
@@ -153,15 +154,17 @@ static int ibmvio_inquiry(int host_no, struct scsi_cmd *cmd)
 
 	data = scsi_get_read_buffer(cmd);
 
-	cmd->len = __ibmvio_inquiry(host_no, cmd, data);
-	cmd->len = min_t(int, scsi_get_read_len(cmd), scb[4]);
+	len = __ibmvio_inquiry(host_no, cmd, data);
+	len = min_t(int, len, scb[4]);
+
+	scsi_set_in_resid_by_actual(cmd, len);
 
 	if (cmd->dev->lun != cmd->dev_id)
 		data[0] = TYPE_NO_LUN;
 
 	return SAM_STAT_GOOD;
 sense:
-	cmd->len = 0;
+	scsi_set_in_resid_by_actual(cmd, 0);
 	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
 }
@@ -219,10 +222,10 @@ static int ibmvio_report_luns(int host_no, struct scsi_cmd *cmd)
 
 done:
 	*((uint32_t *) data) = __cpu_to_be32(nr_luns * 8);
-	cmd->len = min(oalen, nr_luns * 8 + 8);
+	scsi_set_in_resid_by_actual(cmd, min(oalen, nr_luns * 8 + 8));
 	return SAM_STAT_GOOD;
 sense:
-	cmd->len = 0;
+	scsi_set_in_resid_by_actual(cmd, 0);
 	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
 }

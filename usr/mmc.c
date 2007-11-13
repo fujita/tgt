@@ -54,7 +54,11 @@ static int mmc_rw(int host_no, struct scsi_cmd *cmd)
 	ret = cmd->dev->bst->bs_cmd_submit(cmd);
 	if (ret) {
 		cmd->offset = 0;
-		cmd->len = 0;
+		if (scsi_get_data_dir(cmd) == DATA_WRITE)
+			scsi_set_out_resid_by_actual(cmd, 0);
+		else
+			scsi_set_in_resid_by_actual(cmd, 0);
+
 		sense_data_build(cmd, ILLEGAL_REQUEST, ASC_LUN_NOT_SUPPORTED);
 		return SAM_STAT_CHECK_CONDITION;
 	} else {
@@ -87,7 +91,7 @@ static int mmc_read_toc(int host_no, struct scsi_cmd *cmd)
 		data[6] = 0x01;
 	}
 
-	cmd->len = data[1] + 2;
+	scsi_set_in_resid_by_actual(cmd, data[1] + 2);
 
 	return SAM_STAT_GOOD;
 }
@@ -103,7 +107,7 @@ static int mmc_read_capacity(int host_no, struct scsi_cmd *cmd)
 	data[0] = (size >> 32) ?
 		__cpu_to_be32(0xffffffff) : __cpu_to_be32(size - 1);
 	data[1] = __cpu_to_be32(1U << MMC_BLK_SHIFT);
-	cmd->len = 8;
+	scsi_set_in_resid_by_actual(cmd, 8);
 
 	return SAM_STAT_GOOD;
 }

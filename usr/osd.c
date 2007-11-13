@@ -42,7 +42,8 @@ static int osd_varlen_cdb(int host_no, struct scsi_cmd *cmd)
 		eprintf("request size %d wrong, should be 200\n",
 			cmd->scb[7] + 8);
 		sense_data_build(cmd, ILLEGAL_REQUEST, ASC_LUN_NOT_SUPPORTED);
-		cmd->len = 0;
+		scsi_set_in_resid_by_actual(cmd, 0);
+		scsi_set_out_resid_by_actual(cmd, 0);
 		return SAM_STAT_CHECK_CONDITION;
 	}
 

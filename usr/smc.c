@@ -257,7 +257,7 @@ static int smc_read_element_status(int host_no, struct scsi_cmd *cmd)
 
 	elementSize = determine_element_sz(dvcid, voltag);
 
-	cmd->len = 0;
+	scsi_set_in_resid_by_actual(cmd, 0);
 	if (cmd->dev) {
 		ret = device_reserved(cmd);
 		if (ret) {
@@ -332,13 +332,11 @@ static int smc_read_element_status(int host_no, struct scsi_cmd *cmd)
 
 	/* Lastly, fill in data header */
 	len = element_status_data_hdr(data, dvcid, voltag, first, count);
-
-	cmd->len = min_t(int, len, alloc_len);
-
+	len = min_t(int, len, alloc_len);
+	scsi_set_in_resid_by_actual(cmd, len);
 	return SAM_STAT_GOOD;
-
 sense:
-	cmd->len = 0;
+	scsi_set_in_resid_by_actual(cmd, 0);
 	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
 }
@@ -417,11 +415,11 @@ static int smc_move_medium(int host_no, struct scsi_cmd *cmd)
 
 	set_slot_empty(src_slot);
 
-	cmd->len = 0;
+	scsi_set_in_resid_by_actual(cmd, 0);
 	return SAM_STAT_GOOD;
 
 sense:
-	cmd->len = 0;
+	scsi_set_in_resid_by_actual(cmd, 0);
 	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
 }

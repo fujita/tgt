@@ -75,7 +75,9 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 	}
 
 	cmd->offset = 0;
-	cmd->len = 0;
+	scsi_set_in_resid_by_actual(cmd, 0);
+	scsi_set_out_resid_by_actual(cmd, 0);
+
 	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
 }
@@ -120,11 +122,10 @@ static int sbc_read_capacity(int host_no, struct scsi_cmd *cmd)
 	data[0] = (size >> 32) ?
 		__cpu_to_be32(0xffffffff) : __cpu_to_be32(size - 1);
 	data[1] = __cpu_to_be32(1U << BLK_SHIFT);
-	cmd->len = 8;
-
+	scsi_set_in_resid_by_actual(cmd, 8);
 	return SAM_STAT_GOOD;
 sense:
-	cmd->len = 0;
+	scsi_set_in_resid_by_actual(cmd, 0);
 	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
 }
@@ -157,7 +158,7 @@ static int sbc_sync_cache(int host_no, struct scsi_cmd *cmd)
 	}
 
 sense:
-	cmd->len = 0;
+	scsi_set_in_resid_by_actual(cmd, 0);
 	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
 }

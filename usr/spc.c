@@ -231,14 +231,15 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 	if (ret != SAM_STAT_GOOD)
 		goto sense;
 
-	cmd->len = min_t(int, len, scb[4]);
+	len = min_t(int, len, scb[4]);
+	scsi_set_in_resid_by_actual(cmd, len);
 
 	if (cmd->dev->lun != cmd->dev_id)
 		data[0] = TYPE_NO_LUN;
 
 	return SAM_STAT_GOOD;
 sense:
-	cmd->len = 0;
+	scsi_set_in_resid_by_actual(cmd, 0);
 	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
 }
@@ -287,17 +288,17 @@ int spc_report_luns(int host_no, struct scsi_cmd *cmd)
 	}
 
 	*((uint32_t *) data) = __cpu_to_be32(nr_luns * 8);
-	cmd->len = min(oalen, nr_luns * 8 + 8);
+	scsi_set_in_resid_by_actual(cmd, min(oalen, nr_luns * 8 + 8));
 	return SAM_STAT_GOOD;
 sense:
-	cmd->len = 0;
+	scsi_set_in_resid_by_actual(cmd, 0);
 	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
 }
 
 int spc_start_stop(int host_no, struct scsi_cmd *cmd)
 {
-	cmd->len = 0;
+	scsi_set_in_resid_by_actual(cmd, 0);
 
 	if (device_reserved(cmd))
 		return SAM_STAT_RESERVATION_CONFLICT;
@@ -418,18 +419,17 @@ int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 		data[7] = dbd ? 0 : BLOCK_DESCRIPTOR_LEN;
 	}
 
-	cmd->len = len;
+	scsi_set_in_resid_by_actual(cmd, len);
 	return SAM_STAT_GOOD;
-
 sense:
-	cmd->len = 0;
+	scsi_set_in_resid_by_actual(cmd, 0);
 	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
 }
 
 int spc_request_sense(int host_no, struct scsi_cmd *cmd)
 {
-	cmd->len = 0;
+	scsi_set_in_resid_by_actual(cmd, 0);
 	sense_data_build(cmd, NO_SENSE, NO_ADDITIONAL_SENSE);
 	return SAM_STAT_GOOD;
 }
@@ -557,7 +557,7 @@ void dump_cdb(struct scsi_cmd *cmd)
 int spc_illegal_op(int host_no, struct scsi_cmd *cmd)
 {
 	dump_cdb(cmd);
-	cmd->len = 0;
+	scsi_set_in_resid_by_actual(cmd, 0);
 	sense_data_build(cmd, ILLEGAL_REQUEST, ASC_INVALID_OP_CODE);
 	return SAM_STAT_CHECK_CONDITION;
 }

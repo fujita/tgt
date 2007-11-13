@@ -56,16 +56,18 @@ static void sgv3_handler(int fd, int events, void *data)
 	for (i = 0; i < 1; i++) {
 		struct scsi_cmd *cmd = (void *) (unsigned long) hdrs[i].usr_ptr;
 
-		dprintf("%p %u %u %u %u %u\n", cmd,
+		dprintf("%p %u %u %u %u\n", cmd,
 			hdrs[i].status, hdrs[i].host_status, hdrs[i].driver_status,
-			cmd->len, hdrs[i].resid);
+			hdrs[i].resid);
 
 		if (hdrs[i].status) {
 			cmd->sense_len = hdrs[i].sb_len_wr;
-			cmd->len = 0;
-		} else
-			cmd->len += hdrs[i].resid;
-
+			scsi_set_out_resid_by_actual(cmd, 0);
+			scsi_set_in_resid_by_actual(cmd, 0);
+		} else {
+			scsi_set_out_resid(cmd, hdrs[i].resid);
+			scsi_set_in_resid(cmd, hdrs[i].resid);
+		}
 		target_cmd_io_done(cmd, hdrs[i].status);
 	}
 }

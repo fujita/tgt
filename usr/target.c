@@ -548,10 +548,11 @@ int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 
 		cmd_post_perform(q, cmd);
 
-		dprintf("%" PRIx64 " %x %p %p %" PRIu64 " %u %d %d\n",
+		dprintf("%" PRIx64 " %x %p %p %" PRIu64 " %u %u %d %d\n",
 			cmd->tag, cmd->scb[0], scsi_get_write_buffer(cmd),
 			scsi_get_read_buffer(cmd), cmd->offset,
-			cmd->len, result, cmd->async);
+			scsi_get_write_len(cmd), scsi_get_read_len(cmd),
+			result, cmd->async);
 
 		set_cmd_processed(cmd);
 		if (!cmd->async)
@@ -610,8 +611,9 @@ static void __cmd_done(struct target *target, struct scsi_cmd *cmd)
 
 	err = target->bst->bs_cmd_done(cmd);
 
-	dprintf("%d %p %p %u %d\n", cmd->mmapped, scsi_get_write_buffer(cmd),
-		scsi_get_read_buffer(cmd), cmd->len, err);
+	dprintf("%d %p %p %u %u %d\n", cmd->mmapped, scsi_get_write_buffer(cmd),
+		scsi_get_read_buffer(cmd), scsi_get_write_len(cmd),
+		scsi_get_read_len(cmd), err);
 
 	q = &cmd->dev->cmd_queue;
 	q->active_cmd--;

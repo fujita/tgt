@@ -66,14 +66,16 @@ static int spt_cmd_perform(int host_no, struct scsi_cmd *cmd)
 	int ret;
 
 	if (!cmd->dev) {
-		cmd->len = 0;
+		scsi_set_out_resid_by_actual(cmd, 0);
+		scsi_set_in_resid_by_actual(cmd, 0);
 		sense_data_build(cmd, NOT_READY, ASC_INTERNAL_TGT_FAILURE);
 		return SAM_STAT_CHECK_CONDITION;
 	}
 
 	ret = spt_sg_perform(cmd);
 	if (ret) {
-		cmd->len = 0;
+		scsi_set_out_resid_by_actual(cmd, 0);
+		scsi_set_in_resid_by_actual(cmd, 0);
 		sense_data_build(cmd, ILLEGAL_REQUEST, ASC_LUN_NOT_SUPPORTED);
 		return SAM_STAT_CHECK_CONDITION;
 	} else

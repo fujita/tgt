@@ -120,7 +120,9 @@ int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *cmd)
 
 	memset(&ev, 0, sizeof(ev));
 
-	dprintf("%p %u %d %p %p %u %" PRIu64 "\n", cmd, cmd->len, result,
+	dprintf("%p %u %u %d %p %p %u %" PRIu64 "\n", cmd,
+		scsi_get_write_len(cmd), scsi_get_read_len(cmd),
+		result,
 		scsi_get_write_buffer(cmd), scsi_get_read_buffer(cmd),
 		cmd->data_dir, cmd->tag);
 
@@ -129,11 +131,15 @@ int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *cmd)
 	ev.hdr.type = TGT_UEVENT_CMD_RSP;
 	ev.p.cmd_rsp.host_no = kcmd->host_no;
 	ev.p.cmd_rsp.itn_id = cmd->cmd_itn_id;
-	ev.p.cmd_rsp.len = cmd->len;
-	if (scsi_get_data_dir(cmd) == DATA_WRITE)
+	if (scsi_get_data_dir(cmd) == DATA_WRITE) {
 		ev.p.cmd_rsp.uaddr = (unsigned long)scsi_get_write_buffer(cmd);
-	else
+		ev.p.cmd_rsp.len =
+			scsi_get_write_len(cmd) - scsi_get_out_resid(cmd);
+	} else {
 		ev.p.cmd_rsp.uaddr = (unsigned long)scsi_get_read_buffer(cmd);
+		ev.p.cmd_rsp.len =
+			scsi_get_read_len(cmd) - scsi_get_in_resid(cmd);
+	}
 	ev.p.cmd_rsp.sense_len = cmd->sense_len;
 	ev.p.cmd_rsp.sense_uaddr = (unsigned long) cmd->sense_buffer;
 	ev.p.cmd_rsp.result = result;
@@ -171,7 +177,6 @@ static void kern_queue_cmd(struct tgt_event *ev)
 	cmd->scb_len = scb_len;
 	memcpy(cmd->lun, ev->p.cmd_req.lun, sizeof(cmd->lun));
 
-	cmd->len = ev->p.cmd_req.data_len;
 	cmd->attribute = ev->p.cmd_req.attribute;
 	cmd->tag = ev->p.cmd_req.tag;
 

@@ -1036,7 +1036,10 @@ static int iscsi_scsi_cmd_done(uint64_t nid, int result, struct scsi_cmd *scmd)
 		return 0;
 	}
 
-	task->len = scmd->len;
+	if (scsi_get_data_dir(scmd) == DATA_WRITE)
+		task->len = scsi_get_write_len(scmd) - scsi_get_out_resid(scmd);
+	else
+		task->len = scsi_get_read_len(scmd) - scsi_get_in_resid(scmd);
 
 	if (scsi_get_data_dir(scmd) == DATA_WRITE)
 		task->len = 0;  /* no read result */
@@ -1138,7 +1141,6 @@ static int iscsi_target_cmd_queue(struct iscsi_task *task)
 	}
 
 	memcpy(scmd->lun, task->req.lun, sizeof(scmd->lun));
-	scmd->len = data_len;
 	scmd->attribute = cmd_attr(task);
 	scmd->tag = req->itt;
 
