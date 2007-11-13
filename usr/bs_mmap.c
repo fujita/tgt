@@ -52,17 +52,21 @@ static int bs_mmap_cmd_submit(struct scsi_cmd *cmd)
 	int fd = cmd->dev->fd, ret = 0;
 	void *p;
 	uint64_t addr;
+	uint32_t length;
 
 	if (cmd->scb[0] == SYNCHRONIZE_CACHE ||
 	    cmd->scb[0] == SYNCHRONIZE_CACHE_16)
 		return fsync(fd);
 
-	p = mmap64(NULL, pgcnt(cmd->len, cmd->offset) << pageshift,
+	length = (scsi_get_data_dir(cmd) == DATA_WRITE) ?
+		scsi_get_write_len(cmd) : scsi_get_read_len(cmd);
+
+	p = mmap64(NULL, pgcnt(length, cmd->offset) << pageshift,
 		   PROT_READ | PROT_WRITE, MAP_SHARED, fd,
 		   cmd->offset & ~((1ULL << pageshift) - 1));
 	if (p == MAP_FAILED) {
 		ret = -EINVAL;
-		eprintf("%u %" PRIu64 "\n", cmd->len, cmd->offset);
+		eprintf("%u %" PRIu64 "\n", length, cmd->offset);
 	}
 
 	addr = (unsigned long)p + (cmd->offset & (pagesize - 1));
@@ -72,7 +76,7 @@ static int bs_mmap_cmd_submit(struct scsi_cmd *cmd)
 	else if (scsi_get_data_dir(cmd) == DATA_READ)
 		scsi_set_read_buffer(cmd, (void *)(unsigned long)addr);
 
-	dprintf("%" PRIx64 " %u %" PRIu64 "\n", addr, cmd->len, cmd->offset);
+	dprintf("%" PRIx64 " %u %" PRIu64 "\n", addr, length, cmd->offset);
 
 	return ret;
 }
@@ -81,13 +85,15 @@ static int bs_mmap_cmd_done(struct scsi_cmd *cmd)
 {
 	int err = 0;
 	uint64_t addr;
-	int len = cmd->len;
+	uint32_t len;
 
-	if (scsi_get_data_dir(cmd) == DATA_WRITE)
+	if (scsi_get_data_dir(cmd) == DATA_WRITE) {
 		addr = (unsigned long)scsi_get_write_buffer(cmd);
-	else if (scsi_get_data_dir(cmd) == DATA_READ)
+		len = scsi_get_write_len(cmd);
+	} else if (scsi_get_data_dir(cmd) == DATA_READ) {
 		addr = (unsigned long)scsi_get_read_buffer(cmd);
-	else
+		len = scsi_get_read_len(cmd);
+	} else
 		return 0;
 
 	dprintf("%d %" PRIx64 " %d\n", cmd->mmapped, addr, len);

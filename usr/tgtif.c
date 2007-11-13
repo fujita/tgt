@@ -177,6 +177,11 @@ static void kern_queue_cmd(struct tgt_event *ev)
 
 	scsi_set_data_dir(cmd, scsi_data_dir_opcode(cmd->scb[0]));
 
+	if (scsi_get_data_dir(cmd) == DATA_WRITE)
+		scsi_set_write_len(cmd, ev->p.cmd_req.data_len);
+	else
+		scsi_set_read_len(cmd, ev->p.cmd_req.data_len);
+
 	if (!scsi_is_io_opcode(cmd->scb[0])) {
 		char *buf;
 		uint32_t data_len;

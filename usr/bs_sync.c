@@ -120,6 +120,7 @@ static void *bs_sync_worker_fn(void *arg)
 	int ret = 0, fd;
 	struct bs_sync_info *info = arg;
 	struct scsi_cmd *cmd;
+	uint32_t length;
 
 	while (1) {
 		pthread_mutex_lock(&info->pending_lock);
@@ -142,24 +143,28 @@ static void *bs_sync_worker_fn(void *arg)
 		pthread_mutex_unlock(&info->pending_lock);
 
 		fd = cmd->dev->fd;
+		length = 0;
 
 		if (cmd->scb[0] == SYNCHRONIZE_CACHE ||
 		    cmd->scb[0] == SYNCHRONIZE_CACHE_16)
 			ret = fsync(fd);
-		else if (cmd->data_dir == DATA_WRITE)
-			ret = pwrite64(fd, scsi_get_write_buffer(cmd), cmd->len,
+		else if (cmd->data_dir == DATA_WRITE) {
+			length = scsi_get_write_len(cmd);
+			ret = pwrite64(fd, scsi_get_write_buffer(cmd), length,
 				       cmd->offset);
-		else if (cmd->data_dir == DATA_READ)
-			ret = pread64(fd, scsi_get_read_buffer(cmd), cmd->len,
+		} else if (cmd->data_dir == DATA_READ) {
+			length = scsi_get_read_len(cmd);
+			ret = pread64(fd, scsi_get_read_buffer(cmd), length,
 				      cmd->offset);
+		}
 
-		dprintf("io done %p %x %d %d\n", cmd, cmd->scb[0], ret, cmd->len);
+		dprintf("io done %p %x %d %u\n", cmd, cmd->scb[0], ret, length);
 
-		if (ret == cmd->len)
+		if (ret == length)
 			scsi_set_result(cmd, SAM_STAT_GOOD);
 		else {
 			eprintf("io error %p %x %d %d %" PRIu64 ", %m\n",
-				cmd, cmd->scb[0], ret, cmd->len, cmd->offset);
+				cmd, cmd->scb[0], ret, length, cmd->offset);
 			scsi_set_result(cmd, SAM_STAT_CHECK_CONDITION);
 			sense_data_build(cmd, MEDIUM_ERROR, ASC_READ_ERROR);
 		}
@@ -291,10 +296,19 @@ static int bs_sync_cmd_submit(struct scsi_cmd *cmd)
 	struct scsi_lu *lu = cmd->dev;
 	struct bs_sync_info *info =
 		(struct bs_sync_info *)((char *)lu + sizeof(*lu));
+	char *buf;
+	uint32_t length;
 
-	dprintf("%d %d %u %p %p %" PRIx64 " %p\n", lu->fd, cmd->data_dir,
-		cmd->len, scsi_get_write_buffer(cmd),
-		scsi_get_read_buffer(cmd), cmd->offset, cmd);
+	if (cmd->data_dir == DATA_WRITE) {
+		buf = scsi_get_write_buffer(cmd);
+		length = scsi_get_write_len(cmd);
+	} else {
+		buf = scsi_get_read_buffer(cmd);
+		length = scsi_get_read_len(cmd);
+	}
+
+	dprintf("%d %d %u %p %" PRIx64 " %p\n", lu->fd, cmd->data_dir,
+		length, buf, cmd->offset, cmd);
 
 	pthread_mutex_lock(&info->pending_lock);
 

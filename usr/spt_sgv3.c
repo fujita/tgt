@@ -112,11 +112,12 @@ int spt_sg_perform(struct scsi_cmd *cmd)
 	if (scsi_get_data_dir(cmd) == DATA_WRITE) {
 		hdr.dxfer_direction = SG_DXFER_TO_DEV;
 		hdr.dxferp = scsi_get_write_buffer(cmd);
+		hdr.dxfer_len = scsi_get_write_len(cmd);
 	} else {
 		hdr.dxfer_direction = SG_DXFER_FROM_DEV;
 		hdr.dxferp = scsi_get_read_buffer(cmd);
+		hdr.dxfer_len = scsi_get_read_len(cmd);
 	}
-	hdr.dxfer_len = cmd->len;
 	hdr.mx_sb_len = sizeof(cmd->sense_buffer);
 	hdr.sbp = cmd->sense_buffer;
 	hdr.flags = SG_FLAG_DIRECT_IO;

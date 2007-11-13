@@ -154,7 +154,7 @@ static int ibmvio_inquiry(int host_no, struct scsi_cmd *cmd)
 	data = scsi_get_read_buffer(cmd);
 
 	cmd->len = __ibmvio_inquiry(host_no, cmd, data);
-	cmd->len = min_t(int, cmd->len, scb[4]);
+	cmd->len = min_t(int, scsi_get_read_len(cmd), scb[4]);
 
 	if (cmd->dev->lun != cmd->dev_id)
 		data[0] = TYPE_NO_LUN;

@@ -38,7 +38,6 @@
 
 static int osd_varlen_cdb(int host_no, struct scsi_cmd *cmd)
 {
-	dprintf("cdb[0] %x datalen %u\n", cmd->scb[0], cmd->len);
 	if (cmd->scb[7] != 200 - 8) {
 		eprintf("request size %d wrong, should be 200\n",
 			cmd->scb[7] + 8);
