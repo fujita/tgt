@@ -121,9 +121,9 @@ int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *cmd)
 	memset(&ev, 0, sizeof(ev));
 
 	dprintf("%p %u %u %d %p %p %u %" PRIu64 "\n", cmd,
-		scsi_get_write_len(cmd), scsi_get_read_len(cmd),
+		scsi_get_out_length(cmd), scsi_get_in_length(cmd),
 		result,
-		scsi_get_write_buffer(cmd), scsi_get_read_buffer(cmd),
+		scsi_get_out_buffer(cmd), scsi_get_in_buffer(cmd),
 		cmd->data_dir, cmd->tag);
 
 	kcmd = KCMD(cmd);
@@ -132,13 +132,13 @@ int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *cmd)
 	ev.p.cmd_rsp.host_no = kcmd->host_no;
 	ev.p.cmd_rsp.itn_id = cmd->cmd_itn_id;
 	if (scsi_get_data_dir(cmd) == DATA_WRITE) {
-		ev.p.cmd_rsp.uaddr = (unsigned long)scsi_get_write_buffer(cmd);
+		ev.p.cmd_rsp.uaddr = (unsigned long)scsi_get_out_buffer(cmd);
 		ev.p.cmd_rsp.len =
-			scsi_get_write_len(cmd) - scsi_get_out_resid(cmd);
+			scsi_get_out_length(cmd) - scsi_get_out_resid(cmd);
 	} else {
-		ev.p.cmd_rsp.uaddr = (unsigned long)scsi_get_read_buffer(cmd);
+		ev.p.cmd_rsp.uaddr = (unsigned long)scsi_get_in_buffer(cmd);
 		ev.p.cmd_rsp.len =
-			scsi_get_read_len(cmd) - scsi_get_in_resid(cmd);
+			scsi_get_in_length(cmd) - scsi_get_in_resid(cmd);
 	}
 	ev.p.cmd_rsp.sense_len = cmd->sense_len;
 	ev.p.cmd_rsp.sense_uaddr = (unsigned long) cmd->sense_buffer;
@@ -183,9 +183,9 @@ static void kern_queue_cmd(struct tgt_event *ev)
 	scsi_set_data_dir(cmd, scsi_data_dir_opcode(cmd->scb[0]));
 
 	if (scsi_get_data_dir(cmd) == DATA_WRITE)
-		scsi_set_write_len(cmd, ev->p.cmd_req.data_len);
+		scsi_set_out_length(cmd, ev->p.cmd_req.data_len);
 	else
-		scsi_set_read_len(cmd, ev->p.cmd_req.data_len);
+		scsi_set_in_length(cmd, ev->p.cmd_req.data_len);
 
 	if (!scsi_is_io_opcode(cmd->scb[0])) {
 		char *buf;
@@ -204,9 +204,9 @@ static void kern_queue_cmd(struct tgt_event *ev)
 			goto free_kcmd;
 
 		if (scsi_get_data_dir(cmd) == DATA_WRITE)
-			scsi_set_write_buffer(cmd, buf);
+			scsi_set_out_buffer(cmd, buf);
 		else
-			scsi_set_read_buffer(cmd, buf);
+			scsi_set_in_buffer(cmd, buf);
 
 		memset(buf, 0, data_len);
 	}
@@ -240,9 +240,9 @@ static void kern_cmd_done(struct tgt_event *ev)
 		target_cmd_done(cmd);
 		if (!cmd->mmapped) {
 			if (scsi_get_data_dir(cmd) == DATA_WRITE)
-				free(scsi_get_write_buffer(cmd));
+				free(scsi_get_out_buffer(cmd));
 			else
-				free(scsi_get_read_buffer(cmd));
+				free(scsi_get_in_buffer(cmd));
 		}
 		free(KCMD(cmd));
 	} else

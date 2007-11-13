@@ -276,7 +276,7 @@ static int smc_read_element_status(int host_no, struct scsi_cmd *cmd)
 	if (scb[11])	/* Reserved byte */
 		goto sense;
 
-	data = scsi_get_read_buffer(cmd);
+	data = scsi_get_in_buffer(cmd);
 
 	switch(element_type) {
 	case ELEMENT_ANY:

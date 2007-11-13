@@ -10,6 +10,8 @@ enum data_direction {
 
 struct scsi_data_buffer {
 	int resid;
+	uint32_t length;
+	uint64_t buffer;
 };
 
 struct scsi_cmd {
@@ -20,17 +22,13 @@ struct scsi_cmd {
 
 	uint64_t dev_id;
 
-	uint64_t uaddr;
-	int mmapped;
 	struct scsi_lu *dev;
 	unsigned long state;
 
+	int mmapped;
+	enum data_direction data_dir;
 	struct scsi_data_buffer in_sdb;
 	struct scsi_data_buffer out_sdb;
-
-	uint32_t write_len;
-	uint32_t read_len;
-	enum data_direction data_dir;
 
 	uint64_t cmd_itn_id;
 	uint64_t offset;
@@ -51,98 +49,46 @@ struct scsi_cmd {
 	struct list_head bs_list;
 };
 
-static inline void scsi_set_data_dir(struct scsi_cmd *scmd,
-				     enum data_direction dir)
-{
-	scmd->data_dir = dir;
+#define scsi_cmnd_accessor(field, type)						\
+static inline void scsi_set_##field(struct scsi_cmd *scmd, type val)		\
+{										\
+	scmd->field = val;							\
+}										\
+static inline type scsi_get_##field(struct scsi_cmd *scmd)			\
+{										\
+	return scmd->field;							\
 }
 
-static inline enum data_direction scsi_get_data_dir(struct scsi_cmd *scmd)
-{
-	return scmd->data_dir;
-}
+scsi_cmnd_accessor(result, int);
+scsi_cmnd_accessor(data_dir, enum data_direction);
 
-static inline void scsi_set_result(struct scsi_cmd *scmd,
-				   int result)
-{
-	scmd->result = result;
-}
 
-static inline int scsi_get_result(struct scsi_cmd *scmd)
-{
-	return scmd->result;
-}
+#define scsi_data_buffer_accessor(field, type, set_cast, get_cast)		\
+	scsi_data_buffer_function(in, field, type, set_cast, get_cast)		\
+	scsi_data_buffer_function(out, field, type, set_cast, get_cast)
 
-static inline void scsi_set_read_len(struct scsi_cmd *scmd, uint32_t read_len)
-{
-	scmd->read_len = read_len;
-}
-
-static inline uint32_t scsi_get_read_len(struct scsi_cmd *scmd)
-{
-	return scmd->read_len;
-}
-
-static inline void scsi_set_write_len(struct scsi_cmd *scmd, uint32_t write_len)
-{
-	scmd->write_len = write_len;
-}
-
-static inline uint32_t scsi_get_write_len(struct scsi_cmd *scmd)
-{
-	return scmd->write_len;
-}
-
-static inline void scsi_set_read_buffer(struct scsi_cmd *scmd, void *addr)
-{
-	scmd->uaddr = (unsigned long)addr;
-}
-
-static inline void *scsi_get_read_buffer(struct scsi_cmd *scmd)
-{
-	return (void *)(unsigned long)scmd->uaddr;
-}
-
-static inline void scsi_set_write_buffer(struct scsi_cmd *scmd, void *addr)
-{
-	scmd->uaddr = (unsigned long)addr;
-}
-
-static inline void *scsi_get_write_buffer(struct scsi_cmd *scmd)
-{
-	return (void *)(unsigned long)scmd->uaddr;
-}
-
-#define scsi_data_buffer_accessor(field, type)					\
-	__scsi_data_buffer_accessor(in, field, type)				\
-	__scsi_data_buffer_accessor(out, field, type)
-
-#define __scsi_data_buffer_accessor(dir, field, type)				\
-	scsi_cmnd_set_function(dir, field, type)				\
-	scsi_cmnd_get_function(dir, field, type)
-
-#define scsi_cmnd_set_function(dir, field, type)				\
+#define scsi_data_buffer_function(dir, field, type, set_cast, get_cast)		\
 static inline void scsi_set_##dir##_##field(struct scsi_cmd *scmd, type val)	\
 {										\
-	scmd->dir##_sdb.field = val;						\
+	scmd->dir##_sdb.field = set_cast (val);					\
 }										\
-
-#define scsi_cmnd_get_function(dir, field, type)				\
 static inline type scsi_get_##dir##_##field(struct scsi_cmd *scmd)		\
 {										\
-	return scmd->dir##_sdb.field;						\
-}										\
+	return get_cast (scmd->dir##_sdb.field);				\
+}
 
-scsi_data_buffer_accessor(resid, int);
+scsi_data_buffer_accessor(length, uint32_t,,);
+scsi_data_buffer_accessor(resid, int,,);
+scsi_data_buffer_accessor(buffer, void *, (unsigned long), (void *)(unsigned long));
 
 static inline void scsi_set_in_resid_by_actual(struct scsi_cmd *scmd,
 					       uint32_t actual)
 {
-	scsi_set_in_resid(scmd, scsi_get_read_len(scmd) - actual);
+	scsi_set_in_resid(scmd, scsi_get_in_length(scmd) - actual);
 }
 
 static inline void scsi_set_out_resid_by_actual(struct scsi_cmd *scmd,
 					       uint32_t actual)
 {
-	scsi_set_out_resid(scmd, scsi_get_write_len(scmd) - actual);
+	scsi_set_out_resid(scmd, scsi_get_out_length(scmd) - actual);
 }

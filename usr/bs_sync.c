@@ -149,12 +149,12 @@ static void *bs_sync_worker_fn(void *arg)
 		    cmd->scb[0] == SYNCHRONIZE_CACHE_16)
 			ret = fsync(fd);
 		else if (cmd->data_dir == DATA_WRITE) {
-			length = scsi_get_write_len(cmd);
-			ret = pwrite64(fd, scsi_get_write_buffer(cmd), length,
+			length = scsi_get_out_length(cmd);
+			ret = pwrite64(fd, scsi_get_out_buffer(cmd), length,
 				       cmd->offset);
 		} else if (cmd->data_dir == DATA_READ) {
-			length = scsi_get_read_len(cmd);
-			ret = pread64(fd, scsi_get_read_buffer(cmd), length,
+			length = scsi_get_in_length(cmd);
+			ret = pread64(fd, scsi_get_in_buffer(cmd), length,
 				      cmd->offset);
 		}
 
@@ -300,11 +300,11 @@ static int bs_sync_cmd_submit(struct scsi_cmd *cmd)
 	uint32_t length;
 
 	if (cmd->data_dir == DATA_WRITE) {
-		buf = scsi_get_write_buffer(cmd);
-		length = scsi_get_write_len(cmd);
+		buf = scsi_get_out_buffer(cmd);
+		length = scsi_get_out_length(cmd);
 	} else {
-		buf = scsi_get_read_buffer(cmd);
-		length = scsi_get_read_len(cmd);
+		buf = scsi_get_in_buffer(cmd);
+		length = scsi_get_in_length(cmd);
 	}
 
 	dprintf("%d %d %u %p %" PRIx64 " %p\n", lu->fd, cmd->data_dir,

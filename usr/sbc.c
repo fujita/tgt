@@ -116,7 +116,7 @@ static int sbc_read_capacity(int host_no, struct scsi_cmd *cmd)
 		goto sense;
 	}
 
-	data = scsi_get_read_buffer(cmd);
+	data = scsi_get_in_buffer(cmd);
 	size = cmd->dev->size >> BLK_SHIFT;
 
 	data[0] = (size >> 32) ?

@@ -154,7 +154,7 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 	if (((scb[1] & 0x3) == 0x3) || (!(scb[1] & 0x3) && scb[2]))
 		goto sense;
 
-	data = scsi_get_read_buffer(cmd);
+	data = scsi_get_in_buffer(cmd);
 
 	dprintf("%x %x\n", scb[1], scb[2]);
 
@@ -259,7 +259,7 @@ int spc_report_luns(int host_no, struct scsi_cmd *cmd)
 	if (alen < 16)
 		goto sense;
 
-	data = scsi_get_read_buffer(cmd);
+	data = scsi_get_in_buffer(cmd);
 
 	alen &= ~(8 - 1);
 	oalen = alen;
@@ -378,7 +378,7 @@ int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 	if (subpcode)
 		goto sense;
 
-	data = scsi_get_read_buffer(cmd);
+	data = scsi_get_in_buffer(cmd);
 
 	if (mode6) {
 		alloc_len = scb[4];

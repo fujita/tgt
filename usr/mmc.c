@@ -72,7 +72,7 @@ static int mmc_read_toc(int host_no, struct scsi_cmd *cmd)
 {
 	uint8_t *data;
 
-	data = scsi_get_read_buffer(cmd);
+	data = scsi_get_in_buffer(cmd);
 
 	/* forged for single session data cd only. all iso file fall into this */
 	if (cmd->scb[1] & 0x2) {
@@ -101,7 +101,7 @@ static int mmc_read_capacity(int host_no, struct scsi_cmd *cmd)
 	uint64_t size;
 	uint32_t *data;
 
-	data = scsi_get_read_buffer(cmd);
+	data = scsi_get_in_buffer(cmd);
 	size = cmd->dev->size >> MMC_BLK_SHIFT;
 
 	data[0] = (size >> 32) ?

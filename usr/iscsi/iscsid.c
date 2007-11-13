@@ -810,7 +810,7 @@ static void calc_residual(struct iscsi_cmd_rsp *rsp, struct iscsi_task *task)
 {
 	uint32_t residual = 0;
 	struct scsi_cmd *scmd = &task->scmd;
-	uint32_t read_len = scsi_get_read_len(scmd);
+	uint32_t read_len = scsi_get_in_length(scmd);
 
 	/* we never have write under/over flow, no way to signal that
 	 * back from the target currently. */
@@ -911,10 +911,10 @@ static int iscsi_data_rsp_build(struct iscsi_task *task)
 	rsp->offset = cpu_to_be32(task->offset);
 	rsp->datasn = cpu_to_be32(task->exp_r2tsn++);
 
-	datalen = min_t(uint32_t, scsi_get_read_len(&task->scmd), task->len);
+	datalen = min_t(uint32_t, scsi_get_in_length(&task->scmd), task->len);
 	datalen -= task->offset;
 
-	dprintf("%d %d %d %d %x\n", datalen, scsi_get_read_len(&task->scmd),
+	dprintf("%d %d %d %d %x\n", datalen, scsi_get_in_length(&task->scmd),
 		task->len, max_burst, rsp->itt);
 
 	if (datalen <= max_burst) {
@@ -936,7 +936,7 @@ static int iscsi_data_rsp_build(struct iscsi_task *task)
 
 	conn->rsp.datasize = datalen;
 	hton24(rsp->dlength, datalen);
-	conn->rsp.data = scsi_get_read_buffer(&task->scmd);
+	conn->rsp.data = scsi_get_in_buffer(&task->scmd);
 	conn->rsp.data += task->offset;
 
 	task->offset += datalen;
@@ -1023,7 +1023,7 @@ static void iscsi_free_cmd_task(struct iscsi_task *task)
 static int iscsi_scsi_cmd_done(uint64_t nid, int result, struct scsi_cmd *scmd)
 {
 	struct iscsi_task *task = ITASK(scmd);
-	uint32_t read_len = scsi_get_read_len(scmd);
+	uint32_t read_len = scsi_get_in_length(scmd);
 
 	/*
 	 * Since the connection is closed we just free the task.
@@ -1037,9 +1037,9 @@ static int iscsi_scsi_cmd_done(uint64_t nid, int result, struct scsi_cmd *scmd)
 	}
 
 	if (scsi_get_data_dir(scmd) == DATA_WRITE)
-		task->len = scsi_get_write_len(scmd) - scsi_get_out_resid(scmd);
+		task->len = scsi_get_out_length(scmd) - scsi_get_out_resid(scmd);
 	else
-		task->len = scsi_get_read_len(scmd) - scsi_get_in_resid(scmd);
+		task->len = scsi_get_in_length(scmd) - scsi_get_in_resid(scmd);
 
 	if (scsi_get_data_dir(scmd) == DATA_WRITE)
 		task->len = 0;  /* no read result */
@@ -1124,17 +1124,17 @@ static int iscsi_target_cmd_queue(struct iscsi_task *task)
 	data_len = ntohl(req->data_length);
 	/* figure out incoming (write) and outgoing (read) sizes */
 	if (dir == DATA_WRITE || dir == DATA_BIDIRECTIONAL) {
-		scsi_set_write_len(scmd, data_len);
-		scsi_set_write_buffer(scmd, task->data);
+		scsi_set_out_length(scmd, data_len);
+		scsi_set_out_buffer(scmd, task->data);
 	} else if (dir == DATA_READ) {
-		scsi_set_read_len(scmd, data_len);
-		scsi_set_read_buffer(scmd, task->data);
+		scsi_set_in_length(scmd, data_len);
+		scsi_set_in_buffer(scmd, task->data);
 	}
 
 	if (dir == DATA_BIDIRECTIONAL && ahslen >= 8) {
 		struct iscsi_rlength_ahdr *ahs_bidi = (void *) ahs;
 		if (ahs_bidi->ahstype == ISCSI_AHSTYPE_RLENGTH) {
-			scsi_set_read_len(scmd, ntohl(ahs_bidi->read_length));
+			scsi_set_in_length(scmd, ntohl(ahs_bidi->read_length));
 			dprintf("bidi read len %u\n",
 				ntohl(ahs_bidi->read_length));
 		}
