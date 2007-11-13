@@ -63,11 +63,6 @@ enum {
 	TGT_QUEUE_DELETED,
 };
 
-enum {
-	TGT_CMD_QUEUED,
-	TGT_CMD_PROCESSED,
-};
-
 #define QUEUE_FNS(bit, name)						\
 static inline void set_queue_##name(struct tgt_cmd_queue *q)		\
 {									\
@@ -89,22 +84,5 @@ static inline int queue_active(const struct tgt_cmd_queue *q)		\
 
 QUEUE_FNS(BLOCKED, blocked)
 QUEUE_FNS(DELETED, deleted)
-
-#define CMD_FNS(bit, name)						\
-static inline void set_cmd_##name(struct scsi_cmd *c)			\
-{									\
-	(c)->state |= (1UL << TGT_CMD_##bit);				\
-}									\
-static inline void clear_cmd_##name(struct scsi_cmd *c)			\
-{									\
-	(c)->state &= ~(1UL << TGT_CMD_##bit);				\
-}									\
-static inline int cmd_##name(const struct scsi_cmd *c)			\
-{									\
-	return ((c)->state & (1UL << TGT_CMD_##bit));			\
-}
-
-CMD_FNS(QUEUED, queued)
-CMD_FNS(PROCESSED, processed)
 
 #endif

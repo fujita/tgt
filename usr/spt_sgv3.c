@@ -128,7 +128,7 @@ int spt_sg_perform(struct scsi_cmd *cmd)
 
 	ret = write(cmd->dev->fd, &hdr, sizeof(hdr));
 	if (ret == sizeof(hdr)) {
-		cmd->async = 1;
+		set_cmd_async(cmd);
 		return 0;
 	} else {
 		eprintf("%d %m\n", ret);

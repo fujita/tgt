@@ -552,10 +552,10 @@ int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 			cmd->tag, cmd->scb[0], scsi_get_out_buffer(cmd),
 			scsi_get_in_buffer(cmd), cmd->offset,
 			scsi_get_out_length(cmd), scsi_get_in_length(cmd),
-			result, cmd->async);
+			result, cmd_async(cmd));
 
 		set_cmd_processed(cmd);
-		if (!cmd->async)
+		if (!cmd_async(cmd))
 			target_cmd_io_done(cmd, result);
 	} else {
 		set_cmd_queued(cmd);
@@ -595,7 +595,7 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 			result = scsi_cmd_perform(nexus->host_no, cmd);
 			cmd_post_perform(q, cmd);
 			set_cmd_processed(cmd);
-			if (!cmd->async)
+			if (!cmd_async(cmd))
 				target_cmd_io_done(cmd, result);
 		} else
 			break;

@@ -318,7 +318,7 @@ static int bs_sync_cmd_submit(struct scsi_cmd *cmd)
 
 	pthread_cond_signal(&info->pending_cond);
 
-	cmd->async = 1;
+	set_cmd_async(cmd);
 
 	return 0;
 }

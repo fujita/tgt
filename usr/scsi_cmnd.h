@@ -37,7 +37,6 @@ struct scsi_cmd {
 	uint8_t lun[8];
 	int attribute;
 	uint64_t tag;
-	int async;
 	int result;
 	struct mgmt_req *mreq;
 
@@ -92,3 +91,28 @@ static inline void scsi_set_out_resid_by_actual(struct scsi_cmd *scmd,
 {
 	scsi_set_out_resid(scmd, scsi_get_out_length(scmd) - actual);
 }
+
+
+enum {
+	TGT_CMD_QUEUED,
+	TGT_CMD_PROCESSED,
+	TGT_CMD_ASYNC,
+};
+
+#define CMD_FNS(bit, name)						\
+static inline void set_cmd_##name(struct scsi_cmd *c)			\
+{									\
+	(c)->state |= (1UL << TGT_CMD_##bit);				\
+}									\
+static inline void clear_cmd_##name(struct scsi_cmd *c)			\
+{									\
+	(c)->state &= ~(1UL << TGT_CMD_##bit);				\
+}									\
+static inline int cmd_##name(const struct scsi_cmd *c)			\
+{									\
+	return ((c)->state & (1UL << TGT_CMD_##bit));			\
+}
+
+CMD_FNS(QUEUED, queued)
+CMD_FNS(PROCESSED, processed)
+CMD_FNS(ASYNC, async)
