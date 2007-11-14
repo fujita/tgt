@@ -1000,10 +1000,10 @@ void iscsi_free_task(struct iscsi_task *task)
 {
 	struct iscsi_connection *conn = task->conn;
 
-	if (task->data)
-		conn->tp->free_data_buf(conn, task->data);
+	conn->tp->free_data_buf(conn, scsi_get_in_buffer(&task->scmd));
+	conn->tp->free_data_buf(conn, scsi_get_out_buffer(&task->scmd));
+
 	free(task);
-	/* from alloc */
 	conn_put(conn);
 }
 
@@ -1134,9 +1134,21 @@ static int iscsi_target_cmd_queue(struct iscsi_task *task)
 	if (dir == DATA_BIDIRECTIONAL && ahslen >= 8) {
 		struct iscsi_rlength_ahdr *ahs_bidi = (void *) ahs;
 		if (ahs_bidi->ahstype == ISCSI_AHSTYPE_RLENGTH) {
-			scsi_set_in_length(scmd, ntohl(ahs_bidi->read_length));
-			dprintf("bidi read len %u\n",
-				ntohl(ahs_bidi->read_length));
+			uint32_t in_length = ntohl(ahs_bidi->read_length);
+
+			dprintf("bidi read len %u\n", in_length);
+
+			if (in_length) {
+				void *buf;
+
+				in_length = roundup(in_length, 4);
+				buf = conn->tp->alloc_data_buf(conn, in_length);
+				if (!buf)
+					return -ENOMEM;
+
+				scsi_set_in_buffer(scmd, buf);
+				scsi_set_in_length(scmd, in_length);
+			}
 		}
 	}
 

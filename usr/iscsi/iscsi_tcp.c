@@ -269,7 +269,8 @@ void *iscsi_tcp_alloc_data_buf(struct iscsi_connection *conn, size_t sz)
 
 void iscsi_tcp_free_data_buf(struct iscsi_connection *conn, void *buf)
 {
-	free(buf);
+	if (buf)
+		free(buf);
 }
 
 struct iscsi_transport iscsi_tcp = {
