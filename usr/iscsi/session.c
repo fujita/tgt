@@ -103,7 +103,7 @@ int session_create(struct iscsi_connection *conn)
 	}
 
 	memset(addr, 0, sizeof(addr));
-	conn->tp->ep_show(conn->fd, addr, sizeof(addr));
+	conn->tp->ep_show(conn, addr, sizeof(addr));
 
 	snprintf(session->info, 1024, _TAB3 "Initiator: %s\n"
 		 _TAB3 "Connection: %u\n"

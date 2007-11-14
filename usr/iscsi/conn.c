@@ -42,11 +42,11 @@ void conn_add_to_session(struct iscsi_connection *conn, struct iscsi_session *se
 	list_add(&conn->clist, &session->conn_list);
 }
 
-struct iscsi_connection *conn_alloc(void)
+struct iscsi_connection *conn_alloc(unsigned int trans_len)
 {
 	struct iscsi_connection *conn;
 
-	conn = zalloc(sizeof(*conn));
+	conn = zalloc(sizeof(*conn) + trans_len);
 	if (!conn)
 		return NULL;
 
@@ -69,6 +69,9 @@ struct iscsi_connection *conn_alloc(void)
 	INIT_LIST_HEAD(&conn->clist);
 	INIT_LIST_HEAD(&conn->tx_clist);
 
+	if (trans_len)
+		conn->trans_data = &conn[1];
+
 	return conn;
 }
 
@@ -87,12 +90,11 @@ static void conn_free(struct iscsi_connection *conn)
 		session_put(session);
 }
 
-void conn_close(struct iscsi_connection *conn, int fd)
+void conn_close(struct iscsi_connection *conn)
 {
 	struct iscsi_task *task, *tmp;
 
-	tgt_event_del(fd);
-	conn->tp->ep_close(fd);
+	conn->tp->ep_close(conn);
 
 	dprintf("connection closed\n");
 
@@ -166,13 +168,10 @@ struct iscsi_connection *conn_find(struct iscsi_session *session, uint32_t cid)
 	return NULL;
 }
 
-int conn_take_fd(struct iscsi_connection *conn, int fd)
+int conn_take_fd(struct iscsi_connection *conn)
 {
-	uint64_t sid = sid64(conn->isid, conn->tsih);
-
-	dprintf("conn_take_fd: %d %u %u %u %" PRIx64 "\n",
-		  fd, conn->cid, conn->stat_sn, conn->exp_stat_sn, sid);
+	dprintf("%u %u %u %" PRIx64 "\n", conn->cid, conn->stat_sn,
+		conn->exp_stat_sn, sid64(conn->isid, conn->tsih));
 	conn->session->conn_cnt++;
-
 	return 0;
 }

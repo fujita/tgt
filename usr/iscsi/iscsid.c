@@ -435,7 +435,7 @@ static void login_start(struct iscsi_connection *conn)
 			return;
 		}
 
-		if (ip_acl(conn->tid, conn->fd)) {
+		if (ip_acl(conn->tid, conn)) {
 			rsp->status_class = ISCSI_STATUS_CLS_INITIATOR_ERR;
 			rsp->status_detail = ISCSI_LOGIN_STATUS_TGT_NOT_FOUND;
 			conn->state = STATE_EXIT;
@@ -687,7 +687,8 @@ static void text_scan_text(struct iscsi_connection *conn)
 			blen = sizeof(buf);
 
 			slen = sizeof(ss);
-			getsockname(conn->fd, (struct sockaddr *) &ss, &slen);
+			conn->tp->ep_getsockname(conn, (struct sockaddr *) &ss,
+						 &slen);
 			if (ss.ss_family == AF_INET6) {
 				*p++ = '[';
 				blen--;
@@ -1050,7 +1051,7 @@ static int iscsi_scsi_cmd_done(uint64_t nid, int result, struct scsi_cmd *scmd)
 	}
 
 	list_add_tail(&task->c_list, &task->conn->tx_clist);
-	task->conn->tp->ep_event_modify(task->conn->fd, EPOLLIN | EPOLLOUT);
+	task->conn->tp->ep_event_modify(task->conn, EPOLLIN | EPOLLOUT);
 
 	return 0;
 }
@@ -1174,7 +1175,7 @@ int iscsi_scsi_cmd_execute(struct iscsi_task *task)
 	task->offset = 0;  /* for use as transmit pointer for data-ins */
 	ret = iscsi_target_cmd_queue(task);
 no_queuing:
-	conn->tp->ep_event_modify(conn->fd, EPOLLIN | EPOLLOUT);
+	conn->tp->ep_event_modify(conn, EPOLLIN | EPOLLOUT);
 	return ret;
 }
 
@@ -1203,7 +1204,7 @@ static int iscsi_tm_done(struct mgmt_req *mreq)
 		break;
 	}
 	list_add_tail(&task->c_list, &task->conn->tx_clist);
-	task->conn->tp->ep_event_modify(task->conn->fd, EPOLLIN | EPOLLOUT);
+	task->conn->tp->ep_event_modify(task->conn, EPOLLIN | EPOLLOUT);
 	return 0;
 }
 
@@ -1259,8 +1260,7 @@ static int iscsi_task_execute(struct iscsi_task *task)
 	case ISCSI_OP_NOOP_OUT:
 	case ISCSI_OP_LOGOUT:
 		list_add_tail(&task->c_list, &task->conn->tx_clist);
-		task->conn->tp->ep_event_modify(task->conn->fd,
-						EPOLLIN | EPOLLOUT);
+		task->conn->tp->ep_event_modify(task->conn, EPOLLIN | EPOLLOUT);
 		break;
 	case ISCSI_OP_SCSI_CMD:
 		/* convenient directionality for our internal use */
@@ -1280,7 +1280,7 @@ static int iscsi_task_execute(struct iscsi_task *task)
 		err = iscsi_tm_execute(task);
 		if (err) {
 			list_add_tail(&task->c_list, &task->conn->tx_clist);
-			task->conn->tp->ep_event_modify(task->conn->fd,
+			task->conn->tp->ep_event_modify(task->conn,
 							EPOLLIN | EPOLLOUT);
 		}
 		break;
@@ -1736,15 +1736,15 @@ static int iscsi_task_tx_start(struct iscsi_connection *conn)
 
 nodata:
 	dprintf("no more data\n");
-	conn->tp->ep_event_modify(conn->fd, EPOLLIN);
+	conn->tp->ep_event_modify(conn, EPOLLIN);
 	return -EAGAIN;
 }
 
-static int do_recv(int fd, struct iscsi_connection *conn, int next_state)
+static int do_recv(struct iscsi_connection *conn, int next_state)
 {
 	int ret;
 
-	ret = conn->tp->ep_read(fd, conn->rx_buffer, conn->rx_size);
+	ret = conn->tp->ep_read(conn, conn->rx_buffer, conn->rx_size);
 	if (!ret) {
 		conn->state = STATE_CLOSE;
 		return 0;
@@ -1763,7 +1763,7 @@ static int do_recv(int fd, struct iscsi_connection *conn, int next_state)
 	return ret;
 }
 
-void iscsi_rx_handler(int fd, struct iscsi_connection *conn)
+void iscsi_rx_handler(struct iscsi_connection *conn)
 {
 	int ret = 0, hdigest, ddigest;
 	uint32_t crc;
@@ -1777,7 +1777,7 @@ void iscsi_rx_handler(int fd, struct iscsi_connection *conn)
 again:
 	switch (conn->rx_iostate) {
 	case IOSTATE_RX_BHS:
-		ret = do_recv(fd, conn, IOSTATE_RX_INIT_AHS);
+		ret = do_recv(conn, IOSTATE_RX_INIT_AHS);
 		if (ret <= 0 || conn->rx_iostate != IOSTATE_RX_INIT_AHS)
 			break;
 	case IOSTATE_RX_INIT_AHS:
@@ -1814,7 +1814,7 @@ again:
 		else if (conn->rx_iostate != IOSTATE_RX_AHS)
 			break;
 	case IOSTATE_RX_AHS:
-		ret = do_recv(fd, conn, hdigest ?
+		ret = do_recv(conn, hdigest ?
 			      IOSTATE_RX_INIT_HDIGEST : IOSTATE_RX_INIT_DATA);
 		if (ret <= 0)
 			break;
@@ -1827,7 +1827,7 @@ again:
 		conn->rx_size = sizeof(conn->rx_digest);
 		conn->rx_iostate = IOSTATE_RX_HDIGEST;
 	case IOSTATE_RX_HDIGEST:
-		ret = do_recv(fd, conn, IOSTATE_RX_CHECK_HDIGEST);
+		ret = do_recv(conn, IOSTATE_RX_CHECK_HDIGEST);
 		if (ret <= 0 || conn->rx_iostate != IOSTATE_RX_CHECK_HDIGEST)
 			break;
 	case IOSTATE_RX_CHECK_HDIGEST:
@@ -1853,7 +1853,7 @@ again:
 			break;
 		}
 	case IOSTATE_RX_DATA:
-		ret = do_recv(fd, conn, ddigest ?
+		ret = do_recv(conn, ddigest ?
 			      IOSTATE_RX_INIT_DDIGEST : IOSTATE_RX_END);
 		if (ret <= 0 || conn->rx_iostate != IOSTATE_RX_INIT_DDIGEST)
 			break;
@@ -1862,7 +1862,7 @@ again:
 		conn->rx_size = sizeof(conn->rx_digest);
 		conn->rx_iostate = IOSTATE_RX_DDIGEST;
 	case IOSTATE_RX_DDIGEST:
-		ret = do_recv(fd, conn, IOSTATE_RX_CHECK_DDIGEST);
+		ret = do_recv(conn, IOSTATE_RX_CHECK_DDIGEST);
 		if (ret <= 0 || conn->rx_iostate != IOSTATE_RX_CHECK_DDIGEST)
 			break;
 	case IOSTATE_RX_CHECK_DDIGEST:
@@ -1900,18 +1900,18 @@ again:
 			conn_read_pdu(conn);
 	} else {
 		conn_write_pdu(conn);
-		conn->tp->ep_event_modify(fd, EPOLLOUT);
+		conn->tp->ep_event_modify(conn, EPOLLOUT);
 		ret = cmnd_execute(conn);
 		if (ret)
 			conn->state = STATE_CLOSE;
 	}
 }
 
-static int do_send(int fd, struct iscsi_connection *conn, int next_state)
+static int do_send(struct iscsi_connection *conn, int next_state)
 {
 	int ret;
 again:
-	ret = conn->tp->ep_write_begin(fd, conn->tx_buffer, conn->tx_size);
+	ret = conn->tp->ep_write_begin(conn, conn->tx_buffer, conn->tx_size);
 	if (ret < 0) {
 		if (errno != EINTR && errno != EAGAIN)
 			conn->state = STATE_CLOSE;
@@ -1930,7 +1930,7 @@ again:
 	return 0;
 }
 
-void iscsi_tx_handler(int fd, struct iscsi_connection *conn)
+void iscsi_tx_handler(struct iscsi_connection *conn)
 {
 	int ret = 0, hdigest, ddigest;
 	uint32_t crc;
@@ -1950,7 +1950,7 @@ void iscsi_tx_handler(int fd, struct iscsi_connection *conn)
 
 	switch (conn->tx_iostate) {
 	case IOSTATE_TX_BHS:
-		ret = do_send(fd, conn, IOSTATE_TX_INIT_AHS);
+		ret = do_send(conn, IOSTATE_TX_INIT_AHS);
 		if (ret < 0)
 			break;
 	case IOSTATE_TX_INIT_AHS:
@@ -1979,7 +1979,7 @@ void iscsi_tx_handler(int fd, struct iscsi_connection *conn)
 		conn->tx_buffer = conn->tx_digest;
 		conn->tx_size = sizeof(conn->tx_digest);
 	case IOSTATE_TX_HDIGEST:
-		ret = do_send(fd, conn, IOSTATE_TX_INIT_DATA);
+		ret = do_send(conn, IOSTATE_TX_INIT_DATA);
 		if (ret < 0)
 			break;
 	case IOSTATE_TX_INIT_DATA:
@@ -2000,7 +2000,7 @@ void iscsi_tx_handler(int fd, struct iscsi_connection *conn)
 		if (conn->tx_iostate != IOSTATE_TX_DATA)
 			break;
 	case IOSTATE_TX_DATA:
-		ret = do_send(fd, conn, ddigest ?
+		ret = do_send(conn, ddigest ?
 			      IOSTATE_TX_INIT_DDIGEST : IOSTATE_TX_END);
 		if (ret < 0)
 			return;
@@ -2015,7 +2015,7 @@ void iscsi_tx_handler(int fd, struct iscsi_connection *conn)
 		conn->tx_buffer = conn->tx_digest;
 		conn->tx_size = sizeof(conn->tx_digest);
 	case IOSTATE_TX_DDIGEST:
-		ret = do_send(fd, conn, IOSTATE_TX_END);
+		ret = do_send(conn, IOSTATE_TX_END);
 		break;
 	default:
 		eprintf("error %d %d\n", conn->state, conn->tx_iostate);
@@ -2033,18 +2033,18 @@ void iscsi_tx_handler(int fd, struct iscsi_connection *conn)
 		exit(1);
 	}
 
-	conn->tp->ep_write_end(fd);
+	conn->tp->ep_write_end(conn);
 	cmnd_finish(conn);
 
 	switch (conn->state) {
 	case STATE_KERNEL:
-		ret = conn_take_fd(conn, fd);
+		ret = conn_take_fd(conn);
 		if (ret)
 			conn->state = STATE_CLOSE;
 		else {
 			conn->state = STATE_SCSI;
 			conn_read_pdu(conn);
-			conn->tp->ep_event_modify(fd, EPOLLIN);
+			conn->tp->ep_event_modify(conn, EPOLLIN);
 		}
 		break;
 	case STATE_EXIT:
@@ -2055,7 +2055,7 @@ void iscsi_tx_handler(int fd, struct iscsi_connection *conn)
 		break;
 	default:
 		conn_read_pdu(conn);
-		conn->tp->ep_event_modify(fd, EPOLLIN);
+		conn->tp->ep_event_modify(conn, EPOLLIN);
 		break;
 	}
 }

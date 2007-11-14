@@ -115,7 +115,7 @@ static int address_match(struct sockaddr *sa1, struct sockaddr *sa2)
 	return 0;
 }
 
-static int ip_match(int fd, char *address)
+static int ip_match(struct iscsi_connection *conn, char *address)
 {
 	struct sockaddr_storage from;
 	struct addrinfo hints, *res;
@@ -124,7 +124,7 @@ static int ip_match(int fd, char *address)
 	int err;
 
 	len = sizeof(from);
-	err = getpeername(fd, (struct sockaddr *) &from, &len);
+	err = conn->tp->ep_getpeername(conn, (struct sockaddr *) &from, &len);
 	if (err < 0)
 		return -EPERM;
 
@@ -173,7 +173,7 @@ out:
 	return err;
 }
 
-int ip_acl(int tid, int fd)
+int ip_acl(int tid, struct iscsi_connection *conn)
 {
 	int idx, err;
 	char *addr;
@@ -183,7 +183,7 @@ int ip_acl(int tid, int fd)
 		if (!addr)
 			break;
 
-		err = ip_match(fd, addr);
+		err = ip_match(conn, addr);
 		if (!err)
 			return 0;
 	}
@@ -198,7 +198,7 @@ void target_list_build(struct iscsi_connection *conn, char *addr, char *name)
 		if (name && strcmp(tgt_targetname(target->tid), name))
 			continue;
 
-		if (ip_acl(target->tid, conn->fd))
+		if (ip_acl(target->tid, conn))
 			continue;
 
 		if (isns_scn_access(target->tid, conn->initiator))

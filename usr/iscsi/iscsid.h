@@ -129,7 +129,6 @@ struct iscsi_connection {
 	int state;
 	int rx_iostate;
 	int tx_iostate;
-	int fd;
 	int refcount;
 
 	struct list_head clist;
@@ -180,6 +179,7 @@ struct iscsi_connection {
 	} auth;
 
 	struct iscsi_transport *tp;
+	void *trans_data;   /* transport specific data */
 };
 
 #define STATE_FREE		0
@@ -245,20 +245,20 @@ extern struct list_head iscsi_targets_list;
 extern int cmnd_exec_auth_chap(struct iscsi_connection *conn);
 
 /* conn.c */
-extern struct iscsi_connection *conn_alloc(void);
-extern void conn_close(struct iscsi_connection *conn, int fd);
+extern struct iscsi_connection *conn_alloc(unsigned int trans_len);
+extern void conn_close(struct iscsi_connection *conn);
 extern void conn_put(struct iscsi_connection *conn);
 extern int conn_get(struct iscsi_connection *conn);
 extern struct iscsi_connection * conn_find(struct iscsi_session *session, uint32_t cid);
-extern int conn_take_fd(struct iscsi_connection *conn, int fd);
+extern int conn_take_fd(struct iscsi_connection *conn);
 extern void conn_add_to_session(struct iscsi_connection *conn, struct iscsi_session *session);
 
 /* iscsid.c */
 extern char *text_key_find(struct iscsi_connection *conn, char *searchKey);
 extern void text_key_add(struct iscsi_connection *conn, char *key, char *value);
 extern void conn_read_pdu(struct iscsi_connection *conn);
-extern void iscsi_tx_handler(int fd, struct iscsi_connection *conn);
-extern void iscsi_rx_handler(int fd, struct iscsi_connection *conn);
+extern void iscsi_tx_handler(struct iscsi_connection *conn);
+extern void iscsi_rx_handler(struct iscsi_connection *conn);
 extern int iscsi_scsi_cmd_execute(struct iscsi_task *task);
 
 /* iscsid.c iscsi_task */
@@ -274,7 +274,7 @@ extern void session_put(struct iscsi_session *session);
 struct iscsi_target * target_find_by_name(const char *name);
 struct iscsi_target * target_find_by_id(int tid);
 extern void target_list_build(struct iscsi_connection *, char *, char *);
-extern int ip_acl(int tid, int fd);
+extern int ip_acl(int tid, struct iscsi_connection *conn);
 extern int iscsi_target_create(struct target *);
 extern void iscsi_target_destroy(int);
 extern int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid,
