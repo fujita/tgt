@@ -42,9 +42,16 @@
 
 static void iscsi_tcp_event_handler(int fd, int events, void *data);
 
-struct tcp_conn_info {
+struct iscsi_tcp_connection {
 	int fd;
+
+	struct iscsi_connection iscsi_conn;
 };
+
+static inline struct iscsi_tcp_connection *TCP_CONN(struct iscsi_connection *conn)
+{
+	return container_of(conn, struct iscsi_tcp_connection, iscsi_conn);
+}
 
 static int set_keepalive(int fd)
 {
@@ -78,7 +85,7 @@ static void accept_connection(int afd, int events, void *data)
 	struct sockaddr_storage from;
 	socklen_t namesize;
 	struct iscsi_connection *conn;
-	struct tcp_conn_info *tci;
+	struct iscsi_tcp_connection *tcp_conn;
 	int fd, err;
 
 	dprintf("%d\n", afd);
@@ -94,24 +101,32 @@ static void accept_connection(int afd, int events, void *data)
 	if (err)
 		goto out;
 
-	conn = conn_alloc(sizeof(*tci));
-	if (!conn)
+	tcp_conn = zalloc(sizeof(*tcp_conn));
+	if (!tcp_conn)
 		goto out;
 
-	tci = conn->trans_data;
-	tci->fd = fd;
+	conn = &tcp_conn->iscsi_conn;
+
+	err = conn_init(conn);
+	if (err) {
+		free(tcp_conn);
+		goto out;
+	}
+
+	tcp_conn->fd = fd;
 	conn->tp = &iscsi_tcp;
 
 	conn_read_pdu(conn);
 	set_non_blocking(fd);
 
 	err = tgt_event_add(fd, EPOLLIN, iscsi_tcp_event_handler, conn);
-	if (err)
-		goto free_conn;
+	if (err) {
+		conn_exit(conn);
+		free(tcp_conn);
+		goto out;
+	}
 
 	return;
-free_conn:
-	free(conn);
 out:
 	close(fd);
 	return;
@@ -213,46 +228,54 @@ static int iscsi_tcp_init(void)
 static size_t iscsi_tcp_read(struct iscsi_connection *conn, void *buf,
 			     size_t nbytes)
 {
-	struct tcp_conn_info *tci = conn->trans_data;
-	return read(tci->fd, buf, nbytes);
+	struct iscsi_tcp_connection *tcp_conn = TCP_CONN(conn);
+	return read(tcp_conn->fd, buf, nbytes);
 }
 
 static size_t iscsi_tcp_write_begin(struct iscsi_connection *conn, void *buf,
 				    size_t nbytes)
 {
-	struct tcp_conn_info *tci = conn->trans_data;
+	struct iscsi_tcp_connection *tcp_conn = TCP_CONN(conn);
 	int opt = 1;
 
-	setsockopt(tci->fd, SOL_TCP, TCP_CORK, &opt, sizeof(opt));
-	return write(tci->fd, buf, nbytes);
+	setsockopt(tcp_conn->fd, SOL_TCP, TCP_CORK, &opt, sizeof(opt));
+	return write(tcp_conn->fd, buf, nbytes);
 }
 
 static void iscsi_tcp_write_end(struct iscsi_connection *conn)
 {
-	struct tcp_conn_info *tci = conn->trans_data;
+	struct iscsi_tcp_connection *tcp_conn = TCP_CONN(conn);
 	int opt = 0;
 
-	setsockopt(tci->fd, SOL_TCP, TCP_CORK, &opt, sizeof(opt));
+	setsockopt(tcp_conn->fd, SOL_TCP, TCP_CORK, &opt, sizeof(opt));
 }
 
 static size_t iscsi_tcp_close(struct iscsi_connection *conn)
 {
-	struct tcp_conn_info *tci = conn->trans_data;
+	struct iscsi_tcp_connection *tcp_conn = TCP_CONN(conn);
 
-	tgt_event_del(tci->fd);
-	return close(tci->fd);
+	tgt_event_del(tcp_conn->fd);
+	return close(tcp_conn->fd);
+}
+
+static void iscsi_tcp_release(struct iscsi_connection *conn)
+{
+	struct iscsi_tcp_connection *tcp_conn = TCP_CONN(conn);
+
+	conn_exit(conn);
+	free(tcp_conn);
 }
 
 static int iscsi_tcp_show(struct iscsi_connection *conn, char *buf, int rest)
 {
-	struct tcp_conn_info *tci = conn->trans_data;
+	struct iscsi_tcp_connection *tcp_conn = TCP_CONN(conn);
 	int err, total = 0;
 	socklen_t slen;
 	char dst[INET6_ADDRSTRLEN];
 	struct sockaddr_storage from;
 
 	slen = sizeof(from);
-	err = getpeername(tci->fd, (struct sockaddr *) &from, &slen);
+	err = getpeername(tcp_conn->fd, (struct sockaddr *) &from, &slen);
 	if (err < 0) {
 		eprintf("%m\n");
 		return 0;
@@ -272,10 +295,10 @@ static int iscsi_tcp_show(struct iscsi_connection *conn, char *buf, int rest)
 
 void iscsi_event_modify(struct iscsi_connection *conn, int events)
 {
+	struct iscsi_tcp_connection *tcp_conn = TCP_CONN(conn);
 	int ret;
-	struct tcp_conn_info *tci = conn->trans_data;
 
-	ret = tgt_event_modify(tci->fd, events);
+	ret = tgt_event_modify(tcp_conn->fd, events);
 	if (ret)
 		eprintf("tgt_event_modify failed\n");
 }
@@ -294,17 +317,17 @@ void iscsi_tcp_free_data_buf(struct iscsi_connection *conn, void *buf)
 int iscsi_tcp_getsockname(struct iscsi_connection *conn, struct sockaddr *sa,
 			  socklen_t *len)
 {
-	struct tcp_conn_info *tci = conn->trans_data;
+	struct iscsi_tcp_connection *tcp_conn = TCP_CONN(conn);
 
-	return getsockname(tci->fd, sa, len);
+	return getsockname(tcp_conn->fd, sa, len);
 }
 
 int iscsi_tcp_getpeername(struct iscsi_connection *conn, struct sockaddr *sa,
 			  socklen_t *len)
 {
-	struct tcp_conn_info *tci = conn->trans_data;
+	struct iscsi_tcp_connection *tcp_conn = TCP_CONN(conn);
 
-	return getpeername(tci->fd, sa, len);
+	return getpeername(tcp_conn->fd, sa, len);
 }
 
 struct iscsi_transport iscsi_tcp = {
@@ -315,6 +338,7 @@ struct iscsi_transport iscsi_tcp = {
 	.ep_write_begin		= iscsi_tcp_write_begin,
 	.ep_write_end		= iscsi_tcp_write_end,
 	.ep_close		= iscsi_tcp_close,
+	.ep_release		= iscsi_tcp_release,
 	.ep_show		= iscsi_tcp_show,
 	.ep_event_modify	= iscsi_event_modify,
 	.alloc_data_buf		= iscsi_tcp_alloc_data_buf,

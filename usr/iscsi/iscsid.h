@@ -179,7 +179,6 @@ struct iscsi_connection {
 	} auth;
 
 	struct iscsi_transport *tp;
-	void *trans_data;   /* transport specific data */
 };
 
 #define STATE_FREE		0
@@ -245,7 +244,8 @@ extern struct list_head iscsi_targets_list;
 extern int cmnd_exec_auth_chap(struct iscsi_connection *conn);
 
 /* conn.c */
-extern struct iscsi_connection *conn_alloc(unsigned int trans_len);
+extern int conn_init(struct iscsi_connection *conn);
+extern void conn_exit(struct iscsi_connection *conn);
 extern void conn_close(struct iscsi_connection *conn);
 extern void conn_put(struct iscsi_connection *conn);
 extern int conn_get(struct iscsi_connection *conn);

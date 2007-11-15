@@ -42,24 +42,16 @@ void conn_add_to_session(struct iscsi_connection *conn, struct iscsi_session *se
 	list_add(&conn->clist, &session->conn_list);
 }
 
-struct iscsi_connection *conn_alloc(unsigned int trans_len)
+int conn_init(struct iscsi_connection *conn)
 {
-	struct iscsi_connection *conn;
-
-	conn = zalloc(sizeof(*conn) + trans_len);
-	if (!conn)
-		return NULL;
-
 	conn->req_buffer = malloc(INCOMING_BUFSIZE);
-	if (!conn->req_buffer) {
-		free(conn);
-		return NULL;
-	}
+	if (!conn->req_buffer)
+		return -ENOMEM;
+
 	conn->rsp_buffer = malloc(INCOMING_BUFSIZE);
 	if (!conn->rsp_buffer) {
 		free(conn->req_buffer);
-		free(conn);
-		return NULL;
+		return -ENOMEM;
 	}
 
 	conn->refcount = 1;
@@ -69,22 +61,17 @@ struct iscsi_connection *conn_alloc(unsigned int trans_len)
 	INIT_LIST_HEAD(&conn->clist);
 	INIT_LIST_HEAD(&conn->tx_clist);
 
-	if (trans_len)
-		conn->trans_data = &conn[1];
-
-	return conn;
+	return 0;
 }
 
-static void conn_free(struct iscsi_connection *conn)
+void conn_exit(struct iscsi_connection *conn)
 {
 	struct iscsi_session *session = conn->session;
 
-	dprintf("freeing connection\n");
 	list_del(&conn->clist);
 	free(conn->req_buffer);
 	free(conn->rsp_buffer);
 	free(conn->initiator);
-	free(conn);
 
 	if (session)
 		session_put(session);
@@ -145,8 +132,8 @@ done:
 void conn_put(struct iscsi_connection *conn)
 {
 	conn->refcount--;
-	if (conn->refcount == 0)
-		conn_free(conn);
+	if (!conn->refcount)
+		conn->tp->ep_release(conn);
 }
 
 int conn_get(struct iscsi_connection *conn)
