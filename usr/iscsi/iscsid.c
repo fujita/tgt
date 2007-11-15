@@ -469,8 +469,22 @@ static void login_start(struct iscsi_connection *conn)
 
 static void login_finish(struct iscsi_connection *conn)
 {
+	struct iscsi_login_rsp *rsp = (struct iscsi_login_rsp *) &conn->rsp.bhs;
+	int ret;
+
 	switch (conn->session_type) {
 	case SESSION_NORMAL:
+		/*
+		 * Allocate transport resources for this connection.
+		 */
+		ret = conn->tp->ep_login_complete(conn);
+		if (ret) {
+			rsp->flags = 0;
+			rsp->status_class = ISCSI_STATUS_CLS_TARGET_ERR;
+			rsp->status_detail = ISCSI_LOGIN_STATUS_NO_RESOURCES;
+			conn->state = STATE_EXIT;
+			break;
+		}
 		if (!conn->session)
 			session_create(conn);
 		memcpy(conn->isid, conn->session->isid, sizeof(conn->isid));
@@ -637,8 +651,11 @@ static void cmnd_exec_login(struct iscsi_connection *conn)
 			default:
 				goto init_err;
 			}
-			if (!stay && !nsg_disagree)
+			if (!stay && !nsg_disagree) {
 				login_finish(conn);
+				if (rsp->status_class)
+					return;
+			}
 			break;
 		default:
 			goto init_err;

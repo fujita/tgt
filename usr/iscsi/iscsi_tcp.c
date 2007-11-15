@@ -225,6 +225,11 @@ static int iscsi_tcp_init(void)
 	return !nr_sock;
 }
 
+static int iscsi_tcp_conn_login_complete(struct iscsi_connection *conn)
+{
+	return 0;
+}
+
 static size_t iscsi_tcp_read(struct iscsi_connection *conn, void *buf,
 			     size_t nbytes)
 {
@@ -334,6 +339,7 @@ struct iscsi_transport iscsi_tcp = {
 	.name			= "iscsi",
 	.rdma			= 0,
 	.ep_init		= iscsi_tcp_init,
+	.ep_login_complete	= iscsi_tcp_conn_login_complete,
 	.ep_read		= iscsi_tcp_read,
 	.ep_write_begin		= iscsi_tcp_write_begin,
 	.ep_write_end		= iscsi_tcp_write_end,

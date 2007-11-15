@@ -10,6 +10,7 @@ struct iscsi_transport {
 	int rdma;
 
 	int (*ep_init) (void);
+	int (*ep_login_complete)(struct iscsi_connection *conn);
 	size_t (*ep_read)(struct iscsi_connection *conn, void *buf,
 			  size_t nbytes);
 	size_t (*ep_write_begin)(struct iscsi_connection *conn, void *buf,
