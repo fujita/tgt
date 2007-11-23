@@ -85,7 +85,7 @@ static void accept_connection(int afd, int events, void *data)
 	socklen_t namesize;
 	struct iscsi_connection *conn;
 	struct iscsi_tcp_connection *tcp_conn;
-	int fd, err;
+	int fd, ret;
 
 	dprintf("%d\n", afd);
 
@@ -96,8 +96,8 @@ static void accept_connection(int afd, int events, void *data)
 		return;
 	}
 
-	err = set_keepalive(fd);
-	if (err)
+	ret = set_keepalive(fd);
+	if (ret)
 		goto out;
 
 	tcp_conn = zalloc(sizeof(*tcp_conn));
@@ -106,8 +106,8 @@ static void accept_connection(int afd, int events, void *data)
 
 	conn = &tcp_conn->iscsi_conn;
 
-	err = conn_init(conn);
-	if (err) {
+	ret = conn_init(conn);
+	if (ret) {
 		free(tcp_conn);
 		goto out;
 	}
@@ -118,8 +118,8 @@ static void accept_connection(int afd, int events, void *data)
 	conn_read_pdu(conn);
 	set_non_blocking(fd);
 
-	err = tgt_event_add(fd, EPOLLIN, iscsi_tcp_event_handler, conn);
-	if (err) {
+	ret = tgt_event_add(fd, EPOLLIN, iscsi_tcp_event_handler, conn);
+	if (ret) {
 		conn_exit(conn);
 		free(tcp_conn);
 		goto out;
