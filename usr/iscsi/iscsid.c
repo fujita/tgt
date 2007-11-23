@@ -2083,7 +2083,7 @@ void iscsi_tx_handler(struct iscsi_connection *conn)
 	}
 }
 
-struct tgt_driver iscsi = {
+static struct tgt_driver iscsi = {
 	.name			= "iscsi",
 	.use_kernel		= 0,
 	.init			= iscsi_init,
@@ -2096,3 +2096,8 @@ struct tgt_driver iscsi = {
 	.mgmt_end_notify	= iscsi_tm_done,
 	.default_bst		= &sync_bst,
 };
+
+__attribute__((constructor)) static void iscsi_driver_constructor(void)
+{
+	register_driver(&iscsi);
+}

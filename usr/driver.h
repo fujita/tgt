@@ -24,4 +24,5 @@ struct tgt_driver {
 
 extern struct tgt_driver *tgt_drivers[];
 extern int get_driver_index(char *name);
+extern int register_driver(struct tgt_driver *drv);
 

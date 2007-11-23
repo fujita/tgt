@@ -26,20 +26,11 @@
 #include "list.h"
 #include "tgtd.h"
 #include "driver.h"
+#include "util.h"
 
-extern struct tgt_driver ibmvio, iscsi, fc;
+#define MAX_NR_DRIVERS	32
 
-struct tgt_driver *tgt_drivers[] = {
-#ifdef IBMVIO
-	&ibmvio,
-#endif
-#ifdef ISCSI
-	&iscsi,
-#endif
-#ifdef FCP
-	&fc,
-#endif
-	NULL,
+struct tgt_driver *tgt_drivers[MAX_NR_DRIVERS] = {
 };
 
 int get_driver_index(char *name)
@@ -52,4 +43,18 @@ int get_driver_index(char *name)
 	}
 
 	return -ENOENT;
+}
+
+int register_driver(struct tgt_driver *drv)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(tgt_drivers) && tgt_drivers[i]; i++)
+		;
+
+	if (tgt_drivers[i])
+		return -1;
+
+	tgt_drivers[i] = drv;
+	return 0;
 }

@@ -40,10 +40,15 @@
 #include "spc.h"
 #include "scsi.h"
 
-struct tgt_driver fc = {
+static struct tgt_driver fc = {
 	.name			= "fc",
 	.use_kernel		= 1,
 	.cmd_end_notify		= kspace_send_cmd_res,
 	.mgmt_end_notify	= kspace_send_tsk_mgmt_res,
 	.default_bst		= &mmap_bst,
 };
+
+__attribute__((constructor)) static void fc_driver_constructor(void)
+{
+	register_driver(&fc);
+}

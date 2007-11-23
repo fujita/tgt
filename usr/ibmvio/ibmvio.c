@@ -255,7 +255,7 @@ static int ibmvio_lu_create(struct scsi_lu *lu)
 	return 0;
 }
 
-struct tgt_driver ibmvio = {
+static struct tgt_driver ibmvio = {
 	.name			= "ibmvio",
 	.use_kernel		= 1,
 	.scsi_get_lun		= scsi_lun_to_int,
@@ -264,3 +264,8 @@ struct tgt_driver ibmvio = {
 	.mgmt_end_notify	= kspace_send_tsk_mgmt_res,
 	.default_bst		= &mmap_bst,
 };
+
+__attribute__((constructor)) static void ibmvio_driver_constructor(void)
+{
+	register_driver(&ibmvio);
+}
