@@ -36,7 +36,6 @@
 #include "tgtd.h"
 #include "util.h"
 
-#define ISCSI_LISTEN_PORT	3260
 #define LISTEN_MAX		4
 #define INCOMING_MAX		32
 
