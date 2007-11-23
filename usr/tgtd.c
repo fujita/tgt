@@ -38,8 +38,6 @@
 #include "work.h"
 #include "util.h"
 
-#define MAX_FDS	4096
-
 struct tgt_event {
 	union {
 		event_handler_t *handler;
@@ -281,7 +279,7 @@ int main(int argc, char **argv)
 {
 	struct sigaction sa_old;
 	struct sigaction sa_new;
-	int err, ch, longindex, nr_lld = 0, maxfds = MAX_FDS;
+	int err, ch, longindex, nr_lld = 0;
 	int is_daemon = 1, is_debug = 0;
 	int use_kernel = 0;
 
@@ -289,9 +287,9 @@ int main(int argc, char **argv)
 	sa_new.sa_handler = signal_catch;
 	sigemptyset(&sa_new.sa_mask);
 	sa_new.sa_flags = 0;
-	sigaction(SIGINT, &sa_new, &sa_old );
-	sigaction(SIGPIPE, &sa_new, &sa_old );
-	sigaction(SIGTERM, &sa_new, &sa_old );
+	sigaction(SIGINT, &sa_new, &sa_old);
+	sigaction(SIGPIPE, &sa_new, &sa_old);
+	sigaction(SIGTERM, &sa_new, &sa_old);
 
 	pagesize = sysconf(_SC_PAGESIZE);
 	for (pageshift = 0;; pageshift++)
@@ -319,7 +317,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	ep_fd = epoll_create(maxfds);
+	ep_fd = epoll_create(4096);
 	if (ep_fd < 0) {
 		fprintf(stderr, "can't create epoll fd, %m\n");
 		exit(1);
