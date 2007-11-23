@@ -36,9 +36,6 @@
 #include "tgtd.h"
 #include "util.h"
 
-#define LISTEN_MAX		4
-#define INCOMING_MAX		32
-
 static void iscsi_tcp_event_handler(int fd, int events, void *data);
 
 struct iscsi_tcp_connection {
@@ -154,7 +151,7 @@ static int iscsi_tcp_init(void)
 {
 	struct addrinfo hints, *res, *res0;
 	char servname[64];
-	int err, i, fd, opt, nr_sock = 0;
+	int ret, fd, opt, nr_sock = 0;
 
 	memset(servname, 0, sizeof(servname));
 	snprintf(servname, sizeof(servname), "%d", ISCSI_LISTEN_PORT);
@@ -163,13 +160,13 @@ static int iscsi_tcp_init(void)
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
 
-	err = getaddrinfo(NULL, servname, &hints, &res0);
-	if (err) {
+	ret = getaddrinfo(NULL, servname, &hints, &res0);
+	if (ret) {
 		eprintf("unable to get address info, %m\n");
 		return -errno;
 	}
 
-	for (i = 0, res = res0; res && i < LISTEN_MAX; i++, res = res->ai_next) {
+	for (res = res0; res; res = res->ai_next) {
 		fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
 		if (fd < 0) {
 			if (res->ai_family == AF_INET6)
@@ -182,38 +179,38 @@ static int iscsi_tcp_init(void)
 		}
 
 		opt = 1;
-		err = setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt,
+		ret = setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt,
 				 sizeof(opt));
-		if (err)
+		if (ret)
 			dprintf("unable to set SO_REUSEADDR, %m\n");
 
 		opt = 1;
 		if (res->ai_family == AF_INET6) {
-			err = setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &opt,
+			ret = setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &opt,
 					 sizeof(opt));
-			if (err) {
+			if (ret) {
 				close(fd);
 				continue;
 			}
 		}
 
-		err = bind(fd, res->ai_addr, res->ai_addrlen);
-		if (err) {
+		ret = bind(fd, res->ai_addr, res->ai_addrlen);
+		if (ret) {
 			close(fd);
 			eprintf("unable to bind server socket, %m\n");
 			continue;
 		}
 
-		err = listen(fd, INCOMING_MAX);
-		if (err) {
+		ret = listen(fd, SOMAXCONN);
+		if (ret) {
 			eprintf("unable to listen to server socket, %m\n");
 			close(fd);
 			continue;
 		}
 
 		set_non_blocking(fd);
-		err = tgt_event_add(fd, EPOLLIN, accept_connection, NULL);
-		if (err)
+		ret = tgt_event_add(fd, EPOLLIN, accept_connection, NULL);
+		if (ret)
 			close(fd);
 		else
 			nr_sock++;
