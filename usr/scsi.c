@@ -100,12 +100,19 @@ uint64_t scsi_rw_offset(uint8_t *scb)
 		break;
 	case READ_10:
 	case WRITE_10:
+	case VERIFY:
 	case WRITE_VERIFY:
+	case READ_12:
+	case WRITE_12:
+	case VERIFY_12:
+	case WRITE_VERIFY_12:
 		off = (uint32_t)scb[2] << 24 | (uint32_t)scb[3] << 16 |
 			(uint32_t)scb[4] << 8 | (uint32_t)scb[5];
 		break;
 	case READ_16:
 	case WRITE_16:
+	case VERIFY_16:
+	case WRITE_VERIFY_16:
 		off = (uint64_t)scb[2] << 56 | (uint64_t)scb[3] << 48 |
 			(uint64_t)scb[4] << 40 | (uint64_t)scb[5] << 32 |
 			(uint64_t)scb[6] << 24 | (uint64_t)scb[7] << 16 |
@@ -135,11 +142,16 @@ int scsi_is_io_opcode(unsigned char op)
 	case WRITE_6:
 	case READ_10:
 	case WRITE_10:
+	case VERIFY:
 	case WRITE_VERIFY:
 	case READ_12:
 	case WRITE_12:
+	case VERIFY_12:
+	case WRITE_VERIFY_12:
 	case READ_16:
 	case WRITE_16:
+	case VERIFY_16:
+	case WRITE_VERIFY_16:
 		ret = 1;
 		break;
 	default:
