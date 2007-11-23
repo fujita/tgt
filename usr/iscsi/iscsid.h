@@ -286,7 +286,7 @@ extern int iscsi_target_update(int, int, char *);
 int param_index_by_name(char *name, struct iscsi_key *keys);
 
 /* transport.c */
-extern int iscsi_init(int);
+extern int iscsi_init(int, char *);
 
 /* isns.c */
 extern int isns_init(void);

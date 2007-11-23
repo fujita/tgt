@@ -258,13 +258,13 @@ retry:
 	goto retry;
 }
 
-static int lld_init(int *use_kernel)
+static int lld_init(int *use_kernel, char *args)
 {
 	int i, err, nr;
 
 	for (i = nr = 0; tgt_drivers[i]; i++) {
 		if (tgt_drivers[i]->init) {
-			err = tgt_drivers[i]->init(i);
+			err = tgt_drivers[i]->init(i, args);
 			if (err)
 				continue;
 		}
@@ -325,7 +325,7 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	nr_lld = lld_init(&use_kernel);
+	nr_lld = lld_init(&use_kernel, argv[optind]);
 	if (!nr_lld) {
 		fprintf(stderr, "No available low level driver!\n");
 		exit(1);

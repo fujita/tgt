@@ -34,7 +34,7 @@ struct iscsi_transport *iscsi_transports[] = {
 
 int lld_index;
 
-int iscsi_init(int index)
+int iscsi_init(int index, char *args)
 {
 	int i, err, nr = 0;
 
