@@ -102,6 +102,7 @@ uint64_t scsi_rw_offset(uint8_t *scb)
 	case WRITE_10:
 	case VERIFY:
 	case WRITE_VERIFY:
+	case SYNCHRONIZE_CACHE:
 	case READ_12:
 	case WRITE_12:
 	case VERIFY_12:
@@ -113,6 +114,7 @@ uint64_t scsi_rw_offset(uint8_t *scb)
 	case WRITE_16:
 	case VERIFY_16:
 	case WRITE_VERIFY_16:
+	case SYNCHRONIZE_CACHE_16:
 		off = (uint64_t)scb[2] << 56 | (uint64_t)scb[3] << 48 |
 			(uint64_t)scb[4] << 40 | (uint64_t)scb[5] << 32 |
 			(uint64_t)scb[6] << 24 | (uint64_t)scb[7] << 16 |

@@ -146,9 +146,16 @@ static void *bs_sync_worker_fn(void *arg)
 		length = 0;
 
 		if (cmd->scb[0] == SYNCHRONIZE_CACHE ||
-		    cmd->scb[0] == SYNCHRONIZE_CACHE_16)
-			ret = fsync(fd);
-		else if (cmd->data_dir == DATA_WRITE) {
+		    cmd->scb[0] == SYNCHRONIZE_CACHE_16) {
+			if (cmd->scb[0] & 0x2) {
+				scsi_set_result(cmd, SAM_STAT_CHECK_CONDITION);
+				sense_data_build(cmd, ILLEGAL_REQUEST,
+						 ASC_INVALID_FIELD_IN_CDB);
+				goto done;
+			} else
+				ret = fsync(fd);
+			/* will use sync_file_range system call */
+		} else if (cmd->data_dir == DATA_WRITE) {
 			length = scsi_get_out_length(cmd);
 			ret = pwrite64(fd, scsi_get_out_buffer(cmd), length,
 				       cmd->offset);
@@ -168,7 +175,7 @@ static void *bs_sync_worker_fn(void *arg)
 			scsi_set_result(cmd, SAM_STAT_CHECK_CONDITION);
 			sense_data_build(cmd, MEDIUM_ERROR, ASC_READ_ERROR);
 		}
-
+	done:
 		pthread_mutex_lock(&info->finished_lock);
 		list_add(&cmd->bs_list, &info->finished_list);
 		pthread_mutex_unlock(&info->finished_lock);
