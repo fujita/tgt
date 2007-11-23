@@ -1,24 +1,3 @@
-ifneq ($(XEN),)
-XEN_ROOT = ../..
-include $(XEN_ROOT)/tools/Rules.mk
-LINUX_ROOT := $(wildcard $(XEN_ROOT)/linux-2.6.*-xen)
-INCLUDES += -I$(XEN_LIBXC) -I$(XEN_XENSTORE) -I$(XEN_ROOT)/xen/include
-INCLUDES += -I$(LINUX_ROOT)/include -I.
-LIBAIO_DIR = ../libaio/src
-AIOLIBS := $(LIBAIO_DIR)/libaio.a
-CFLAGS += -I$(XEN_LIBXC) -I$(LIBAIO_DIR)
-CFLAGS += $(INCLUDES) -I. -I../../xenstore
-CFLAGS += -DXEN -DUSE_KERNEL
-LIBS := -L. -L.. -L../lib
-LIBS += -L$(XEN_LIBXC)
-LIBS += -lxenctrl
-LIBS += -L$(XEN_XENSTORE) -lxenstore $(AIOLIBS)
-TGTD_OBJS += $(addprefix xen/, xen.o xs_api.o xenbus.o)
-TGTD_OBJS += tgtif.o bs_xen.o
-else
-INCLUDES += -I../include -I$(KERNELSRC)/include
-endif
-
 ifneq ($(SGV4),)
 TGTD_OBJS += spt_sgv4.o
 else
@@ -46,7 +25,7 @@ TGTD_OBJS += $(addprefix fc/, fc.o)
 TGTD_OBJS += bs_mmap.o tgtif.o
 endif
 
-INCLUDES += -I.
+INCLUDES += -I. -I../include -I$(KERNELSRC)/include
 
 CFLAGS += -D_LARGEFILE64_SOURCE
 CFLAGS += $(INCLUDES)
@@ -81,5 +60,4 @@ install: $(PROGRAMS)
 
 .PHONY: clean
 clean:
-	rm -f *.[od] $(PROGRAMS) iscsi/*.[od] ibmvio/*.[od] fc/*.[od] \
-		xen/*.[od]
+	rm -f *.[od] $(PROGRAMS) iscsi/*.[od] ibmvio/*.[od] fc/*.[od]
