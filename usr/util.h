@@ -2,6 +2,8 @@
 #define __UTIL_H__
 
 #include <byteswap.h>
+#include <syscall.h>
+#include <unistd.h>
 
 #define roundup(x, y) ((((x) + ((y) - 1)) / (y)) * (y))
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
@@ -87,5 +89,35 @@ do {									\
 } while (0)
 
 extern unsigned long pagesize, pageshift;
+
+
+/*
+ * the latest glibc have a proper sync_file_range definition but
+ * most of the distributions aren't shipped with it yet.
+*/
+
+#ifndef __NR_sync_file_range
+#if defined(__i386)
+#define __NR_sync_file_range	314
+#elif defined(__x86_64__)
+#define __NR_sync_file_range	277
+#elif defined(__ia64__)
+#define __NR_sync_file_range	1300
+#endif
+#endif
+
+#ifndef SYNC_FILE_RANGE_WAIT_BEFORE
+#define SYNC_FILE_RANGE_WAIT_BEFORE	1
+#define SYNC_FILE_RANGE_WRITE		2
+#define SYNC_FILE_RANGE_WAIT_AFTER	4
+#endif
+
+extern long int syscall(long int sysno, ...);
+
+static inline int __sync_file_range(int fd, __off64_t offset, __off64_t bytes,
+				    unsigned int flags)
+{
+	return syscall(__NR_sync_file_range, fd, offset, bytes, flags);
+}
 
 #endif
