@@ -130,12 +130,22 @@ static void __bs_sync_worker_fn(struct scsi_cmd *cmd)
 	{
 	case SYNCHRONIZE_CACHE:
 	case SYNCHRONIZE_CACHE_16:
+
+		/* TODO */
+		length = (cmd->scb[0] == SYNCHRONIZE_CACHE) ? 0 : 0;
+
 		if (cmd->scb[0] & 0x2) {
 			result = SAM_STAT_CHECK_CONDITION;
 			key = ILLEGAL_REQUEST;
 			asc = ASC_INVALID_FIELD_IN_CDB;
 		} else {
-			ret = fsync(fd);
+			unsigned int flags = SYNC_FILE_RANGE_WAIT_BEFORE|
+				SYNC_FILE_RANGE_WRITE;
+
+			ret = __sync_file_range(fd, cmd->offset, length, flags);
+			if (ret == -EPERM)
+				ret = fsync(fd);
+
 			if (ret) {
 				result = SAM_STAT_CHECK_CONDITION;
 				key = MEDIUM_ERROR;
