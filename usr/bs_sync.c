@@ -115,12 +115,69 @@ out:
 	return NULL;
 }
 
+static void __bs_sync_worker_fn(struct scsi_cmd *cmd)
+{
+	int ret, fd = cmd->dev->fd;
+	uint32_t length;
+	int result = SAM_STAT_GOOD;
+	uint8_t key;
+	uint16_t asc;
+
+	ret = length = 0;
+	key = asc = 0;
+
+	switch (cmd->scb[0])
+	{
+	case SYNCHRONIZE_CACHE:
+	case SYNCHRONIZE_CACHE_16:
+		if (cmd->scb[0] & 0x2) {
+			result = SAM_STAT_CHECK_CONDITION;
+			key = ILLEGAL_REQUEST;
+			asc = ASC_INVALID_FIELD_IN_CDB;
+		} else {
+			ret = fsync(fd);
+			if (ret) {
+				result = SAM_STAT_CHECK_CONDITION;
+				key = MEDIUM_ERROR;
+				asc = ASC_READ_ERROR;
+			}
+		}
+		break;
+	default:
+		if (cmd->data_dir == DATA_WRITE) {
+			length = scsi_get_out_length(cmd);
+			ret = pwrite64(fd, scsi_get_out_buffer(cmd), length,
+				       cmd->offset);
+		} else if (cmd->data_dir == DATA_READ) {
+			length = scsi_get_in_length(cmd);
+			ret = pread64(fd, scsi_get_in_buffer(cmd), length,
+				      cmd->offset);
+		}
+
+		if (ret != length) {
+			result = SAM_STAT_CHECK_CONDITION;
+			key = MEDIUM_ERROR;
+			asc = ASC_READ_ERROR;
+		}
+
+		break;
+	}
+
+	dprintf("io done %p %x %d %u\n", cmd, cmd->scb[0], ret, length);
+
+	scsi_set_result(cmd, result);
+
+	if (result != SAM_STAT_GOOD) {
+		eprintf("io error %p %x %d %d %" PRIu64 ", %m\n",
+			cmd, cmd->scb[0], ret, length, cmd->offset);
+		sense_data_build(cmd, key, asc);
+	}
+}
+
 static void *bs_sync_worker_fn(void *arg)
 {
-	int ret = 0, fd;
 	struct bs_sync_info *info = arg;
 	struct scsi_cmd *cmd;
-	uint32_t length;
 
 	while (1) {
 		pthread_mutex_lock(&info->pending_lock);
@@ -142,40 +199,8 @@ static void *bs_sync_worker_fn(void *arg)
 		list_del(&cmd->bs_list);
 		pthread_mutex_unlock(&info->pending_lock);
 
-		fd = cmd->dev->fd;
-		length = 0;
+		__bs_sync_worker_fn(cmd);
 
-		if (cmd->scb[0] == SYNCHRONIZE_CACHE ||
-		    cmd->scb[0] == SYNCHRONIZE_CACHE_16) {
-			if (cmd->scb[0] & 0x2) {
-				scsi_set_result(cmd, SAM_STAT_CHECK_CONDITION);
-				sense_data_build(cmd, ILLEGAL_REQUEST,
-						 ASC_INVALID_FIELD_IN_CDB);
-				goto done;
-			} else
-				ret = fsync(fd);
-			/* will use sync_file_range system call */
-		} else if (cmd->data_dir == DATA_WRITE) {
-			length = scsi_get_out_length(cmd);
-			ret = pwrite64(fd, scsi_get_out_buffer(cmd), length,
-				       cmd->offset);
-		} else if (cmd->data_dir == DATA_READ) {
-			length = scsi_get_in_length(cmd);
-			ret = pread64(fd, scsi_get_in_buffer(cmd), length,
-				      cmd->offset);
-		}
-
-		dprintf("io done %p %x %d %u\n", cmd, cmd->scb[0], ret, length);
-
-		if (ret == length)
-			scsi_set_result(cmd, SAM_STAT_GOOD);
-		else {
-			eprintf("io error %p %x %d %d %" PRIu64 ", %m\n",
-				cmd, cmd->scb[0], ret, length, cmd->offset);
-			scsi_set_result(cmd, SAM_STAT_CHECK_CONDITION);
-			sense_data_build(cmd, MEDIUM_ERROR, ASC_READ_ERROR);
-		}
-	done:
 		pthread_mutex_lock(&info->finished_lock);
 		list_add(&cmd->bs_list, &info->finished_list);
 		pthread_mutex_unlock(&info->finished_lock);
