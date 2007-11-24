@@ -87,11 +87,14 @@ struct device_type_template {
 };
 
 struct backingstore_template {
+	const char *bs_name;
 	int bs_datasize;
 	int (*bs_open)(struct scsi_lu *dev, char *path, int *fd, uint64_t *size);
 	void (*bs_close)(struct scsi_lu *dev);
 	int (*bs_cmd_submit)(struct scsi_cmd *cmd);
 	int (*bs_cmd_done)(struct scsi_cmd *cmd);
+
+	struct list_head backingstore_siblings;
 };
 
 struct mode_pg {
@@ -219,5 +222,8 @@ extern int device_type_register(struct device_type_template *);
 
 extern struct lu_phy_attr *lu_attr_lookup(int tid, uint64_t lun);
 extern int dtd_load_unload(int tid, uint64_t lun, int load, char *file);
+
+extern int register_backingstore_template(struct backingstore_template *bst);
+extern struct backingstore_template *get_backingstore_template(const char *name);
 
 #endif

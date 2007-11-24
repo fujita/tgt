@@ -262,7 +262,7 @@ static struct tgt_driver ibmvio = {
 	.lu_create		= ibmvio_lu_create,
 	.cmd_end_notify		= kspace_send_cmd_res,
 	.mgmt_end_notify	= kspace_send_tsk_mgmt_res,
-	.default_bst		= &mmap_bst,
+	.default_bst		= "mmap",
 };
 
 __attribute__((constructor)) static void ibmvio_driver_constructor(void)

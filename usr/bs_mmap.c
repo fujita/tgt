@@ -109,9 +109,15 @@ static int bs_mmap_cmd_done(struct scsi_cmd *cmd)
 	return err;
 }
 
-struct backingstore_template mmap_bst = {
+static struct backingstore_template mmap_bst = {
+	.bs_name		= "mmap",
 	.bs_open		= bs_mmap_open,
 	.bs_close		= bs_mmap_close,
 	.bs_cmd_submit		= bs_mmap_cmd_submit,
 	.bs_cmd_done		= bs_mmap_cmd_done,
 };
+
+__attribute__((constructor)) static void bs_mmap_constructor(void)
+{
+	register_backingstore_template(&mmap_bst);
+}

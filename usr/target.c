@@ -1307,6 +1307,7 @@ int tgt_target_create(int lld, int tid, char *args)
 {
 	struct target *target, *pos;
 	char *p, *q, *targetname = NULL;
+	struct backingstore_template *bst;
 
 	p = args;
 	while ((q = strsep(&p, ","))) {
@@ -1332,6 +1333,10 @@ int tgt_target_create(int lld, int tid, char *args)
 		return TGTADM_TARGET_EXIST;
 	}
 
+	bst = get_backingstore_template(tgt_drivers[lld]->default_bst);
+	if (!bst)
+		return TGTADM_INVALID_REQUEST;
+
 	target = zalloc(sizeof(*target));
 	if (!target)
 		return TGTADM_NOMEM;
@@ -1354,7 +1359,7 @@ int tgt_target_create(int lld, int tid, char *args)
 
 	INIT_LIST_HEAD(&target->device_list);
 
-	target->bst = tgt_drivers[lld]->default_bst;
+	target->bst = bst;
 
 	target->target_state = SCSI_TARGET_RUNNING;
 	target->lid = lld;

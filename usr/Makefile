@@ -27,7 +27,7 @@ CFLAGS += -g -O2 -Wall -Wstrict-prototypes -fPIC
 
 PROGRAMS += tgtd tgtadm
 TGTD_OBJS += tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o \
-		parser.o spc.o sbc.o mmc.o osd.o scc.o smc.o
+		parser.o spc.o sbc.o mmc.o osd.o scc.o smc.o bs.o
 
 TGTD_DEP = $(TGTD_OBJS:.o=.d)
 

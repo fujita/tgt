@@ -1,5 +1,3 @@
-extern struct backingstore_template mmap_bst, sync_bst;
-
 struct tgt_driver {
 	const char *name;
 	int use_kernel;
@@ -19,7 +17,7 @@ struct tgt_driver {
 	int (*cmd_end_notify)(uint64_t nid, int result, struct scsi_cmd *);
 	int (*mgmt_end_notify)(struct mgmt_req *);
 
-	struct backingstore_template *default_bst;
+	const char *default_bst;
 };
 
 extern struct tgt_driver *tgt_drivers[];
