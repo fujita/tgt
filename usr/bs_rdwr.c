@@ -388,10 +388,16 @@ static int bs_sync_cmd_done(struct scsi_cmd *cmd)
 	return 0;
 }
 
-struct backingstore_template sync_bst = {
+static struct backingstore_template sync_bst = {
+	.bs_name		= "rdwr",
 	.bs_datasize		= sizeof(struct bs_sync_info),
 	.bs_open		= bs_sync_open,
 	.bs_close		= bs_sync_close,
 	.bs_cmd_submit		= bs_sync_cmd_submit,
 	.bs_cmd_done		= bs_sync_cmd_done,
 };
+
+__attribute__((constructor)) static void bs_rdwr_constructor(void)
+{
+	register_backingstore_template(&sync_bst);
+}
