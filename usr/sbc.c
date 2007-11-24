@@ -262,8 +262,8 @@ static struct device_type_template sbc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{sbc_rw},
-		{spc_test_unit},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
 
 		/* 0x30 */
 		{spc_illegal_op,},
@@ -323,8 +323,8 @@ static struct device_type_template sbc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{sbc_rw},
-		{spc_test_unit},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
 
 		/* 0x90 */
 		{spc_illegal_op,},
@@ -361,8 +361,8 @@ static struct device_type_template sbc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{sbc_rw,},
-		{spc_test_unit,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
 
 		[0xb0 ... 0xff] = {spc_illegal_op},
 	}
