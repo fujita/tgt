@@ -1,9 +1,3 @@
-ifneq ($(SGV4),)
-TGTD_OBJS += spt_sgv4.o
-else
-TGTD_OBJS += spt_sgv3.o
-endif
-
 ifneq ($(IBMVIO),)
 CFLAGS += -DIBMVIO -DUSE_KERNEL
 TGTD_OBJS += $(addprefix ibmvio/, ibmvio.o)
@@ -33,7 +27,7 @@ CFLAGS += -g -O2 -Wall -Wstrict-prototypes -fPIC
 
 PROGRAMS += tgtd tgtadm
 TGTD_OBJS += tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o \
-		parser.o spc.o sbc.o mmc.o osd.o spt.o scc.o smc.o
+		parser.o spc.o sbc.o mmc.o osd.o scc.o smc.o
 
 TGTD_DEP = $(TGTD_OBJS:.o=.d)
 

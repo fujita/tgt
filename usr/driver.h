@@ -1,4 +1,4 @@
-extern struct backingstore_template mmap_bst, sync_bst, sg_bst;
+extern struct backingstore_template mmap_bst, sync_bst;
 
 struct tgt_driver {
 	const char *name;

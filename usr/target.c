@@ -243,11 +243,7 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *args, int backi
 		return TGTADM_LUN_EXIST;
 	}
 
-	if (dev_type == TYPE_SPT)
-		lu = zalloc(sizeof(*lu) + sg_bst.bs_datasize);
-	else
-		lu = zalloc(sizeof(*lu) + target->bst->bs_datasize);
-
+	lu = zalloc(sizeof(*lu) + target->bst->bs_datasize);
 	if (!lu)
 		return TGTADM_NOMEM;
 
