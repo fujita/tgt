@@ -115,6 +115,27 @@ out:
 	return NULL;
 }
 
+static void set_medium_error(int *result, uint8_t *key, uint16_t *asc)
+{
+	*result = SAM_STAT_CHECK_CONDITION;
+	*key = MEDIUM_ERROR;
+	*asc = ASC_READ_ERROR;
+}
+
+static void bs_sync_sync_range(struct scsi_cmd *cmd, uint32_t length,
+			       int *result, uint8_t *key, uint16_t *asc)
+{
+	int ret;
+	unsigned int flags = SYNC_FILE_RANGE_WAIT_BEFORE| SYNC_FILE_RANGE_WRITE;
+
+	ret = __sync_file_range(cmd->dev->fd, cmd->offset, length, flags);
+	if (ret == -EPERM)
+		ret = fsync(cmd->dev->fd);
+
+	if (ret)
+		set_medium_error(result, key, asc);
+}
+
 static void __bs_sync_worker_fn(struct scsi_cmd *cmd)
 {
 	int ret, fd = cmd->dev->fd;
@@ -130,7 +151,6 @@ static void __bs_sync_worker_fn(struct scsi_cmd *cmd)
 	{
 	case SYNCHRONIZE_CACHE:
 	case SYNCHRONIZE_CACHE_16:
-
 		/* TODO */
 		length = (cmd->scb[0] == SYNCHRONIZE_CACHE) ? 0 : 0;
 
@@ -138,38 +158,36 @@ static void __bs_sync_worker_fn(struct scsi_cmd *cmd)
 			result = SAM_STAT_CHECK_CONDITION;
 			key = ILLEGAL_REQUEST;
 			asc = ASC_INVALID_FIELD_IN_CDB;
-		} else {
-			unsigned int flags = SYNC_FILE_RANGE_WAIT_BEFORE|
-				SYNC_FILE_RANGE_WRITE;
+		} else
+			bs_sync_sync_range(cmd, length, &result, &key, &asc);
+		break;
+	case WRITE_6:
+	case WRITE_10:
+	case WRITE_12:
+	case WRITE_16:
+		length = scsi_get_out_length(cmd);
+		ret = pwrite64(fd, scsi_get_out_buffer(cmd), length,
+			       cmd->offset);
+		if (ret == length) {
+			if ((cmd->scb[0] != WRITE_6) && (cmd->scb[1] & 0x8))
+				bs_sync_sync_range(cmd, length, &result, &key,
+						   &asc);
+		} else
+			set_medium_error(&result, &key, &asc);
 
-			ret = __sync_file_range(fd, cmd->offset, length, flags);
-			if (ret == -EPERM)
-				ret = fsync(fd);
+		break;
+	case READ_6:
+	case READ_10:
+	case READ_12:
+	case READ_16:
+		length = scsi_get_in_length(cmd);
+		ret = pread64(fd, scsi_get_in_buffer(cmd), length,
+			      cmd->offset);
 
-			if (ret) {
-				result = SAM_STAT_CHECK_CONDITION;
-				key = MEDIUM_ERROR;
-				asc = ASC_READ_ERROR;
-			}
-		}
+		if (ret != length)
+			set_medium_error(&result, &key, &asc);
 		break;
 	default:
-		if (cmd->data_dir == DATA_WRITE) {
-			length = scsi_get_out_length(cmd);
-			ret = pwrite64(fd, scsi_get_out_buffer(cmd), length,
-				       cmd->offset);
-		} else if (cmd->data_dir == DATA_READ) {
-			length = scsi_get_in_length(cmd);
-			ret = pread64(fd, scsi_get_in_buffer(cmd), length,
-				      cmd->offset);
-		}
-
-		if (ret != length) {
-			result = SAM_STAT_CHECK_CONDITION;
-			key = MEDIUM_ERROR;
-			asc = ASC_READ_ERROR;
-		}
-
 		break;
 	}
 
