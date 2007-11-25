@@ -122,7 +122,7 @@ static void bs_thread_request_done(int fd, int events, void *data)
 		dprintf("back to tgtd, %p\n", cmd);
 
 		list_del(&cmd->bs_list);
-		target_cmd_io_done(cmd, scsi_get_result(cmd));
+		cmd->scsi_cmd_done(cmd, scsi_get_result(cmd));
 	}
 
 	write(info->command_fd[1], &nr_events, sizeof(nr_events));
@@ -245,6 +245,8 @@ int bs_thread_cmd_submit(struct scsi_cmd *cmd)
 {
 	struct scsi_lu *lu = cmd->dev;
 	struct bs_thread_info *info = BS_THREAD_I(lu);
+
+	cmd->scsi_cmd_done = target_cmd_io_done;
 
 	pthread_mutex_lock(&info->pending_lock);
 

@@ -41,7 +41,6 @@ struct tgt_cmd_queue {
 };
 
 struct scsi_lu;
-struct scsi_cmd;
 
 struct vpd {
 	uint16_t size;

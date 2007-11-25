@@ -43,7 +43,8 @@ struct scsi_cmd {
 	unsigned char sense_buffer[SCSI_SENSE_BUFFERSIZE];
 	int sense_len;
 
-	/* workaround */
+	void (*scsi_cmd_done)(struct scsi_cmd *, int);
+
 	struct list_head bs_list;
 };
 
