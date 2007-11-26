@@ -47,6 +47,8 @@ static int osd_varlen_cdb(int host_no, struct scsi_cmd *cmd)
 		return SAM_STAT_CHECK_CONDITION;
 	}
 
+	cmd->scsi_cmd_done = target_cmd_io_done;
+
 /* 	return SAM_STAT_GOOD; */
 	return cmd->dev->bst->bs_cmd_submit(cmd);
 }

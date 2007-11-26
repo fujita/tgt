@@ -246,8 +246,6 @@ int bs_thread_cmd_submit(struct scsi_cmd *cmd)
 	struct scsi_lu *lu = cmd->dev;
 	struct bs_thread_info *info = BS_THREAD_I(lu);
 
-	cmd->scsi_cmd_done = target_cmd_io_done;
-
 	pthread_mutex_lock(&info->pending_lock);
 
 	list_add(&cmd->bs_list, &info->pending_list);

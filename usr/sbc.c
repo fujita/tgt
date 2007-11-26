@@ -64,6 +64,8 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 		break;
 	}
 
+	cmd->scsi_cmd_done = target_cmd_io_done;
+
 	cmd->offset = (scsi_rw_offset(cmd->scb) << BLK_SHIFT);
 	ret = cmd->dev->bst->bs_cmd_submit(cmd);
 	if (ret) {
@@ -138,6 +140,8 @@ static int sbc_sync_cache(int host_no, struct scsi_cmd *cmd)
 
 	if (device_reserved(cmd))
 		return SAM_STAT_RESERVATION_CONFLICT;
+
+	cmd->scsi_cmd_done = target_cmd_io_done;
 
 	ret = cmd->dev->bst->bs_cmd_submit(cmd);
 	switch (ret) {
