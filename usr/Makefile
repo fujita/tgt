@@ -10,7 +10,7 @@ TGTD_OBJS += $(addprefix iscsi/, conn.o param.o session.o \
 		iscsid.o target.o chap.o transport.o iscsi_tcp.o \
 		isns.o libcrc32c.o)
 TGTD_OBJS += bs_rdwr.o
-LIBS += -lcrypto -lpthread
+LIBS += -lcrypto
 endif
 
 ifneq ($(FCP),)
@@ -24,6 +24,8 @@ INCLUDES += -I. -I../include -I$(KERNELSRC)/include
 CFLAGS += -D_LARGEFILE64_SOURCE
 CFLAGS += $(INCLUDES)
 CFLAGS += -g -O2 -Wall -Wstrict-prototypes -fPIC
+
+LIBS += -lpthread
 
 PROGRAMS += tgtd tgtadm
 TGTD_OBJS += tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o \

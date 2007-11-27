@@ -32,16 +32,79 @@
 #include "util.h"
 #include "tgtd.h"
 #include "scsi.h"
+#include "bs_thread.h"
+
+static void bs_mmap_request(struct scsi_cmd *cmd)
+{
+	int ret;
+	uint32_t length;
+	int result = SAM_STAT_GOOD;
+	uint8_t key;
+	uint16_t asc;
+
+	ret = length = 0;
+	key = asc = 0;
+
+	if (cmd->scb[0] != SYNCHRONIZE_CACHE &&
+	    cmd->scb[0] != SYNCHRONIZE_CACHE_16)
+		eprintf("bug %x\n", cmd->scb[0]);
+
+	/* TODO */
+	length = (cmd->scb[0] == SYNCHRONIZE_CACHE) ? 0 : 0;
+
+	if (cmd->scb[1] & 0x2) {
+		result = SAM_STAT_CHECK_CONDITION;
+		key = ILLEGAL_REQUEST;
+		asc = ASC_INVALID_FIELD_IN_CDB;
+	} else {
+		unsigned int flags =
+			SYNC_FILE_RANGE_WAIT_BEFORE| SYNC_FILE_RANGE_WRITE;
+
+		ret = __sync_file_range(cmd->dev->fd, cmd->offset, length, flags);
+		if (ret == -EPERM)
+			ret = fsync(cmd->dev->fd);
+
+		if (ret) {
+			result = SAM_STAT_CHECK_CONDITION;
+			key = MEDIUM_ERROR;
+			asc = ASC_READ_ERROR;
+		}
+	}
+
+	dprintf("io done %p %x %d %u\n", cmd, cmd->scb[0], ret, length);
+
+	scsi_set_result(cmd, result);
+
+	if (result != SAM_STAT_GOOD) {
+		eprintf("io error %p %x %d %d %" PRIu64 ", %m\n",
+			cmd, cmd->scb[0], ret, length, cmd->offset);
+		sense_data_build(cmd, key, asc);
+	}
+}
 
 static int bs_mmap_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 {
-	*fd = backed_file_open(path, O_RDWR| O_LARGEFILE, size);
+	int ret;
+	struct bs_thread_info *info = BS_THREAD_I(lu);
 
-	return *fd >= 0 ? 0 : *fd;
+	*fd = backed_file_open(path, O_RDWR| O_LARGEFILE, size);
+	if (*fd < 0)
+		return *fd;
+
+	ret = bs_thread_open(info, bs_mmap_request);
+	if (ret) {
+		close(*fd);
+		return -1;
+	}
+
+	return 0;
 }
 
 static void bs_mmap_close(struct scsi_lu *lu)
 {
+	struct bs_thread_info *info = BS_THREAD_I(lu);
+
+	bs_thread_close(info);
 	close(lu->fd);
 }
 
@@ -49,14 +112,15 @@ static void bs_mmap_close(struct scsi_lu *lu)
 
 static int bs_mmap_cmd_submit(struct scsi_cmd *cmd)
 {
-	int fd = cmd->dev->fd, ret = 0;
+	struct scsi_lu *lu = cmd->dev;
+	int fd = lu->fd, ret = 0;
 	void *p;
 	uint64_t addr;
 	uint32_t length;
 
 	if (cmd->scb[0] == SYNCHRONIZE_CACHE ||
 	    cmd->scb[0] == SYNCHRONIZE_CACHE_16)
-		return fsync(fd);
+		return bs_thread_cmd_submit(cmd);
 
 	length = (scsi_get_data_dir(cmd) == DATA_WRITE) ?
 		scsi_get_out_length(cmd) : scsi_get_in_length(cmd);
@@ -111,6 +175,7 @@ static int bs_mmap_cmd_done(struct scsi_cmd *cmd)
 
 static struct backingstore_template mmap_bst = {
 	.bs_name		= "mmap",
+	.bs_datasize		= sizeof(struct bs_thread_info),
 	.bs_open		= bs_mmap_open,
 	.bs_close		= bs_mmap_close,
 	.bs_cmd_submit		= bs_mmap_cmd_submit,

@@ -103,6 +103,8 @@ extern unsigned long pagesize, pageshift;
 #define __NR_sync_file_range	277
 #elif defined(__ia64__)
 #define __NR_sync_file_range	1300
+#elif defined(__powerpc64__) || defined(__PPC__)
+#define __NR_sync_file_range	308
 #endif
 #endif
 
