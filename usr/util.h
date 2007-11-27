@@ -4,6 +4,7 @@
 #include <byteswap.h>
 #include <syscall.h>
 #include <unistd.h>
+#include <errno.h>
 
 #define roundup(x, y) ((((x) + ((y) - 1)) / (y)) * (y))
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
@@ -119,7 +120,12 @@ extern long int syscall(long int sysno, ...);
 static inline int __sync_file_range(int fd, __off64_t offset, __off64_t bytes,
 				    unsigned int flags)
 {
-	return syscall(__NR_sync_file_range, fd, offset, bytes, flags);
+	int ret;
+
+	ret = syscall(__NR_sync_file_range, fd, offset, bytes, flags);
+	if (ret == -EPERM)
+		ret = fsync(fd);
+	return ret;
 }
 
 #endif

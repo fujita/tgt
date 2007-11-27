@@ -61,9 +61,6 @@ static void bs_mmap_request(struct scsi_cmd *cmd)
 			SYNC_FILE_RANGE_WAIT_BEFORE| SYNC_FILE_RANGE_WRITE;
 
 		ret = __sync_file_range(cmd->dev->fd, cmd->offset, length, flags);
-		if (ret == -EPERM)
-			ret = fsync(cmd->dev->fd);
-
 		if (ret) {
 			result = SAM_STAT_CHECK_CONDITION;
 			key = MEDIUM_ERROR;
