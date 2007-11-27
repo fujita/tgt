@@ -77,7 +77,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 		/* TODO */
 		length = (cmd->scb[0] == SYNCHRONIZE_CACHE) ? 0 : 0;
 
-		if (cmd->scb[0] & 0x2) {
+		if (cmd->scb[1] & 0x2) {
 			result = SAM_STAT_CHECK_CONDITION;
 			key = ILLEGAL_REQUEST;
 			asc = ASC_INVALID_FIELD_IN_CDB;
