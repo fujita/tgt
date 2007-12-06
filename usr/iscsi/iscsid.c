@@ -1163,10 +1163,11 @@ static int iscsi_target_cmd_queue(struct iscsi_task *task)
 			dprintf("bidi read len %u\n", in_length);
 
 			if (in_length) {
+				uint32_t len;
 				void *buf;
 
-				in_length = roundup(in_length, 4);
-				buf = conn->tp->alloc_data_buf(conn, in_length);
+				len = roundup(in_length, 4);
+				buf = conn->tp->alloc_data_buf(conn, len);
 				if (!buf)
 					return -ENOMEM;
 
