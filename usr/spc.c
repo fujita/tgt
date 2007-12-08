@@ -182,8 +182,8 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 		for (i = 0; i < ARRAY_SIZE(attrs->version_desc); i++)
 			*desc++ = __cpu_to_be16(attrs->version_desc[i]);
 
-		data[4] = len - 5;	/* Additional Length */
 		len = 66;
+		data[4] = len - 5;	/* Additional Length */
 		ret = SAM_STAT_GOOD;
 	} else if (scb[1] & 0x2) {
 		/* CmdDt bit is set */
