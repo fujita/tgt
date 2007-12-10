@@ -2006,6 +2006,29 @@ int iscsi_tx_handler(struct iscsi_connection *conn)
 			goto out;
 	}
 
+	/*
+	 * For rdma, grab the data-in or r2t packet and covert to
+	 * an RDMA operation.
+	 */
+	if (conn->tp->rdma && conn->state == STATE_SCSI) {
+		switch (conn->rsp.bhs.opcode) {
+		case ISCSI_OP_R2T:
+			ret = conn->tp->ep_rdma_read(conn);
+			if (ret < 0)  /* wait for free slot */
+				goto out;
+			goto finish;
+
+		case ISCSI_OP_SCSI_DATA_IN:
+			ret = conn->tp->ep_rdma_write(conn);
+			if (ret < 0)
+				goto out;
+			goto finish;
+
+		default:
+			break;
+		}
+	}
+
 again:
 	switch (conn->tx_iostate) {
 	case IOSTATE_TX_BHS:
@@ -2098,6 +2121,8 @@ again:
 	}
 
 	conn->tp->ep_write_end(conn);
+
+finish:
 	cmnd_finish(conn);
 
 	switch (conn->state) {

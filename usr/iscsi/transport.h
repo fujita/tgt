@@ -20,6 +20,8 @@ struct iscsi_transport {
 	size_t (*ep_write_begin)(struct iscsi_connection *conn, void *buf,
 				 size_t nbytes);
 	void (*ep_write_end)(struct iscsi_connection *conn);
+	int (*ep_rdma_read)(struct iscsi_connection *conn);
+	int (*ep_rdma_write)(struct iscsi_connection *conn);
 	size_t (*ep_close)(struct iscsi_connection *conn);
 	void (*ep_release)(struct iscsi_connection *conn);
 
@@ -34,5 +36,6 @@ struct iscsi_transport {
 };
 
 extern struct iscsi_transport iscsi_tcp;
+extern struct iscsi_transport iscsi_iser;
 
 #endif

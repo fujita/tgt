@@ -11,6 +11,11 @@ TGTD_OBJS += $(addprefix iscsi/, conn.o param.o session.o \
 		isns.o libcrc32c.o)
 TGTD_OBJS += bs_rdwr.o
 LIBS += -lcrypto
+ifneq ($(ISCSI_RDMA),)
+CFLAGS += -DISCSI_RDMA
+TGTD_OBJS += iscsi/iscsi_rdma.o
+LIBS += -libverbs -lrdmacm
+endif
 endif
 
 ifneq ($(FCP),)

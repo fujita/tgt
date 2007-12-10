@@ -29,6 +29,9 @@
 
 struct iscsi_transport *iscsi_transports[] = {
 	&iscsi_tcp,
+#ifdef ISCSI_RDMA
+	&iscsi_iser,
+#endif
 	NULL,
 };
 
