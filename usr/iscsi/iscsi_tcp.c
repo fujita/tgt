@@ -226,6 +226,10 @@ static int iscsi_tcp_conn_login_complete(struct iscsi_connection *conn)
 	return 0;
 }
 
+static void iscsi_tcp_task_init(struct iscsi_task *task)
+{
+}
+
 static size_t iscsi_tcp_read(struct iscsi_connection *conn, void *buf,
 			     size_t nbytes)
 {
@@ -334,8 +338,10 @@ int iscsi_tcp_getpeername(struct iscsi_connection *conn, struct sockaddr *sa,
 struct iscsi_transport iscsi_tcp = {
 	.name			= "iscsi",
 	.rdma			= 0,
+	.task_trans_len		= 0,
 	.ep_init		= iscsi_tcp_init,
 	.ep_login_complete	= iscsi_tcp_conn_login_complete,
+	.ep_task_init		= iscsi_tcp_task_init,
 	.ep_read		= iscsi_tcp_read,
 	.ep_write_begin		= iscsi_tcp_write_begin,
 	.ep_write_end		= iscsi_tcp_write_end,
