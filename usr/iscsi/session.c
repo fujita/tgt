@@ -128,6 +128,8 @@ int session_create(struct iscsi_connection *conn)
 	memcpy(session->isid, conn->isid, sizeof(session->isid));
 	session->tsih = last_tsih = tsih;
 
+	session->rdma = conn->tp->rdma;
+
 	conn_add_to_session(conn, session);
 
 	dprintf("session_create: %#" PRIx64 "\n", sid64(conn->isid, session->tsih));

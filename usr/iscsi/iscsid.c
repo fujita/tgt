@@ -511,8 +511,21 @@ static void login_finish(struct iscsi_connection *conn)
 			conn->state = STATE_EXIT;
 			break;
 		}
-		if (!conn->session)
+		if (!conn->session) {
 			session_create(conn);
+		} else {
+			if (conn->tp->rdma ^ conn->session->rdma) {
+				eprintf("new conn rdma %d, but session %d\n",
+					conn->tp->rdma, conn->session->rdma);
+				rsp->flags = 0;
+				rsp->status_class =
+					ISCSI_STATUS_CLS_INITIATOR_ERR;
+				rsp->status_detail =
+					ISCSI_LOGIN_STATUS_INVALID_REQUEST;
+				conn->state = STATE_EXIT;
+				break;
+			}
+		}
 		memcpy(conn->isid, conn->session->isid, sizeof(conn->isid));
 		conn->tsih = conn->session->tsih;
 		break;
@@ -965,7 +978,8 @@ static int iscsi_data_rsp_build(struct iscsi_task *task)
 
 		/* collapse status into final packet if successful */
 		if (result == SAM_STAT_GOOD &&
-		    scsi_get_data_dir(&task->scmd) != DATA_BIDIRECTIONAL) {
+		    scsi_get_data_dir(&task->scmd) != DATA_BIDIRECTIONAL &&
+		    !conn->tp->rdma) {
 			rsp->flags |= ISCSI_FLAG_DATA_STATUS;
 			rsp->cmd_status = result;
 			rsp->statsn = cpu_to_be32(conn->stat_sn++);
@@ -1697,8 +1711,9 @@ static int iscsi_scsi_cmd_tx_done(struct iscsi_connection *conn)
 		break;
 	case ISCSI_OP_SCSI_DATA_IN:
 		if (task->offset < task->len ||
-		    scsi_get_result(&task->scmd) != SAM_STAT_GOOD
-		    || scsi_get_data_dir(&task->scmd) == DATA_BIDIRECTIONAL) {
+		    scsi_get_result(&task->scmd) != SAM_STAT_GOOD ||
+		    scsi_get_data_dir(&task->scmd) == DATA_BIDIRECTIONAL ||
+		    conn->tp->rdma) {
 			dprintf("more data or sense or bidir %x\n", hdr->itt);
 			list_add_tail(&task->c_list, &task->conn->tx_clist);
 			return 0;
@@ -1973,7 +1988,7 @@ again:
 	return 0;
 }
 
-void iscsi_tx_handler(struct iscsi_connection *conn)
+int iscsi_tx_handler(struct iscsi_connection *conn)
 {
 	int ret = 0, hdigest, ddigest;
 	uint32_t crc;
@@ -1988,9 +2003,10 @@ void iscsi_tx_handler(struct iscsi_connection *conn)
 	if (conn->state == STATE_SCSI && !conn->tx_task) {
 		ret = iscsi_task_tx_start(conn);
 		if (ret)
-			return;
+			goto out;
 	}
 
+again:
 	switch (conn->tx_iostate) {
 	case IOSTATE_TX_BHS:
 		ret = do_send(conn, IOSTATE_TX_INIT_AHS);
@@ -2046,7 +2062,7 @@ void iscsi_tx_handler(struct iscsi_connection *conn)
 		ret = do_send(conn, ddigest ?
 			      IOSTATE_TX_INIT_DDIGEST : IOSTATE_TX_END);
 		if (ret < 0)
-			return;
+			goto out;
 		if (conn->tx_iostate != IOSTATE_TX_INIT_DDIGEST)
 			break;
 	case IOSTATE_TX_INIT_DDIGEST:
@@ -2066,10 +2082,14 @@ void iscsi_tx_handler(struct iscsi_connection *conn)
 		exit(1);
 	}
 
-	if (ret < 0 ||
-	    conn->tx_iostate != IOSTATE_TX_END ||
-	    conn->state == STATE_CLOSE)
-		return;
+	if (ret < 0 || conn->state == STATE_CLOSE)
+		goto out;
+
+	if (conn->tx_iostate != IOSTATE_TX_END) {
+		if (conn->tp->rdma)
+			goto again;  /* avoid event loop, just push */
+		goto out;
+	}
 
 	if (conn->tx_size) {
 		eprintf("error %d %d %d\n", conn->state, conn->tx_iostate,
@@ -2102,6 +2122,9 @@ void iscsi_tx_handler(struct iscsi_connection *conn)
 		conn->tp->ep_event_modify(conn, EPOLLIN);
 		break;
 	}
+
+out:
+	return ret;
 }
 
 static struct tgt_driver iscsi = {

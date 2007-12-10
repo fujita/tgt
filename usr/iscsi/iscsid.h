@@ -91,6 +91,9 @@ struct iscsi_session {
 	struct param session_param[ISCSI_PARAM_MAX];
 
 	char *info;
+
+	/* if this session uses rdma connections */
+	int rdma;
 };
 
 struct iscsi_task {
@@ -258,7 +261,7 @@ extern void conn_add_to_session(struct iscsi_connection *conn, struct iscsi_sess
 extern char *text_key_find(struct iscsi_connection *conn, char *searchKey);
 extern void text_key_add(struct iscsi_connection *conn, char *key, char *value);
 extern void conn_read_pdu(struct iscsi_connection *conn);
-extern void iscsi_tx_handler(struct iscsi_connection *conn);
+extern int iscsi_tx_handler(struct iscsi_connection *conn);
 extern void iscsi_rx_handler(struct iscsi_connection *conn);
 extern int iscsi_scsi_cmd_execute(struct iscsi_task *task);
 
