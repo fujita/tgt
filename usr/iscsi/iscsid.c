@@ -270,7 +270,7 @@ static void login_security_done(struct iscsi_connection *conn)
 static void text_scan_login(struct iscsi_connection *conn)
 {
 	char *key, *value, *data;
-	int datasize, idx;
+	int datasize, idx, is_rdma = 0;
 	struct iscsi_login_rsp *rsp = (struct iscsi_login_rsp *)&conn->rsp.bhs;
 
 	data = conn->req.data;
@@ -288,6 +288,9 @@ static void text_scan_login(struct iscsi_connection *conn)
 
 			if (idx == ISCSI_PARAM_MAX_RECV_DLENGTH)
 				idx = ISCSI_PARAM_MAX_XMIT_DLENGTH;
+
+			if (idx == ISCSI_PARAM_RDMA_EXTENSIONS)
+				is_rdma = 1;
 
 			if (param_str_to_val(session_keys, idx, value, &val) < 0) {
 				if (conn->session_param[idx].state
@@ -335,6 +338,15 @@ static void text_scan_login(struct iscsi_connection *conn)
 			text_key_add(conn, key, "NotUnderstood");
 	}
 
+	if (is_rdma) {
+		/* do not try to do digests, not supported in iser */
+		conn->session_param[ISCSI_PARAM_HDRDGST_EN].val = DIGEST_NONE;
+		conn->session_param[ISCSI_PARAM_DATADGST_EN].val = DIGEST_NONE;
+	} else {
+		/* do not offer RDMA, initiator must explicitly request */
+		conn->session_param[ISCSI_PARAM_RDMA_EXTENSIONS].val = 0;
+	}
+
 out:
 	return;
 }
@@ -353,6 +365,13 @@ static int text_check_param(struct iscsi_connection *conn)
 						p[i].val = session_keys[i].def;
 					p[i].state = KEY_STATE_DONE;
 					continue;
+				}
+				if (p[ISCSI_PARAM_RDMA_EXTENSIONS].val == 1) {
+					if (i == ISCSI_PARAM_MAX_RECV_DLENGTH)
+						continue;
+				} else {
+					if (i >= ISCSI_PARAM_RDMA_EXTENSIONS)
+						continue;
 				}
 				memset(buf, 0, sizeof(buf));
 				param_val_to_str(session_keys, i, p[i].val,

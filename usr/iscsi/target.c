@@ -283,6 +283,10 @@ int iscsi_target_create(struct target *t)
 		[ISCSI_PARAM_OFMARKINT] = {0, 2048},
 		[ISCSI_PARAM_IFMARKINT] = {0, 2048},
 		[ISCSI_PARAM_MAXCONNECTIONS] = {0, 1},
+		[ISCSI_PARAM_RDMA_EXTENSIONS] = {0, 1},
+		[ISCSI_PARAM_TARGET_RDSL] = {0, 262144},
+		[ISCSI_PARAM_INITIATOR_RDSL] = {0, 262144},
+		[ISCSI_PARAM_MAX_OUTST_PDU] =  {0, 0},  /* not in open-iscsi */
 	};
 
 	target = malloc(sizeof(*target));

@@ -118,6 +118,18 @@ static int minimum_check_val(struct iscsi_key *key, unsigned int *val)
 	return 0;
 }
 
+static int min_or_zero_check_val(struct iscsi_key *key, unsigned int *val)
+{
+	int err = 0;
+
+	if (*val != 0 && (*val < key->min || key->max < *val)) {
+		*val = key->min;
+		err = -EINVAL;
+	}
+
+	return 0;
+}
+
 static int maximum_check_val(struct iscsi_key *key, unsigned int *val)
 {
 	int err = 0;
@@ -133,6 +145,16 @@ static int maximum_check_val(struct iscsi_key *key, unsigned int *val)
 static int minimum_set_val(struct param *param, int idx, unsigned int *val)
 {
 	if (*val > param[idx].val)
+		*val = param[idx].val;
+	else
+		param[idx].val = *val;
+
+	return 0;
+}
+
+static int min_or_zero_set_val(struct param *param, int idx, unsigned int *val)
+{
+	if (*val > param[idx].val || *val == 0)
 		*val = param[idx].val;
 	else
 		param[idx].val = *val;
@@ -265,6 +287,13 @@ static struct iscsi_key_ops minimum_ops = {
 	.set_val = minimum_set_val,
 };
 
+static struct iscsi_key_ops min_or_zero_ops = {
+	.val_to_str = range_val_to_str,
+	.str_to_val = range_str_to_val,
+	.check_val = min_or_zero_check_val,
+	.set_val = min_or_zero_set_val,
+};
+
 static struct iscsi_key_ops maximum_ops = {
 	.val_to_str = range_val_to_str,
 	.str_to_val = range_str_to_val,
@@ -345,6 +374,15 @@ struct iscsi_key session_keys[] = {
 	{"IFMarkInt", 2048, 1, 65535, &marker_ops},
 	[ISCSI_PARAM_MAXCONNECTIONS] =
 	{"MaxConnections", 1, 1, 65535, &minimum_ops},
+	/* iSER draft */
+	[ISCSI_PARAM_RDMA_EXTENSIONS] =
+	{"RDMAExtensions", 0, 0, 1, &and_ops},
+	[ISCSI_PARAM_TARGET_RDSL] =
+	{"TargetRecvDataSegmentLength", 8192, 512, 16777215, &minimum_ops},
+	[ISCSI_PARAM_INITIATOR_RDSL] =
+	{"InitiatorRecvDataSegmentLength", 8192, 512, 16777215, &minimum_ops},
+	[ISCSI_PARAM_MAX_OUTST_PDU] =
+	{"MaxOutstandingUnexpectedPDUs", 0, 2, 4294967295U, &min_or_zero_ops},
 	[ISCSI_PARAM_MAX] =
 	{NULL,},
 };
