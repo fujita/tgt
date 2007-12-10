@@ -339,6 +339,7 @@ struct iscsi_transport iscsi_tcp = {
 	.name			= "iscsi",
 	.rdma			= 0,
 	.task_trans_len		= 0,
+	.data_padding		= PAD_WORD_LEN,
 	.ep_init		= iscsi_tcp_init,
 	.ep_login_complete	= iscsi_tcp_conn_login_complete,
 	.ep_task_init		= iscsi_tcp_task_init,

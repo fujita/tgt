@@ -10,6 +10,7 @@ struct iscsi_transport {
 	const char *name;
 	int rdma;
 	int task_trans_len;
+	int data_padding;
 
 	int (*ep_init) (void);
 	int (*ep_login_complete)(struct iscsi_connection *conn);

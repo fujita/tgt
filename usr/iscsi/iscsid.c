@@ -1173,7 +1173,8 @@ static int iscsi_target_cmd_queue(struct iscsi_task *task)
 				uint32_t len;
 				void *buf;
 
-				len = roundup(in_length, 4);
+				len = roundup(in_length,
+					      conn->tp->data_padding);
 				buf = conn->tp->alloc_data_buf(conn, len);
 				if (!buf)
 					return -ENOMEM;
@@ -1431,9 +1432,9 @@ static int iscsi_scsi_cmd_rx_start(struct iscsi_connection *conn)
 	struct iscsi_task *task;
 	int ahs_len, imm_len, data_len, ext_len;
 
-	ahs_len = roundup(req->hlength * 4, 4);
-	imm_len = roundup(ntoh24(req->dlength), 4);
-	data_len = roundup(ntohl(req->data_length), 4);
+	ahs_len = req->hlength * 4;
+	imm_len = roundup(ntoh24(req->dlength), conn->tp->data_padding);
+	data_len = roundup(ntohl(req->data_length), conn->tp->data_padding);
 
 	dprintf("%u %x %d %d %d %x %x\n", conn->session->tsih,
 		req->cdb[0], ahs_len, imm_len, data_len,
@@ -1812,11 +1813,11 @@ again:
 			conn->rx_buffer = conn->req_buffer;
 			conn->req.ahs = conn->rx_buffer;
 			conn->req.data = conn->rx_buffer
-				+ roundup(conn->req.bhs.hlength * 4, 4);
+				+ conn->req.bhs.hlength * 4;
 		}
 		conn->req.ahssize = conn->req.bhs.hlength * 4;
 		conn->req.datasize = ntoh24(conn->req.bhs.dlength);
-		conn->rx_size = roundup(conn->req.ahssize, 4);
+		conn->rx_size = conn->req.ahssize;
 		if (conn->rx_size) {
 			conn->rx_buffer = conn->req.ahs;
 			conn->rx_iostate = IOSTATE_RX_AHS;
@@ -1855,8 +1856,7 @@ again:
 		crc = ~0;
 		crc = crc32c(crc, &conn->req.bhs, BHS_SIZE);
 		if (conn->req.ahssize)
-			crc = crc32c(crc, conn->req.ahs,
-				     roundup(conn->req.ahssize, 4));
+			crc = crc32c(crc, conn->req.ahs, conn->req.ahssize);
 		crc = ~crc;
 		if (*((uint32_t *)conn->rx_digest) != crc) {
 			eprintf("rx hdr digest error 0x%x calc 0x%x\n",
@@ -1865,7 +1865,8 @@ again:
 		}
 		conn->rx_iostate = IOSTATE_RX_INIT_DATA;
 	case IOSTATE_RX_INIT_DATA:
-		conn->rx_size = roundup(conn->req.datasize, 4);
+		conn->rx_size = roundup(conn->req.datasize,
+					conn->tp->data_padding);
 		if (conn->rx_size) {
 			conn->rx_iostate = IOSTATE_RX_DATA;
 			conn->rx_buffer = conn->req.data;
@@ -1888,7 +1889,9 @@ again:
 			break;
 	case IOSTATE_RX_CHECK_DDIGEST:
 		crc = ~0;
-		crc = crc32c(crc, conn->req.data, roundup(conn->req.datasize, 4));
+		crc = crc32c(crc, conn->req.data,
+			     roundup(conn->req.datasize,
+				     conn->tp->data_padding));
 		crc = ~crc;
 		conn->rx_iostate = IOSTATE_RX_END;
 		if (*((uint32_t *)conn->rx_digest) != crc) {
@@ -2010,7 +2013,7 @@ void iscsi_tx_handler(struct iscsi_connection *conn)
 			conn->tx_iostate = IOSTATE_TX_DATA;
 			conn->tx_buffer = conn->rsp.data;
 			conn->tx_size = conn->rsp.datasize;
-			pad = conn->tx_size & (PAD_WORD_LEN - 1);
+			pad = conn->tx_size & (conn->tp->data_padding - 1);
 			if (pad) {
 				pad = PAD_WORD_LEN - pad;
 				memset(conn->tx_buffer + conn->tx_size, 0, pad);
@@ -2030,7 +2033,8 @@ void iscsi_tx_handler(struct iscsi_connection *conn)
 	case IOSTATE_TX_INIT_DDIGEST:
 		crc = ~0;
 		crc = crc32c(crc, conn->rsp.data,
-			     roundup(conn->rsp.datasize, 4));
+			     roundup(conn->rsp.datasize,
+				     conn->tp->data_padding));
 		*(uint32_t *)conn->tx_digest = ~crc;
 		conn->tx_iostate = IOSTATE_TX_DDIGEST;
 		conn->tx_buffer = conn->tx_digest;
