@@ -294,7 +294,7 @@ static int iscsi_tcp_show(struct iscsi_connection *conn, char *buf, int rest)
 	return total > 0 ? total : 0;
 }
 
-void iscsi_event_modify(struct iscsi_connection *conn, int events)
+static void iscsi_event_modify(struct iscsi_connection *conn, int events)
 {
 	struct iscsi_tcp_connection *tcp_conn = TCP_CONN(conn);
 	int ret;
@@ -320,27 +320,27 @@ static void iscsi_tcp_free_task(struct iscsi_task *task)
 	free(task);
 }
 
-void *iscsi_tcp_alloc_data_buf(struct iscsi_connection *conn, size_t sz)
+static void *iscsi_tcp_alloc_data_buf(struct iscsi_connection *conn, size_t sz)
 {
 	return valloc(sz);
 }
 
-void iscsi_tcp_free_data_buf(struct iscsi_connection *conn, void *buf)
+static void iscsi_tcp_free_data_buf(struct iscsi_connection *conn, void *buf)
 {
 	if (buf)
 		free(buf);
 }
 
-int iscsi_tcp_getsockname(struct iscsi_connection *conn, struct sockaddr *sa,
-			  socklen_t *len)
+static int iscsi_tcp_getsockname(struct iscsi_connection *conn,
+				 struct sockaddr *sa, socklen_t *len)
 {
 	struct iscsi_tcp_connection *tcp_conn = TCP_CONN(conn);
 
 	return getsockname(tcp_conn->fd, sa, len);
 }
 
-int iscsi_tcp_getpeername(struct iscsi_connection *conn, struct sockaddr *sa,
-			  socklen_t *len)
+static int iscsi_tcp_getpeername(struct iscsi_connection *conn,
+				 struct sockaddr *sa, socklen_t *len)
 {
 	struct iscsi_tcp_connection *tcp_conn = TCP_CONN(conn);
 
