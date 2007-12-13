@@ -233,13 +233,13 @@ static int build_element_descriptors(uint8_t *data, struct list_head *head,
 static int smc_read_element_status(int host_no, struct scsi_cmd *cmd)
 {
 	struct smc_info *smc = (struct smc_info *)cmd->dev->smc_p;
-	uint8_t *data;
+	uint8_t *data = NULL;
 	uint8_t *scb;
 	uint8_t element_type;
 	uint8_t voltag;
 	uint16_t req_start_elem;
 	uint8_t dvcid;
-	uint32_t alloc_len;
+	int alloc_len;
 	uint16_t count = 0;
 	int first = 0;		/* First valid slot location */
 	int len = 8;
@@ -255,6 +255,9 @@ static int smc_read_element_status(int host_no, struct scsi_cmd *cmd)
 	req_start_elem = __be16_to_cpu(*(uint16_t *)(scb + 2));
 	alloc_len = 0xffffff & __be32_to_cpu(*(uint32_t *)(scb + 6));
 
+	if (scsi_get_in_length(cmd) < alloc_len)
+		goto sense;
+
 	elementSize = determine_element_sz(dvcid, voltag);
 
 	scsi_set_in_resid_by_actual(cmd, 0);
@@ -266,7 +269,8 @@ static int smc_read_element_status(int host_no, struct scsi_cmd *cmd)
 		}
 	}
 
-	if (pagesize < alloc_len) {
+	data = zalloc(alloc_len);
+	if (!data) {
 		dprintf("Can't allocate enough memory for cmd\n");
 		key = HARDWARE_ERROR;
 		asc = ASC_INTERNAL_TGT_FAILURE;
@@ -275,8 +279,6 @@ static int smc_read_element_status(int host_no, struct scsi_cmd *cmd)
 
 	if (scb[11])	/* Reserved byte */
 		goto sense;
-
-	data = scsi_get_in_buffer(cmd);
 
 	switch(element_type) {
 	case ELEMENT_ANY:
@@ -332,10 +334,13 @@ static int smc_read_element_status(int host_no, struct scsi_cmd *cmd)
 
 	/* Lastly, fill in data header */
 	len = element_status_data_hdr(data, dvcid, voltag, first, count);
-	len = min_t(int, len, alloc_len);
+	memcpy(scsi_get_in_buffer(cmd), data, min(len, alloc_len));
 	scsi_set_in_resid_by_actual(cmd, len);
+	free(data);
 	return SAM_STAT_GOOD;
 sense:
+	if (data)
+		free(data);
 	scsi_set_in_resid_by_actual(cmd, 0);
 	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
