@@ -73,8 +73,10 @@ static int mmc_rw(int host_no, struct scsi_cmd *cmd)
 static int mmc_read_toc(int host_no, struct scsi_cmd *cmd)
 {
 	uint8_t *data;
+	uint8_t buf[16];
 
-	data = scsi_get_in_buffer(cmd);
+	memset(buf, 0, sizeof(buf));
+	data = buf;
 
 	/* forged for single session data cd only. all iso file fall into this */
 	if (cmd->scb[1] & 0x2) {
@@ -93,6 +95,9 @@ static int mmc_read_toc(int host_no, struct scsi_cmd *cmd)
 		data[6] = 0x01;
 	}
 
+	memcpy(scsi_get_in_buffer(cmd), data,
+	       min(scsi_get_in_length(cmd), sizeof(buf)));
+
 	scsi_set_in_resid_by_actual(cmd, data[1] + 2);
 
 	return SAM_STAT_GOOD;
@@ -103,14 +108,18 @@ static int mmc_read_capacity(int host_no, struct scsi_cmd *cmd)
 	uint64_t size;
 	uint32_t *data;
 
+	if (scsi_get_in_length(cmd) < 8)
+		goto overflow;
+
 	data = scsi_get_in_buffer(cmd);
 	size = cmd->dev->size >> MMC_BLK_SHIFT;
 
 	data[0] = (size >> 32) ?
 		__cpu_to_be32(0xffffffff) : __cpu_to_be32(size - 1);
 	data[1] = __cpu_to_be32(1U << MMC_BLK_SHIFT);
-	scsi_set_in_resid_by_actual(cmd, 8);
 
+overflow:
+	scsi_set_in_resid_by_actual(cmd, 8);
 	return SAM_STAT_GOOD;
 }
 

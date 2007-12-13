@@ -118,12 +118,17 @@ static int sbc_read_capacity(int host_no, struct scsi_cmd *cmd)
 		goto sense;
 	}
 
+	if (scsi_get_in_length(cmd) < 8)
+		goto overflow;
+
 	data = scsi_get_in_buffer(cmd);
 	size = cmd->dev->size >> BLK_SHIFT;
 
 	data[0] = (size >> 32) ?
 		__cpu_to_be32(0xffffffff) : __cpu_to_be32(size - 1);
 	data[1] = __cpu_to_be32(1U << BLK_SHIFT);
+
+overflow:
 	scsi_set_in_resid_by_actual(cmd, 8);
 	return SAM_STAT_GOOD;
 sense:

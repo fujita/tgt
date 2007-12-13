@@ -150,11 +150,16 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 	uint8_t devtype = 0;
 	struct lu_phy_attr *attrs;
 	struct vpd *vpd_pg;
+	uint8_t buf[256];
 
 	if (((scb[1] & 0x3) == 0x3) || (!(scb[1] & 0x3) && scb[2]))
 		goto sense;
 
-	data = scsi_get_in_buffer(cmd);
+	if (scsi_get_in_length(cmd) < scb[4])
+		goto sense;
+
+	memset(buf, 0, sizeof(buf));
+	data = buf;
 
 	dprintf("%x %x\n", scb[1], scb[2]);
 
@@ -231,8 +236,8 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 	if (ret != SAM_STAT_GOOD)
 		goto sense;
 
-	len = min_t(int, len, scb[4]);
 	scsi_set_in_resid_by_actual(cmd, len);
+	memcpy(scsi_get_in_buffer(cmd), data, scb[4]);
 
 	if (cmd->dev->lun != cmd->dev_id)
 		data[0] = TYPE_NO_LUN;
@@ -249,7 +254,7 @@ int spc_report_luns(int host_no, struct scsi_cmd *cmd)
 	struct scsi_lu *lu;
 	struct list_head *dev_list = &cmd->c_target->device_list;
 	uint64_t lun, *data;
-	int idx, alen, oalen, nr_luns, rbuflen = 4096, overflow;
+	int idx, alen, oalen, nr_luns;
 	unsigned char key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 	uint8_t *scb = cmd->scb;
@@ -259,36 +264,34 @@ int spc_report_luns(int host_no, struct scsi_cmd *cmd)
 	if (alen < 16)
 		goto sense;
 
+	if (scsi_get_in_length(cmd) < alen)
+		goto sense;
+
 	data = scsi_get_in_buffer(cmd);
+	memset(data, 0, alen);
 
 	alen &= ~(8 - 1);
 	oalen = alen;
 
 	alen -= 8;
-	rbuflen -= 8; /* FIXME */
 	idx = 1;
 	nr_luns = 0;
 
-	overflow = 0;
 	list_for_each_entry(lu, dev_list, device_siblings) {
 		nr_luns++;
 
-		if (overflow)
+		if (!alen)
 			continue;
 
 		lun = lu->lun;
 		lun = ((lun > 0xff) ? (0x1 << 30) : 0) | ((0x3ff & lun) << 16);
 		data[idx++] = __cpu_to_be64(lun << 32);
-		if (!(alen -= 8))
-			overflow = 1;
-		if (!(rbuflen -= 8)) {
-			fprintf(stderr, "FIXME: too many luns\n");
-			exit(-1);
-		}
+		alen -= 8;
 	}
 
 	*((uint32_t *) data) = __cpu_to_be32(nr_luns * 8);
-	scsi_set_in_resid_by_actual(cmd, min(oalen, nr_luns * 8 + 8));
+	scsi_set_in_resid_by_actual(cmd, nr_luns * 8 + 8);
+	eprintf("%d %u\n", cmd->in_sdb.resid, nr_luns * 8 + 8);
 	return SAM_STAT_GOOD;
 sense:
 	scsi_set_in_resid_by_actual(cmd, 0);
@@ -337,17 +340,20 @@ int spc_test_unit(int host_no, struct scsi_cmd *cmd)
  *
  * Returns number of bytes copied.
  */
-static int build_mode_page(uint8_t *data, struct mode_pg *pg)
+static int build_mode_page(uint8_t *data, struct mode_pg *pg, int update)
 {
 	uint8_t *p;
 	int len;
 
-	data[0] = pg->pcode;
 	len = pg->pcode_size;
-	data[1] = len;
+	if (update) {
+		data[0] = pg->pcode;
+		data[1] = len;
+	}
 	p = &data[2];
 	len += 2;
-	memcpy(p, pg->mode_data, pg->pcode_size);
+	if (update)
+		memcpy(p, pg->mode_data, pg->pcode_size);
 
 	return len;
 }
@@ -388,13 +394,15 @@ int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 		len = 8;
 	}
 
-	if (alloc_len > pagesize)
+	if (scsi_get_in_length(cmd) < alloc_len)
 		goto sense;
+	memset(data, 0, alloc_len);
 
 	if (!dbd) {
-		memcpy(data + len, cmd->dev->mode_block_descriptor,
-				BLOCK_DESCRIPTOR_LEN);
-		len += 8;
+		if (alloc_len >= len)
+			memcpy(data + len, cmd->dev->mode_block_descriptor,
+			       BLOCK_DESCRIPTOR_LEN);
+		len += BLOCK_DESCRIPTOR_LEN;
 	}
 
 	if (pcode == 0x3f) {
@@ -402,13 +410,14 @@ int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 		for (i = 0; i < ARRAY_SIZE(cmd->dev->mode_pgs); i++) {
 			pg = cmd->dev->mode_pgs[i];
 			if (pg)
-				len += build_mode_page(data + len, pg);
+				len += build_mode_page(data + len, pg,
+						       alloc_len >= len);
 		}
 	} else {
 		pg = cmd->dev->mode_pgs[pcode];
 		if (!pg)
 			goto sense;
-		len += build_mode_page(data + len, pg);
+		len += build_mode_page(data + len, pg, alloc_len >= len);
 	}
 
 	if (mode6) {
