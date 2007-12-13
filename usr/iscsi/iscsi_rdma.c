@@ -198,6 +198,8 @@ struct iser_device {
 	struct list_head mempool_free, mempool_alloc;
 };
 
+static struct iscsi_transport iscsi_iser;
+
 /* global, across all devices */
 static struct rdma_event_channel *rdma_evt_channel;
 static struct rdma_cm_id *cma_listen_id;
@@ -1704,7 +1706,7 @@ static int iscsi_rdma_getpeername(struct iscsi_connection *conn,
 	return 0;
 }
 
-struct iscsi_transport iscsi_iser = {
+static struct iscsi_transport iscsi_iser = {
 	.name			= "iser",
 	.rdma			= 1,
 	.data_padding		= 1,
@@ -1727,3 +1729,7 @@ struct iscsi_transport iscsi_iser = {
 	.ep_getpeername		= iscsi_rdma_getpeername,
 };
 
+__attribute__((constructor)) static void iser_transport_init(void)
+{
+	iscsi_transport_register(&iscsi_iser);
+}

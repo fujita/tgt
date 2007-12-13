@@ -27,27 +27,29 @@
 #include "iscsid.h"
 #include "transport.h"
 
-struct iscsi_transport *iscsi_transports[] = {
-	&iscsi_tcp,
-#ifdef ISCSI_RDMA
-	&iscsi_iser,
-#endif
-	NULL,
-};
+static LIST_HEAD(iscsi_transport_list);
 
 int lld_index;
 
 int iscsi_init(int index, char *args)
 {
-	int i, err, nr = 0;
+	int err, nr = 0;
+	struct iscsi_transport *t;
 
 	lld_index = index;
 
-	for (i = 0; iscsi_transports[i]; i++) {
-		err = iscsi_transports[i]->ep_init();
+	list_for_each_entry(t, &iscsi_transport_list,
+			    iscsi_transport_siblings) {
+		err = t->ep_init();
 		if (!err)
 			nr++;
 	}
 
 	return !nr;
+}
+
+int iscsi_transport_register(struct iscsi_transport *t)
+{
+	list_add_tail(&t->iscsi_transport_siblings, &iscsi_transport_list);
+	return 0;
 }

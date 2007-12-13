@@ -38,6 +38,8 @@
 
 static void iscsi_tcp_event_handler(int fd, int events, void *data);
 
+static struct iscsi_transport iscsi_tcp;
+
 struct iscsi_tcp_connection {
 	int fd;
 
@@ -347,7 +349,7 @@ static int iscsi_tcp_getpeername(struct iscsi_connection *conn,
 	return getpeername(tcp_conn->fd, sa, len);
 }
 
-struct iscsi_transport iscsi_tcp = {
+static struct iscsi_transport iscsi_tcp = {
 	.name			= "iscsi",
 	.rdma			= 0,
 	.data_padding		= PAD_WORD_LEN,
@@ -369,3 +371,8 @@ struct iscsi_transport iscsi_tcp = {
 	.ep_getsockname		= iscsi_tcp_getsockname,
 	.ep_getpeername		= iscsi_tcp_getpeername,
 };
+
+__attribute__((constructor)) static void iscsi_transport_init(void)
+{
+	iscsi_transport_register(&iscsi_tcp);
+}

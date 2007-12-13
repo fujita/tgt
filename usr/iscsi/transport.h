@@ -2,11 +2,14 @@
 #define __TRANSPORT_H
 
 #include <sys/socket.h>
+#include "list.h"
 
 struct iscsi_connection;
 struct iscsi_task;
 
 struct iscsi_transport {
+	struct list_head iscsi_transport_siblings;
+
 	const char *name;
 	int rdma;
 	int data_padding;
@@ -36,7 +39,6 @@ struct iscsi_transport {
 			      struct sockaddr *sa, socklen_t *len);
 };
 
-extern struct iscsi_transport iscsi_tcp;
-extern struct iscsi_transport iscsi_iser;
+extern int iscsi_transport_register(struct iscsi_transport *);
 
 #endif
