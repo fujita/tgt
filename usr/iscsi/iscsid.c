@@ -1432,12 +1432,6 @@ static int iscsi_scsi_cmd_rx_start(struct iscsi_connection *conn)
 		req->cdb[0], ahs_len, imm_len, data_len,
 		req->flags & ISCSI_FLAG_CMD_ATTR_MASK, req->itt);
 
-	/*
-	 * fix spc, sbc, etc. they assume that buffer is long enough.
-	 */
-	if (data_len < 4096)
-		data_len = 4096;
-
 	ext_len = ahs_len ? sizeof(req->cdb) + ahs_len : 0;
 
 	task = iscsi_alloc_task(conn, ext_len, max(imm_len, data_len));
@@ -1445,12 +1439,6 @@ static int iscsi_scsi_cmd_rx_start(struct iscsi_connection *conn)
 		conn->rx_task = task;
 	else
 		return -ENOMEM;
-
-	/*
-	 * fix spc, sbc, etc. they assume that buffer is zero'ed.
-	 */
-	if (data_len && !scsi_is_io_opcode(req->cdb[0]))
-		memset(task->data, 0, data_len);
 
 	task->tag = req->itt;
 
