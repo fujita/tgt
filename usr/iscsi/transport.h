@@ -9,12 +9,13 @@ struct iscsi_task;
 struct iscsi_transport {
 	const char *name;
 	int rdma;
-	int task_trans_len;
 	int data_padding;
 
 	int (*ep_init) (void);
 	int (*ep_login_complete)(struct iscsi_connection *conn);
-	void (*ep_task_init)(struct iscsi_task *task);
+	struct iscsi_task *(*alloc_task)(struct iscsi_connection *conn,
+					 size_t ext_len);
+	void (*free_task)(struct iscsi_task *task);
 	size_t (*ep_read)(struct iscsi_connection *conn, void *buf,
 			  size_t nbytes);
 	size_t (*ep_write_begin)(struct iscsi_connection *conn, void *buf,

@@ -226,10 +226,6 @@ static int iscsi_tcp_conn_login_complete(struct iscsi_connection *conn)
 	return 0;
 }
 
-static void iscsi_tcp_task_init(struct iscsi_task *task)
-{
-}
-
 static size_t iscsi_tcp_read(struct iscsi_connection *conn, void *buf,
 			     size_t nbytes)
 {
@@ -308,6 +304,22 @@ void iscsi_event_modify(struct iscsi_connection *conn, int events)
 		eprintf("tgt_event_modify failed\n");
 }
 
+struct iscsi_task *iscsi_tcp_alloc_task(struct iscsi_connection *conn,
+					size_t ext_len)
+{
+	struct iscsi_task *task;
+
+	task = malloc(sizeof(*task) + ext_len);
+	if (task)
+		memset(task, 0, sizeof(*task) + ext_len);
+	return task;
+}
+
+static void iscsi_tcp_free_task(struct iscsi_task *task)
+{
+	free(task);
+}
+
 void *iscsi_tcp_alloc_data_buf(struct iscsi_connection *conn, size_t sz)
 {
 	return valloc(sz);
@@ -338,11 +350,11 @@ int iscsi_tcp_getpeername(struct iscsi_connection *conn, struct sockaddr *sa,
 struct iscsi_transport iscsi_tcp = {
 	.name			= "iscsi",
 	.rdma			= 0,
-	.task_trans_len		= 0,
 	.data_padding		= PAD_WORD_LEN,
 	.ep_init		= iscsi_tcp_init,
 	.ep_login_complete	= iscsi_tcp_conn_login_complete,
-	.ep_task_init		= iscsi_tcp_task_init,
+	.alloc_task		= iscsi_tcp_alloc_task,
+	.free_task		= iscsi_tcp_free_task,
 	.ep_read		= iscsi_tcp_read,
 	.ep_write_begin		= iscsi_tcp_write_begin,
 	.ep_write_end		= iscsi_tcp_write_end,
@@ -350,6 +362,8 @@ struct iscsi_transport iscsi_tcp = {
 	.ep_release		= iscsi_tcp_release,
 	.ep_show		= iscsi_tcp_show,
 	.ep_event_modify	= iscsi_event_modify,
+	.alloc_task		= iscsi_tcp_alloc_task,
+	.free_task		= iscsi_tcp_free_task,
 	.alloc_data_buf		= iscsi_tcp_alloc_data_buf,
 	.free_data_buf		= iscsi_tcp_free_data_buf,
 	.ep_getsockname		= iscsi_tcp_getsockname,

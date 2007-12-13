@@ -120,12 +120,12 @@ struct iscsi_task {
 	int unsol_count;
 	int exp_r2tsn;
 
-	struct scsi_cmd scmd;
-
-	void *trans_data;   /* transport specific data */
-	void *extdata;      /* extra data, after transport, for ahs only */
 	void *ahs;
 	void *data;
+
+	struct scsi_cmd scmd;
+
+	unsigned long extdata[0];
 };
 
 struct iscsi_connection {

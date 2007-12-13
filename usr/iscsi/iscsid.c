@@ -1030,15 +1030,14 @@ static struct iscsi_task *iscsi_alloc_task(struct iscsi_connection *conn,
 	struct iscsi_task *task;
 	void *buf;
 
-	task = malloc(sizeof(*task) + conn->tp->task_trans_len + ext_len);
+	task = conn->tp->alloc_task(conn, ext_len);
 	if (!task)
 		return NULL;
-	memset(task, 0, sizeof(*task) + conn->tp->task_trans_len + ext_len);
 
 	if (data_len) {
 		buf = conn->tp->alloc_data_buf(conn, data_len);
 		if (!buf) {
-			free(task);
+			conn->tp->free_task(task);
 			return NULL;
 		}
 		task->data = buf;
@@ -1048,13 +1047,6 @@ static struct iscsi_task *iscsi_alloc_task(struct iscsi_connection *conn,
 	task->conn = conn;
 	INIT_LIST_HEAD(&task->c_hlist);
 	INIT_LIST_HEAD(&task->c_list);
-
-	if (conn->tp->task_trans_len)
-		task->trans_data = (void *) &task[1];
-
-	if (ext_len)
-		task->extdata = (void *)((uintptr_t) &task[1] +
-				      conn->tp->task_trans_len);
 
 	conn_get(conn);
 	return task;
@@ -1067,7 +1059,7 @@ void iscsi_free_task(struct iscsi_task *task)
 	conn->tp->free_data_buf(conn, scsi_get_in_buffer(&task->scmd));
 	conn->tp->free_data_buf(conn, scsi_get_out_buffer(&task->scmd));
 
-	free(task);
+	conn->tp->free_task(task);
 	conn_put(conn);
 }
 
@@ -1482,8 +1474,6 @@ static int iscsi_scsi_cmd_rx_start(struct iscsi_connection *conn)
 		return -ENOMEM;
 
 	task->tag = req->itt;
-
-	conn->tp->ep_task_init(task);
 
 	if (ahs_len) {
 		task->ahs = task->extdata + sizeof(req->cdb);

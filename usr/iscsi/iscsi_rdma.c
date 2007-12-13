@@ -105,6 +105,7 @@ struct iser_task {
 	/* read and write from the initiator's point of view */
 	uint32_t rem_read_stag, rem_write_stag;
 	uint64_t rem_read_va, rem_write_va;
+	struct iscsi_task task;
 };
 
 struct iser_device;
@@ -256,6 +257,11 @@ static int num_rx_ready;
  */
 static int mempool_num = 192;
 static size_t mempool_size = 512 * 1024;
+
+static inline struct iser_task *ISER_TASK(struct iscsi_task *t)
+{
+	return container_of(t, struct iser_task, task);
+}
 
 static inline struct conn_info *RDMA_CONN(struct iscsi_connection *conn)
 {
@@ -1224,15 +1230,27 @@ out:
 /*
  * Copy the remote va and stag that were temporarily saved in conn_info.
  */
-static void iscsi_iser_task_init(struct iscsi_task *task)
+struct iscsi_task *iscsi_iser_alloc_task(struct iscsi_connection *conn,
+					 size_t ext_len)
 {
-	struct conn_info *ci = RDMA_CONN(task->conn);
-	struct iser_task *itask = task->trans_data;
+	struct conn_info *ci = RDMA_CONN(conn);
+	struct iser_task *itask;
+
+	itask = zalloc(sizeof(*itask) + ext_len);
+	if (!itask)
+		return NULL;
 
 	itask->rem_read_stag = ci->rem_read_stag;
 	itask->rem_read_va = ci->rem_read_va;
 	itask->rem_write_stag = ci->rem_write_stag;
 	itask->rem_write_va = ci->rem_write_va;
+
+	return &itask->task;
+}
+
+static void iscsi_iser_free_task(struct iscsi_task *task)
+{
+	free(ISER_TASK(task));
 }
 
 static int iser_parse_hdr(struct conn_info *ci, struct recvlist *recvl)
@@ -1423,7 +1441,7 @@ static int iscsi_rdma_rdma_read(struct iscsi_connection *conn)
 {
 	struct conn_info *ci = RDMA_CONN(conn);
 	struct iscsi_task *task = conn->tx_task;
-	struct iser_task *itask = task->trans_data;
+	struct iser_task *itask = ISER_TASK(task);
 	struct iscsi_r2t_rsp *r2t = (struct iscsi_r2t_rsp *) &conn->rsp.bhs;
 	uint8_t *buf;
 	uint32_t len;
@@ -1459,7 +1477,7 @@ static int iscsi_rdma_rdma_write(struct iscsi_connection *conn)
 {
 	struct conn_info *ci = RDMA_CONN(conn);
 	struct iscsi_task *task = conn->tx_task;
-	struct iser_task *itask = task->trans_data;
+	struct iser_task *itask = ISER_TASK(task);
 	struct iscsi_pdu *rsp = &conn->rsp;
 	struct iscsi_data_rsp *datain = (struct iscsi_data_rsp *) &rsp->bhs;
 	uint32_t offset;
@@ -1689,11 +1707,11 @@ static int iscsi_rdma_getpeername(struct iscsi_connection *conn,
 struct iscsi_transport iscsi_iser = {
 	.name			= "iser",
 	.rdma			= 1,
-	.task_trans_len		= sizeof(struct iser_task),
 	.data_padding		= 1,
 	.ep_init		= iscsi_rdma_init,
 	.ep_login_complete	= iscsi_rdma_login_complete,
-	.ep_task_init		= iscsi_iser_task_init,
+	.alloc_task		= iscsi_iser_alloc_task,
+	.free_task		= iscsi_iser_free_task,
 	.ep_read		= iscsi_iser_read,
 	.ep_write_begin		= iscsi_iser_write_begin,
 	.ep_write_end		= iscsi_iser_write_end,
