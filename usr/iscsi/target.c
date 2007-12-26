@@ -84,8 +84,7 @@ static int netmask_match(struct sockaddr *sa1, struct sockaddr *sa2, char *buf)
 	uint8_t family = sa1->sa_family;
 
 	mbit = strtoul(buf, NULL, 0);
-	if (mbit < 0 ||
-	    (family == AF_INET && mbit > 31) ||
+	if ((family == AF_INET && mbit > 31) ||
 	    (family == AF_INET6 && mbit > 127))
 		return 0;
 
