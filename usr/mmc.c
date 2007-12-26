@@ -96,7 +96,7 @@ static int mmc_read_toc(int host_no, struct scsi_cmd *cmd)
 	}
 
 	memcpy(scsi_get_in_buffer(cmd), data,
-	       min(scsi_get_in_length(cmd), sizeof(buf)));
+	       min(scsi_get_in_length(cmd), (uint32_t) sizeof(buf)));
 
 	scsi_set_in_resid_by_actual(cmd, data[1] + 2);
 
