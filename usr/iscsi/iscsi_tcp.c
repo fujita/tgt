@@ -306,7 +306,7 @@ static void iscsi_event_modify(struct iscsi_connection *conn, int events)
 		eprintf("tgt_event_modify failed\n");
 }
 
-struct iscsi_task *iscsi_tcp_alloc_task(struct iscsi_connection *conn,
+static struct iscsi_task *iscsi_tcp_alloc_task(struct iscsi_connection *conn,
 					size_t ext_len)
 {
 	struct iscsi_task *task;
@@ -364,8 +364,6 @@ static struct iscsi_transport iscsi_tcp = {
 	.ep_release		= iscsi_tcp_release,
 	.ep_show		= iscsi_tcp_show,
 	.ep_event_modify	= iscsi_event_modify,
-	.alloc_task		= iscsi_tcp_alloc_task,
-	.free_task		= iscsi_tcp_free_task,
 	.alloc_data_buf		= iscsi_tcp_alloc_data_buf,
 	.free_data_buf		= iscsi_tcp_free_data_buf,
 	.ep_getsockname		= iscsi_tcp_getsockname,
