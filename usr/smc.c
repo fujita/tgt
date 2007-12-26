@@ -507,7 +507,8 @@ static int slot_insert(struct list_head *head, int element_type, int address)
  *
  * Return NULL if no match
  */
-struct slot *slot_lookup(struct list_head *head, int element_type, int address)
+static struct slot *slot_lookup(struct list_head *head, int element_type,
+				int address)
 {
 	struct slot *s;
 

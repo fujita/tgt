@@ -110,7 +110,7 @@
 #define DESG_MD5 7
 #define DESG_SCSI 8
 
-void update_vpd_80(struct scsi_lu *lu, void *sn)
+static void update_vpd_80(struct scsi_lu *lu, void *sn)
 {
 	struct vpd *vpd_pg = lu->attrs.lu_vpd[0];
 	char *data = (char *)vpd_pg->data;
@@ -128,7 +128,7 @@ void update_vpd_80(struct scsi_lu *lu, void *sn)
 	}
 }
 
-void update_vpd_83(struct scsi_lu *lu, void *id)
+static void update_vpd_83(struct scsi_lu *lu, void *id)
 {
 	struct vpd *vpd_pg = lu->attrs.lu_vpd[3];
 	uint8_t	*data = vpd_pg->data;

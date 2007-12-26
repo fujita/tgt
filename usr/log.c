@@ -142,7 +142,7 @@ static void dump_logarea (void)
 }
 #endif
 
-int log_enqueue (int prio, const char * fmt, va_list ap)
+static int log_enqueue(int prio, const char *fmt, va_list ap)
 {
 	int len, fwd;
 	char buff[MAX_MSG_SIZE];
@@ -194,7 +194,7 @@ int log_enqueue (int prio, const char * fmt, va_list ap)
 	return 0;
 }
 
-int log_dequeue (void * buff)
+static int log_dequeue(void *buff)
 {
 	struct logmsg * src = (struct logmsg *)la->head;
 	struct logmsg * dst = (struct logmsg *)buff;

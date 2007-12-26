@@ -32,6 +32,7 @@
 #include <sys/sysmacros.h>
 
 #include "log.h"
+#include "util.h"
 
 int chrdev_open(char *modname, char *devpath, uint8_t minor, int *fd)
 {
