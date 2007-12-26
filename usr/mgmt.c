@@ -60,7 +60,7 @@ struct mgmt_task {
 
 static void set_show_results(struct tgtadm_rsp *rsp, int *err)
 {
-	if (err < 0)
+	if (*err < 0)
 		rsp->err = *err;
 	else {
 		rsp->err = 0;
