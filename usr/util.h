@@ -5,6 +5,7 @@
 #include <syscall.h>
 #include <unistd.h>
 #include <errno.h>
+#include <endian.h>
 
 #define roundup(x, y) ((((x) + ((y) - 1)) / (y)) * (y))
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
