@@ -1476,7 +1476,7 @@ static int iscsi_scsi_cmd_rx_start(struct iscsi_connection *conn)
 	task->tag = req->itt;
 
 	if (ahs_len) {
-		task->ahs = task->extdata + sizeof(req->cdb);
+		task->ahs = (uint8_t *) task->extdata + sizeof(req->cdb);
 		conn->req.ahs = task->ahs;
 		conn->req.data = task->data;
 	} else if (data_len)
