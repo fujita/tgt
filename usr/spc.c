@@ -291,7 +291,7 @@ int spc_report_luns(int host_no, struct scsi_cmd *cmd)
 
 	*((uint32_t *) data) = __cpu_to_be32(nr_luns * 8);
 	scsi_set_in_resid_by_actual(cmd, nr_luns * 8 + 8);
-	eprintf("%d %u\n", cmd->in_sdb.resid, nr_luns * 8 + 8);
+
 	return SAM_STAT_GOOD;
 sense:
 	scsi_set_in_resid_by_actual(cmd, 0);
