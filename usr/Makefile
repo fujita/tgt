@@ -24,6 +24,25 @@ TGTD_OBJS += $(addprefix fc/, fc.o)
 TGTD_OBJS += bs_mmap.o tgtif.o
 endif
 
+ifneq ($(FCOE),)
+TGTD_OBJS += $(addprefix fcoe/,\
+	openfc_target.o \
+	openfc_scst.o \
+	fcs_state.o \
+	fc_exch.o \
+	fc_disc_targ.o \
+	fc_frame.o \
+	fc_local_port.o \
+	fc_remote_port.o \
+	fc_sess.o \
+	fc_virt_fab.o \
+	fc_port.o \
+	fcoe_if.o fcoe_dev.o \
+	sa_event.o sa_timer.o sa_hash_kern.o sa_state.o\
+	crc32_le.o crc32_le_tab.o)
+TGTD_OBJS += bs_rdwr.o
+endif
+
 INCLUDES += -I. -I../include -I$(KERNELSRC)/include
 
 CFLAGS += -D_LARGEFILE64_SOURCE
@@ -61,4 +80,4 @@ install: $(PROGRAMS)
 
 .PHONY: clean
 clean:
-	rm -f *.[od] $(PROGRAMS) iscsi/*.[od] ibmvio/*.[od] fc/*.[od]
+	rm -f *.[od] $(PROGRAMS) iscsi/*.[od] ibmvio/*.[od] fc/*.[od] fcoe/*.[od]

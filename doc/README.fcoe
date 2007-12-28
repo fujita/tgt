@@ -1,0 +1,31 @@
+FC over Ethernet
+
+Note that this driver is not stable at all. It's for only fcoe developers.
+
+1. Preparation
+
+fujita@iris:~/git/tgt/usr$ make FCOE=1
+
+What's all. You don't need any other software.
+
+
+2. Starting the daemon
+
+root@iris:~/git/tgt# ./usr/tgtd eth2
+
+You need to specify a device connected to the initiator.
+
+
+3. Configuration
+
+You need to setup a target and luns as you do with other target
+drivers. There is no special hack for the FCOE driver.
+
+Here's a simple example:
+
+root@iris:~/git/tgt# ./usr/tgtadm --lld fcoe --op new --mode target --tid 1 -T fcoe1
+root@iris:~/git/tgt# ./usr/tgtadm --lld fcoe --op new --mode logicalunit --tid 1 --lun 1 -b /var/tmp/image0
+root@iris:~/git/tgt# ./usr/tgtadm --lld fcoe --op bind --mode target --tid 1 -I ALL
+
+
+Enjoy!
