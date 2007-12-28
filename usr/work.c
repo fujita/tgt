@@ -55,7 +55,7 @@ void add_work(struct tgt_work *work, unsigned int second)
 
 void del_work(struct tgt_work *work)
 {
-	list_del(&work->entry);
+	list_del_init(&work->entry);
 }
 
 /*
@@ -76,7 +76,7 @@ void schedule(void)
 
 	while (!list_empty(&active_work_list)) {
 		work = list_entry(active_work_list.next, struct tgt_work, entry);
-		list_del(&work->entry);
+		list_del_init(&work->entry);
 		work->func(work->data);
 	}
 
