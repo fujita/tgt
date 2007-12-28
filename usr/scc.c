@@ -47,6 +47,8 @@ static int scc_lu_init(struct scsi_lu *lu)
 	lu->attrs.version_desc[1] = 0x0960; /* iSCSI */
 	lu->attrs.version_desc[2] = 0x01fb; /* SCC-2 */
 
+	lu->attrs.online = 1;
+
 	return 0;
 }
 
