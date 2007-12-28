@@ -29,6 +29,9 @@ static inline void INIT_LIST_HEAD(struct list_head *list)
 	list->prev = list;
 }
 
+#define list_first_entry(ptr, type, member) \
+	list_entry((ptr)->next, type, member)
+
 static inline int list_empty(const struct list_head *head)
 {
 	return head->next == head;
