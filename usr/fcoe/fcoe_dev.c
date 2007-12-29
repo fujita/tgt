@@ -308,17 +308,17 @@ int fcoe_rcv(struct fcdev *fdev)
 	    fh->fh_type == FC_TYPE_FCP) {
 		fp->fr_flags |= FCPHF_CRC_UNCHECKED;
 		openfc_rcv(fdev, fp);
-/* 	} else if (cp->fcoe_crc32 == */
-/* 		   ~crc32_sb8_64_bit(~0, (uint8_t *)fp->fr_hdr, fr_len)) { */
-	} else {
+	} else if (cp->fcoe_crc32 ==
+		   ~crc32_sb8_64_bit(~0, (uint8_t *)fp->fr_hdr, fr_len)) {
+
 		if (fc->flogi_progress)
 			fcoe_recv_flogi(fc, fp, mac);
 		openfc_rcv(fdev, fp);
-/* 	} else { */
-/* 		dprintf("dropping frame with CRC error\n"); */
+	} else {
+		eprintf("dropping frame with CRC error\n");
 
-/* 		stats->InvalidCRCCount++; */
-/* 		stats->ErrorFrames++; */
+		stats->InvalidCRCCount++;
+		stats->ErrorFrames++;
 	}
 out:
 	fcoe_frame_free(fp);
