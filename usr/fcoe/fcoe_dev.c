@@ -235,12 +235,13 @@ int fcoe_rcv(struct fcdev *fdev)
 	fp = fcoe_frame_alloc(fdev->mtu);
 	if (!fp)
 		return 0;
+
 	buf = (char *)fp->fr_hdr - (sizeof(*eh) + fc->fcoe_hlen);
 	ret = read(fdev->fd, buf, fdev->mtu + sizeof(*eh));
-
-	dprintf("%d %d %d\n", ret, fdev->mtu, sizeof(*eh));
-	if (ret <= 0)
-		return ret;
+	if (ret <= 0) {
+		eprintf("%d\n", ret);
+		goto out;
+	}
 
 	eh = (struct ethhdr *)buf;
 
@@ -256,7 +257,6 @@ int fcoe_rcv(struct fcdev *fdev)
 	if (hlen == sizeof(struct fcoe_hdr)) {
 		struct fcoe_hdr *hp = (struct fcoe_hdr *)(eh + 1);
 
-		dprintf("new\n");
 		if (FC_FCOE_DECAPS_VER(hp) != FC_FCOE_VER) {
 			eprintf("unknown FCoE version %x\n",
 				FC_FCOE_DECAPS_VER(hp));
