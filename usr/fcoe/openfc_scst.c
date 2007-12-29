@@ -127,7 +127,6 @@ void openfct_rcv_cmd(struct fc_seq *sp, struct fc_frame *fp, void *arg)
 		fc_seq_hold(sp);
 		hba = (struct openfchba_softc *) arg;
 		pkt = openfc_alloc_scsi_pkt(hba);
-		pkt->next = pkt->prev = NULL;
 		pkt->cnt = 0;
 		fcmd = fc_frame_payload_get(fp, sizeof(*fcmd));
 		pkt->exid = net16_get(&fh->fh_ox_id);

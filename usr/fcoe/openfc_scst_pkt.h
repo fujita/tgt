@@ -22,10 +22,8 @@
 #include "fc_frame.h"
 #include "fc_exch.h"
 
-
 struct openfchba_softc;
-#define DCEHBA_SRB_READ		   (1 << 1)
-#define DCEHBA_SRB_WRITE	   (1 << 0)
+
 /*
  * SRB state  definitions
  */
@@ -43,8 +41,6 @@ struct openfchba_softc;
 #define OPENFC_SRB_INIT		   1	/* INIT command. */
 #define OPENFC_SRB_FREE		   0	/* cmd needs retrying */
 
-#define OPENFC_SRB_READ		   (1 << 1)
-#define OPENFC_SRB_WRITE	   (1 << 0)
 /*
  * transport level status code
  */
@@ -85,7 +81,6 @@ struct openfct_tgt;
 #define SS_CONDITION_MET		1 << 2
 #define SS_CHECK_CONDITION		1 << 1
 
-
 struct openfct_sess {
 	struct list_head list;
 	struct openfct_tgt *tgt;
@@ -95,7 +90,6 @@ struct openfct_sess {
 struct openfct_tgt {
 	u_int32_t	handle;
 	void	       *ha;
-	int		datasegs_per_cmd, datasegs_per_cont;
 	int		status;
 	/* Target's flags, serialized by ha->hardware_lock */
 	unsigned int	tgt_shutdown:1; /* The driver is being released */
@@ -103,42 +97,18 @@ struct openfct_tgt {
 	struct list_head sess_list;
 };
 
-static inline struct openfct_sess *openfct_find_sess_by_fcid(struct openfct_tgt
-							     *tgt,
-							     u_int32_t fcid)
-{
-	struct openfct_sess *sess, *sess_tmp;
-	list_for_each_entry_safe(sess, sess_tmp, &tgt->sess_list, list) {
-		if (fcid == (sess->fcid))
-			return (sess);
-	}
-	return (NULL);
-}
-
-
 struct fc_scsi_pkt {
-	struct fc_scsi_pkt *next;
-	struct fc_scsi_pkt *prev;
 	struct openfchba_softc *openfcp;	/* handle to hba struct */
 	u_int16_t	flags;		/* scsi_pkt state flags */
 	u_int16_t	state;		/* scsi_pkt state flags */
-	unsigned int	id;
 	u_int64_t	lun;
 	u_int8_t	lunp[8];
-	void	       *private;	/* this pvt ptr */
 	uint32_t	data_len;
 	int	cnt;
 	int	ref_cnt;
-	uint32_t	idx;		/* host given value */
 	struct openfct_tgt *tgt;
-	uint16_t	req_cnt;
-	uint16_t	seg_cnt;
-	unsigned short	use_sg;
-	struct scatterlist *sg;
 	int		bufflen;
-	void	       *buffer;
 	uint16_t	rq_result;
-	uint16_t	scsi_status;
 	unsigned char  *sense_buffer;
 	unsigned int	sense_buffer_len;
 	int		residual;
@@ -147,19 +117,11 @@ struct fc_scsi_pkt {
 	uint16_t	exid;
 	uint32_t	fcid;
 	u_int8_t	cdb[MAX_CMD_SIZE];
-	void		(*done) (struct fc_scsi_pkt *);
 	struct fcp_cmnd cdb_cmd;	/* this is only used in fcoe */
 	size_t		xfer_len;	/* onlye used by fcoe */
 	size_t		cmd_len;	/* onlye used by fcoe */
-	u_int8_t	cdb_status;
-	u_int8_t	status_code;
 	struct fc_seq  *seq_ptr;
-	struct fc_remote_port   *rp;
 	struct scsi_cmd scmd;
 };
 
-struct fc_scsi_pkt_head {
-	struct fc_scsi_pkt *next;
-	struct fc_scsi_pkt *prev;
-};
 #endif /* _OPENFC_SCSI_PKT_H_ */

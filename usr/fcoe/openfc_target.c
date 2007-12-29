@@ -31,6 +31,17 @@ extern void openfct_send_xfer_rdy(struct fc_scsi_pkt *);
 extern void openfct_scsi_send_status(struct fc_scsi_pkt *pkt);
 extern int openfct_scsi_send_data_status(struct fc_scsi_pkt *pkt);
 
+static struct openfct_sess *openfct_find_sess_by_fcid(struct openfct_tgt *tgt,
+						      u_int32_t fcid)
+{
+	struct openfct_sess *sess;
+	list_for_each_entry(sess, &tgt->sess_list, list) {
+		if (fcid == sess->fcid)
+			return sess;
+	}
+	return NULL;
+}
+
 int fcoe_cmd_done(uint64_t nid, int result, struct scsi_cmd *scmd)
 {
 	struct fc_scsi_pkt *pkt = container_of(scmd, struct fc_scsi_pkt, scmd);
