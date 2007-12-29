@@ -209,8 +209,8 @@ int fcoe_xmit(struct fcdev *fdev, struct fc_frame *fp)
 
 	total = fp->fr_len + tlen + sizeof(*eh) + hlen;
 	ret = write(fdev->fd, eh, total);
-
-	dprintf("%d %d %d\n", fdev->fd, total, ret);
+	if (ret <= 0)
+		eprintf("%d %d %d\n", fdev->fd, total, ret);
 	return 0;
 }
 
