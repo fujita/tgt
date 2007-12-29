@@ -13,7 +13,6 @@
  * You should have received a copy of the GNU General Public License along with
  * this program; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
- *
  */
 
 #ifndef _FC_FRAME_H_
@@ -32,13 +31,6 @@
 #define	FC_FRAME_HEADROOM	32	/* headroom for VLAN + FCoE headers */
 #define	FC_FRAME_TAILROOM	8	/* trailer space for FCoE */
 
-/*
- * Information about an individual fibre channel frame received or to be sent.
- * The buffer may be in up to 4 additional non-contiguous sections,
- * but the linear section (fr_hdr) must hold the frame header.
- */
-#define FC_FRAME_SG_LEN 	4	/* scatter/gather list maximum length */
-
 struct fc_frame {
 	struct fc_port	*fr_in_port;	/* port where frame was received */
 	struct fc_seq	*fr_seq;	/* for use with exchange manager */
@@ -46,14 +38,10 @@ struct fc_frame {
 	const char	*fr_stamp;	/* debug info on last usage */
 	void		(*fr_free)(struct fc_frame *); /* free callback */
 	void		*fr_free_priv;	/* private data for free handler */
-	void		*fr_dev;	/* transport layer private pointer */
 	enum fc_sof	fr_sof;		/* start of frame delimiter */
 	enum fc_eof	fr_eof;		/* end of frame delimiter */
 	u_int16_t	fr_len;		/* total length including S/G bytes */
 	u_int8_t	fr_flags;	/* flags - see below */
-	u_int8_t	fr_sg_len;	/* number of SG lists used */
-/* 	struct scatterlist fr_sg[FC_FRAME_SG_LEN]; /\* scatter / gather list *\/ */
-	u_char		fr_util[FC_FRAME_TAILROOM]; /* buffer for CRC, EOF */
 	void		(*fr_destructor)(void *); /* destructor for frame */
 	void		*fr_arg;                  /* arg for destructor */
 };
@@ -84,7 +72,6 @@ static inline void fc_frame_init(struct fc_frame *fp)
 	fp->fr_in_port = NULL;
 	fp->fr_seq = NULL;
 	fp->fr_flags = 0;
-	fp->fr_sg_len = 0;
 	FC_FRAME_STAMP(fp);
 }
 
@@ -163,11 +150,6 @@ static inline void fc_frame_free(struct fc_frame *fp)
 	(*fp->fr_free)(fp);
 }
 
-static inline int fc_frame_is_linear(struct fc_frame *fp)
-{
-	return (fp->fr_sg_len == 0); /* first buffer doesn't use fr_sg */
-}
-
 /*
  * Get frame header from message in fc_frame structure.
  * This hides a cast and provides a place to add some checking.
@@ -241,19 +223,5 @@ fc_frame_set_offset(struct fc_frame *fp, u_int32_t offset)
 	fh = fc_frame_header_get(fp);
 	net32_put(&fh->fh_parm_offset, offset);
 }
-
-/*
- * Check the CRC in a frame.
- * The CRC immediately follows the last data item *AFTER* the length.
- * The return value is zero if the CRC matches.
- */
-u_int32_t fc_frame_crc_check(struct fc_frame *);
-
-/*
- * Check for leaks.
- * Print the frame header of any currently allocated frame, assuming there
- * should be none at this point.
- */
-void fc_frame_leak_check(void);
 
 #endif /* _FC_FRAME_H_ */
