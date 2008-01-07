@@ -1,0 +1,217 @@
+# LUN assignment script
+#
+# Copyright (C) 2007 Erez Zilber <erezz@voltaire.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation, version 2 of the
+# License.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+# 02110-1301 USA
+
+#!/bin/bash
+
+usage()
+{
+	name=$(basename $0)
+	echo "usage: $name -d dev -n target_name [initiator_IP1 initiator_IP2 ...] ";
+	echo "example: $name /dev/sdb1 noni 192.168.10.63";
+}
+
+verify_params()
+{
+	if ! [ "$dev" ]; then
+		echo "Error: a device is mandatory";
+		exit 1;
+	fi
+
+	# Make sure that the device exists
+	if ! [ -b $dev -o -f $dev ]; then
+		echo "Error: $dev is not a device";
+		exit 1;
+	fi
+
+	if ! [ "$tgt_name" ]; then
+		echo "Error: target name is mandatory";
+		exit 1;
+	fi
+}
+
+find_vacant_tgt_id()
+{
+	id_list=$(tgtadm --lld iscsi --op show --mode target | grep Target | cut -d" " -f2 | sed s/://)
+
+	next_vacant_id=1
+
+	for id in $id_list; do
+		if (($id > $next_vacant_id)); then
+			break;
+		else
+			next_vacant_id=$((next_vacant_id+1))
+		fi
+	done
+
+	return $next_vacant_id
+}
+
+find_vacant_lun()
+{
+	tid=$1
+	tgt_found=0
+	next_vacant_lun=0
+	tmp_file=/tmp/target_list.txt
+
+	tgtadm --lld iscsi --op show --mode target > $tmp_file
+
+	while read line; do
+		# Check if we finished going over this target
+		if ((tgt_found == 1 && $(echo $line | grep -c "^Target") == 1)); then
+			break
+		fi
+
+		# Check if we found the requested target
+		if (($(echo $line | grep -c "Target $tid:") == 1)); then
+			tgt_found=1
+			continue
+		fi
+
+		if ((tgt_found == 1 && $(echo $line | grep -c "LUN:") == 1)); then
+			curr_lun=$(echo $line | cut -d" " -f2)
+			if (($curr_lun > $next_vacant_lun)); then
+				break
+			else
+				next_vacant_lun=$((next_vacant_lun+1))
+			fi
+		fi
+	done < $tmp_file
+
+	rm -f $tmp_file
+
+	if ((tgt_found == 0)); then
+		echo "Error: could not find a LUN for target $tid"
+		return -1
+	fi
+
+	return $next_vacant_lun
+}
+
+err_exit()
+{
+	echo "Deleting the new target"
+	tgtadm --lld iscsi --op delete --mode target --tid $tid
+	res=$?
+
+	if [ $res -ne 0 ]; then
+		echo "Error: could not delete a target"
+	fi
+
+	exit 1
+}
+
+check_if_tgt_exists()
+{
+	tgt_list=$(tgtadm --lld iscsi --op show --mode target | grep Target | cut -d" " -f3)
+
+	for curr_tgt in $tgt_list; do
+		if [ $tgt_name = $curr_tgt ]; then
+			return 1
+		fi
+	done
+
+	return 0
+}
+
+while getopts "d:n:" opt
+do
+	case ${opt} in
+	d)
+		dev=$OPTARG;;
+	n)
+		tgt_name=$OPTARG;;
+	*)
+		usage
+		exit 1
+	esac
+done
+
+shift $(($OPTIND - 1))
+
+initiators=$*
+
+verify_params
+
+# Check if tgtd is running (we should have 2 daemons)
+tgtd_count=$(ps aux|grep -c tgtd)
+if [ $tgtd_count -ne 3 ]; then
+	echo "Starting tgtd"
+	tgtd
+fi
+
+tgt_name="iqn.2001-04.com.$(hostname -s)-$tgt_name"
+
+# Make sure that a target with the same name doesn't exist
+check_if_tgt_exists
+if [ $? -eq 1 ]; then
+	echo "Error: a target named $tgt_name already exists"
+	echo "Please select a different target name"
+	exit 1
+fi
+
+find_vacant_tgt_id
+tid=$?
+
+# Create the new target
+echo "Creating the new target ($tgt_name)"
+tgtadm --lld iscsi --op new --mode target --tid $tid -T $tgt_name
+res=$?
+
+if [ $res -ne 0 ]; then
+	echo "Error: could not create a target"
+	exit 1
+fi
+
+find_vacant_lun $tid
+lun=$?
+
+# Add a logical unit to the target
+echo "Adding a logical unit ($dev) to the target"
+tgtadm --lld iscsi --op new --mode logicalunit --tid $tid --lun $lun -b $dev
+res=$?
+
+if [ $res -ne 0 ]; then
+	echo "Error: could not add a logical unit to the target"
+	err_exit
+fi
+
+# Define which initiators can use this target
+if test "$initiators" ; then
+	# Allow access only for specific initiators
+	echo "Accepting connections only from $initiators"
+	for initiator in $initiators; do
+		tgtadm --lld iscsi --op bind --mode target --tid $tid -I $initiator
+		res=$?
+
+		if [ $res -ne 0 ]; then
+			echo "Error: could not assign an initiator to the target"
+			err_exit
+		fi
+	done
+else
+	# Allow access for everyone
+	echo "Accepting connections from every initiator"
+	tgtadm --lld iscsi --op bind --mode target --tid $tid -I ALL
+	res=$?
+
+	if [ $res -ne 0 ]; then
+		echo "Error: could not assign initiators to the target"
+		err_exit
+	fi
+fi
