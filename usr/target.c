@@ -35,6 +35,7 @@
 #include "target.h"
 #include "scsi.h"
 #include "tgtadm.h"
+#include "parser.h"
 
 static LIST_HEAD(device_type_list);
 
@@ -223,15 +224,41 @@ __device_lookup(int tid, uint64_t lun, struct target **t)
 	return lu;
 }
 
-int tgt_device_create(int tid, int dev_type, uint64_t lun, char *args, int backing)
+enum {
+	Opt_path, Opt_err,
+};
+
+static match_table_t device_tokens = {
+	{Opt_path, "path=%s"},
+	{Opt_err, NULL},
+};
+
+int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
+		      int backing)
 {
-	char *p = NULL;
+	char *p, *path = NULL;
 	int ret = 0;
 	struct target *target;
 	struct scsi_lu *lu, *pos;
 	struct device_type_template *t;
 
 	dprintf("%d %" PRIu64 "\n", tid, lun);
+
+	while ((p = strsep(&params, ",")) != NULL) {
+		substring_t args[MAX_OPT_ARGS];
+		int token;
+		if (!*p)
+			continue;
+		token = match_token(p, device_tokens, args);
+		switch (token) {
+		case Opt_path:
+			path = match_strdup(&args[0]);
+			eprintf("%s\n", path);
+			break;
+		default:
+			break;
+		}
+	}
 
 	target = target_lookup(tid);
 	if (!target)
@@ -270,15 +297,10 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *args, int backi
 	}
 
 	if (backing) {
-		if (!*args)
+		if (!path)
 			return TGTADM_INVALID_REQUEST;
 
-		p = strchr(args, '=');
-		if (!p)
-			return TGTADM_INVALID_REQUEST;
-		p++;
-
-		ret = tgt_device_path_update(target, lu, p);
+		ret = tgt_device_path_update(target, lu, path);
 		if (ret)
 			goto free_lu;
 	}
@@ -293,10 +315,13 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *args, int backi
 	list_add_tail(&lu->device_siblings, &pos->device_siblings);
 
 	dprintf("Add a logical unit %" PRIu64 " to the target %d\n", lun, tid);
+out:
+	if (path)
+		free(path);
 	return ret;
 free_lu:
 	free(lu);
-	return ret;
+	goto out;
 }
 
 int tgt_device_destroy(int tid, uint64_t lun, int force)
