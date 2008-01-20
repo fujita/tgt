@@ -99,6 +99,7 @@ struct option const long_options[] = {
 	{"name", required_argument, NULL, 'n'},
 	{"value", required_argument, NULL, 'v'},
 	{"backing-store", required_argument, NULL, 'b'},
+	{"bstype", required_argument, NULL, 'E'},
 	{"targetname", required_argument, NULL, 'T'},
 	{"initiator-address", required_argument, NULL, 'I'},
 	{"user", required_argument, NULL, 'u'},
@@ -112,7 +113,7 @@ struct option const long_options[] = {
 	{NULL, 0, NULL, 0},
 };
 
-static char *short_options = "dhL:o:m:t:s:c:l:n:v:b:T:I:u:p:H:P:B:Y:O";
+static char *short_options = "dhL:o:m:t:s:c:l:n:v:b:E:T:I:u:p:H:P:B:Y:O";
 
 static void usage(int status)
 {
@@ -360,6 +361,7 @@ int main(int argc, char **argv)
 	uint32_t cid, hostno;
 	uint64_t sid, lun;
 	char *name, *value, *path, *targetname, *params, *address, *targetOps;
+	char *bstype;
 	char *user, *password;
 	char *buf;
 	struct tgtadm_req *req;
@@ -369,7 +371,7 @@ int main(int argc, char **argv)
 	dev_type = TYPE_DISK;
 	ac_dir = ACCOUNT_TYPE_INCOMING;
 	rest = BUFSIZE;
-	name = value = path = targetname = address = targetOps = NULL;
+	name = value = path = targetname = address = targetOps = bstype = NULL;
 	user = password = NULL;
 
 	buf = valloc(BUFSIZE + sizeof(struct tgtadm_req));
@@ -431,6 +433,9 @@ int main(int argc, char **argv)
 			break;
 		case 'H':
 			hostno = strtol(optarg, NULL, 10);
+			break;
+		case 'E':
+			bstype = optarg;
 			break;
 		case 'Y':
 			dev_type = str_to_device_type(optarg);
@@ -570,6 +575,9 @@ int main(int argc, char **argv)
 	if (path)
 		shprintf(total, params, rest, "%spath=%s",
 			 rest == BUFSIZE ? "" : ",", path);
+	if (bstype)
+		shprintf(total, params, rest, "%sbstype=%s",
+			 rest == BUFSIZE ? "" : ",", bstype);
 	if (targetname)
 		shprintf(total, params, rest, "%stargetname=%s",
 			 rest == BUFSIZE ? "" : ",", targetname);

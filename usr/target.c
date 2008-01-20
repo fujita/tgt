@@ -225,18 +225,19 @@ __device_lookup(int tid, uint64_t lun, struct target **t)
 }
 
 enum {
-	Opt_path, Opt_err,
+	Opt_path, Opt_bstype, Opt_err,
 };
 
 static match_table_t device_tokens = {
 	{Opt_path, "path=%s"},
+	{Opt_bstype, "bstype=%s"},
 	{Opt_err, NULL},
 };
 
 int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 		      int backing)
 {
-	char *p, *path = NULL;
+	char *p, *path = NULL, *bstype = NULL;
 	int ret = 0;
 	struct target *target;
 	struct scsi_lu *lu, *pos;
@@ -253,7 +254,9 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 		switch (token) {
 		case Opt_path:
 			path = match_strdup(&args[0]);
-			eprintf("%s\n", path);
+			break;
+		case Opt_bstype:
+			bstype = match_strdup(&args[0]);
 			break;
 		default:
 			break;
@@ -297,8 +300,20 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	}
 
 	if (backing) {
+		struct backingstore_template *bst;
+
 		if (!path)
 			return TGTADM_INVALID_REQUEST;
+
+		if (bstype) {
+			bst = get_backingstore_template(bstype);
+			if (bst)
+				lu->bst = bst;
+			else {
+				eprintf("failed to find bstype, %s\n", bstype);
+				goto free_lu;
+			}
+		}
 
 		ret = tgt_device_path_update(target, lu, path);
 		if (ret)
@@ -316,6 +331,8 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 
 	dprintf("Add a logical unit %" PRIu64 " to the target %d\n", lun, tid);
 out:
+	if (bstype)
+		free(bstype);
 	if (path)
 		free(path);
 	return ret;
