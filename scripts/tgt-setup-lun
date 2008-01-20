@@ -129,14 +129,19 @@ check_if_tgt_exists()
 	return 0
 }
 
-while getopts "d:n:" opt
+if [ $# -eq 0 ]; then
+	usage
+	exit 1
+fi
+
+while getopts "d:n:h" opt
 do
 	case ${opt} in
 	d)
 		dev=$OPTARG;;
 	n)
 		tgt_name=$OPTARG;;
-	*)
+	h*)
 		usage
 		exit 1
 	esac
