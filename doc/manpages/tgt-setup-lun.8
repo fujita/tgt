@@ -1,0 +1,45 @@
+.de Vb \" Begin verbatim text
+.ft CW
+.nf
+.ne \\$1
+..
+
+.TH "tgt-setup-lun" 8
+.SH NAME
+tgt-setup-lun \- creates a target, adds a device to the target and defines initiators that can connect to the target
+.SH SYNOPSIS
+.B tgt-setup-lun -d device -n target_name [initiator_IP1 initiator_IP2 ...] [-h]
+
+.SH DESCRIPTION
+Starts tgtd if necessary and creates a target according to the supplied target_name. The format of the target name is as follows:
+.br
+iqn.2001-04.com.<hostname>-<target_name>
+The target name must be unique.
+
+The script then adds the requested device to the target. If specific IP addresses are defined, it adds them to the
+list of allowed initiators for that target. If no IP addresses is defined, it defines that the target accepts any
+initiator.
+
+.SH  EXAMPLES
+Create a target that uses /dev/sdb1 and allows connections only from 192.168.10.81:
+.br
+tgt-setup-lun -d /dev/sdb1 -n my_target 192.168.10.81
+
+Create a target that uses /dev/sdb1 and allows connections only from 192.168.10.81 and 192.168.10.82:
+.br
+tgt-setup-lun -d /dev/sdb1 -n my_target 192.168.10.81 192.168.10.82
+
+Create a target that uses /dev/sdb1 and allows connections from any initiator:
+.br
+tgt-setup-lun -d /dev/sdb1 -n my_target
+
+Display help:
+.br
+tgt-setup-lun -h
+
+.SH AUTHOR
+Written by Erez Zilber
+.SH "REPORTING BUGS"
+Report bugs to <erezz@voltaire.com>.
+.SH COPYRIGHT
+Copyright \(co Voltaire Ltd. 2008.
