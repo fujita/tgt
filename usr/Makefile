@@ -1,3 +1,5 @@
+mandir = /usr/share/man
+
 ifneq ($(IBMVIO),)
 CFLAGS += -DIBMVIO -DUSE_KERNEL
 TGTD_OBJS += $(addprefix ibmvio/, ibmvio.o)
@@ -56,6 +58,7 @@ PROGRAMS += tgtd tgtadm
 PROGRAMS += ../scripts/tgt-setup-lun
 TGTD_OBJS += tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o \
 		parser.o spc.o sbc.o mmc.o osd.o scc.o smc.o bs.o
+MANPAGES = ../doc/manpages/tgtadm.8 ../doc/manpages/tgt-setup-lun.8
 
 TGTD_DEP = $(TGTD_OBJS:.o=.d)
 
@@ -77,8 +80,12 @@ tgtadm: tgtadm.o
 	@$(CC) -MM $(CFLAGS) -MF $*.d -MT $*.o $*.c
 
 .PHONY: install
-install: $(PROGRAMS)
+install: $(PROGRAMS) install_doc
 	install -m 0755 $(PROGRAMS) $(DESTDIR)/usr/sbin
+
+install_doc: $(MANPAGES)
+	install -d $(DESTDIR)$(mandir)/man8
+	install -m 644 $^ $(DESTDIR)$(mandir)/man8
 
 .PHONY: clean
 clean:
