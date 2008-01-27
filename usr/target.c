@@ -265,40 +265,51 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	}
 
 	target = target_lookup(tid);
-	if (!target)
-		return TGTADM_NO_TARGET;
+	if (!target) {
+		ret = TGTADM_NO_TARGET;
+		goto out;
+	}
 
 	lu = device_lookup(target, lun);
 	if (lu) {
 		eprintf("device %" PRIu64 " already exists\n", lun);
-		return TGTADM_LUN_EXIST;
+		ret = TGTADM_LUN_EXIST;
+		goto out;
 	}
 
 	bst = target->bst;
-	if (backing && bstype) {
-		bst = get_backingstore_template(bstype);
-		if (!bst) {
-			eprintf("failed to find bstype, %s\n", bstype);
+	if (backing) {
+		if (!path) {
+			ret = TGTADM_INVALID_REQUEST;
 			goto out;
+		}
+
+		if (bstype) {
+			bst = get_backingstore_template(bstype);
+			if (!bst) {
+				eprintf("failed to find bstype, %s\n", bstype);
+				ret = TGTADM_INVALID_REQUEST;
+				goto out;
+			}
 		}
 	}
 
-	lu = zalloc(sizeof(*lu) + bst->bs_datasize);
-	if (!lu)
-		return TGTADM_NOMEM;
-
 	t = device_type_lookup(dev_type);
-	if (t) {
-		lu->dev_type_template = *t;
-		lu->bst = bst;
-	} else {
+	if (!t) {
 		eprintf("Unknown device type %d\n", dev_type);
 		ret = TGTADM_INVALID_REQUEST;
-		goto free_lu;
+		goto out;
 	}
 
-	lu->tgt = target;
+	lu = zalloc(sizeof(*lu) + bst->bs_datasize);
+	if (!lu) {
+		ret = TGTADM_NOMEM;
+		goto out;
+	}
 
+	lu->dev_type_template = *t;
+	lu->bst = bst;
+	lu->tgt = target;
 	lu->lun = lun;
 	lu->lu_state = SCSI_LU_RUNNING;
 	tgt_cmd_queue_init(&lu->cmd_queue);
@@ -310,9 +321,6 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	}
 
 	if (backing) {
-		if (!path)
-			return TGTADM_INVALID_REQUEST;
-
 		ret = tgt_device_path_update(target, lu, path);
 		if (ret)
 			goto free_lu;
