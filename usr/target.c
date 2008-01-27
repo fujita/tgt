@@ -242,6 +242,7 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	struct target *target;
 	struct scsi_lu *lu, *pos;
 	struct device_type_template *t;
+	struct backingstore_template *bst;
 
 	dprintf("%d %" PRIu64 "\n", tid, lun);
 
@@ -273,14 +274,23 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 		return TGTADM_LUN_EXIST;
 	}
 
-	lu = zalloc(sizeof(*lu) + target->bst->bs_datasize);
+	bst = target->bst;
+	if (backing && bstype) {
+		bst = get_backingstore_template(bstype);
+		if (!bst) {
+			eprintf("failed to find bstype, %s\n", bstype);
+			goto out;
+		}
+	}
+
+	lu = zalloc(sizeof(*lu) + bst->bs_datasize);
 	if (!lu)
 		return TGTADM_NOMEM;
 
 	t = device_type_lookup(dev_type);
 	if (t) {
 		lu->dev_type_template = *t;
-		lu->bst = target->bst;
+		lu->bst = bst;
 	} else {
 		eprintf("Unknown device type %d\n", dev_type);
 		ret = TGTADM_INVALID_REQUEST;
@@ -300,20 +310,8 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	}
 
 	if (backing) {
-		struct backingstore_template *bst;
-
 		if (!path)
 			return TGTADM_INVALID_REQUEST;
-
-		if (bstype) {
-			bst = get_backingstore_template(bstype);
-			if (bst)
-				lu->bst = bst;
-			else {
-				eprintf("failed to find bstype, %s\n", bstype);
-				goto free_lu;
-			}
-		}
 
 		ret = tgt_device_path_update(target, lu, path);
 		if (ret)
