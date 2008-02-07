@@ -78,6 +78,15 @@ static int set_keepalive(int fd)
 	return 0;
 }
 
+static int set_nodelay(int fd)
+{
+	int ret, opt;
+
+	opt = 1;
+	ret = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
+	return ret;
+}
+
 static void accept_connection(int afd, int events, void *data)
 {
 	struct sockaddr_storage from;
@@ -96,6 +105,10 @@ static void accept_connection(int afd, int events, void *data)
 	}
 
 	ret = set_keepalive(fd);
+	if (ret)
+		goto out;
+
+	ret = set_nodelay(fd);
 	if (ret)
 		goto out;
 
