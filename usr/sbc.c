@@ -137,6 +137,36 @@ sense:
 	return SAM_STAT_CHECK_CONDITION;
 }
 
+static int sbc_service_action(int host_no, struct scsi_cmd *cmd)
+{
+	uint32_t *data;
+	uint64_t size;
+
+	if (device_reserved(cmd))
+		return SAM_STAT_RESERVATION_CONFLICT;
+
+	if (cmd->scb[1] != SAI_READ_CAPACITY_16)
+		goto sense;
+
+	if (scsi_get_in_length(cmd) < 12)
+		goto overflow;
+
+	data = scsi_get_in_buffer(cmd);
+	memset(data, 0, 12);
+
+	size = cmd->dev->size >> BLK_SHIFT;
+
+	*((uint64_t *)(data)) = __cpu_to_be64(size - 1);
+	data[2] = __cpu_to_be32(1UL << BLK_SHIFT);
+
+overflow:
+	scsi_set_in_resid_by_actual(cmd, 12);
+	return SAM_STAT_GOOD;
+sense:
+	sense_data_build(cmd, ILLEGAL_REQUEST, ASC_INVALID_OP_CODE);
+	return SAM_STAT_CHECK_CONDITION;
+}
+
 static int sbc_sync_cache(int host_no, struct scsi_cmd *cmd)
 {
 	int ret, len;
@@ -351,7 +381,7 @@ static struct device_type_template sbc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{sbc_service_action,},
 		{spc_illegal_op,},
 
 		/* 0xA0 */
