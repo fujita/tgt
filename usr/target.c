@@ -1214,14 +1214,11 @@ int tgt_set_target_state(int tid, char *str)
 static char *print_disksize(uint64_t size)
 {
 	static char buf[64];
-	char *format[] = {"", "K", "M", "G", "T"};
-	int i;
+	unsigned long long mb;
 
-	memset(buf, 0, sizeof(buf));
-	for (i = 1; size >= (1ULL << (i * 10)) && i < ARRAY_SIZE(format); i++)
-		;
-	i--;
-	sprintf(buf, "%" PRIu64 "%s", size >> (i * 10), format[i]);
+	mb = ((size / 512) - (((size / 512) / 625) - 974)) / 1950;
+
+	sprintf(buf, "%" PRIu64 " MB", mb);
 	return buf;
 }
 
