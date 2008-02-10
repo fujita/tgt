@@ -38,6 +38,12 @@
 #include "scsi.h"
 #include "spc.h"
 
+static unsigned char scsi_command_size[8] = {6, 10, 10, 12, 16, 12, 10, 10};
+
+#define COMMAND_SIZE(opcode) scsi_command_size[((opcode) >> 5) & 7]
+#define CDB_SIZE(cmd) (((((cmd)->scb[0] >> 5) & 7) < 6) ? \
+				COMMAND_SIZE((cmd)->scb[0]) : (cmd)->scb_len)
+
 void sense_data_build(struct scsi_cmd *cmd, uint8_t key, uint16_t asc)
 {
 
