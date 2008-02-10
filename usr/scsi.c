@@ -138,7 +138,12 @@ int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd)
 {
 	unsigned char op = cmd->scb[0];
 
-	if (cmd->scb[CDB_SIZE(cmd) - 1] & (1U << 2)) {
+	if (cmd->scb[CDB_SIZE(cmd) - 1] & ((1U << 0) | (1U << 2))) {
+		/*
+		 * We don't support a linked command. SAM-3 say that
+		 * it's optional. It's obsolete in SAM-4.
+		 */
+
 		/*
 		 * We don't support ACA. SAM-3 and SAM-4 say that a
 		 * logical unit MAY support ACA.
