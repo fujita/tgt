@@ -138,6 +138,16 @@ int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd)
 {
 	unsigned char op = cmd->scb[0];
 
+	if (cmd->scb[CDB_SIZE(cmd) - 1] & (1U << 2)) {
+		/*
+		 * We don't support ACA. SAM-3 and SAM-4 say that a
+		 * logical unit MAY support ACA.
+		 */
+		sense_data_build(cmd,
+				 ILLEGAL_REQUEST, ASC_INVALID_FIELD_IN_CDB);
+		return SAM_STAT_CHECK_CONDITION;
+	}
+
 	return cmd->dev->dev_type_template.ops[op].cmd_perform(host_no, cmd);
 }
 
