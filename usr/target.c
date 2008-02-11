@@ -951,6 +951,7 @@ void target_mgmt_request(int tid, uint64_t itn_id, uint64_t req_id,
 	struct it_nexus *itn;
 	struct it_nexus_lu_info *itn_lu;
 	uint64_t lun;
+	uint16_t asc;
 
 	target = target_lookup(tid);
 	if (!target) {
@@ -980,9 +981,30 @@ void target_mgmt_request(int tid, uint64_t itn_id, uint64_t req_id,
 			send = 0;
 		break;
 	case CLEAR_ACA:
-	case CLEAR_TASK_SET:
-		eprintf("Not supported yet %x\n", function);
+		eprintf("We don't support ACA\n");
 		err = -EINVAL;
+		break;
+	case CLEAR_TASK_SET:
+		/* TAS bit is set to zero. */
+		lun = scsi_get_devid(target->lid, lun_buf);
+		count = abort_task_set(mreq, target, itn_id, 0, lun_buf, 0);
+		if (mreq->busy)
+			send = 0;
+
+		list_for_each_entry(itn, &target->it_nexus_list, nexus_siblings) {
+			list_for_each_entry(itn_lu, &itn->it_nexus_lu_info_list,
+					    lu_info_siblings) {
+				if (itn_lu->lu->lun == lun) {
+					if (itn->itn_id == itn_id)
+						asc = ASC_POWERON_RESET;
+					else
+						asc = ASC_COMMANDS_CLEARED_BY_ANOTHOR_INI;
+
+					asc = ua_sense_add(itn_lu, asc);
+					break;
+				}
+			}
+		}
 		break;
 	case LOGICAL_UNIT_RESET:
 		lun = scsi_get_devid(target->lid, lun_buf);
