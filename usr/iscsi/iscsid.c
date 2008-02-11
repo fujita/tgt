@@ -1423,8 +1423,8 @@ static int iscsi_task_queue(struct iscsi_task *task)
 
 		if (list_empty(&session->pending_cmd_list))
 			return 0;
-		task = list_entry(session->pending_cmd_list.next,
-				   struct iscsi_task, c_list);
+		task = list_first_entry(&session->pending_cmd_list,
+					struct iscsi_task, c_list);
 		if (be32_to_cpu(task->req.statsn) != cmd_sn)
 			return 0;
 
@@ -1752,7 +1752,7 @@ static int iscsi_task_tx_start(struct iscsi_connection *conn)
 
 	conn_write_pdu(conn);
 
-	task = list_entry(conn->tx_clist.next, struct iscsi_task, c_list);
+	task = list_first_entry(&conn->tx_clist, struct iscsi_task, c_list);
 	dprintf("found a task %" PRIx64 " %u %u %u\n", task->tag,
 		ntohl(((struct iscsi_cmd *) (&task->req))->data_length),
 		task->offset,

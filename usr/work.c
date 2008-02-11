@@ -75,7 +75,8 @@ void schedule(void)
 	}
 
 	while (!list_empty(&active_work_list)) {
-		work = list_entry(active_work_list.next, struct tgt_work, entry);
+		work = list_first_entry(&active_work_list,
+					struct tgt_work, entry);
 		list_del_init(&work->entry);
 		work->func(work->data);
 	}

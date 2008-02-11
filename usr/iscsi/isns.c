@@ -258,7 +258,8 @@ static int isns_scn_register(void)
 	memset(buf, 0, sizeof(buf));
 	tlv = (struct isns_tlv *) hdr->pdu;
 
-	target = list_entry(iscsi_targets_list.next, struct iscsi_target, tlist);
+	target = list_first_entry(&iscsi_targets_list,
+				  struct iscsi_target, tlist);
 	name = tgt_targetname(target->tid);
 
 	length += isns_tlv_set(&tlv, ISNS_ATTR_ISCSI_NAME, strlen(name), name);
@@ -313,7 +314,8 @@ static int isns_attr_query(char *name)
 		snprintf(mgmt->name, sizeof(mgmt->name), name);
 	else {
 		mgmt->name[0] = '\0';
-		target = list_entry(iscsi_targets_list.next, struct iscsi_target, tlist);
+		target = list_first_entry(&iscsi_targets_list,
+					  struct iscsi_target, tlist);
 		name = tgt_targetname(target->tid);
 	}
 
@@ -356,7 +358,8 @@ static int isns_deregister(void)
 	memset(buf, 0, sizeof(buf));
 	tlv = (struct isns_tlv *) hdr->pdu;
 
-	target = list_entry(iscsi_targets_list.next, struct iscsi_target, tlist);
+	target = list_first_entry(&iscsi_targets_list,
+				  struct iscsi_target, tlist);
 	name = tgt_targetname(target->tid);
 
 	length += isns_tlv_set(&tlv, ISNS_ATTR_ISCSI_NAME, strlen(name), name);
@@ -401,7 +404,8 @@ int isns_target_register(char *name)
 	memset(buf, 0, sizeof(buf));
 	tlv = (struct isns_tlv *) hdr->pdu;
 
-        target = list_entry(iscsi_targets_list.next, struct iscsi_target, tlist);
+        target = list_first_entry(&iscsi_targets_list,
+				  struct iscsi_target, tlist);
         length += isns_tlv_set(&tlv, ISNS_ATTR_ISCSI_NAME,
 			       strlen(tgt_targetname(target->tid)),
 			       tgt_targetname(target->tid));
@@ -453,7 +457,7 @@ static void free_all_acl(struct iscsi_target *target)
 	struct isns_initiator *ini;
 
 	while (!list_empty(&target->isns_list)) {
-		ini = list_entry(target->isns_list.next, typeof(*ini), ilist);
+		ini = list_first_entry(&target->isns_list, typeof(*ini), ilist);
 		list_del(&ini->ilist);
 	}
 }

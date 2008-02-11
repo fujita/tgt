@@ -76,7 +76,7 @@ retest:
 	}
 
 	while (!list_empty(&info->finished_list)) {
-		cmd = list_entry(info->finished_list.next,
+		cmd = list_first_entry(&info->finished_list,
 				 struct scsi_cmd, bs_list);
 
 		dprintf("found %p\n", cmd);
@@ -116,8 +116,8 @@ static void bs_thread_request_done(int fd, int events, void *data)
 	}
 
 	while (!list_empty(&info->ack_list)) {
-		cmd = list_entry(info->ack_list.next,
-				 struct scsi_cmd, bs_list);
+		cmd = list_first_entry(&info->ack_list,
+				       struct scsi_cmd, bs_list);
 
 		dprintf("back to tgtd, %p\n", cmd);
 
@@ -145,8 +145,8 @@ static void *bs_thread_worker_fn(void *arg)
 			goto retest;
 		}
 
-		cmd = list_entry(info->pending_list.next,
-				 struct scsi_cmd, bs_list);
+		cmd = list_first_entry(&info->pending_list,
+				       struct scsi_cmd, bs_list);
 
 		dprintf("got %p\n", cmd);
 

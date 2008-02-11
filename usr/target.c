@@ -764,8 +764,9 @@ int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 	cmd->dev = device_lookup(target, dev_id);
 	/* use LUN0 */
 	if (!cmd->dev)
-		cmd->dev = list_entry(target->device_list.next, struct scsi_lu,
-				      device_siblings);
+		cmd->dev = list_first_entry(&target->device_list,
+					    struct scsi_lu,
+					    device_siblings);
 
 	cmd->itn_lu_info = it_nexus_lu_info_lookup(itn, cmd->dev->lun);
 
