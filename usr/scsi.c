@@ -136,7 +136,9 @@ uint64_t scsi_rw_offset(uint8_t *scb)
 
 int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd)
 {
+	int ret;
 	unsigned char op = cmd->scb[0];
+	struct it_nexus_lu_info *itn_lu;
 
 	if (cmd->scb[CDB_SIZE(cmd) - 1] & ((1U << 0) | (1U << 2))) {
 		/*
@@ -151,6 +153,29 @@ int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd)
 		sense_data_build(cmd,
 				 ILLEGAL_REQUEST, ASC_INVALID_FIELD_IN_CDB);
 		return SAM_STAT_CHECK_CONDITION;
+	}
+
+	/* check out Unit Attention condition */
+	switch (op) {
+	case INQUIRY:
+		break;
+	case REPORT_LUNS:
+		list_for_each_entry(itn_lu,
+				    &cmd->it_nexus->it_nexus_lu_info_list,
+				    lu_info_siblings)
+			ua_sense_clear(itn_lu,
+				       ASC_REPORTED_LUNS_DATA_HAS_CHANGED);
+		break;
+	case REQUEST_SENSE:
+		ret = ua_sense_del(cmd, 0);
+		if (!ret)
+			return SAM_STAT_CHECK_CONDITION;
+		break;
+	default:
+		/* FIXME: use UA_INTLCK_CTRL field. */
+		ret = ua_sense_del(cmd, 1);
+		if (!ret)
+			return SAM_STAT_CHECK_CONDITION;
 	}
 
 	return cmd->dev->dev_type_template.ops[op].cmd_perform(host_no, cmd);

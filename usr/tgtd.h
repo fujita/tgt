@@ -69,6 +69,18 @@ struct lu_phy_attr {
 	struct vpd *lu_vpd[1 << PCODE_SHIFT];
 };
 
+struct ua_sense {
+	struct list_head ua_sense_siblings;
+	unsigned char ua_sense_buffer[SCSI_SENSE_BUFFERSIZE];
+	int ua_sense_len;
+};
+
+struct it_nexus_lu_info {
+	struct scsi_lu *lu;
+	struct list_head lu_info_siblings;
+	struct list_head pending_ua_sense_list;
+};
+
 struct device_type_operations {
 	int (*cmd_perform)(int host_no, struct scsi_cmd *cmd);
 };
@@ -192,6 +204,8 @@ extern void target_mgmt_request(int tid, uint64_t itn_id, uint64_t req_id,
 				int host_no);
 
 extern void target_cmd_io_done(struct scsi_cmd *cmd, int result);
+extern int ua_sense_del(struct scsi_cmd *cmd, int del);
+extern void ua_sense_clear(struct it_nexus_lu_info *itn_lu, uint16_t asc);
 
 extern uint64_t scsi_get_devid(int lid, uint8_t *pdu);
 extern int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd);

@@ -1,6 +1,9 @@
 struct target;
 struct mgmt_req;
 
+/* needs to move somewhere else */
+#define SCSI_SENSE_BUFFERSIZE	252
+
 enum data_direction {
 	DATA_NONE = 0,
 	DATA_WRITE = 1,
@@ -39,13 +42,15 @@ struct scsi_cmd {
 	int result;
 	struct mgmt_req *mreq;
 
-#define SCSI_SENSE_BUFFERSIZE	252
 	unsigned char sense_buffer[SCSI_SENSE_BUFFERSIZE];
 	int sense_len;
 
 	void (*scsi_cmd_done)(struct scsi_cmd *, int);
 
 	struct list_head bs_list;
+
+	struct it_nexus *it_nexus;
+	struct it_nexus_lu_info *itn_lu_info;
 };
 
 #define scsi_cmnd_accessor(field, type)						\

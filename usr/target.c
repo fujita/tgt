@@ -83,11 +83,124 @@ static struct it_nexus *it_nexus_lookup(int tid, uint64_t itn_id)
 	return NULL;
 }
 
+static int ua_sense_add(struct it_nexus_lu_info *itn_lu, uint16_t asc)
+{
+	struct ua_sense *uas;
+
+	uas = zalloc(sizeof(*uas));
+	if (!uas)
+		return -ENOMEM;
+
+	if (itn_lu->lu->attrs.sense_format) {
+		/* descriptor format */
+		uas->ua_sense_buffer[0] = 0x72;  /* current, not deferred */
+		uas->ua_sense_buffer[1] = UNIT_ATTENTION;
+		uas->ua_sense_buffer[2] = (asc >> 8) & 0xff;
+		uas->ua_sense_buffer[3] = asc & 0xff;
+		uas->ua_sense_len = 8;
+	} else {
+		/* fixed format */
+		int len = 0xa;
+		uas->ua_sense_buffer[0] = 0x70;  /* current, not deferred */
+		uas->ua_sense_buffer[2] = UNIT_ATTENTION;
+		uas->ua_sense_buffer[7] = len;
+		uas->ua_sense_buffer[12] = (asc >> 8) & 0xff;
+		uas->ua_sense_buffer[13] = asc & 0xff;
+		uas->ua_sense_len = len + 8;
+	}
+
+	list_add_tail(&uas->ua_sense_siblings, &itn_lu->pending_ua_sense_list);
+
+	return 0;
+}
+
+int ua_sense_del(struct scsi_cmd *cmd, int del)
+{
+	struct it_nexus_lu_info *itn_lu = cmd->itn_lu_info;
+	struct ua_sense *uas = NULL;
+	int len = sizeof(cmd->sense_buffer);
+
+	if (!list_empty(&itn_lu->pending_ua_sense_list)) {
+		uas = list_first_entry(&itn_lu->pending_ua_sense_list,
+				       struct ua_sense,
+				       ua_sense_siblings);
+		memcpy(cmd->sense_buffer, uas->ua_sense_buffer,
+		       min(uas->ua_sense_len, len));
+		cmd->sense_len = min(uas->ua_sense_len, len);
+
+		/*
+		 * FIXME: we should hook the uas to the command
+		 * instead of freeing it here. if a transport fails to
+		 * send the response, we should revert the
+		 * uas. Hooking the uas enable us to avoid memory
+		 * allocation. But a driver can't tell us to free the
+		 * command now.
+		 */
+		if (del) {
+			list_del(&uas->ua_sense_siblings);
+			free(uas);
+		}
+	}
+
+	return uas ? 0 : 1;
+}
+
+void ua_sense_clear(struct it_nexus_lu_info *itn_lu, uint16_t asc)
+{
+	struct ua_sense *uas, *next;
+	unsigned char *src;
+
+	list_for_each_entry_safe(uas, next, &itn_lu->pending_ua_sense_list,
+				 ua_sense_siblings) {
+		if (uas->ua_sense_buffer[0] == 0x72)
+			src = uas->ua_sense_buffer + 2;
+		else
+			src = uas->ua_sense_buffer + 12;
+
+		if ((src[0] == ((asc >> 8) & 0xff)) &&
+		    (src[1] == (asc & 0xff))) {
+			list_del(&uas->ua_sense_siblings);
+			free(uas);
+		}
+	}
+}
+
+static void ua_sense_pending_del(struct it_nexus_lu_info *itn_lu)
+{
+	struct ua_sense *uas;
+
+	while (!list_empty(&itn_lu->pending_ua_sense_list)) {
+		uas = list_first_entry(&itn_lu->pending_ua_sense_list,
+				       struct ua_sense,
+				       ua_sense_siblings);
+		list_del(&uas->ua_sense_siblings);
+		free(uas);
+	}
+}
+
+static void it_nexus_del_lu_info(struct it_nexus *itn)
+{
+	struct it_nexus_lu_info *itn_lu;
+
+	while(!list_empty(&itn->it_nexus_lu_info_list)) {
+		itn_lu = list_first_entry(&itn->it_nexus_lu_info_list,
+					  struct it_nexus_lu_info,
+					  lu_info_siblings);
+
+		ua_sense_pending_del(itn_lu);
+
+		list_del(&itn_lu->lu_info_siblings);
+		free(itn_lu);
+	}
+}
+
 int it_nexus_create(int tid, uint64_t itn_id, int host_no, char *info)
 {
-	int i;
+	int i, ret;
 	struct target *target;
 	struct it_nexus *itn;
+	struct scsi_lu *lu;
+	struct it_nexus_lu_info *itn_lu;
 
 	dprintf("%d %" PRIu64 "%d\n", tid, itn_id, host_no);
 	/* for reserve/release code */
@@ -108,6 +221,22 @@ int it_nexus_create(int tid, uint64_t itn_id, int host_no, char *info)
 	itn->host_no = host_no;
 	itn->nexus_target = target;
 	itn->info = info;
+	INIT_LIST_HEAD(&itn->it_nexus_lu_info_list);
+
+	list_for_each_entry(lu, &target->device_list, device_siblings) {
+		itn_lu = zalloc(sizeof(*itn_lu));
+		if (!itn_lu)
+			goto out;
+		itn_lu->lu = lu;
+		INIT_LIST_HEAD(&itn_lu->pending_ua_sense_list);
+
+		ret = ua_sense_add(itn_lu, ASC_POWERON_RESET);
+		if (ret)
+			goto out;
+
+		list_add(&itn_lu->lu_info_siblings,
+			 &itn->it_nexus_lu_info_list);
+	}
 
 	for (i = 0; i < ARRAY_SIZE(itn->cmd_hash_list); i++)
 		INIT_LIST_HEAD(&itn->cmd_hash_list[i]);
@@ -115,6 +244,9 @@ int it_nexus_create(int tid, uint64_t itn_id, int host_no, char *info)
 	list_add_tail(&itn->nexus_siblings, &target->it_nexus_list);
 
 	return 0;
+out:
+	it_nexus_del_lu_info(itn);
+	return -ENOMEM;
 }
 
 int it_nexus_destroy(int tid, uint64_t itn_id)
@@ -131,6 +263,8 @@ int it_nexus_destroy(int tid, uint64_t itn_id)
 	for (i = 0; i < ARRAY_SIZE(itn->cmd_hash_list); i++)
 		if (!list_empty(&itn->cmd_hash_list[i]))
 			return -EBUSY;
+
+	it_nexus_del_lu_info(itn);
 
 	list_del(&itn->nexus_siblings);
 	free(itn);
@@ -243,6 +377,8 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	struct scsi_lu *lu, *pos;
 	struct device_type_template *t;
 	struct backingstore_template *bst;
+	struct it_nexus_lu_info *itn_lu;
+	struct it_nexus *itn;
 
 	dprintf("%d %" PRIu64 "\n", tid, lun);
 
@@ -335,6 +471,26 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	}
 	list_add_tail(&lu->device_siblings, &pos->device_siblings);
 
+	list_for_each_entry(itn, &target->it_nexus_list, nexus_siblings) {
+		itn_lu = zalloc(sizeof(*itn_lu));
+		if (!itn_lu)
+			break;
+		itn_lu->lu = lu;
+		INIT_LIST_HEAD(&itn_lu->pending_ua_sense_list);
+
+		list_add(&itn_lu->lu_info_siblings,
+			 &itn->it_nexus_lu_info_list);
+	}
+
+	list_for_each_entry(itn, &target->it_nexus_list, nexus_siblings) {
+		list_for_each_entry(itn_lu, &itn->it_nexus_lu_info_list,
+				    lu_info_siblings) {
+
+			ret = ua_sense_add(itn_lu,
+					   ASC_REPORTED_LUNS_DATA_HAS_CHANGED);
+		}
+	}
+
 	dprintf("Add a logical unit %" PRIu64 " to the target %d\n", lun, tid);
 out:
 	if (bstype)
@@ -351,6 +507,9 @@ int tgt_device_destroy(int tid, uint64_t lun, int force)
 {
 	struct target *target;
 	struct scsi_lu *lu;
+	struct it_nexus *itn;
+	struct it_nexus_lu_info *itn_lu, *next;
+	int ret;
 
 	dprintf("%u %" PRIu64 "\n", tid, lun);
 
@@ -375,8 +534,27 @@ int tgt_device_destroy(int tid, uint64_t lun, int force)
 		lu->bst->bs_close(lu);
 	}
 
+	list_for_each_entry(itn, &target->it_nexus_list, nexus_siblings) {
+		list_for_each_entry_safe(itn_lu, next, &itn->it_nexus_lu_info_list,
+					 lu_info_siblings) {
+			if (itn_lu->lu == lu) {
+				ua_sense_pending_del(itn_lu);
+				break;
+			}
+		}
+	}
+
 	list_del(&lu->device_siblings);
 	free(lu);
+
+	list_for_each_entry(itn, &target->it_nexus_list, nexus_siblings) {
+		list_for_each_entry(itn_lu, &itn->it_nexus_lu_info_list,
+				    lu_info_siblings) {
+
+			ret = ua_sense_add(itn_lu,
+					   ASC_REPORTED_LUNS_DATA_HAS_CHANGED);
+		}
+	}
 
 	return 0;
 }
@@ -550,6 +728,19 @@ static void cmd_post_perform(struct tgt_cmd_queue *q, struct scsi_cmd *cmd)
 	}
 }
 
+static struct it_nexus_lu_info *it_nexus_lu_info_lookup(struct it_nexus *itn,
+							uint64_t lun)
+{
+	struct it_nexus_lu_info *itn_lu;
+
+	list_for_each_entry(itn_lu, &itn->it_nexus_lu_info_list,
+			    lu_info_siblings) {
+		if (itn_lu->lu->lun == lun)
+			return itn_lu;
+	}
+	return NULL;
+}
+
 int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 {
 	struct target *target;
@@ -565,6 +756,7 @@ int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 	}
 
 	cmd->c_target = target = itn->nexus_target;
+	cmd->it_nexus = itn;
 
 	dev_id = scsi_get_devid(target->lid, cmd->lun);
 	cmd->dev_id = dev_id;
@@ -574,6 +766,8 @@ int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 	if (!cmd->dev)
 		cmd->dev = list_entry(target->device_list.next, struct scsi_lu,
 				      device_siblings);
+
+	cmd->itn_lu_info = it_nexus_lu_info_lookup(itn, cmd->dev->lun);
 
 	/* service delivery or target failure */
 	if (target->target_state != SCSI_TARGET_RUNNING ||
@@ -748,11 +942,14 @@ static int abort_task_set(struct mgmt_req *mreq, struct target* target,
 }
 
 void target_mgmt_request(int tid, uint64_t itn_id, uint64_t req_id,
-			 int function, uint8_t *lun, uint64_t tag, int host_no)
+			 int function, uint8_t *lun_buf, uint64_t tag, int host_no)
 {
 	struct target *target;
 	struct mgmt_req *mreq;
 	int err = 0, count, send = 1;
+	struct it_nexus *itn;
+	struct it_nexus_lu_info *itn_lu;
+	uint64_t lun;
 
 	target = target_lookup(tid);
 	if (!target) {
@@ -787,11 +984,21 @@ void target_mgmt_request(int tid, uint64_t itn_id, uint64_t req_id,
 		err = -EINVAL;
 		break;
 	case LOGICAL_UNIT_RESET:
-		device_release(target->tid, itn_id,
-			       scsi_get_devid(target->lid, lun), 1);
-		count = abort_task_set(mreq, target, itn_id, 0, lun, 0);
+		lun = scsi_get_devid(target->lid, lun_buf);
+		device_release(target->tid, itn_id, lun, 1);
+		count = abort_task_set(mreq, target, itn_id, 0, lun_buf, 0);
 		if (mreq->busy)
 			send = 0;
+
+		list_for_each_entry(itn, &target->it_nexus_list, nexus_siblings) {
+			list_for_each_entry(itn_lu, &itn->it_nexus_lu_info_list,
+					    lu_info_siblings) {
+				if (itn_lu->lu->lun == lun) {
+					ua_sense_add(itn_lu, ASC_POWERON_RESET);
+					break;
+				}
+			}
+		}
 		break;
 	default:
 		err = -EINVAL;
