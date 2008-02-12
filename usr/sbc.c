@@ -235,7 +235,7 @@ static int sbc_lu_init(struct scsi_lu *lu)
 	add_mode_page(lu, "8:0:18:0x14:0:0xff:0xff:0:0:"
 		      "0xff:0xff:0xff:0xff:0x80:0x14:0:0:0:0:0:0");
 	/* Control page */
-	add_mode_page(lu, "10:0:10:2:0:0:0:0:0:0:0:2:0");
+	add_mode_page(lu, "10:0:10:2:0x10:0:0:0:0:0:0:2:0");
 	/* Informational Exceptions Control page */
 	add_mode_page(lu, "0x1c:0:10:8:0:0:0:0:0:0:0:0:0");
 
