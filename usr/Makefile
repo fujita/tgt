@@ -48,7 +48,7 @@ endif
 
 INCLUDES += -I. -I../include -I$(KERNELSRC)/include
 
-CFLAGS += -D_LARGEFILE64_SOURCE
+CFLAGS += -D_GNU_SOURCE
 CFLAGS += $(INCLUDES)
 CFLAGS += -g -O2 -Wall -Wstrict-prototypes -fPIC
 
