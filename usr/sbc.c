@@ -53,17 +53,6 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 	if (ret)
 		return SAM_STAT_RESERVATION_CONFLICT;
 
-	/* we need to set data dir for kernel drivers */
-	switch (cmd->scb[0]) {
-	case WRITE_6:
-	case WRITE_10:
-	case WRITE_16:
-	case WRITE_VERIFY:
-		break;
-	default:
-		break;
-	}
-
 	cmd->scsi_cmd_done = target_cmd_io_done;
 
 	cmd->offset = (scsi_rw_offset(cmd->scb) << BLK_SHIFT);
