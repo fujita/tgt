@@ -237,10 +237,16 @@ static void login_security_done(struct iscsi_connection *conn)
 	session = session_find_name(conn->tid, conn->initiator, req->isid);
 	if (session) {
 		if (!req->tsih) {
+			struct iscsi_connection *ent, *next;
+
 			/* do session reinstatement */
-			/* We need to close all connections in this session */
-/* 			session_conns_close(conn->tid, sid); */
-/* 			session = NULL; */
+
+			list_for_each_entry_safe(ent, next, &session->conn_list,
+						 clist) {
+				conn_close(ent);
+			}
+
+			session = NULL;
 		} else if (req->tsih != session->tsih) {
 			/* fail the login */
 			rsp->status_class = ISCSI_STATUS_CLS_INITIATOR_ERR;
@@ -250,8 +256,10 @@ static void login_security_done(struct iscsi_connection *conn)
 		} else if (conn_find(session, conn->cid)) {
 			/* do connection reinstatement */
 		}
+
 		/* add a new connection to the session */
-		conn_add_to_session(conn, session);
+		if (session)
+			conn_add_to_session(conn, session);
 	} else {
 		if (req->tsih) {
 			/* fail the login */
