@@ -1444,7 +1444,7 @@ int tgt_set_target_state(int tid, char *str)
 static char *print_disksize(uint64_t size)
 {
 	static char buf[64];
-	unsigned long long mb;
+	uint64_t mb;
 
 	mb = ((size / 512) - (((size / 512) / 625) - 974)) / 1950;
 
