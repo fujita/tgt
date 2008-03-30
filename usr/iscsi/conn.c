@@ -109,8 +109,7 @@ void conn_close(struct iscsi_connection *conn)
 	list_for_each_entry_safe(task, tmp, &conn->tx_clist, c_list) {
 		dprintf("Forcing release of tx task %" PRIx64 "\n",
 			task->tag);
-		list_del(&task->c_list);
-		iscsi_free_task(task);
+		iscsi_free_cmd_task(task);
 	}
 
 	if (conn->rx_task) {

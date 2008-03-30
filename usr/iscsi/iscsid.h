@@ -267,6 +267,7 @@ extern int iscsi_scsi_cmd_execute(struct iscsi_task *task);
 
 /* iscsid.c iscsi_task */
 extern void iscsi_free_task(struct iscsi_task *task);
+extern void iscsi_free_cmd_task(struct iscsi_task *task);
 
 /* session.c */
 extern struct iscsi_session *session_find_name(int tid, const char *iname, uint8_t *isid);

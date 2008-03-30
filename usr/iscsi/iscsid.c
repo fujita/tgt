@@ -1076,7 +1076,7 @@ static inline struct iscsi_task *ITASK(struct scsi_cmd *scmd)
 	return container_of(scmd, struct iscsi_task, scmd);
 }
 
-static void iscsi_free_cmd_task(struct iscsi_task *task)
+void iscsi_free_cmd_task(struct iscsi_task *task)
 {
 	target_cmd_done(&task->scmd);
 
