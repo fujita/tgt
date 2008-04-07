@@ -23,7 +23,7 @@ usage()
 {
 	name=$(basename $0)
 	echo "usage: $name -d dev -n target_name [initiator_IP1 initiator_IP2 ...] ";
-	echo "example: $name /dev/sdb1 noni 192.168.10.63";
+	echo "example: $name -d /dev/sdb1 -n noni 192.168.10.63";
 }
 
 verify_params()
