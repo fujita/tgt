@@ -154,10 +154,11 @@ initiators=$*
 verify_params
 
 # Check if tgtd is running (we should have 2 daemons)
-tgtd_count=$(ps aux|grep -c tgtd)
-if [ $tgtd_count -ne 3 ]; then
-	echo "Starting tgtd"
-	tgtd
+tgtd_count=`pidof tgtd | wc -w`
+if [ $tgtd_count -ne 2 ]; then
+	echo "tgtd is not running"
+	echo "Exiting..."
+	exit 1
 fi
 
 tgt_name="iqn.2001-04.com.$(hostname -s)-$tgt_name"
