@@ -34,11 +34,6 @@ enum scsi_target_state {
 	SCSI_TARGET_RUNNING,
 };
 
-enum scsi_lu_state {
-	SCSI_LU_OFFLINE = 1,
-	SCSI_LU_RUNNING,
-};
-
 struct tgt_cmd_queue {
 	int active_cmd;
 	unsigned long state;
@@ -130,8 +125,6 @@ struct scsi_lu {
 	struct list_head device_siblings;
 
 	struct tgt_cmd_queue cmd_queue;
-
-	enum scsi_lu_state lu_state;
 
 	uint64_t reserve_id;
 

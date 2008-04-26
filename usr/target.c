@@ -447,7 +447,6 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	lu->bst = bst;
 	lu->tgt = target;
 	lu->lun = lun;
-	lu->lu_state = SCSI_LU_RUNNING;
 	tgt_cmd_queue_init(&lu->cmd_queue);
 
  	if (lu->dev_type_template.lu_init) {
@@ -771,8 +770,7 @@ int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 	cmd->itn_lu_info = it_nexus_lu_info_lookup(itn, cmd->dev->lun);
 
 	/* service delivery or target failure */
-	if (target->target_state != SCSI_TARGET_RUNNING ||
-	    (cmd->dev->lu_state != SCSI_LU_RUNNING))
+	if (target->target_state != SCSI_TARGET_RUNNING)
 		return -EBUSY;
 
 	cmd_hlist_insert(itn, cmd);
