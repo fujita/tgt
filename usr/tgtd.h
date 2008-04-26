@@ -31,7 +31,7 @@ enum tgt_system_state {
 
 enum scsi_target_state {
 	SCSI_TARGET_OFFLINE = 1,
-	SCSI_TARGET_RUNNING,
+	SCSI_TARGET_READY,
 };
 
 struct tgt_cmd_queue {

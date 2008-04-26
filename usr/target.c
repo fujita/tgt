@@ -785,7 +785,7 @@ int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 	cmd->itn_lu_info = it_nexus_lu_info_lookup(itn, cmd->dev->lun);
 
 	/* service delivery or target failure */
-	if (target->target_state != SCSI_TARGET_RUNNING)
+	if (target->target_state != SCSI_TARGET_READY)
 		return -EBUSY;
 
 	cmd_hlist_insert(itn, cmd);
@@ -1417,7 +1417,7 @@ static struct {
 	char *name;
 } target_state[] = {
 	{SCSI_TARGET_OFFLINE, "offline"},
-	{SCSI_TARGET_RUNNING, "running"},
+	{SCSI_TARGET_READY, "ready"},
 };
 
 static char *target_state_name(enum scsi_target_state state)
@@ -1514,7 +1514,7 @@ int tgt_target_show_all(char *buf, int rest)
 			 "Target %d: %s\n"
 			 _TAB1 "System information:\n"
 			 _TAB2 "Driver: %s\n"
-			 _TAB2 "Status: %s\n",
+			 _TAB2 "State: %s\n",
 			 target->tid,
 			 target->name,
 			 tgt_drivers[target->lid]->name,
@@ -1647,7 +1647,7 @@ int tgt_target_create(int lld, int tid, char *args)
 
 	target->bst = bst;
 
-	target->target_state = SCSI_TARGET_RUNNING;
+	target->target_state = SCSI_TARGET_READY;
 	target->lid = lld;
 
 	list_for_each_entry(pos, &target_list, target_siblings)

@@ -455,7 +455,7 @@ static void login_start(struct iscsi_connection *conn)
 		}
 		conn->tid = target->tid;
 
-		if (tgt_get_target_state(target->tid) != SCSI_TARGET_RUNNING) {
+		if (tgt_get_target_state(target->tid) != SCSI_TARGET_READY) {
 			rsp->status_class = ISCSI_STATUS_CLS_TARGET_ERR;
 			rsp->status_detail = ISCSI_LOGIN_STATUS_TARGET_ERROR;
 			conn->state = STATE_EXIT;
