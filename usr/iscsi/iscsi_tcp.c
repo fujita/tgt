@@ -104,6 +104,12 @@ static void accept_connection(int afd, int events, void *data)
 		return;
 	}
 
+	if (!is_system_available())
+		goto out;
+
+	if (list_empty(&iscsi_targets_list))
+		goto out;
+
 	ret = set_keepalive(fd);
 	if (ret)
 		goto out;

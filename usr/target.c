@@ -1716,3 +1716,63 @@ int account_show(char *buf, int rest)
 overflow:
 	return max;
 }
+
+static struct {
+	enum tgt_system_state value;
+	char *name;
+} system_state[] = {
+	{TGT_SYSTEM_OFFLINE, "offline"},
+	{TGT_SYSTEM_READY, "ready"},
+};
+
+static char *system_state_name(enum scsi_target_state state)
+{
+	int i;
+	char *name = NULL;
+
+	for (i = 0; i < ARRAY_SIZE(system_state); i++) {
+		if (system_state[i].value == state) {
+			name = system_state[i].name;
+			break;
+		}
+	}
+	return name;
+}
+
+static enum tgt_system_state sys_state = TGT_SYSTEM_READY;
+
+int system_set_state(char *str)
+{
+	int i, err = TGTADM_INVALID_REQUEST;
+
+	for (i = 0; i < ARRAY_SIZE(target_state); i++) {
+		if (!strcmp(system_state[i].name, str)) {
+			sys_state = system_state[i].value;
+			err = 0;
+			break;
+		}
+	}
+	return err;
+}
+
+int system_show(int mode, char *buf, int rest)
+{
+	int total = 0, max = rest;
+
+	/* FIXME: too hacky */
+	if (mode != MODE_SYSTEM)
+		return 0;
+
+	shprintf(total, buf, rest, "System:\n");
+	shprintf(total, buf, rest, _TAB1 "State: %s\n",
+		 system_state_name(sys_state));
+
+	return total;
+overflow:
+	return max;
+}
+
+int is_system_available(void)
+{
+	return (sys_state == TGT_SYSTEM_READY);
+}

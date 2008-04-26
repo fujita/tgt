@@ -982,7 +982,7 @@ overflow:
 }
 
 enum {
-	Opt_isns, Opt_ip, Opt_port, Opt_ac, Opt_err,
+	Opt_isns, Opt_ip, Opt_port, Opt_ac, Opt_state, Opt_err,
 };
 
 static match_table_t tokens = {
@@ -990,6 +990,7 @@ static match_table_t tokens = {
 	{Opt_ip, "iSNSServerIP=%s"},
 	{Opt_port, "iSNSServerPort=%d"},
 	{Opt_ac, "iSNSAccessControl=%s"},
+	{Opt_state, "State=%s"},
 	{Opt_err, NULL},
 };
 
@@ -1001,7 +1002,7 @@ int isns_update(char *params)
 	while ((p = strsep(&params, ",")) != NULL) {
 		substring_t args[MAX_OPT_ARGS];
 		int token;
-		char tmp[8];
+		char tmp[16];
 
 		if (!*p)
 			continue;
@@ -1029,6 +1030,10 @@ int isns_update(char *params)
 		case Opt_ac:
 			match_strncpy(tmp, &args[0], sizeof(tmp));
 			use_isns_ac = !strcmp(tmp, "On");
+			break;
+		case Opt_state:
+			match_strncpy(tmp, &args[0], sizeof(tmp));
+			system_set_state(tmp);
 			break;
 		default:
 			ret = TGTADM_INVALID_REQUEST;

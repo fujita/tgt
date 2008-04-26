@@ -262,13 +262,14 @@ static int sys_mgmt(int lld_no, struct mgmt_task *mtask)
 		rsp->len = sizeof(*rsp);
 		break;
 	case OP_SHOW:
-		if (tgt_drivers[lld_no]->show) {
-			err = tgt_drivers[lld_no]->show(req->mode,
-							req->tid, req->sid,
-							req->cid, req->lun,
-							mtask->buf, len);
-			set_show_results(rsp, &err);
+		err = system_show(req->mode, mtask->buf, len);
+		if (err >= 0 && tgt_drivers[lld_no]->show) {
+			err += tgt_drivers[lld_no]->show(req->mode,
+							 req->tid, req->sid,
+							 req->cid, req->lun,
+							 mtask->buf + err, len - err);
 		}
+		set_show_results(rsp, &err);
 		break;
 	default:
 		break;

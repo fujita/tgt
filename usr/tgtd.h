@@ -24,6 +24,11 @@
 #define _TAB3 _TAB1 _TAB1 _TAB1
 #define _TAB4 _TAB2 _TAB2
 
+enum tgt_system_state {
+	TGT_SYSTEM_OFFLINE = 1,
+	TGT_SYSTEM_READY,
+};
+
 enum scsi_target_state {
 	SCSI_TARGET_OFFLINE = 1,
 	SCSI_TARGET_RUNNING,
@@ -183,6 +188,9 @@ extern int tgt_target_create(int lld, int tid, char *args);
 extern int tgt_target_destroy(int lld, int tid);
 extern char *tgt_targetname(int tid);
 extern int tgt_target_show_all(char *buf, int rest);
+int system_set_state(char *str);
+int system_show(int mode, char *buf, int rest);
+int is_system_available(void);
 
 extern int tgt_bind_host_to_target(int tid, int host_no);
 extern int tgt_unbind_host_to_target(int tid, int host_no);
