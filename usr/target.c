@@ -502,7 +502,7 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 		}
 	}
 
-	if (!path)
+	if (backing && !path)
 		lu->attrs.online = 0;
 
 	dprintf("Add a logical unit %" PRIu64 " to the target %d\n", lun, tid);
