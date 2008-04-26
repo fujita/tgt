@@ -315,11 +315,23 @@ static void tgt_cmd_queue_init(struct tgt_cmd_queue *q)
 	INIT_LIST_HEAD(&q->queue);
 }
 
-static int tgt_device_path_update(struct target *target,
-				  struct scsi_lu *lu, char *path)
+int tgt_device_path_update(struct target *target, struct scsi_lu *lu, char *path)
 {
 	int err, dev_fd;
 	uint64_t size;
+
+	if (lu->path) {
+		if (lu->attrs.online)
+			return TGTADM_INVALID_REQUEST;
+
+		lu->bst->bs_close(lu);
+		free(lu->path);
+		lu->fd = 0;
+		lu->addr = 0;
+		lu->size = 0;
+		lu->path = NULL;
+		lu->attrs.online = 0;
+	}
 
 	path = strdup(path);
 	if (!path)
@@ -415,11 +427,6 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 
 	bst = target->bst;
 	if (backing) {
-		if (!path) {
-			ret = TGTADM_INVALID_REQUEST;
-			goto out;
-		}
-
 		if (bstype) {
 			bst = get_backingstore_template(bstype);
 			if (!bst) {
@@ -455,7 +462,12 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 			goto free_lu;
 	}
 
-	if (backing) {
+	if (backing && !path && !lu->attrs.removable) {
+		ret = TGTADM_INVALID_REQUEST;
+		goto free_lu;
+	}
+
+	if (backing && path) {
 		ret = tgt_device_path_update(target, lu, path);
 		if (ret)
 			goto free_lu;
@@ -489,6 +501,9 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 					   ASC_REPORTED_LUNS_DATA_HAS_CHANGED);
 		}
 	}
+
+	if (!path)
+		lu->attrs.online = 0;
 
 	dprintf("Add a logical unit %" PRIu64 " to the target %d\n", lun, tid);
 out:

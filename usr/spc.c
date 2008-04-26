@@ -572,6 +572,7 @@ enum {
 	Opt_product_rev, Opt_sense_format,
 	Opt_removable, Opt_online,
 	Opt_mode_page,
+	Opt_path,
 	Opt_err,
 };
 
@@ -585,6 +586,7 @@ static match_table_t tokens = {
 	{Opt_removable, "removable=%s"},
 	{Opt_online, "online=%s"},
 	{Opt_mode_page, "mode_page=%s"},
+	{Opt_path, "path=%s"},
 	{Opt_err, NULL},
 };
 
@@ -592,7 +594,7 @@ int lu_config(struct scsi_lu *lu, char *params, match_fn_t *fn)
 {
 	int err = TGTADM_SUCCESS;
 	char *p;
-	char buf[256];
+	char buf[1024];
 	struct lu_phy_attr *attrs;
 	struct vpd **lu_vpd;
 
@@ -646,6 +648,10 @@ int lu_config(struct scsi_lu *lu, char *params, match_fn_t *fn)
 		case Opt_mode_page:
 			match_strncpy(buf, &args[0], sizeof(buf));
 			err = add_mode_page(lu, buf);
+			break;
+		case Opt_path:
+			match_strncpy(buf, &args[0], sizeof(buf));
+			err = tgt_device_path_update(lu->tgt, lu, buf);
 			break;
 		default:
 			err |= fn ? fn(lu, p) : TGTADM_INVALID_REQUEST;

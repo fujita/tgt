@@ -515,19 +515,6 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (mode == MODE_DEVICE) {
-		switch (op) {
-		case OP_NEW:
-			if (!path) {
-				eprintf("the backing store path is necessary\n");
-				exit(EINVAL);
-			}
-			break;
-		default:
-			break;
-		}
-	}
-
 	if (mode == MODE_ACCOUNT) {
 		switch (op) {
 		case OP_NEW:

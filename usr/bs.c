@@ -239,6 +239,16 @@ void bs_thread_close(struct bs_thread_info *info)
 	pthread_cond_destroy(&info->pending_cond);
 	pthread_mutex_destroy(&info->finished_lock);
 	pthread_mutex_destroy(&info->pending_lock);
+
+	tgt_event_del(info->done_fd[0]);
+
+	close(info->done_fd[0]);
+	close(info->done_fd[1]);
+
+	close(info->command_fd[0]);
+	close(info->command_fd[1]);
+
+	info->stop = 0;
 }
 
 int bs_thread_cmd_submit(struct scsi_cmd *cmd)

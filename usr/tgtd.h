@@ -175,6 +175,7 @@ extern int tgt_device_update(int tid, uint64_t dev_id, char *name);
 extern int device_reserve(struct scsi_cmd *cmd);
 extern int device_release(int tid, uint64_t itn_id, uint64_t lun, int force);
 extern int device_reserved(struct scsi_cmd *cmd);
+extern int tgt_device_path_update(struct target *target, struct scsi_lu *lu, char *path);
 
 extern int tgt_target_create(int lld, int tid, char *args);
 extern int tgt_target_destroy(int lld, int tid);

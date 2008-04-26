@@ -143,6 +143,8 @@ static int mmc_lu_init(struct scsi_lu *lu)
 	lu->attrs.version_desc[1] = 0x0960; /* iSCSI */
 	lu->attrs.version_desc[2] = 0x0300; /* SPC-3 */
 
+	lu->attrs.removable = 1;
+
 	/*
 	 * Set up default mode pages
 	 * Ref: mmc6r00.pdf 7.2.2 (Table 649)
