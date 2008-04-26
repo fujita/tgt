@@ -466,7 +466,6 @@ static int smc_lu_init(struct scsi_lu *lu)
 	INIT_LIST_HEAD(&smc->slots);
 
 	lu->attrs.online = 1;	/* Library will now report as Online */
-	lu->attrs.reset = 1;	/* Poweron/reset occurred */
 	lu->attrs.removable = 1; /* Default to removable media */
 
 	return 0;

@@ -1525,7 +1525,6 @@ int tgt_target_show_all(char *buf, int rest)
 				 _TAB3 "SCSI SN: %s\n"
 				 _TAB3 "Size: %s\n"
 				 _TAB3 "Online: %s\n"
-				 _TAB3 "Poweron/Reset: %s\n"
 				 _TAB3 "Removable media: %s\n"
 				 _TAB3 "Backing store: %s\n",
 				 lu->lun,
@@ -1534,7 +1533,6 @@ int tgt_target_show_all(char *buf, int rest)
 				 lu->attrs.scsi_sn,
 				 print_disksize(lu->size),
 				 lu->attrs.online ? "Yes" : "No",
-				 lu->attrs.reset ? "Yes" : "No",
 				 lu->attrs.removable ? "Yes" : "No",
 				 lu->path ? : "No backing store");
 

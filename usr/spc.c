@@ -315,11 +315,6 @@ int spc_test_unit(int host_no, struct scsi_cmd *cmd)
 
 	if (device_reserved(cmd))
 		return SAM_STAT_RESERVATION_CONFLICT;
-	if (cmd->dev->attrs.reset) {
-		cmd->dev->attrs.reset = 0;
-		sense_data_build(cmd, UNIT_ATTENTION, ASC_POWERON_RESET);
-		return SAM_STAT_CHECK_CONDITION;
-	}
 	if (cmd->dev->attrs.online)
 		return SAM_STAT_GOOD;
 	if (cmd->dev->attrs.removable)
@@ -697,7 +692,6 @@ int spc_lu_init(struct scsi_lu *lu)
 	lu->attrs.removable = 0;
 	lu->attrs.sense_format = 0;
 	lu->attrs.online = 0;
-	lu->attrs.reset = 1;
 
 	return 0;
 }

@@ -67,7 +67,6 @@ struct lu_phy_attr {
  	char qualifier;		/* Peripheral Qualifier */
 	char removable;		/* Removable media */
 	char online;		/* Logical Unit online */
-	char reset;		/* Power-on or reset has occured */
 	char sense_format;	/* Descrptor format sense data supported */
 
 	/* VPD pages 0x80 -> 0xff masked with 0x80*/
