@@ -143,8 +143,9 @@ struct scsi_lu {
 	struct lu_phy_attr attrs;
 
 	/* TODO: needs a structure for lots of device parameters */
-	/* Currently only used by smc module */
+	/* Currently only used by smc and mmc modules */
 	void *smc_p;
+	void *mmc_p;
 };
 
 struct mgmt_req {

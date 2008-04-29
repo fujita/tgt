@@ -3,6 +3,7 @@
  *
  * Copyright (C) 2007 FUJITA Tomonori <tomof@acm.org>
  * Copyright (C) 2007 Mike Christie <michaelc@cs.wisc.edu>
+ * Copyright (C) 2008 Ronnie Sahlberg <ronniesahlberg@gmail.com>
  *
  * This code is based on Ardis's iSCSI implementation.
  *   http://www.ardistech.com/iscsi/
@@ -33,6 +34,7 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <linux/fs.h>
+#include <sys/stat.h>
 
 #include "list.h"
 #include "util.h"
@@ -45,6 +47,14 @@
 #include "tgtadm_error.h"
 
 #define MMC_BLK_SHIFT 11
+
+#define PROFILE_NO_PROFILE		0x0000
+#define PROFILE_DVD_ROM			0x0010
+#define PROFILE_DVD_PLUS_R		0x001b
+
+struct mmc_info {
+	int current_profile;
+};
 
 static int mmc_rw(int host_no, struct scsi_cmd *cmd)
 {
@@ -134,8 +144,25 @@ static int mmc_mode_sense(int host_no, struct scsi_cmd *cmd)
 
 static int mmc_lu_init(struct scsi_lu *lu)
 {
+	struct backingstore_template *bst;
+	struct mmc_info *mmc;
+
+	mmc = zalloc(sizeof(struct mmc_info));
+	if (mmc == NULL)
+		return -ENOMEM;
+
+	lu->mmc_p = mmc;
+
 	if (spc_lu_init(lu))
 		return TGTADM_NOMEM;
+
+	/* MMC devices always use rdwr backingstore */
+	bst = get_backingstore_template("rdwr");
+	if (!bst) {
+		eprintf("failed to find bstype, rdwr\n");
+		return TGTADM_INVALID_REQUEST;
+	}
+	lu->bst = bst;
 
 	strncpy(lu->attrs.product_id, "VIRTUAL-CDROM", sizeof(lu->attrs.product_id));
 	lu->attrs.sense_format = 0;
@@ -175,12 +202,45 @@ static int mmc_lu_init(struct scsi_lu *lu)
 	return 0;
 }
 
+static int mmc_lu_online(struct scsi_lu *lu)
+{
+	struct mmc_info *mmc = (struct mmc_info *)lu->mmc_p;
+	struct stat st;
+
+	mmc->current_profile = PROFILE_NO_PROFILE;
+
+	if (lu->fd == -1) {
+		return TGTADM_INVALID_REQUEST;
+	}
+
+	lu->attrs.online = 1;
+
+	if (stat(lu->path, &st) != 0) {	
+		mmc->current_profile = PROFILE_NO_PROFILE;
+		lu->attrs.online = 0;
+	} else {
+		if (st.st_size == 0) {
+			mmc->current_profile = PROFILE_DVD_PLUS_R;
+		} else {
+			mmc->current_profile = PROFILE_DVD_ROM;
+		}
+	}
+	
+	return 0;
+}
+
+static int mmc_lu_offline(struct scsi_lu *lu)
+{
+	lu->attrs.online = 0;
+	return 0;
+}
+
 static struct device_type_template mmc_template = {
 	.type		= TYPE_MMC,
 	.lu_init	= mmc_lu_init,
 	.lu_config	= spc_lu_config,
-	.lu_online	= spc_lu_online,
-	.lu_offline	= spc_lu_offline,
+	.lu_online	= mmc_lu_online,
+	.lu_offline	= mmc_lu_offline,
 	.lu_exit	= spc_lu_exit,
 	.ops		= {
 		{spc_test_unit,},
