@@ -57,6 +57,19 @@ struct mmc_info {
 };
 
 
+static int mmc_synchronize_cache(int host_no, struct scsi_cmd *cmd)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	
+	if (mmc->current_profile == PROFILE_NO_PROFILE) {
+		scsi_set_in_resid_by_actual(cmd, 0);
+		sense_data_build(cmd, NOT_READY, ASC_MEDIUM_NOT_PRESENT);
+		return SAM_STAT_CHECK_CONDITION;
+	}
+
+	return SAM_STAT_GOOD;
+}
+
 unsigned char *perf_type_write_speed(struct scsi_cmd *cmd, unsigned char *data, unsigned int type, unsigned int data_type)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
@@ -603,7 +616,24 @@ static struct device_type_template mmc_template = {
 		{spc_illegal_op,},
 		{spc_test_unit},
 
-		[0x30 ... 0x3f] = {spc_illegal_op,},
+		/* 0x30 */
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{mmc_synchronize_cache,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
 
 		/* 0x40 */
 		{spc_illegal_op,},
