@@ -57,6 +57,173 @@ struct mmc_info {
 };
 
 
+static int mmc_read_disc_information(int host_no, struct scsi_cmd *cmd)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	unsigned char buf[34];
+
+	if (mmc->current_profile == PROFILE_NO_PROFILE) {
+		scsi_set_in_resid_by_actual(cmd, 0);
+		sense_data_build(cmd, NOT_READY, ASC_MEDIUM_NOT_PRESENT);
+		return SAM_STAT_CHECK_CONDITION;
+	}
+
+	memset(buf, 0, sizeof(buf));
+
+	switch(mmc->current_profile){
+	case PROFILE_DVD_ROM:
+		/* disk information length */
+		buf[0] = 0x00;
+		buf[1] = 0x20;
+
+		/* erasable:0 state of last session:complete disc status:finalized */
+		buf[2] = 0x0e;
+	
+		/* number of first track on disk */
+		buf[3] = 1;
+
+		/* number of sessions LSB */
+		buf[4] = 1;
+
+		/* first track in last session LSB */
+		buf[5] = 1;
+
+		/* last track in last session LSB */
+		buf[6] = 1;
+
+		/* did_v:0 dbc_v:0 uru:0 dac_v:0 dbit:0 bg format:0 */
+		buf[7] = 0x00;
+
+		/* disc type */
+		buf[8] = 0;
+
+		/* number of sessions MSB */
+		buf[9] = 0;
+
+		/* first track in last session MSB */
+		buf[10] = 0;
+
+		/* last track in last session MSB */
+		buf[11] = 0;
+
+		/* disc identification */
+		buf[12] = 0;
+		buf[13] = 0;
+		buf[14] = 0;
+		buf[15] = 0;
+
+		/* last session lead-in start address */
+		buf[16] = 0;
+		buf[17] = 0;
+		buf[18] = 0;
+		buf[19] = 0;
+
+		/* last possible lead-out start address */
+		buf[20] = 0;
+		buf[21] = 0;
+		buf[22] = 0;
+		buf[23] = 0;
+
+		/* disc bar code */
+		buf[24] = 0;
+		buf[25] = 0;
+		buf[26] = 0;
+		buf[27] = 0;
+		buf[28] = 0;
+		buf[29] = 0;
+		buf[30] = 0;
+		buf[31] = 0;
+
+		/* disc application code */
+		buf[32] = 0;
+
+		/* number of opc tables */
+		buf[33] = 0;
+
+		break;
+	case PROFILE_DVD_PLUS_R:
+		/* disk information length */
+		buf[0] = 0x00;
+		buf[1] = 0x20;
+
+		/* erasable:0 state of last session:empty disc status:empty */
+		buf[2] = 0;
+	
+		/* number of first track on disk */
+		buf[3] = 1;
+
+		/* number of sessions LSB */
+		buf[4] = 1;
+
+		/* first track in last session LSB */
+		buf[5] = 1;
+
+		/* last track in last session LSB */
+		buf[6] = 1;
+
+		/* did_v:0 dbc_v:0 uru:0 dac_v:1 dbit:0 bg format:0 */
+		buf[7] = 0x10;
+
+		/* disc type */
+		buf[8] = 0;
+
+		/* number of sessions MSB */
+		buf[9] = 0;
+
+		/* first track in last session MSB */
+		buf[10] = 0;
+
+		/* last track in last session MSB */
+		buf[11] = 0;
+
+		/* disc identification */
+		buf[12] = 0;
+		buf[13] = 0;
+		buf[14] = 0;
+		buf[15] = 0;
+
+		/* last session lead-in start address */
+		buf[16] = 0;
+		buf[17] = 0;
+		buf[18] = 0;
+		buf[19] = 0;
+
+		/* last possible lead-out start address */
+		buf[20] = 0x00;
+		buf[21] = 0x23;
+		buf[22] = 0x05;
+		buf[23] = 0x40;
+
+		/* disc bar code */
+		buf[24] = 0;
+		buf[25] = 0;
+		buf[26] = 0;
+		buf[27] = 0;
+		buf[28] = 0;
+		buf[29] = 0;
+		buf[30] = 0;
+		buf[31] = 0;
+
+		/* disc application code */
+		buf[32] = 0;
+
+		/* number of opc tables */
+		buf[33] = 0;
+
+		break;
+	default:
+		/* we do not understand/support this command for this profile */
+		scsi_set_in_resid_by_actual(cmd, 0);
+		sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
+		return SAM_STAT_CHECK_CONDITION;
+	}
+
+	memcpy(scsi_get_in_buffer(cmd), buf,
+		min(scsi_get_in_length(cmd),
+			(uint32_t) sizeof(buf)));
+	return SAM_STAT_GOOD;
+}
+
 void profile_dvd_rom(struct scsi_cmd *cmd, char *data)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
@@ -1642,7 +1809,7 @@ static struct device_type_template mmc_template = {
 
 		/* 0x50 */
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{mmc_read_disc_information,},
 		{mmc_read_track_information,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
