@@ -56,6 +56,305 @@ struct mmc_info {
 	int current_profile;
 };
 
+
+unsigned char *perf_type_write_speed(struct scsi_cmd *cmd, unsigned char *data, unsigned int type, unsigned int data_type)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+
+	/* write/except */
+	*data++ = 0x00;
+
+	data+=3;
+
+	switch (mmc->current_profile) {
+	case PROFILE_NO_PROFILE:
+		/* descriptor 0 */
+		/* wrcc:CLV rdd:0 exact:0 mrw:0 */
+		*data++ = 0x00;
+
+		/* reserved */
+		data+=3;
+
+		/* end lba */
+		*data++ = 0x00;
+		*data++ = 0x25;
+		*data++ = 0x99;
+		*data++ = 0x99;
+
+		/* read speed */
+		*data++ = 0x00;
+		*data++ = 0x00;
+		*data++ = 0x0a;
+		*data++ = 0xd2;
+
+		/* write speed */
+		*data++ = 0x00;
+		*data++ = 0x00;
+		*data++ = 0x0a;
+		*data++ = 0xd2;
+
+		/* descriptor 1 */
+		/* wrcc:CLV rdd:0 exact:0 mrw:0 */
+		*data++ = 0x00;
+
+		/* reserved */
+		data+=3;
+
+		/* end lba */
+		*data++ = 0x00;
+		*data++ = 0x25;
+		*data++ = 0x99;
+		*data++ = 0x99;
+
+		/* read speed */
+		*data++ = 0x00;
+		*data++ = 0x00;
+		*data++ = 0x05;
+		*data++ = 0x69;
+
+		/* write speed */
+		*data++ = 0x00;
+		*data++ = 0x00;
+		*data++ = 0x05;
+		*data++ = 0x69;
+
+		return data;
+		break;
+	case PROFILE_DVD_PLUS_R:
+		/* descriptor 0 */
+		/* wrcc:CLV rdd:0 exact:0 mrw:1 */
+		*data++ = 0x01;
+
+		/* reserved */
+		data+=3;
+
+		/* end lba */
+		*data++ = 0x00;
+		*data++ = 0x23;
+		*data++ = 0x05;
+		*data++ = 0x3f;
+
+		/* read speed */
+		*data++ = 0x00;
+		*data++ = 0x00;
+		*data++ = 0x0c;
+		*data++ = 0xfc;
+
+		/* write speed */
+		*data++ = 0x00;
+		*data++ = 0x00;
+		*data++ = 0x0c;
+		*data++ = 0xfc;
+
+		return data;
+		break;
+	case PROFILE_DVD_ROM:
+		/* descriptor 0 */
+		/* wrcc:CLV rdd:0 exact:0 mrw:0 */
+		*data++ = 0x00;
+
+		/* reserved */
+		data+=3;
+
+		/* end lba */
+		*data++ = 0x00;
+		*data++ = 0x25;
+		*data++ = 0x99;
+		*data++ = 0x99;
+
+		/* read speed */
+		*data++ = 0x00;
+		*data++ = 0x00;
+		*data++ = 0x0a;
+		*data++ = 0xd2;
+
+		/* write speed */
+		*data++ = 0x00;
+		*data++ = 0x00;
+		*data++ = 0x0a;
+		*data++ = 0xd2;
+
+		/* descriptor 1 */
+		/* wrcc:CLV rdd:0 exact:0 mrw:0 */
+		*data++ = 0x00;
+
+		/* reserved */
+		data+=3;
+
+		/* end lba */
+		*data++ = 0x00;
+		*data++ = 0x25;
+		*data++ = 0x99;
+		*data++ = 0x99;
+
+		/* read speed */
+		*data++ = 0x00;
+		*data++ = 0x00;
+		*data++ = 0x05;
+		*data++ = 0x69;
+
+		/* write speed */
+		*data++ = 0x00;
+		*data++ = 0x00;
+		*data++ = 0x05;
+		*data++ = 0x69;
+
+		return data;
+		break;
+	}
+
+	/* we do not understand/support this command */
+	scsi_set_in_resid_by_actual(cmd, 0);
+	sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
+	return NULL;
+}
+
+unsigned char *perf_type_perf_data(struct scsi_cmd *cmd, unsigned char *data, unsigned int type, unsigned int data_type)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	int tolerance;
+	int write_flag;
+	int except;
+	long tmp;
+
+	tolerance  = (data_type>>3)&0x03;
+	write_flag = (data_type>>2)&0x01;
+	except     = data_type&0x03;
+
+	/* all other values for tolerance are reserved */
+	if (tolerance != 0x02) {
+		scsi_set_in_resid_by_actual(cmd, 0);
+		sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
+		return NULL;
+	}
+
+	switch(except){
+	case 1:
+	case 2:
+		/* write/except */
+		*data++ = 0x01;
+
+		/* reserved */
+		data+=3;
+
+		/* no actual descriptor returned here */
+		return data;
+	case 3:
+		/* reserved */
+		scsi_set_in_resid_by_actual(cmd, 0);
+		sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
+		return NULL;
+	}
+
+	/* write/except */
+	if (write_flag) {
+		*data++ = 0x02;
+	} else {
+		*data++ = 0x00;
+	}
+
+	/* reserved */
+	data+=3;
+
+	/* start lba */
+	*data++ = 0;
+	*data++ = 0;
+	*data++ = 0;
+	*data++ = 0;
+
+	/* start performance */
+	*data++ = 0x00;
+	*data++ = 0x00;
+	*data++ = 0x15;
+	*data++ = 0xa4;
+
+	/* end lba */
+	switch (mmc->current_profile) {
+	case PROFILE_DVD_ROM:
+		tmp = (cmd->dev->size >> MMC_BLK_SHIFT) - 1;
+		break;
+	default:
+		tmp = 0x23053f;
+	}			
+	*data++ = (tmp>>24)&0xff;
+	*data++ = (tmp>>16)&0xff;
+	*data++ = (tmp>> 8)&0xff;
+	*data++ = (tmp    )&0xff;
+
+	/* end performance */
+	*data++ = 0x00;
+	*data++ = 0x00;
+	*data++ = 0x15;
+	*data++ = 0xa4;
+
+	return data;
+}
+
+#define PERF_TYPE_PERF_DATA		0x00
+#define PERF_TYPE_WRITE_SPEED		0x03
+struct perf_type {
+	int type;
+	unsigned char *(*func)(struct scsi_cmd *cmd, unsigned char *data, unsigned int type, unsigned int data_type);
+};
+struct perf_type perf_types[] = {
+	{PERF_TYPE_PERF_DATA, perf_type_perf_data},
+	{PERF_TYPE_WRITE_SPEED, perf_type_write_speed},
+	{0, NULL}
+};
+
+static int mmc_get_performance(int host_no, struct scsi_cmd *cmd)
+{
+	unsigned int type;
+	unsigned int num_desc;
+	unsigned long lba;
+	unsigned int data_type;
+	struct perf_type *p;
+	unsigned char *data;
+	unsigned char buf[256];
+
+	memset(buf, 0, sizeof(buf));
+	data = &buf[4];
+
+	data_type = cmd->scb[1]&0x1f;
+
+	lba = cmd->scb[2];
+	lba = (lba<<8)|cmd->scb[3];
+	lba = (lba<<8)|cmd->scb[4];
+	lba = (lba<<8)|cmd->scb[5];
+
+	num_desc = cmd->scb[8];
+	num_desc = (num_desc<<8)|cmd->scb[9];
+
+	type = cmd->scb[10];
+
+	for (p=perf_types;p->func;p++) {
+		int tmp;
+
+		if (p->type != type) {
+			continue;
+		}
+		data = p->func(cmd, data, type, data_type);
+		if (data == NULL) {
+			return SAM_STAT_CHECK_CONDITION;
+		}
+
+		tmp = data-&buf[4];
+		buf[0] = (tmp>>24)&0xff;
+		buf[1] = (tmp>>16)&0xff;
+		buf[2] = (tmp>> 8)&0xff;
+		buf[3] = (tmp    )&0xff;
+		memcpy(scsi_get_in_buffer(cmd), buf,
+			min(scsi_get_in_length(cmd),
+				(uint32_t) sizeof(buf)));
+		return SAM_STAT_GOOD;
+
+	}
+	/* we do not understand/support this command */
+	scsi_set_in_resid_by_actual(cmd, 0);
+	sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
+	return SAM_STAT_CHECK_CONDITION;
+}
+
 static int mmc_set_streaming(int host_no, struct scsi_cmd *cmd)
 {
 	return SAM_STAT_GOOD;
@@ -360,7 +659,7 @@ static struct device_type_template mmc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{mmc_get_performance,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
