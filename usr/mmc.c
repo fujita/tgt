@@ -57,6 +57,126 @@ struct mmc_info {
 };
 
 
+static int mmc_read_toc(int host_no, struct scsi_cmd *cmd)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	uint8_t *data;
+	uint8_t buf[32];
+	int toc_time, toc_format, toc_track;
+	unsigned long tsa;
+
+	if (!cmd->dev->attrs.online) {
+		scsi_set_in_resid_by_actual(cmd, 0);
+		sense_data_build(cmd, NOT_READY, ASC_MEDIUM_NOT_PRESENT);
+		return SAM_STAT_CHECK_CONDITION;
+	}
+
+	if (mmc->current_profile == PROFILE_NO_PROFILE) {
+		/* a blank disk has no tracks */
+		scsi_set_in_resid_by_actual(cmd, 0);
+		sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
+		return SAM_STAT_CHECK_CONDITION;
+	}
+
+	toc_time   = cmd->scb[1] & 0x02;
+	toc_format = cmd->scb[2] & 0x0f;
+	toc_track  = cmd->scb[6];
+
+	memset(buf, 0, sizeof(buf));
+	data = buf;
+		
+	switch (toc_format) {
+	case 0:	/* formatted toc */
+		if (toc_track != 0) {
+			/* we only do single session data disks so only
+			   track 0 is valid */
+			scsi_set_in_resid_by_actual(cmd, 0);
+			sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
+			return SAM_STAT_CHECK_CONDITION;
+		}
+
+		if (toc_time) {
+			tsa = 0x00ff3b4a;
+		} else {
+			tsa = cmd->dev->size >> MMC_BLK_SHIFT; /* lba */
+		}
+
+		/* size of return data */
+		data[0] = 0;
+		data[1] = 0x1a;
+
+		data[2] = 1;	/* first track */
+		data[3] = 1;	/* last track */
+
+		/* data track */
+		data[ 4] = 0;		/* reserved */	
+		data[ 5] = 0x14;
+		data[ 6] = 1;		/* track number */
+		data[ 7] = 0;		/* reserved */
+		data[ 8] = 0;		/* track start address : 0 */
+		data[ 9] = 0;
+		if (toc_time) {
+			data[10] = 2;	/* time 00:00:02:00 */
+		} else {
+			data[10] = 0;
+		}
+		data[11] = 0;
+
+		/* leadout track */
+		data[12] = 0;		/* reserved */	
+		data[13] = 0x14;
+		data[14] = 0xaa;	/* track number */
+		data[15] = 0;		/* reserved */
+		data[16] = (tsa>>24)&0xff;/* track start address */
+		data[17] = (tsa>>16)&0xff;
+		data[18] = (tsa>> 8)&0xff;
+		data[19] = (tsa    )&0xff;
+
+		break;
+	case 1:	/* multi session info */
+		/* size of return data */
+		data[0] = 0;
+		data[1] = 0x0a;
+
+		data[2] = 1;	/* first session */
+		data[3] = 1;	/* last session */
+
+		/* data track */
+		data[ 4] = 0;		/* reserved */	
+		data[ 5] = 0x14;
+		data[ 6] = 1;		/* track number */
+		data[ 7] = 0;		/* reserved */
+		data[ 8] = 0;		/* track start address : 0 */
+		data[ 9] = 0;
+		if (toc_time) {
+			data[10] = 2;	/* time 00:00:02:00 */
+		} else {
+			data[10] = 0;
+		}
+		data[11] = 0;
+
+		break;
+	case 2: /* raw toc */
+	case 3: /* pma */
+	case 4: /* atip */
+	case 5: /* cd-text */
+		/* not implemented yet */
+	default:
+		eprintf("read_toc: format %x not implemented\n", toc_format);
+
+		scsi_set_in_resid_by_actual(cmd, 0);
+		sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
+		return SAM_STAT_CHECK_CONDITION;
+	}
+
+	memcpy(scsi_get_in_buffer(cmd), data,
+	       min(scsi_get_in_length(cmd), (uint32_t) sizeof(buf)));
+
+	scsi_set_in_resid_by_actual(cmd, data[1]);
+
+	return SAM_STAT_GOOD;
+}
+
 static int mmc_close_track(int host_no, struct scsi_cmd *cmd)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
@@ -1560,38 +1680,6 @@ static int mmc_rw(int host_no, struct scsi_cmd *cmd)
 	return 0;
 }
 
-static int mmc_read_toc(int host_no, struct scsi_cmd *cmd)
-{
-	uint8_t *data;
-	uint8_t buf[16];
-
-	memset(buf, 0, sizeof(buf));
-	data = buf;
-
-	/* forged for single session data cd only. all iso file fall into this */
-	if (cmd->scb[1] & 0x2) {
-		data[1] = 0x12;
-		data[2] = 0x01;
-		data[3] = 0x01;
-		data[5] = 0x14;
-		data[6] = 0x01;
-		data[13] = 0x14;
-		data[14] = 0xaa;
-	} else {
-		data[1] = 0x0a;
-		data[2] = 0x01;
-		data[3] = 0x01;
-		data[5] = 0x14;
-		data[6] = 0x01;
-	}
-
-	memcpy(scsi_get_in_buffer(cmd), data,
-	       min(scsi_get_in_length(cmd), (uint32_t) sizeof(buf)));
-
-	scsi_set_in_resid_by_actual(cmd, data[1] + 2);
-
-	return SAM_STAT_GOOD;
-}
 
 static int mmc_read_capacity(int host_no, struct scsi_cmd *cmd)
 {
