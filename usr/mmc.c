@@ -1746,9 +1746,380 @@ static int mmc_get_performance(int host_no, struct scsi_cmd *cmd)
 	return SAM_STAT_CHECK_CONDITION;
 }
 
+
 static int mmc_set_streaming(int host_no, struct scsi_cmd *cmd)
 {
 	return SAM_STAT_GOOD;
+}
+
+
+#define DVD_FORMAT_PHYS_INFO		0x00
+#define DVD_FORMAT_DVD_COPYRIGHT_INFO	0x01
+#define DVD_FORMAT_ADIP_INFO		0x11
+#define DVD_FORMAT_DVD_STRUCTURE_LIST	0xff
+
+
+unsigned char *dvd_format_phys_info(struct scsi_cmd *cmd, unsigned char *data, int format, int layer, int write_header)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	unsigned char *old_data;
+
+	if (write_header) {
+		*data++ = DVD_FORMAT_PHYS_INFO;
+		*data++ = 0x40;
+		*data++ = 0x08;
+		*data++ = 0x02;	/* 0x800 bytes data, 2 reserved bytes */
+		return data;
+	}
+
+	if (layer != 0) {
+		/* we only support single layer disks */
+		scsi_set_in_resid_by_actual(cmd, 0);
+		sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
+		return NULL;
+	}
+
+	switch (mmc->current_profile) {
+	case PROFILE_DVD_ROM:
+		/* book type DVD-ROM, part version */
+		*data++ = 0x01;
+
+		/* disk size 120mm, maximum rate 10mbit/s */
+		*data++ = 0x02;
+
+		/* num layers:1  layer type: embossed*/
+		*data++ = 0x01;
+
+		/* linear density: track density: */
+		*data++ = 0x10;
+
+		*data++ = 0;
+
+		/* starting physical sector number of data area */
+		*data++ = 3;
+		*data++ = 0;
+		*data++ = 0;
+
+		/* end physical sector number of data area */
+		*data++ = 0x1b;
+		*data++ = 0xc1;
+		*data++ = 0x7f;
+
+		*data++ = 0;
+
+		/* end physical sector number in layer 0 */
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+
+		/* bca */
+		*data++ = 0;
+
+		/* just leave the media specific area as 0 */
+		data+=2031;
+
+		break;
+	case PROFILE_DVD_PLUS_R:
+		/* book type DVD+R, part version */
+		*data++ = 0xa1;
+
+		/* disk size 120mm, maximum rate nof specified */
+		*data++ = 0x0f;
+
+		/* num layers:1  layer type:recordable */
+		*data++ = 0x02;
+
+		/* linear density: track density: */
+		*data++ = 0x00;
+
+		*data++ = 0;
+
+		/* starting physical sector number of data area */
+		*data++ = 3;
+		*data++ = 0;
+		*data++ = 0;
+
+		*data++ = 0;
+
+		/* end physical sector number of data area */
+		*data++ = 0x26;
+		*data++ = 0x05;
+		*data++ = 0x3f;
+
+		*data++ = 0;
+
+		/* end physical sector number in layer 0 */
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+
+		/* bca */
+		*data++ = 0;
+
+
+		/* data, copied from a blank disk */
+		/* not in t.10 spec */
+		old_data = data;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
+
+		data=old_data+2031;
+
+		break;
+	default:
+		scsi_set_in_resid_by_actual(cmd, 0);
+		sense_data_build(cmd, NOT_READY, ASC_MEDIUM_NOT_PRESENT);
+		return NULL;
+	}
+
+	return data;
+}
+
+unsigned char *dvd_format_adip_info(struct scsi_cmd *cmd, unsigned char *data, int format, int layer, int write_header)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+
+	if (write_header) {
+		*data++ = DVD_FORMAT_ADIP_INFO;
+		switch(mmc->current_profile){
+		case PROFILE_DVD_PLUS_R:
+			*data++ = 0x40;	/* readable */
+			break;
+		default:
+			*data++ = 0;
+		}
+		*data++ = 0x01;
+		*data++ = 0x02;	/* 0x100 bytes data, 2 reserved bytes */
+		return data;
+	}
+
+	switch (mmc->current_profile) {
+	case PROFILE_DVD_PLUS_R:
+		break;
+	default:
+		scsi_set_in_resid_by_actual(cmd, 0);
+		sense_data_build(cmd, NOT_READY, ASC_MEDIUM_NOT_PRESENT);
+		return NULL;
+	}
+
+	/* adip information */
+	/* adip for DVD+R not in t.10 mmc spec, */
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;	*data++ = 0x00;
+
+	return data;
+}
+
+unsigned char *dvd_format_copyright_info(struct scsi_cmd *cmd, unsigned char *data, int format, int layer, int write_header)
+{
+	if (write_header) {
+		*data++ = DVD_FORMAT_DVD_COPYRIGHT_INFO;
+		*data++ = 0x40;	/* readable */
+		*data++ = 0;
+		*data++ = 6;	/* 4 bytes data, 2 reserved bytes */
+		return data;
+	}
+
+	if (layer != 0) {
+		/* we only support single layer disks */
+		scsi_set_in_resid_by_actual(cmd, 0);
+		sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
+		return NULL;
+	}
+
+	/* copyright protection system type : no */
+	*data++ = 0;
+
+	/* region management info : no regions blocked */
+	*data++ = 0;
+
+	/* reserved */
+	*data++ = 0;
+	*data++ = 0;
+	
+	return data;
+}
+
+unsigned char *dvd_format_dvd_structure_list(struct scsi_cmd *cmd, unsigned char *data, int format, int layer, int write_header);
+
+struct dvd_format {
+	int format;
+	unsigned char *(*func)(struct scsi_cmd *cmd, unsigned char *data, int format, int layer, int write_header);
+};
+struct dvd_format dvd_formats[] = {
+	{DVD_FORMAT_PHYS_INFO,		dvd_format_phys_info},
+	{DVD_FORMAT_DVD_COPYRIGHT_INFO,	dvd_format_copyright_info},
+	{DVD_FORMAT_ADIP_INFO,		dvd_format_adip_info},
+	{DVD_FORMAT_DVD_STRUCTURE_LIST, dvd_format_dvd_structure_list},
+	{0, NULL}
+};
+
+unsigned char *dvd_format_dvd_structure_list(struct scsi_cmd *cmd, unsigned char *data, int format, int layer, int write_header)
+{
+	struct dvd_format *f;
+
+	/* list all format headers */
+	for (f=dvd_formats;f->func;f++) {
+		/* we dont report ourself back in the format list */
+		if (f->format == 0xff)
+			continue;
+		
+		data = f->func(cmd, data, format, layer, 1);
+		if (data == NULL) {
+			return NULL;
+		}
+	}
+
+	return data;
+}
+
+static int mmc_read_dvd_structure(int host_no, struct scsi_cmd *cmd)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	long address;
+	int format, layer;
+	unsigned char *data;
+	unsigned char buf[4096];
+	struct dvd_format *f;
+
+	if (mmc->current_profile == PROFILE_NO_PROFILE) {
+		scsi_set_in_resid_by_actual(cmd, 0);
+		sense_data_build(cmd, NOT_READY, ASC_MEDIUM_NOT_PRESENT);
+		return SAM_STAT_CHECK_CONDITION;
+	}
+
+	address = cmd->scb[2];
+	address = (address<<8) | cmd->scb[3];
+	address = (address<<8) | cmd->scb[4];
+	address = (address<<8) | cmd->scb[5];
+	layer = cmd->scb[6];
+	format = cmd->scb[7];
+
+	memset(buf, 0, sizeof(buf));
+	data = &buf[4];
+
+	for (f=dvd_formats;f->func;f++) {
+		if (f->format == format) {
+			int tmp;
+
+			data = f->func(cmd, data, format, layer, 0);
+			if (data == NULL) {
+				return SAM_STAT_CHECK_CONDITION;
+			}
+
+			tmp = data-buf;
+			tmp -= 2;
+			buf[0] = (tmp>>8)&0xff;
+			buf[1] = (tmp   )&0xff;
+			buf[2] = 0;
+			buf[3] = 0;
+			memcpy(scsi_get_in_buffer(cmd), buf,
+		       		min(scsi_get_in_length(cmd),
+					(uint32_t) sizeof(buf)));
+			return SAM_STAT_GOOD;
+		}
+	}
+
+	/* we do not understand this format */
+	scsi_set_in_resid_by_actual(cmd, 0);
+	sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
+	return SAM_STAT_CHECK_CONDITION;
 }
 
 static int mmc_mode_sense(int host_no, struct scsi_cmd *cmd)
@@ -1991,7 +2362,7 @@ static struct device_type_template mmc_template = {
 		{mmc_rw},
 		{spc_illegal_op,},
 		{mmc_get_performance,},
-		{spc_illegal_op,},
+		{mmc_read_dvd_structure,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 
