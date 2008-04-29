@@ -212,6 +212,7 @@ extern uint64_t scsi_get_devid(int lid, uint8_t *pdu);
 extern int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd);
 extern void sense_data_build(struct scsi_cmd *cmd, uint8_t key, uint16_t asc);
 extern uint64_t scsi_rw_offset(uint8_t *scb);
+extern uint32_t scsi_rw_count(uint8_t *scb);
 extern int scsi_is_io_opcode(unsigned char op);
 extern enum data_direction scsi_data_dir_opcode(unsigned char op);
 

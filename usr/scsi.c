@@ -134,6 +134,45 @@ uint64_t scsi_rw_offset(uint8_t *scb)
 	return off;
 }
 
+uint32_t scsi_rw_count(uint8_t *scb)
+{
+	uint32_t cnt;
+
+	switch (scb[0]) {
+	case READ_6:
+	case WRITE_6:
+		cnt = scb[4];
+		break;
+	case READ_10:
+	case WRITE_10:
+	case VERIFY:
+	case WRITE_VERIFY:
+	case SYNCHRONIZE_CACHE:
+		cnt = (uint16_t)scb[7] << 8 | (uint16_t)scb[8];
+		break;
+	case READ_12:
+	case WRITE_12:
+	case VERIFY_12:
+	case WRITE_VERIFY_12:
+		cnt = (uint32_t)scb[6] << 24 | (uint32_t)scb[7] << 16 |
+			(uint32_t)scb[8] << 8 | (uint32_t)scb[9];
+		break;
+	case READ_16:
+	case WRITE_16:
+	case VERIFY_16:
+	case WRITE_VERIFY_16:
+	case SYNCHRONIZE_CACHE_16:
+		cnt = (uint32_t)scb[10] << 24 | (uint32_t)scb[11] << 16 |
+			(uint32_t)scb[12] << 8 | (uint32_t)scb[13];
+		break;
+	default:
+		cnt = 0;
+		break;
+	}
+
+	return cnt;
+}
+
 int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd)
 {
 	int ret;
