@@ -57,6 +57,61 @@ struct mmc_info {
 };
 
 
+static int mmc_read_buffer_capacity(int host_no, struct scsi_cmd *cmd)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	int blocks;
+	unsigned char buf[12];
+	long tmp;
+
+	memset(buf, 0, sizeof(buf));
+	blocks = cmd->scb[1]&0x01;
+
+	switch (mmc->current_profile) {
+	case PROFILE_NO_PROFILE:
+		scsi_set_in_resid_by_actual(cmd, 0);
+		sense_data_build(cmd, NOT_READY, ASC_MEDIUM_NOT_PRESENT);
+		return SAM_STAT_CHECK_CONDITION;
+	case PROFILE_DVD_ROM:
+		scsi_set_in_resid_by_actual(cmd, 0);
+		sense_data_build(cmd, ILLEGAL_REQUEST, ASC_IMCOMPATIBLE_FORMAT);
+		return SAM_STAT_CHECK_CONDITION;
+	case PROFILE_DVD_PLUS_R:
+		/* data length */
+		buf[0] = 0x00;
+		buf[1] = 0x0a;
+		
+		/* 4096 blocks */
+		tmp = 0x1000;
+		if (!blocks) {
+			/* convert to bytes */
+			tmp <<= MMC_BLK_SHIFT;
+		}
+
+		/* length of buffer */
+		buf[4]  = (tmp>>24)&0xff;
+		buf[5]  = (tmp>>16)&0xff;
+		buf[6] = (tmp>> 8)&0xff;
+		buf[7] = (tmp    )&0xff;
+
+		/* available length of buffer (always half) */
+		tmp = tmp >> 1;
+		buf[8]  = (tmp>>24)&0xff;
+		buf[9]  = (tmp>>16)&0xff;
+		buf[10] = (tmp>> 8)&0xff;
+		buf[11] = (tmp    )&0xff;
+
+		memcpy(scsi_get_in_buffer(cmd), &buf[0],
+		       min(scsi_get_in_length(cmd), (uint32_t) sizeof(buf)));
+		scsi_set_in_resid_by_actual(cmd, buf[1]+2);
+		return SAM_STAT_GOOD;
+	}
+
+	scsi_set_in_resid_by_actual(cmd, 0);
+	sense_data_build(cmd, MEDIUM_ERROR, ASC_INVALID_FIELD_IN_CDB);
+	return SAM_STAT_CHECK_CONDITION;
+}
+
 static int mmc_synchronize_cache(int host_no, struct scsi_cmd *cmd)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
@@ -668,7 +723,7 @@ static struct device_type_template mmc_template = {
 		{spc_illegal_op,},
 		{mmc_mode_sense,},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{mmc_read_buffer_capacity,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
