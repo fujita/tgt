@@ -57,6 +57,556 @@ struct mmc_info {
 };
 
 
+void profile_dvd_rom(struct scsi_cmd *cmd, char *data)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+
+	/* profile number */
+	*data++ = 0;
+	*data++ = 0x10;
+
+	/* current ? */
+	if (mmc->current_profile == PROFILE_DVD_ROM) {
+		*data++ = 0x01;
+	} else {
+		*data++ = 0;
+	}
+
+	/* reserved */
+	*data++ = 0;
+}
+
+void profile_dvd_plus_r(struct scsi_cmd *cmd, char *data)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+
+	/* profile number */
+	*data++ = 0;
+	*data++ = 0x1b;
+
+	/* current ? */
+	if (mmc->current_profile == PROFILE_DVD_PLUS_R) {
+		*data++ = 0x01;
+	} else {
+		*data++ = 0;
+	}
+
+	/* reserved */
+	*data++ = 0;
+}
+
+struct profile_descriptor {
+	int profile;
+	void (*func)(struct scsi_cmd *cmd, char *data);
+};
+struct profile_descriptor profiles[] = {
+	{PROFILE_DVD_ROM,	profile_dvd_rom},
+	{PROFILE_DVD_PLUS_R,	profile_dvd_plus_r},
+	{0, NULL}
+};
+
+/* these features are mandatory for profile DVD_ROM
+	FEATURE_PROFILE_LIST
+	FEATURE_CORE
+	FEATURE_MORHPING
+	FEATURE_REMOVABLE_MEDIUM
+	FEATURE_RANDOM_READABLE
+	FEATURE_DVD_READ
+	FEATURE_POWER_MANAGEMENT
+	FEATURE_TIMEOUT
+	FEATURE_REAL_TIME_STREAMING
+   these features are mandatory for profile DVD+R
+	FEATURE_PROFILE_LIST
+	FEATURE_CORE
+	FEATURE_MORHPING
+	FEATURE_REMOVABLE_MEDIUM
+	FEATURE_RANDOM_READABLE
+	FEATURE_DVD_READ
+	FEATURE_DVD_PLUS_R
+	FEATURE_POWER_MANAGEMENT
+	FEATURE_TIMEOUT
+	FEATURE_REAL_TIME_STREAMING
+	FEATURE_DCBS
+   additional features
+	FEATURE_MULIT_READ
+	FEATURE_LUN_SERIAL_NO
+*/
+
+char *feature_profile_list(struct scsi_cmd *cmd, char *data, int only_current)
+{
+	struct profile_descriptor *p;
+	char *additional;
+
+	/* feature code */
+	*data++ = 0;
+	*data++ = 0;
+
+	/* version 0  always persistent, always current */
+	*data++ = 0x03;
+	
+	/* additional length start at 0*/
+	additional = data++;
+	*additional = 0;
+
+	/* all all profiles we support */
+	for (p=profiles;p->func;p++) {
+		p->func(cmd, data);
+		*additional = (*additional) + 4;
+		data+=4;
+	}
+
+	return data;
+}
+
+char *feature_core(struct scsi_cmd *cmd, char *data, int only_current)
+{
+	/* feature code */
+	*data++ = 0;
+	*data++ = 0x01;
+
+	/* version 0  always persistent, always current */
+	*data++ = 0x03;
+	
+	/* additional length */
+	*data++ = 4;
+
+	/* physical interface standard : atapi*/
+	*data++ = 0;
+	*data++ = 0;
+	*data++ = 0;
+	*data++ = 2;
+
+	return data;
+}
+
+char *feature_morphing(struct scsi_cmd *cmd, char *data, int only_current)
+{
+	/* feature code */
+	*data++ = 0;
+	*data++ = 0x02;
+
+	/* version 0  always persistent, always current */
+	*data++ = 0x03;
+
+	/* additional length */
+	*data++ = 4;
+
+	/* dont support ocevent or async */ 
+	*data++ = 0;
+	*data++ = 0;
+	*data++ = 0;
+	*data++ = 0;
+
+	return data;
+}	
+
+char *feature_removable_medium(struct scsi_cmd *cmd, char *data, int only_current)
+{
+	/* feature code */
+	*data++ = 0;
+	*data++ = 0x03;
+
+	/* version 0  always persistent, always current */
+	*data++ = 0x03;
+
+	/* additional length */
+	*data++ = 4;
+
+	/* loading mechanism:tray
+	   ejectable through STARTSTOPUNIT loej
+	   pvnt : PREVENTALLOWMEDIUMREMOVAL supported
+	   lock : medium can be locked
+	*/
+	*data++ = 0x29;
+
+	/* reserved */
+	*data++ = 0;
+	*data++ = 0;
+	*data++ = 0;
+
+	return data;
+}
+
+char *feature_random_readable(struct scsi_cmd *cmd, char *data, int only_current)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	int is_current;
+
+	/* this feature is only current in DVD_ROM */
+	switch(mmc->current_profile){
+	case PROFILE_DVD_ROM:
+		is_current = 1;
+		break;
+	default:
+		is_current = 0;
+	}
+
+	if (only_current) 
+		if (!is_current)
+			return data;
+
+	/* feature code */
+	*data++ = 0;
+	*data++ = 0x10;
+
+	/* version 0 , never persistent */
+	*data = 0;
+	if (is_current)
+		*data |= 0x01;
+	data++;
+
+	/* additional length */
+	*data++ = 8;
+
+	/* logical block size */
+	*data++ = 0;
+	*data++ = 0;
+	*data++ = 8;
+	*data++ = 0;
+	
+	/* blocking is always 0x10 for dvd devices */
+	*data++ = 0;
+	*data++ = 0x10;
+	
+	/* pp is supported */
+	*data++ = 0x01;
+
+	/* reserved */
+	*data++ = 0;
+
+	return data;
+}
+
+char *feature_dvd_read(struct scsi_cmd *cmd, char *data, int only_current)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	int is_current;
+
+	/* this feature is only current in DVD_ROM */
+	switch(mmc->current_profile){
+	case PROFILE_DVD_ROM:
+		is_current = 1;
+		break;
+	default:
+		is_current = 0;
+	}
+
+	if (only_current) 
+		if (!is_current)
+			return data;
+
+	/* feature code */
+	*data++ = 0;
+	*data++ = 0x1f;
+
+	/* version 0, never persistent */
+	*data = 0;
+	if (is_current)
+		*data |= 0x01;
+	data++;
+
+	/* additional length */
+	*data++ = 0;
+
+	return data;
+}
+
+char *feature_power_management(struct scsi_cmd *cmd, char *data, int only_current)
+{
+	/* feature code */
+	*data++ = 0x01;
+	*data++ = 0x00;
+
+	/* version 0   always persistent always current */
+	*data++ = 0x03;
+
+	/* additional length */
+	*data++ = 0;
+
+	return data;
+}
+
+char *feature_timeout(struct scsi_cmd *cmd, char *data, int only_current)
+{
+	/* feature code */
+	*data++ = 0x01;
+	*data++ = 0x05;
+
+	/* version 0   always persistent always current */
+	*data++ = 0x03;
+
+	/* additional length */
+	*data++ = 0;
+
+	return data;
+}
+
+char *feature_real_time_streaming(struct scsi_cmd *cmd, char *data, int only_current)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	int is_current;
+
+	/* this feature is only current in DVD_ROM */
+	switch(mmc->current_profile){
+	case PROFILE_DVD_ROM:
+		is_current = 1;
+		break;
+	default:
+		is_current = 0;
+	}
+
+	if (only_current) 
+		if (!is_current)
+			return data;
+
+	/* feature code */
+	*data++ = 0x01;
+	*data++ = 0x07;
+
+	/* version 3 */
+	*data = 0x0c;
+	if (is_current)
+		*data |= 0x01;
+	data++;
+
+	/* additional length */
+	*data++ = 4;
+
+	/* flags */
+	*data++ = 0x1f;
+
+	/* reserved */	
+	*data++ = 0;
+	*data++ = 0;
+	*data++ = 0;
+
+	return data;
+}
+
+char *feature_dvd_plus_r(struct scsi_cmd *cmd, char *data, int only_current)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	int is_current;
+
+	/* this feature is only current in DVD+R */
+	switch(mmc->current_profile){
+	case PROFILE_DVD_PLUS_R:
+		is_current = 1;
+		break;
+	default:
+		is_current = 0;
+	}
+
+	if (only_current) 
+		if (!is_current)
+			return data;
+
+	/* feature code */
+	*data++ = 0;
+	*data++ = 0x2b;
+
+	/* version 0 */
+	*data = 0;
+	if (is_current)
+		*data |= 0x01;
+	data++;
+
+	/* additional length */
+	*data++ = 4;
+
+	/* we support WRITE of DVD+R when profile is DVD+R*/
+	*data++ = 0x01;
+
+	/* reserved */
+	*data++ = 0;
+	*data++ = 0;
+	*data++ = 0;
+
+	return data;
+}
+
+char *feature_lun_serial_no(struct scsi_cmd *cmd, char *data, int only_current)
+{
+	/* feature code */
+	*data++ = 0x01;
+	*data++ = 0x08;
+
+	/* version 0 */
+	*data++ = 0x03;
+
+	/* additional length */
+	*data++ = 8;
+
+	/* XXX */
+	*data++ = 'D';
+	*data++ = 'V';
+	*data++ = 'D';
+	*data++ = '#';
+	*data++ = '1';
+	*data++ = '2';
+	*data++ = '3';
+	*data++ = '4';
+
+	return data;
+}
+
+char *feature_multi_read(struct scsi_cmd *cmd, char *data, int only_current)
+{
+	/* feature code */
+	*data++ = 0;
+	*data++ = 0x1d;
+
+	/* version 0 */
+	*data++ = 0x00;
+
+	/* additional length */
+	*data++ = 0;
+
+	return data;
+}
+
+char *feature_dcbs(struct scsi_cmd *cmd, char *data, int only_current)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	int is_current;
+
+	/* this feature is only current in DVD+R */
+	switch(mmc->current_profile){
+	case PROFILE_DVD_PLUS_R:
+		is_current = 1;
+		break;
+	default:
+		is_current = 0;
+	}
+
+	if (only_current) 
+		if (!is_current)
+			return data;
+
+	/* feature code */
+	*data++ = 0x01;
+	*data++ = 0x0a;
+
+	/* version 0 */
+	*data = 0;
+	if (is_current)
+		*data |= 0x01;
+	data++;
+
+	/* additional length : 12 */
+	*data++ = 0x0c;
+
+	/* DCB entry 0 */
+	*data++ = 0x46;
+	*data++ = 0x44;
+	*data++ = 0x43;
+	*data++ = 0x00;
+
+	/* DCB entry 1 */
+	*data++ = 0x53;
+	*data++ = 0x44;
+	*data++ = 0x43;
+	*data++ = 0x00;
+
+	/* DCB entry 2 */
+	*data++ = 0x54;
+	*data++ = 0x4f;
+	*data++ = 0x43;
+	*data++ = 0x00;
+
+	return data;
+}
+
+#define FEATURE_PROFILE_LIST		0x0000
+#define FEATURE_CORE			0x0001
+#define FEATURE_MORHPING		0x0002
+#define FEATURE_REMOVABLE_MEDIUM	0x0003
+#define FEATURE_RANDOM_READABLE		0x0010
+#define FEATURE_MULTI_READ		0x001d
+#define FEATURE_DVD_READ		0x001f
+#define FEATURE_DVD_PLUS_R		0x002b
+#define FEATURE_POWER_MANAGEMENT	0x0100
+#define FEATURE_TIMEOUT			0x0105
+#define FEATURE_REAL_TIME_STREAMING	0x0107
+#define FEATURE_LUN_SERIAL_NO		0x0108
+#define FEATURE_DCBS			0x010a
+struct feature_descriptor {
+	int feature;
+	char *(*func)(struct scsi_cmd *cmd, char *data, int only_current);
+};
+/* this array MUST list the features in numerical order */
+struct feature_descriptor features[] = {
+	{FEATURE_PROFILE_LIST,		feature_profile_list},
+	{FEATURE_CORE,			feature_core},
+	{FEATURE_MORHPING,		feature_morphing},
+	{FEATURE_REMOVABLE_MEDIUM,	feature_removable_medium},
+	{FEATURE_RANDOM_READABLE,	feature_random_readable},
+	{FEATURE_MULTI_READ,		feature_multi_read},
+	{FEATURE_DVD_READ,		feature_dvd_read},
+	{FEATURE_DVD_PLUS_R,		feature_dvd_plus_r},
+	{FEATURE_POWER_MANAGEMENT,	feature_power_management},
+	{FEATURE_TIMEOUT,		feature_timeout},
+	{FEATURE_REAL_TIME_STREAMING,	feature_real_time_streaming},
+	{FEATURE_LUN_SERIAL_NO,		feature_lun_serial_no},
+	{FEATURE_DCBS,			feature_dcbs},
+	{0, NULL},
+};
+
+static int mmc_get_configuration(int host_no, struct scsi_cmd *cmd)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	char *data;
+	char buf[1024];
+	int rt, start;
+	struct feature_descriptor *f;
+	int tmp;
+
+	rt = cmd->scb[1] & 0x03;
+
+	start = cmd->scb[2];
+	start = (start<<8) | cmd->scb[3];
+
+	memset(buf, 0, sizeof(buf));
+	data = buf;
+	/* skip past size */
+	data += 4;
+
+	/* reserved */
+	*data++ = 0; 
+	*data++ = 0; 
+	/* current profile */
+	*data++ = (mmc->current_profile>>8)&0xff;
+	*data++ = (mmc->current_profile   )&0xff;
+
+	/* add the features */
+	for (f=features;f->func;f++) {
+		/* only return features >= the start feature */
+		if (f->feature < start)
+			continue;
+		/* if rt==2 we skip all other features except start */
+		if ( (rt==2) && (f->feature!=start) )
+			continue;
+
+		data = f->func(cmd, data, (rt==1)?1:0 );
+	}
+
+	tmp = data-buf;
+	tmp -= 4;
+
+	buf[0] = (tmp>>24)&0xff;
+	buf[1] = (tmp>>16)&0xff;
+	buf[2] = (tmp>> 8)&0xff;
+	buf[3] = (tmp    )&0xff;
+
+	tmp = data-buf;
+
+	memcpy(scsi_get_in_buffer(cmd), buf,
+	       min(scsi_get_in_length(cmd), (uint32_t) sizeof(buf)));
+
+	/* dont report overflow/underflow for GET CONFIGURATION */
+	return SAM_STAT_GOOD;
+}
+
 unsigned char *track_type_lba(struct scsi_cmd *cmd, unsigned char *data, unsigned int lba)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
@@ -1078,7 +1628,7 @@ static struct device_type_template mmc_template = {
 		{mmc_read_toc,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{mmc_get_configuration,},
 		{spc_illegal_op,},
 
 		{spc_illegal_op,},
