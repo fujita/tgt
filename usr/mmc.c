@@ -176,7 +176,7 @@ static int mmc_lu_init(struct scsi_lu *lu)
 }
 
 static struct device_type_template mmc_template = {
-	.type		= TYPE_ROM,
+	.type		= TYPE_MMC,
 	.lu_init	= mmc_lu_init,
 	.lu_config	= spc_lu_config,
 	.lu_exit	= spc_lu_exit,

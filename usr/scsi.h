@@ -122,7 +122,7 @@
 #define TYPE_PRINTER        0x02
 #define TYPE_PROCESSOR      0x03
 #define TYPE_WORM           0x04
-#define TYPE_ROM            0x05
+#define TYPE_MMC            0x05
 #define TYPE_SCANNER        0x06
 #define TYPE_MOD            0x07
 

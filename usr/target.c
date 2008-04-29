@@ -1474,7 +1474,7 @@ static struct {
 	{TYPE_PRINTER, "printer"},
 	{TYPE_PROCESSOR, "processor"},
 	{TYPE_WORM, "worm"},
-	{TYPE_ROM, "cd/dvd"},
+	{TYPE_MMC, "cd/dvd"},
 	{TYPE_SCANNER, "scanner"},
 	{TYPE_MOD, "optical"},
 	{TYPE_MEDIUM_CHANGER, "changer"},

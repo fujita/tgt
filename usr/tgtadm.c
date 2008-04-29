@@ -301,7 +301,7 @@ static int str_to_device_type(char *str)
 		eprintf("type emulation isn't supported yet\n");
 		exit(EINVAL);
 	} else if (!strcmp(str, "cd"))
-		return TYPE_ROM;
+		return TYPE_MMC;
 	else if (!strcmp(str, "changer"))
 		return TYPE_MEDIUM_CHANGER;
 	else if (!strcmp(str, "osd"))
