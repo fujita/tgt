@@ -90,6 +90,8 @@ struct device_type_template {
 	int (*lu_init)(struct scsi_lu *lu);
 	void (*lu_exit)(struct scsi_lu *lu);
 	int (*lu_config)(struct scsi_lu *lu, char *args);
+	int (*lu_online)(struct scsi_lu *lu);
+	int (*lu_offline)(struct scsi_lu *lu);
 
 	struct device_type_operations ops[256];
 

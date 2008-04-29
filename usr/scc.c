@@ -47,7 +47,7 @@ static int scc_lu_init(struct scsi_lu *lu)
 	lu->attrs.version_desc[1] = 0x0960; /* iSCSI */
 	lu->attrs.version_desc[2] = 0x01fb; /* SCC-2 */
 
-	lu->attrs.online = 1;
+	lu->dev_type_template.lu_online(lu);
 
 	return 0;
 }
@@ -56,6 +56,8 @@ static struct device_type_template scc_template = {
 	.type		= TYPE_RAID,
 	.lu_init	= scc_lu_init,
 	.lu_config	= spc_lu_config,
+	.lu_online	= spc_lu_online,
+	.lu_offline	= spc_lu_offline,
 	.lu_exit	= spc_lu_exit,
 	.ops		= {
 		{spc_test_unit,},

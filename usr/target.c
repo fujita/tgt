@@ -330,7 +330,7 @@ int tgt_device_path_update(struct target *target, struct scsi_lu *lu, char *path
 		lu->addr = 0;
 		lu->size = 0;
 		lu->path = NULL;
-		lu->attrs.online = 0;
+		lu->dev_type_template.lu_online(lu);
 	}
 
 	path = strdup(path);
@@ -347,7 +347,7 @@ int tgt_device_path_update(struct target *target, struct scsi_lu *lu, char *path
 	lu->addr = 0;
 	lu->size = size;
 	lu->path = path;
-	lu->attrs.online = 1;
+	lu->dev_type_template.lu_online(lu);
 
 	return 0;
 }
@@ -503,7 +503,7 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	}
 
 	if (backing && !path)
-		lu->attrs.online = 0;
+		lu->dev_type_template.lu_offline(lu);
 
 	dprintf("Add a logical unit %" PRIu64 " to the target %d\n", lun, tid);
 out:
@@ -614,7 +614,7 @@ int dtd_load_unload(int tid, uint64_t lun, int load, char *file)
 
 	lu->size = 0;
 	lu->fd = 0;
-	lu->attrs.online = 0;
+	lu->dev_type_template.lu_offline(lu);
 
 	if (load) {
 		lu->path = strdup(file);
@@ -623,7 +623,7 @@ int dtd_load_unload(int tid, uint64_t lun, int load, char *file)
 		lu->fd = backed_file_open(file, O_RDWR|O_LARGEFILE, &lu->size);
 		if (lu->fd < 0)
 			return TGTADM_UNSUPPORTED_OPERATION;
-		lu->attrs.online = 1;
+		lu->dev_type_template.lu_online(lu);
 	}
 	return err;
 }

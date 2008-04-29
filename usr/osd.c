@@ -75,6 +75,8 @@ static struct device_type_template osd_template = {
 	.type		= TYPE_OSD,
 	.lu_init	= osd_lu_init,
 	.lu_config	= spc_lu_config,
+	.lu_online	= spc_lu_online,
+	.lu_offline	= spc_lu_offline,
 	.lu_exit	= spc_lu_exit,
 	.ops		= {
 		/* 0x00 */

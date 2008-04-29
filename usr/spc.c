@@ -590,6 +590,18 @@ static match_table_t tokens = {
 	{Opt_err, NULL},
 };
 
+int spc_lu_online(struct scsi_lu *lu)
+{
+	lu->attrs.online = 1;
+	return 0;
+}
+
+int spc_lu_offline(struct scsi_lu *lu)
+{
+	lu->attrs.online = 0;
+	return 0;
+}
+
 int lu_config(struct scsi_lu *lu, char *params, match_fn_t *fn)
 {
 	int err = TGTADM_SUCCESS;
@@ -643,7 +655,11 @@ int lu_config(struct scsi_lu *lu, char *params, match_fn_t *fn)
 			break;
 		case Opt_online:
 			match_strncpy(buf, &args[0], sizeof(buf));
-			attrs->online = atoi(buf);
+			if (atoi(buf)) {
+				lu->dev_type_template.lu_online(lu);
+			} else {
+				lu->dev_type_template.lu_offline(lu);
+			}
 			break;
 		case Opt_mode_page:
 			match_strncpy(buf, &args[0], sizeof(buf));
@@ -697,7 +713,7 @@ int spc_lu_init(struct scsi_lu *lu)
 
 	lu->attrs.removable = 0;
 	lu->attrs.sense_format = 0;
-	lu->attrs.online = 0;
+	lu->dev_type_template.lu_offline(lu);
 
 	return 0;
 }

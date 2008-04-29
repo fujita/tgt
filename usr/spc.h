@@ -17,5 +17,7 @@ extern void dump_cdb(struct scsi_cmd *cmd);
 extern int spc_mode_sense(int host_no, struct scsi_cmd *cmd);
 extern int add_mode_page(struct scsi_lu *lu, char *params);
 extern struct vpd *alloc_vpd(uint16_t size);
+extern int spc_lu_online(struct scsi_lu *lu);
+extern int spc_lu_offline(struct scsi_lu *lu);
 
 #endif

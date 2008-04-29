@@ -465,7 +465,7 @@ static int smc_lu_init(struct scsi_lu *lu)
 
 	INIT_LIST_HEAD(&smc->slots);
 
-	lu->attrs.online = 1;	/* Library will now report as Online */
+	lu->dev_type_template.lu_online(lu); /* Library will now report as Online */
 	lu->attrs.removable = 1; /* Default to removable media */
 
 	return 0;
@@ -737,6 +737,8 @@ struct device_type_template smc_template = {
 	.type		= TYPE_MEDIUM_CHANGER,
 	.lu_init	= smc_lu_init,
 	.lu_exit 	= smc_lu_exit,
+	.lu_online	= spc_lu_online,
+	.lu_offline	= spc_lu_offline,
 	.lu_config	= smc_lu_config,
 	.ops	= {
 		{spc_test_unit,},
