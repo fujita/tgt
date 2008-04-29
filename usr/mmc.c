@@ -56,6 +56,11 @@ struct mmc_info {
 	int current_profile;
 };
 
+static int mmc_set_streaming(int host_no, struct scsi_cmd *cmd)
+{
+	return SAM_STAT_GOOD;
+}
+
 static int mmc_rw(int host_no, struct scsi_cmd *cmd)
 {
 	int ret;
@@ -360,7 +365,26 @@ static struct device_type_template mmc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 
-		[0xb0 ... 0xff] = {spc_illegal_op},
+		/* 0xB0 */
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{mmc_set_streaming,},
+		{spc_illegal_op,},
+
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+
+		[0xc0 ... 0xff] = {spc_illegal_op},
 	}
 };
 
