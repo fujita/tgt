@@ -57,6 +57,70 @@ struct mmc_info {
 };
 
 
+static int mmc_rw(int host_no, struct scsi_cmd *cmd)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	int ret;
+	uint64_t end_offset;
+
+	if (mmc->current_profile == PROFILE_NO_PROFILE) {
+		scsi_set_in_resid_by_actual(cmd, 0);
+		sense_data_build(cmd, NOT_READY, ASC_MEDIUM_NOT_PRESENT);
+		return SAM_STAT_CHECK_CONDITION;
+	}
+
+	switch (mmc->current_profile) {
+	case PROFILE_DVD_ROM:
+		switch(cmd->scb[0]) {
+		case WRITE_6:
+		case WRITE_10:
+		case WRITE_12:
+		case WRITE_16:
+			scsi_set_in_resid_by_actual(cmd, 0);
+			sense_data_build(cmd, ILLEGAL_REQUEST, ASC_INCOMPATIBLE_FORMAT);
+			return SAM_STAT_CHECK_CONDITION;
+		}
+		break;
+	case PROFILE_DVD_PLUS_R:
+		switch(cmd->scb[0]) {
+		case READ_6:
+		case READ_10:
+		case READ_12:
+		case READ_16:
+			scsi_set_in_resid_by_actual(cmd, 0);
+			sense_data_build(cmd, ILLEGAL_REQUEST, ASC_LBA_OUT_OF_RANGE);
+			return SAM_STAT_CHECK_CONDITION;
+		}
+		break;
+	}
+
+	cmd->scsi_cmd_done = target_cmd_io_done;
+
+	cmd->offset = (scsi_rw_offset(cmd->scb) << MMC_BLK_SHIFT);
+
+	/* update the size of the device */
+	end_offset = cmd->offset + (((uint64_t)scsi_rw_count(cmd->scb)) << MMC_BLK_SHIFT);
+	if (end_offset > cmd->dev->size) {
+		cmd->dev->size = end_offset;
+	}
+
+	ret = cmd->dev->bst->bs_cmd_submit(cmd);
+	if (ret) {
+		cmd->offset = 0;
+		if (scsi_get_data_dir(cmd) == DATA_WRITE)
+			scsi_set_out_resid_by_actual(cmd, 0);
+		else
+			scsi_set_in_resid_by_actual(cmd, 0);
+
+		sense_data_build(cmd, ILLEGAL_REQUEST, ASC_LUN_NOT_SUPPORTED);
+		return SAM_STAT_CHECK_CONDITION;
+	} else {
+		set_cmd_mmapio(cmd);
+		return SAM_STAT_GOOD;
+	}
+	return 0;
+}
+
 static int mmc_read_capacity(int host_no, struct scsi_cmd *cmd)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
@@ -1687,31 +1751,6 @@ static int mmc_set_streaming(int host_no, struct scsi_cmd *cmd)
 	return SAM_STAT_GOOD;
 }
 
-static int mmc_rw(int host_no, struct scsi_cmd *cmd)
-{
-	int ret;
-
-	cmd->scsi_cmd_done = target_cmd_io_done;
-
-	cmd->offset = (scsi_rw_offset(cmd->scb) << MMC_BLK_SHIFT);
-	ret = cmd->dev->bst->bs_cmd_submit(cmd);
-	if (ret) {
-		cmd->offset = 0;
-		if (scsi_get_data_dir(cmd) == DATA_WRITE)
-			scsi_set_out_resid_by_actual(cmd, 0);
-		else
-			scsi_set_in_resid_by_actual(cmd, 0);
-
-		sense_data_build(cmd, ILLEGAL_REQUEST, ASC_LUN_NOT_SUPPORTED);
-		return SAM_STAT_CHECK_CONDITION;
-	} else {
-		set_cmd_mmapio(cmd);
-		return SAM_STAT_GOOD;
-	}
-	return 0;
-}
-
-
 static int mmc_mode_sense(int host_no, struct scsi_cmd *cmd)
 {
 	uint8_t *scb = cmd->scb;
@@ -1871,7 +1910,7 @@ static struct device_type_template mmc_template = {
 
 		{mmc_rw},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{mmc_rw},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
@@ -1947,9 +1986,9 @@ static struct device_type_template mmc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 
+		{mmc_rw},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{mmc_rw},
 		{spc_illegal_op,},
 		{mmc_get_performance,},
 		{spc_illegal_op,},
