@@ -57,6 +57,387 @@ struct mmc_info {
 };
 
 
+unsigned char *track_type_lba(struct scsi_cmd *cmd, unsigned char *data, unsigned int lba)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	unsigned long tmp;
+	switch(mmc->current_profile){
+	case PROFILE_DVD_PLUS_R:
+		/* track number LSB */
+		*data++ = 1;
+
+		/* session number LSB */
+		*data++ = 1;
+
+		/* reserved */
+		*data++ = 0;
+
+		/* damage:0 copy:0 track_mode:DVD+R */ 
+		*data++ = 0x07;
+
+		/* rt:0 blank:1 packet/inc:0 fp:0 data mode:1 */
+		*data++ = 0x41;
+
+		/* lra_v:0 nwa_v:1 */
+		*data++ = 0x01;
+
+		/* track start address */
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+
+		/* next writeable address */
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+
+		/* free blocks */
+		*data++ = 0x00;
+		*data++ = 0x23;
+		*data++ = 0x05;
+		*data++ = 0x40;
+
+		/* blocking factor */
+		*data++ = 0x00;
+		*data++ = 0x00;
+		*data++ = 0x00;
+		*data++ = 0x10;
+
+		/* track size */
+		*data++ = 0x00;
+		*data++ = 0x23;
+		*data++ = 0x05;
+		*data++ = 0x40;
+
+		/* last recorded address */
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+
+		/* track number MSB */
+		*data++ = 0;
+
+		/* session number MSB */
+		*data++ = 0;
+
+		/* reserved */
+		data+=2;
+
+		/* read compat lba */
+		*data++ = 0x00;
+		*data++ = 0x04;
+		*data++ = 0x0d;
+		*data++ = 0x0e;
+
+		return data;
+	case PROFILE_DVD_ROM:
+		/* track number LSB */
+		*data++ = 1;
+
+		/* session number LSB */
+		*data++ = 1;
+
+		/* reserved */
+		*data++ = 0;
+
+		/* damage:0 copy:0 track_mode:other media */ 
+		*data++ = 0x04;
+
+		/* rt:0 blank:0 packet/inc:0 fp:0 data mode:1 */
+		*data++ = 0x01;
+
+		/* lra_v:1 nwa_v:0 */
+		*data++ = 0x02;
+
+		/* track start address */
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+
+		/* next writeable address */
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+
+		/* free blocks */
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+
+		/* blocking factor */
+		*data++ = 0x00;
+		*data++ = 0x00;
+		*data++ = 0x00;
+		*data++ = 0x10;
+
+		/* track size */
+		tmp = cmd->dev->size >> MMC_BLK_SHIFT;
+		*data++ = (tmp>>24)&0xff;
+		*data++ = (tmp>>16)&0xff;
+		*data++ = (tmp>> 8)&0xff;
+		*data++ = (tmp    )&0xff;
+
+		/* last recorded address */
+		tmp--;  /* one less */
+		*data++ = (tmp>>24)&0xff;
+		*data++ = (tmp>>16)&0xff;
+		*data++ = (tmp>> 8)&0xff;
+		*data++ = (tmp    )&0xff;
+
+		/* track number MSB */
+		*data++ = 0;
+
+		/* session number MSB */
+		*data++ = 0;
+
+		/* reserved */
+		data+=2;
+
+		return data;
+	}
+	
+	/* we do not understand/support this profile */
+	scsi_set_in_resid_by_actual(cmd, 0);
+	sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
+	return NULL;
+}
+
+unsigned char *track_type_track(struct scsi_cmd *cmd, unsigned char *data, unsigned int lba)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	unsigned long tmp;
+
+	switch(mmc->current_profile){
+	case PROFILE_DVD_PLUS_R:
+		if (lba == 0) {
+			scsi_set_in_resid_by_actual(cmd, 0);
+			sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
+			return NULL;
+		}
+
+		/* track number LSB */
+		*data++ = 1;
+
+		/* session number LSB */
+		*data++ = 1;
+
+		/* reserved */
+		*data++ = 0;
+
+		/* damage:0 copy:0 track_mode:DVD+R */ 
+		*data++ = 0x07;
+
+		/* rt:0 blank:1 packet/inc:0 fp:0 data mode:1 */
+		*data++ = 0x41;
+
+		/* lra_v:0 nwa_v:1 */
+		*data++ = 0x01;
+
+		/* track start address */
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+
+		/* next writeable address */
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+
+		/* free blocks */
+		*data++ = 0x00;
+		*data++ = 0x23;
+		*data++ = 0x05;
+		*data++ = 0x40;
+
+		/* blocking factor */
+		*data++ = 0x00;
+		*data++ = 0x00;
+		*data++ = 0x00;
+		*data++ = 0x10;
+
+		/* track size */
+		*data++ = 0x00;
+		*data++ = 0x23;
+		*data++ = 0x05;
+		*data++ = 0x40;
+
+		/* last recorded address */
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+
+		/* track number MSB */
+		*data++ = 0;
+
+		/* session number MSB */
+		*data++ = 0;
+
+		/* reserved */
+		data+=2;
+
+		/* read compat lba */
+		*data++ = 0x00;
+		*data++ = 0x04;
+		*data++ = 0x0d;
+		*data++ = 0x0e;
+
+		return data;
+	case PROFILE_DVD_ROM:
+		/* we only have one track */
+		if (lba != 1) {
+			scsi_set_in_resid_by_actual(cmd, 0);
+			sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
+			return NULL;
+		}
+
+		/* track number LSB */
+		*data++ = 1;
+
+		/* session number LSB */
+		*data++ = 1;
+
+		/* reserved */
+		*data++ = 0;
+
+		/* damage:0 copy:0 track_mode:other media */ 
+		*data++ = 0x04;
+
+		/* rt:0 blank:0 packet/inc:0 fp:0 data mode:1 */
+		*data++ = 0x01;
+
+		/* lra_v:1 nwa_v:0 */
+		*data++ = 0x02;
+
+		/* track start address */
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+
+		/* next writeable address */
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+
+		/* free blocks */
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+		*data++ = 0;
+
+		/* blocking factor */
+		*data++ = 0x00;
+		*data++ = 0x00;
+		*data++ = 0x00;
+		*data++ = 0x10;
+
+		/* track size */
+		tmp = cmd->dev->size >> MMC_BLK_SHIFT;
+		*data++ = (tmp>>24)&0xff;
+		*data++ = (tmp>>16)&0xff;
+		*data++ = (tmp>> 8)&0xff;
+		*data++ = (tmp    )&0xff;
+
+		/* last recorded address */
+		tmp--;  /* one less */
+		*data++ = (tmp>>24)&0xff;
+		*data++ = (tmp>>16)&0xff;
+		*data++ = (tmp>> 8)&0xff;
+		*data++ = (tmp    )&0xff;
+
+		/* track number MSB */
+		*data++ = 0;
+
+		/* session number MSB */
+		*data++ = 0;
+
+		/* reserved */
+		data+=2;
+
+		return data;
+	}
+	
+	/* we do not understand/support this profile */
+	scsi_set_in_resid_by_actual(cmd, 0);
+	sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
+	return NULL;
+}
+
+
+#define TRACK_INFO_LBA		0
+#define TRACK_INFO_TRACK	1
+
+struct track_type {
+	int type;
+	unsigned char *(*func)(struct scsi_cmd *cmd, unsigned char *data, unsigned int lba);
+};
+struct track_type track_types[] = {
+	{TRACK_INFO_LBA,     track_type_lba},
+	{TRACK_INFO_TRACK,   track_type_track},
+	{0, NULL}
+};
+
+static int mmc_read_track_information(int host_no, struct scsi_cmd *cmd)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct track_type *t;
+	unsigned char *data;
+	unsigned char buf[4096];
+	int type;
+	int lba;
+
+	if (mmc->current_profile == PROFILE_NO_PROFILE) {
+		scsi_set_in_resid_by_actual(cmd, 0);
+		sense_data_build(cmd, NOT_READY, ASC_MEDIUM_NOT_PRESENT);
+		return SAM_STAT_CHECK_CONDITION;
+	}
+
+	type = cmd->scb[1]&0x03;
+
+	lba = cmd->scb[2];
+	lba = (lba<<8) | cmd->scb[3];
+	lba = (lba<<8) | cmd->scb[4];
+	lba = (lba<<8) | cmd->scb[5];
+
+	memset(buf, 0, sizeof(buf));
+	data = &buf[2];
+
+	for(t=track_types;t->func;t++){
+		int tmp;
+
+		if (t->type != type) {
+			continue;
+		}
+		data = t->func(cmd, data, lba);
+		if (data == NULL) {
+			return SAM_STAT_CHECK_CONDITION;
+		}
+
+		tmp = data-&buf[2];
+		buf[0] = (tmp>>8)&0xff;
+		buf[1] = (tmp   )&0xff;
+		memcpy(scsi_get_in_buffer(cmd), buf,
+			min(scsi_get_in_length(cmd),
+				(uint32_t) sizeof(buf)));
+		return SAM_STAT_GOOD;
+	}
+
+	/* we do not understand this track type */
+	scsi_set_in_resid_by_actual(cmd, 0);
+	sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
+	return SAM_STAT_CHECK_CONDITION;
+}
+	
 static int mmc_read_buffer_capacity(int host_no, struct scsi_cmd *cmd)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
@@ -712,7 +1093,7 @@ static struct device_type_template mmc_template = {
 		/* 0x50 */
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{mmc_read_track_information,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
