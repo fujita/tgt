@@ -57,6 +57,16 @@ struct mmc_info {
 };
 
 
+static int mmc_close_track(int host_no, struct scsi_cmd *cmd)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+
+	/* once we close the track it becomes a DVD_ROM */
+	mmc->current_profile = PROFILE_DVD_ROM;
+
+	return SAM_STAT_GOOD;
+}
+
 static int mmc_read_disc_information(int host_no, struct scsi_cmd *cmd)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
@@ -1820,7 +1830,7 @@ static struct device_type_template mmc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{mmc_mode_sense,},
-		{spc_illegal_op,},
+		{mmc_close_track,},
 		{mmc_read_buffer_capacity,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
