@@ -56,7 +56,6 @@ struct mmc_info {
 	int current_profile;
 };
 
-
 static int mmc_rw(int host_no, struct scsi_cmd *cmd)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
@@ -71,24 +70,26 @@ static int mmc_rw(int host_no, struct scsi_cmd *cmd)
 
 	switch (mmc->current_profile) {
 	case PROFILE_DVD_ROM:
-		switch(cmd->scb[0]) {
+		switch (cmd->scb[0]) {
 		case WRITE_6:
 		case WRITE_10:
 		case WRITE_12:
 		case WRITE_16:
 			scsi_set_in_resid_by_actual(cmd, 0);
-			sense_data_build(cmd, ILLEGAL_REQUEST, ASC_INCOMPATIBLE_FORMAT);
+			sense_data_build(cmd, ILLEGAL_REQUEST,
+					 ASC_INCOMPATIBLE_FORMAT);
 			return SAM_STAT_CHECK_CONDITION;
 		}
 		break;
 	case PROFILE_DVD_PLUS_R:
-		switch(cmd->scb[0]) {
+		switch (cmd->scb[0]) {
 		case READ_6:
 		case READ_10:
 		case READ_12:
 		case READ_16:
 			scsi_set_in_resid_by_actual(cmd, 0);
-			sense_data_build(cmd, ILLEGAL_REQUEST, ASC_LBA_OUT_OF_RANGE);
+			sense_data_build(cmd, ILLEGAL_REQUEST,
+					 ASC_LBA_OUT_OF_RANGE);
 			return SAM_STAT_CHECK_CONDITION;
 		}
 		break;
@@ -99,10 +100,10 @@ static int mmc_rw(int host_no, struct scsi_cmd *cmd)
 	cmd->offset = (scsi_rw_offset(cmd->scb) << MMC_BLK_SHIFT);
 
 	/* update the size of the device */
-	end_offset = cmd->offset + (((uint64_t)scsi_rw_count(cmd->scb)) << MMC_BLK_SHIFT);
-	if (end_offset > cmd->dev->size) {
+	end_offset = cmd->offset +
+		(((uint64_t)scsi_rw_count(cmd->scb)) << MMC_BLK_SHIFT);
+	if (end_offset > cmd->dev->size)
 		cmd->dev->size = end_offset;
-	}
 
 	ret = cmd->dev->bst->bs_cmd_submit(cmd);
 	if (ret) {
@@ -139,14 +140,13 @@ static int mmc_read_capacity(int host_no, struct scsi_cmd *cmd)
 	data = scsi_get_in_buffer(cmd);
 	size = cmd->dev->size >> MMC_BLK_SHIFT;
 
-	if (size == 0) {
-		data[0] = 0; /* A blank DVD */
-	} else {
+	if (size)
 		data[0] = (size >> 32) ?
 			__cpu_to_be32(0xffffffff) : __cpu_to_be32(size - 1);
-	}
-	data[1] = __cpu_to_be32(1U << MMC_BLK_SHIFT);
+	else
+		data[0] = 0; /* A blank DVD */
 
+	data[1] = __cpu_to_be32(1U << MMC_BLK_SHIFT);
 overflow:
 	scsi_set_in_resid_by_actual(cmd, 8);
 	return SAM_STAT_GOOD;
@@ -173,28 +173,28 @@ static int mmc_read_toc(int host_no, struct scsi_cmd *cmd)
 		return SAM_STAT_CHECK_CONDITION;
 	}
 
-	toc_time   = cmd->scb[1] & 0x02;
+	toc_time = cmd->scb[1] & 0x02;
 	toc_format = cmd->scb[2] & 0x0f;
-	toc_track  = cmd->scb[6];
+	toc_track = cmd->scb[6];
 
 	memset(buf, 0, sizeof(buf));
 	data = buf;
-		
+
 	switch (toc_format) {
 	case 0:	/* formatted toc */
-		if (toc_track != 0) {
+		if (toc_track) {
 			/* we only do single session data disks so only
 			   track 0 is valid */
 			scsi_set_in_resid_by_actual(cmd, 0);
-			sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
+			sense_data_build(cmd, NOT_READY,
+					 ASC_INVALID_FIELD_IN_CDB);
 			return SAM_STAT_CHECK_CONDITION;
 		}
 
-		if (toc_time) {
+		if (toc_time)
 			tsa = 0x00ff3b4a;
-		} else {
+		else
 			tsa = cmd->dev->size >> MMC_BLK_SHIFT; /* lba */
-		}
 
 		/* size of return data */
 		data[0] = 0;
@@ -204,28 +204,27 @@ static int mmc_read_toc(int host_no, struct scsi_cmd *cmd)
 		data[3] = 1;	/* last track */
 
 		/* data track */
-		data[ 4] = 0;		/* reserved */	
-		data[ 5] = 0x14;
-		data[ 6] = 1;		/* track number */
-		data[ 7] = 0;		/* reserved */
-		data[ 8] = 0;		/* track start address : 0 */
-		data[ 9] = 0;
-		if (toc_time) {
+		data[4] = 0;		/* reserved */
+		data[5] = 0x14;
+		data[6] = 1;		/* track number */
+		data[7] = 0;		/* reserved */
+		data[8] = 0;		/* track start address : 0 */
+		data[9] = 0;
+		if (toc_time)
 			data[10] = 2;	/* time 00:00:02:00 */
-		} else {
+		else
 			data[10] = 0;
-		}
 		data[11] = 0;
 
 		/* leadout track */
-		data[12] = 0;		/* reserved */	
+		data[12] = 0;		/* reserved */
 		data[13] = 0x14;
 		data[14] = 0xaa;	/* track number */
 		data[15] = 0;		/* reserved */
-		data[16] = (tsa>>24)&0xff;/* track start address */
-		data[17] = (tsa>>16)&0xff;
-		data[18] = (tsa>> 8)&0xff;
-		data[19] = (tsa    )&0xff;
+		data[16] = (tsa >> 24) & 0xff;/* track start address */
+		data[17] = (tsa >> 16) & 0xff;
+		data[18] = (tsa >> 8) & 0xff;
+		data[19] = tsa & 0xff;
 
 		break;
 	case 1:	/* multi session info */
@@ -237,17 +236,16 @@ static int mmc_read_toc(int host_no, struct scsi_cmd *cmd)
 		data[3] = 1;	/* last session */
 
 		/* data track */
-		data[ 4] = 0;		/* reserved */	
-		data[ 5] = 0x14;
-		data[ 6] = 1;		/* track number */
-		data[ 7] = 0;		/* reserved */
-		data[ 8] = 0;		/* track start address : 0 */
-		data[ 9] = 0;
-		if (toc_time) {
+		data[4] = 0;		/* reserved */
+		data[5] = 0x14;
+		data[6] = 1;		/* track number */
+		data[7] = 0;		/* reserved */
+		data[8] = 0;		/* track start address : 0 */
+		data[9] = 0;
+		if (toc_time)
 			data[10] = 2;	/* time 00:00:02:00 */
-		} else {
+		else
 			data[10] = 0;
-		}
 		data[11] = 0;
 
 		break;
@@ -295,15 +293,18 @@ static int mmc_read_disc_information(int host_no, struct scsi_cmd *cmd)
 
 	memset(buf, 0, sizeof(buf));
 
-	switch(mmc->current_profile){
+	switch (mmc->current_profile) {
 	case PROFILE_DVD_ROM:
 		/* disk information length */
 		buf[0] = 0x00;
 		buf[1] = 0x20;
 
-		/* erasable:0 state of last session:complete disc status:finalized */
+		/*
+		 * erasable:0 state of last session:complete disc
+		 * status:finalized
+		 */
 		buf[2] = 0x0e;
-	
+
 		/* number of first track on disk */
 		buf[3] = 1;
 
@@ -373,7 +374,7 @@ static int mmc_read_disc_information(int host_no, struct scsi_cmd *cmd)
 
 		/* erasable:0 state of last session:empty disc status:empty */
 		buf[2] = 0;
-	
+
 		/* number of first track on disk */
 		buf[3] = 1;
 
@@ -434,7 +435,6 @@ static int mmc_read_disc_information(int host_no, struct scsi_cmd *cmd)
 
 		/* number of opc tables */
 		buf[33] = 0;
-
 		break;
 	default:
 		/* we do not understand/support this command for this profile */
@@ -444,12 +444,11 @@ static int mmc_read_disc_information(int host_no, struct scsi_cmd *cmd)
 	}
 
 	memcpy(scsi_get_in_buffer(cmd), buf,
-		min(scsi_get_in_length(cmd),
-			(uint32_t) sizeof(buf)));
+	       min_t(uint32_t, scsi_get_in_length(cmd), sizeof(buf)));
 	return SAM_STAT_GOOD;
 }
 
-void profile_dvd_rom(struct scsi_cmd *cmd, char *data)
+static void profile_dvd_rom(struct scsi_cmd *cmd, char *data)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
 
@@ -458,17 +457,16 @@ void profile_dvd_rom(struct scsi_cmd *cmd, char *data)
 	*data++ = 0x10;
 
 	/* current ? */
-	if (mmc->current_profile == PROFILE_DVD_ROM) {
+	if (mmc->current_profile == PROFILE_DVD_ROM)
 		*data++ = 0x01;
-	} else {
+	else
 		*data++ = 0;
-	}
 
 	/* reserved */
 	*data++ = 0;
 }
 
-void profile_dvd_plus_r(struct scsi_cmd *cmd, char *data)
+static void profile_dvd_plus_r(struct scsi_cmd *cmd, char *data)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
 
@@ -477,11 +475,10 @@ void profile_dvd_plus_r(struct scsi_cmd *cmd, char *data)
 	*data++ = 0x1b;
 
 	/* current ? */
-	if (mmc->current_profile == PROFILE_DVD_PLUS_R) {
+	if (mmc->current_profile == PROFILE_DVD_PLUS_R)
 		*data++ = 0x01;
-	} else {
+	else
 		*data++ = 0;
-	}
 
 	/* reserved */
 	*data++ = 0;
@@ -497,34 +494,37 @@ struct profile_descriptor profiles[] = {
 	{0, NULL}
 };
 
-/* these features are mandatory for profile DVD_ROM
-	FEATURE_PROFILE_LIST
-	FEATURE_CORE
-	FEATURE_MORHPING
-	FEATURE_REMOVABLE_MEDIUM
-	FEATURE_RANDOM_READABLE
-	FEATURE_DVD_READ
-	FEATURE_POWER_MANAGEMENT
-	FEATURE_TIMEOUT
-	FEATURE_REAL_TIME_STREAMING
-   these features are mandatory for profile DVD+R
-	FEATURE_PROFILE_LIST
-	FEATURE_CORE
-	FEATURE_MORHPING
-	FEATURE_REMOVABLE_MEDIUM
-	FEATURE_RANDOM_READABLE
-	FEATURE_DVD_READ
-	FEATURE_DVD_PLUS_R
-	FEATURE_POWER_MANAGEMENT
-	FEATURE_TIMEOUT
-	FEATURE_REAL_TIME_STREAMING
-	FEATURE_DCBS
-   additional features
-	FEATURE_MULIT_READ
-	FEATURE_LUN_SERIAL_NO
-*/
-
-char *feature_profile_list(struct scsi_cmd *cmd, char *data, int only_current)
+/*
+ * these features are mandatory for profile DVD_ROM
+ * FEATURE_PROFILE_LIST
+ * FEATURE_CORE
+ * FEATURE_MORHPING
+ * FEATURE_REMOVABLE_MEDIUM
+ * FEATURE_RANDOM_READABLE
+ * FEATURE_DVD_READ
+ * FEATURE_POWER_MANAGEMENT
+ * FEATURE_TIMEOUT
+ * FEATURE_REAL_TIME_STREAMING
+ *
+ * these features are mandatory for profile DVD+R
+ * FEATURE_PROFILE_LIST
+ * FEATURE_CORE
+ * FEATURE_MORHPING
+ * FEATURE_REMOVABLE_MEDIUM
+ * FEATURE_RANDOM_READABLE
+ * FEATURE_DVD_READ
+ * FEATURE_DVD_PLUS_R
+ * FEATURE_POWER_MANAGEMENT
+ * FEATURE_TIMEOUT
+ * FEATURE_REAL_TIME_STREAMING
+ * FEATURE_DCBS
+ *
+ * additional features
+ * FEATURE_MULIT_READ
+ * FEATURE_LUN_SERIAL_NO
+ */
+static char *feature_profile_list(struct scsi_cmd *cmd, char *data,
+				  int only_current)
 {
 	struct profile_descriptor *p;
 	char *additional;
@@ -535,22 +535,22 @@ char *feature_profile_list(struct scsi_cmd *cmd, char *data, int only_current)
 
 	/* version 0  always persistent, always current */
 	*data++ = 0x03;
-	
+
 	/* additional length start at 0*/
 	additional = data++;
 	*additional = 0;
 
 	/* all all profiles we support */
-	for (p=profiles;p->func;p++) {
+	for (p = profiles; p->func; p++) {
 		p->func(cmd, data);
 		*additional = (*additional) + 4;
-		data+=4;
+		data += 4;
 	}
 
 	return data;
 }
 
-char *feature_core(struct scsi_cmd *cmd, char *data, int only_current)
+static char *feature_core(struct scsi_cmd *cmd, char *data, int only_current)
 {
 	/* feature code */
 	*data++ = 0;
@@ -558,7 +558,7 @@ char *feature_core(struct scsi_cmd *cmd, char *data, int only_current)
 
 	/* version 0  always persistent, always current */
 	*data++ = 0x03;
-	
+
 	/* additional length */
 	*data++ = 4;
 
@@ -571,7 +571,8 @@ char *feature_core(struct scsi_cmd *cmd, char *data, int only_current)
 	return data;
 }
 
-char *feature_morphing(struct scsi_cmd *cmd, char *data, int only_current)
+static char *feature_morphing(struct scsi_cmd *cmd, char *data,
+			      int only_current)
 {
 	/* feature code */
 	*data++ = 0;
@@ -583,16 +584,17 @@ char *feature_morphing(struct scsi_cmd *cmd, char *data, int only_current)
 	/* additional length */
 	*data++ = 4;
 
-	/* dont support ocevent or async */ 
+	/* dont support ocevent or async */
 	*data++ = 0;
 	*data++ = 0;
 	*data++ = 0;
 	*data++ = 0;
 
 	return data;
-}	
+}
 
-char *feature_removable_medium(struct scsi_cmd *cmd, char *data, int only_current)
+static char *feature_removable_medium(struct scsi_cmd *cmd, char *data,
+				      int only_current)
 {
 	/* feature code */
 	*data++ = 0;
@@ -605,9 +607,9 @@ char *feature_removable_medium(struct scsi_cmd *cmd, char *data, int only_curren
 	*data++ = 4;
 
 	/* loading mechanism:tray
-	   ejectable through STARTSTOPUNIT loej
-	   pvnt : PREVENTALLOWMEDIUMREMOVAL supported
-	   lock : medium can be locked
+	 * ejectable through STARTSTOPUNIT loej
+	 * vnt : PREVENTALLOWMEDIUMREMOVAL supported
+	 * lock : medium can be locked
 	*/
 	*data++ = 0x29;
 
@@ -619,13 +621,14 @@ char *feature_removable_medium(struct scsi_cmd *cmd, char *data, int only_curren
 	return data;
 }
 
-char *feature_random_readable(struct scsi_cmd *cmd, char *data, int only_current)
+static char *feature_random_readable(struct scsi_cmd *cmd, char *data,
+				     int only_current)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
 	int is_current;
 
 	/* this feature is only current in DVD_ROM */
-	switch(mmc->current_profile){
+	switch (mmc->current_profile) {
 	case PROFILE_DVD_ROM:
 		is_current = 1;
 		break;
@@ -633,9 +636,8 @@ char *feature_random_readable(struct scsi_cmd *cmd, char *data, int only_current
 		is_current = 0;
 	}
 
-	if (only_current) 
-		if (!is_current)
-			return data;
+	if (only_current && !is_current)
+		return data;
 
 	/* feature code */
 	*data++ = 0;
@@ -655,11 +657,11 @@ char *feature_random_readable(struct scsi_cmd *cmd, char *data, int only_current
 	*data++ = 0;
 	*data++ = 8;
 	*data++ = 0;
-	
+
 	/* blocking is always 0x10 for dvd devices */
 	*data++ = 0;
 	*data++ = 0x10;
-	
+
 	/* pp is supported */
 	*data++ = 0x01;
 
@@ -669,13 +671,14 @@ char *feature_random_readable(struct scsi_cmd *cmd, char *data, int only_current
 	return data;
 }
 
-char *feature_dvd_read(struct scsi_cmd *cmd, char *data, int only_current)
+static char *feature_dvd_read(struct scsi_cmd *cmd, char *data,
+			      int only_current)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
 	int is_current;
 
 	/* this feature is only current in DVD_ROM */
-	switch(mmc->current_profile){
+	switch (mmc->current_profile) {
 	case PROFILE_DVD_ROM:
 		is_current = 1;
 		break;
@@ -683,9 +686,8 @@ char *feature_dvd_read(struct scsi_cmd *cmd, char *data, int only_current)
 		is_current = 0;
 	}
 
-	if (only_current) 
-		if (!is_current)
-			return data;
+	if (only_current && !is_current)
+		return data;
 
 	/* feature code */
 	*data++ = 0;
@@ -703,7 +705,8 @@ char *feature_dvd_read(struct scsi_cmd *cmd, char *data, int only_current)
 	return data;
 }
 
-char *feature_power_management(struct scsi_cmd *cmd, char *data, int only_current)
+static char *feature_power_management(struct scsi_cmd *cmd, char *data,
+				      int only_current)
 {
 	/* feature code */
 	*data++ = 0x01;
@@ -718,7 +721,7 @@ char *feature_power_management(struct scsi_cmd *cmd, char *data, int only_curren
 	return data;
 }
 
-char *feature_timeout(struct scsi_cmd *cmd, char *data, int only_current)
+static char *feature_timeout(struct scsi_cmd *cmd, char *data, int only_current)
 {
 	/* feature code */
 	*data++ = 0x01;
@@ -733,13 +736,14 @@ char *feature_timeout(struct scsi_cmd *cmd, char *data, int only_current)
 	return data;
 }
 
-char *feature_real_time_streaming(struct scsi_cmd *cmd, char *data, int only_current)
+static char *feature_real_time_streaming(struct scsi_cmd *cmd, char *data,
+					 int only_current)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
 	int is_current;
 
 	/* this feature is only current in DVD_ROM */
-	switch(mmc->current_profile){
+	switch (mmc->current_profile) {
 	case PROFILE_DVD_ROM:
 		is_current = 1;
 		break;
@@ -747,9 +751,8 @@ char *feature_real_time_streaming(struct scsi_cmd *cmd, char *data, int only_cur
 		is_current = 0;
 	}
 
-	if (only_current) 
-		if (!is_current)
-			return data;
+	if (only_current && !is_current)
+		return data;
 
 	/* feature code */
 	*data++ = 0x01;
@@ -767,7 +770,7 @@ char *feature_real_time_streaming(struct scsi_cmd *cmd, char *data, int only_cur
 	/* flags */
 	*data++ = 0x1f;
 
-	/* reserved */	
+	/* reserved */
 	*data++ = 0;
 	*data++ = 0;
 	*data++ = 0;
@@ -775,13 +778,14 @@ char *feature_real_time_streaming(struct scsi_cmd *cmd, char *data, int only_cur
 	return data;
 }
 
-char *feature_dvd_plus_r(struct scsi_cmd *cmd, char *data, int only_current)
+static char *feature_dvd_plus_r(struct scsi_cmd *cmd, char *data,
+				int only_current)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
 	int is_current;
 
 	/* this feature is only current in DVD+R */
-	switch(mmc->current_profile){
+	switch (mmc->current_profile) {
 	case PROFILE_DVD_PLUS_R:
 		is_current = 1;
 		break;
@@ -789,9 +793,8 @@ char *feature_dvd_plus_r(struct scsi_cmd *cmd, char *data, int only_current)
 		is_current = 0;
 	}
 
-	if (only_current) 
-		if (!is_current)
-			return data;
+	if (only_current && !is_current)
+		return data;
 
 	/* feature code */
 	*data++ = 0;
@@ -817,7 +820,8 @@ char *feature_dvd_plus_r(struct scsi_cmd *cmd, char *data, int only_current)
 	return data;
 }
 
-char *feature_lun_serial_no(struct scsi_cmd *cmd, char *data, int only_current)
+static char *feature_lun_serial_no(struct scsi_cmd *cmd, char *data,
+				   int only_current)
 {
 	/* feature code */
 	*data++ = 0x01;
@@ -842,7 +846,8 @@ char *feature_lun_serial_no(struct scsi_cmd *cmd, char *data, int only_current)
 	return data;
 }
 
-char *feature_multi_read(struct scsi_cmd *cmd, char *data, int only_current)
+static char *feature_multi_read(struct scsi_cmd *cmd, char *data,
+				int only_current)
 {
 	/* feature code */
 	*data++ = 0;
@@ -857,13 +862,13 @@ char *feature_multi_read(struct scsi_cmd *cmd, char *data, int only_current)
 	return data;
 }
 
-char *feature_dcbs(struct scsi_cmd *cmd, char *data, int only_current)
+static char *feature_dcbs(struct scsi_cmd *cmd, char *data, int only_current)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
 	int is_current;
 
 	/* this feature is only current in DVD+R */
-	switch(mmc->current_profile){
+	switch (mmc->current_profile) {
 	case PROFILE_DVD_PLUS_R:
 		is_current = 1;
 		break;
@@ -871,9 +876,8 @@ char *feature_dcbs(struct scsi_cmd *cmd, char *data, int only_current)
 		is_current = 0;
 	}
 
-	if (only_current) 
-		if (!is_current)
-			return data;
+	if (only_current && !is_current)
+		return data;
 
 	/* feature code */
 	*data++ = 0x01;
@@ -956,7 +960,7 @@ static int mmc_get_configuration(int host_no, struct scsi_cmd *cmd)
 	rt = cmd->scb[1] & 0x03;
 
 	start = cmd->scb[2];
-	start = (start<<8) | cmd->scb[3];
+	start = (start << 8) | cmd->scb[3];
 
 	memset(buf, 0, sizeof(buf));
 	data = buf;
@@ -964,46 +968,48 @@ static int mmc_get_configuration(int host_no, struct scsi_cmd *cmd)
 	data += 4;
 
 	/* reserved */
-	*data++ = 0; 
-	*data++ = 0; 
+	*data++ = 0;
+	*data++ = 0;
 	/* current profile */
-	*data++ = (mmc->current_profile>>8)&0xff;
-	*data++ = (mmc->current_profile   )&0xff;
+	*data++ = (mmc->current_profile >> 8) & 0xff;
+	*data++ = mmc->current_profile & 0xff;
 
 	/* add the features */
-	for (f=features;f->func;f++) {
+	for (f = features; f->func; f++) {
 		/* only return features >= the start feature */
 		if (f->feature < start)
 			continue;
 		/* if rt==2 we skip all other features except start */
-		if ( (rt==2) && (f->feature!=start) )
+		if (rt == 2 && f->feature != start)
 			continue;
 
-		data = f->func(cmd, data, (rt==1)?1:0 );
+		data = f->func(cmd, data, rt == 1);
 	}
 
 	tmp = data-buf;
 	tmp -= 4;
 
-	buf[0] = (tmp>>24)&0xff;
-	buf[1] = (tmp>>16)&0xff;
-	buf[2] = (tmp>> 8)&0xff;
-	buf[3] = (tmp    )&0xff;
+	buf[0] = (tmp >> 24) & 0xff;
+	buf[1] = (tmp >> 16) & 0xff;
+	buf[2] = (tmp >> 8) & 0xff;
+	buf[3] = tmp & 0xff;
 
 	tmp = data-buf;
 
 	memcpy(scsi_get_in_buffer(cmd), buf,
-	       min(scsi_get_in_length(cmd), (uint32_t) sizeof(buf)));
+	       min_t(uint32_t, scsi_get_in_length(cmd), sizeof(buf)));
 
 	/* dont report overflow/underflow for GET CONFIGURATION */
 	return SAM_STAT_GOOD;
 }
 
-unsigned char *track_type_lba(struct scsi_cmd *cmd, unsigned char *data, unsigned int lba)
+static unsigned char *track_type_lba(struct scsi_cmd *cmd, unsigned char *data,
+				     unsigned int lba)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
 	unsigned long tmp;
-	switch(mmc->current_profile){
+
+	switch (mmc->current_profile) {
 	case PROFILE_DVD_PLUS_R:
 		/* track number LSB */
 		*data++ = 1;
@@ -1014,7 +1020,7 @@ unsigned char *track_type_lba(struct scsi_cmd *cmd, unsigned char *data, unsigne
 		/* reserved */
 		*data++ = 0;
 
-		/* damage:0 copy:0 track_mode:DVD+R */ 
+		/* damage:0 copy:0 track_mode:DVD+R */
 		*data++ = 0x07;
 
 		/* rt:0 blank:1 packet/inc:0 fp:0 data mode:1 */
@@ -1066,7 +1072,7 @@ unsigned char *track_type_lba(struct scsi_cmd *cmd, unsigned char *data, unsigne
 		*data++ = 0;
 
 		/* reserved */
-		data+=2;
+		data += 2;
 
 		/* read compat lba */
 		*data++ = 0x00;
@@ -1085,7 +1091,7 @@ unsigned char *track_type_lba(struct scsi_cmd *cmd, unsigned char *data, unsigne
 		/* reserved */
 		*data++ = 0;
 
-		/* damage:0 copy:0 track_mode:other media */ 
+		/* damage:0 copy:0 track_mode:other media */
 		*data++ = 0x04;
 
 		/* rt:0 blank:0 packet/inc:0 fp:0 data mode:1 */
@@ -1120,17 +1126,17 @@ unsigned char *track_type_lba(struct scsi_cmd *cmd, unsigned char *data, unsigne
 
 		/* track size */
 		tmp = cmd->dev->size >> MMC_BLK_SHIFT;
-		*data++ = (tmp>>24)&0xff;
-		*data++ = (tmp>>16)&0xff;
-		*data++ = (tmp>> 8)&0xff;
-		*data++ = (tmp    )&0xff;
+		*data++ = (tmp >> 24) & 0xff;
+		*data++ = (tmp >> 16) & 0xff;
+		*data++ = (tmp >> 8) & 0xff;
+		*data++ = tmp & 0xff;
 
 		/* last recorded address */
 		tmp--;  /* one less */
-		*data++ = (tmp>>24)&0xff;
-		*data++ = (tmp>>16)&0xff;
-		*data++ = (tmp>> 8)&0xff;
-		*data++ = (tmp    )&0xff;
+		*data++ = (tmp >> 24) & 0xff;
+		*data++ = (tmp >> 16) & 0xff;
+		*data++ = (tmp >> 8) & 0xff;
+		*data++ = tmp & 0xff;
 
 		/* track number MSB */
 		*data++ = 0;
@@ -1139,27 +1145,29 @@ unsigned char *track_type_lba(struct scsi_cmd *cmd, unsigned char *data, unsigne
 		*data++ = 0;
 
 		/* reserved */
-		data+=2;
+		data += 2;
 
 		return data;
 	}
-	
+
 	/* we do not understand/support this profile */
 	scsi_set_in_resid_by_actual(cmd, 0);
 	sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
 	return NULL;
 }
 
-unsigned char *track_type_track(struct scsi_cmd *cmd, unsigned char *data, unsigned int lba)
+static unsigned char *track_type_track(struct scsi_cmd *cmd,
+				       unsigned char *data, unsigned int lba)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
 	unsigned long tmp;
 
-	switch(mmc->current_profile){
+	switch (mmc->current_profile) {
 	case PROFILE_DVD_PLUS_R:
-		if (lba == 0) {
+		if (!lba) {
 			scsi_set_in_resid_by_actual(cmd, 0);
-			sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
+			sense_data_build(cmd, NOT_READY,
+					 ASC_INVALID_FIELD_IN_CDB);
 			return NULL;
 		}
 
@@ -1172,7 +1180,7 @@ unsigned char *track_type_track(struct scsi_cmd *cmd, unsigned char *data, unsig
 		/* reserved */
 		*data++ = 0;
 
-		/* damage:0 copy:0 track_mode:DVD+R */ 
+		/* damage:0 copy:0 track_mode:DVD+R */
 		*data++ = 0x07;
 
 		/* rt:0 blank:1 packet/inc:0 fp:0 data mode:1 */
@@ -1224,7 +1232,7 @@ unsigned char *track_type_track(struct scsi_cmd *cmd, unsigned char *data, unsig
 		*data++ = 0;
 
 		/* reserved */
-		data+=2;
+		data += 2;
 
 		/* read compat lba */
 		*data++ = 0x00;
@@ -1237,7 +1245,8 @@ unsigned char *track_type_track(struct scsi_cmd *cmd, unsigned char *data, unsig
 		/* we only have one track */
 		if (lba != 1) {
 			scsi_set_in_resid_by_actual(cmd, 0);
-			sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
+			sense_data_build(cmd, NOT_READY,
+					 ASC_INVALID_FIELD_IN_CDB);
 			return NULL;
 		}
 
@@ -1250,7 +1259,7 @@ unsigned char *track_type_track(struct scsi_cmd *cmd, unsigned char *data, unsig
 		/* reserved */
 		*data++ = 0;
 
-		/* damage:0 copy:0 track_mode:other media */ 
+		/* damage:0 copy:0 track_mode:other media */
 		*data++ = 0x04;
 
 		/* rt:0 blank:0 packet/inc:0 fp:0 data mode:1 */
@@ -1285,17 +1294,17 @@ unsigned char *track_type_track(struct scsi_cmd *cmd, unsigned char *data, unsig
 
 		/* track size */
 		tmp = cmd->dev->size >> MMC_BLK_SHIFT;
-		*data++ = (tmp>>24)&0xff;
-		*data++ = (tmp>>16)&0xff;
-		*data++ = (tmp>> 8)&0xff;
-		*data++ = (tmp    )&0xff;
+		*data++ = (tmp >> 24) & 0xff;
+		*data++ = (tmp >> 16) & 0xff;
+		*data++ = (tmp >> 8) & 0xff;
+		*data++ = tmp & 0xff;
 
 		/* last recorded address */
 		tmp--;  /* one less */
-		*data++ = (tmp>>24)&0xff;
-		*data++ = (tmp>>16)&0xff;
-		*data++ = (tmp>> 8)&0xff;
-		*data++ = (tmp    )&0xff;
+		*data++ = (tmp >> 24) & 0xff;
+		*data++ = (tmp >> 16) & 0xff;
+		*data++ = (tmp >> 8) & 0xff;
+		*data++ = tmp & 0xff;
 
 		/* track number MSB */
 		*data++ = 0;
@@ -1304,11 +1313,11 @@ unsigned char *track_type_track(struct scsi_cmd *cmd, unsigned char *data, unsig
 		*data++ = 0;
 
 		/* reserved */
-		data+=2;
+		data += 2;
 
 		return data;
 	}
-	
+
 	/* we do not understand/support this profile */
 	scsi_set_in_resid_by_actual(cmd, 0);
 	sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
@@ -1321,7 +1330,8 @@ unsigned char *track_type_track(struct scsi_cmd *cmd, unsigned char *data, unsig
 
 struct track_type {
 	int type;
-	unsigned char *(*func)(struct scsi_cmd *cmd, unsigned char *data, unsigned int lba);
+	unsigned char *(*func)(struct scsi_cmd *cmd, unsigned char *data,
+			       unsigned int lba);
 };
 struct track_type track_types[] = {
 	{TRACK_INFO_LBA,     track_type_lba},
@@ -1354,23 +1364,22 @@ static int mmc_read_track_information(int host_no, struct scsi_cmd *cmd)
 	memset(buf, 0, sizeof(buf));
 	data = &buf[2];
 
-	for(t=track_types;t->func;t++){
+	for (t = track_types; t->func; t++) {
 		int tmp;
 
-		if (t->type != type) {
+		if (t->type != type)
 			continue;
-		}
+
 		data = t->func(cmd, data, lba);
-		if (data == NULL) {
+
+		if (!data)
 			return SAM_STAT_CHECK_CONDITION;
-		}
 
 		tmp = data-&buf[2];
-		buf[0] = (tmp>>8)&0xff;
-		buf[1] = (tmp   )&0xff;
+		buf[0] = (tmp >> 8) & 0xff;
+		buf[1] = tmp & 0xff;
 		memcpy(scsi_get_in_buffer(cmd), buf,
-			min(scsi_get_in_length(cmd),
-				(uint32_t) sizeof(buf)));
+		       min_t(uint32_t, scsi_get_in_length(cmd), sizeof(buf)));
 		return SAM_STAT_GOOD;
 	}
 
@@ -1379,7 +1388,7 @@ static int mmc_read_track_information(int host_no, struct scsi_cmd *cmd)
 	sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
 	return SAM_STAT_CHECK_CONDITION;
 }
-	
+
 static int mmc_read_buffer_capacity(int host_no, struct scsi_cmd *cmd)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
@@ -1403,7 +1412,7 @@ static int mmc_read_buffer_capacity(int host_no, struct scsi_cmd *cmd)
 		/* data length */
 		buf[0] = 0x00;
 		buf[1] = 0x0a;
-		
+
 		/* 4096 blocks */
 		tmp = 0x1000;
 		if (!blocks) {
@@ -1412,21 +1421,21 @@ static int mmc_read_buffer_capacity(int host_no, struct scsi_cmd *cmd)
 		}
 
 		/* length of buffer */
-		buf[4]  = (tmp>>24)&0xff;
-		buf[5]  = (tmp>>16)&0xff;
-		buf[6] = (tmp>> 8)&0xff;
-		buf[7] = (tmp    )&0xff;
+		buf[4] = (tmp >> 24) & 0xff;
+		buf[5] = (tmp >> 16) & 0xff;
+		buf[6] = (tmp >> 8) & 0xff;
+		buf[7] = tmp & 0xff;
 
 		/* available length of buffer (always half) */
 		tmp = tmp >> 1;
-		buf[8]  = (tmp>>24)&0xff;
-		buf[9]  = (tmp>>16)&0xff;
-		buf[10] = (tmp>> 8)&0xff;
-		buf[11] = (tmp    )&0xff;
+		buf[8]  = (tmp >> 24) & 0xff;
+		buf[9]  = (tmp >> 16) & 0xff;
+		buf[10] = (tmp >> 8) & 0xff;
+		buf[11] = tmp & 0xff;
 
-		memcpy(scsi_get_in_buffer(cmd), &buf[0],
+		memcpy(scsi_get_in_buffer(cmd), buf,
 		       min(scsi_get_in_length(cmd), (uint32_t) sizeof(buf)));
-		scsi_set_in_resid_by_actual(cmd, buf[1]+2);
+		scsi_set_in_resid_by_actual(cmd, buf[1] + 2);
 		return SAM_STAT_GOOD;
 	}
 
@@ -1438,7 +1447,7 @@ static int mmc_read_buffer_capacity(int host_no, struct scsi_cmd *cmd)
 static int mmc_synchronize_cache(int host_no, struct scsi_cmd *cmd)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
-	
+
 	if (mmc->current_profile == PROFILE_NO_PROFILE) {
 		scsi_set_in_resid_by_actual(cmd, 0);
 		sense_data_build(cmd, NOT_READY, ASC_MEDIUM_NOT_PRESENT);
@@ -1448,14 +1457,17 @@ static int mmc_synchronize_cache(int host_no, struct scsi_cmd *cmd)
 	return SAM_STAT_GOOD;
 }
 
-unsigned char *perf_type_write_speed(struct scsi_cmd *cmd, unsigned char *data, unsigned int type, unsigned int data_type)
+static unsigned char *perf_type_write_speed(struct scsi_cmd *cmd,
+					    unsigned char *data,
+					    unsigned int type,
+					    unsigned int data_type)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
 
 	/* write/except */
 	*data++ = 0x00;
 
-	data+=3;
+	data += 3;
 
 	switch (mmc->current_profile) {
 	case PROFILE_NO_PROFILE:
@@ -1464,7 +1476,7 @@ unsigned char *perf_type_write_speed(struct scsi_cmd *cmd, unsigned char *data, 
 		*data++ = 0x00;
 
 		/* reserved */
-		data+=3;
+		data += 3;
 
 		/* end lba */
 		*data++ = 0x00;
@@ -1489,7 +1501,7 @@ unsigned char *perf_type_write_speed(struct scsi_cmd *cmd, unsigned char *data, 
 		*data++ = 0x00;
 
 		/* reserved */
-		data+=3;
+		data += 3;
 
 		/* end lba */
 		*data++ = 0x00;
@@ -1517,7 +1529,7 @@ unsigned char *perf_type_write_speed(struct scsi_cmd *cmd, unsigned char *data, 
 		*data++ = 0x01;
 
 		/* reserved */
-		data+=3;
+		data += 3;
 
 		/* end lba */
 		*data++ = 0x00;
@@ -1545,7 +1557,7 @@ unsigned char *perf_type_write_speed(struct scsi_cmd *cmd, unsigned char *data, 
 		*data++ = 0x00;
 
 		/* reserved */
-		data+=3;
+		data += 3;
 
 		/* end lba */
 		*data++ = 0x00;
@@ -1570,7 +1582,7 @@ unsigned char *perf_type_write_speed(struct scsi_cmd *cmd, unsigned char *data, 
 		*data++ = 0x00;
 
 		/* reserved */
-		data+=3;
+		data += 3;
 
 		/* end lba */
 		*data++ = 0x00;
@@ -1600,7 +1612,10 @@ unsigned char *perf_type_write_speed(struct scsi_cmd *cmd, unsigned char *data, 
 	return NULL;
 }
 
-unsigned char *perf_type_perf_data(struct scsi_cmd *cmd, unsigned char *data, unsigned int type, unsigned int data_type)
+static unsigned char *perf_type_perf_data(struct scsi_cmd *cmd,
+					  unsigned char *data,
+					  unsigned int type,
+					  unsigned int data_type)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
 	int tolerance;
@@ -1608,9 +1623,9 @@ unsigned char *perf_type_perf_data(struct scsi_cmd *cmd, unsigned char *data, un
 	int except;
 	long tmp;
 
-	tolerance  = (data_type>>3)&0x03;
-	write_flag = (data_type>>2)&0x01;
-	except     = data_type&0x03;
+	tolerance  = (data_type >> 3) & 0x03;
+	write_flag = (data_type >> 2) & 0x01;
+	except = data_type & 0x03;
 
 	/* all other values for tolerance are reserved */
 	if (tolerance != 0x02) {
@@ -1619,14 +1634,14 @@ unsigned char *perf_type_perf_data(struct scsi_cmd *cmd, unsigned char *data, un
 		return NULL;
 	}
 
-	switch(except){
+	switch (except) {
 	case 1:
 	case 2:
 		/* write/except */
 		*data++ = 0x01;
 
 		/* reserved */
-		data+=3;
+		data += 3;
 
 		/* no actual descriptor returned here */
 		return data;
@@ -1638,14 +1653,13 @@ unsigned char *perf_type_perf_data(struct scsi_cmd *cmd, unsigned char *data, un
 	}
 
 	/* write/except */
-	if (write_flag) {
+	if (write_flag)
 		*data++ = 0x02;
-	} else {
+	else
 		*data++ = 0x00;
-	}
 
 	/* reserved */
-	data+=3;
+	data += 3;
 
 	/* start lba */
 	*data++ = 0;
@@ -1666,11 +1680,12 @@ unsigned char *perf_type_perf_data(struct scsi_cmd *cmd, unsigned char *data, un
 		break;
 	default:
 		tmp = 0x23053f;
-	}			
-	*data++ = (tmp>>24)&0xff;
-	*data++ = (tmp>>16)&0xff;
-	*data++ = (tmp>> 8)&0xff;
-	*data++ = (tmp    )&0xff;
+	}
+
+	*data++ = (tmp >> 24) & 0xff;
+	*data++ = (tmp >> 16) & 0xff;
+	*data++ = (tmp >> 8) & 0xff;
+	*data++ = tmp & 0xff;
 
 	/* end performance */
 	*data++ = 0x00;
@@ -1685,7 +1700,8 @@ unsigned char *perf_type_perf_data(struct scsi_cmd *cmd, unsigned char *data, un
 #define PERF_TYPE_WRITE_SPEED		0x03
 struct perf_type {
 	int type;
-	unsigned char *(*func)(struct scsi_cmd *cmd, unsigned char *data, unsigned int type, unsigned int data_type);
+	unsigned char *(*func)(struct scsi_cmd *cmd, unsigned char *data,
+			       unsigned int type, unsigned int data_type);
 };
 struct perf_type perf_types[] = {
 	{PERF_TYPE_PERF_DATA, perf_type_perf_data},
@@ -1718,25 +1734,23 @@ static int mmc_get_performance(int host_no, struct scsi_cmd *cmd)
 
 	type = cmd->scb[10];
 
-	for (p=perf_types;p->func;p++) {
+	for (p = perf_types; p->func; p++) {
 		int tmp;
 
-		if (p->type != type) {
+		if (p->type != type)
 			continue;
-		}
+
 		data = p->func(cmd, data, type, data_type);
-		if (data == NULL) {
+		if (!data)
 			return SAM_STAT_CHECK_CONDITION;
-		}
 
 		tmp = data-&buf[4];
-		buf[0] = (tmp>>24)&0xff;
-		buf[1] = (tmp>>16)&0xff;
-		buf[2] = (tmp>> 8)&0xff;
-		buf[3] = (tmp    )&0xff;
+		buf[0] = (tmp >> 24) & 0xff;
+		buf[1] = (tmp >> 16) & 0xff;
+		buf[2] = (tmp >> 8) & 0xff;
+		buf[3] = tmp & 0xff;
 		memcpy(scsi_get_in_buffer(cmd), buf,
-			min(scsi_get_in_length(cmd),
-				(uint32_t) sizeof(buf)));
+		       min_t(uint32_t, scsi_get_in_length(cmd), sizeof(buf)));
 		return SAM_STAT_GOOD;
 
 	}
@@ -1752,14 +1766,14 @@ static int mmc_set_streaming(int host_no, struct scsi_cmd *cmd)
 	return SAM_STAT_GOOD;
 }
 
-
 #define DVD_FORMAT_PHYS_INFO		0x00
 #define DVD_FORMAT_DVD_COPYRIGHT_INFO	0x01
 #define DVD_FORMAT_ADIP_INFO		0x11
 #define DVD_FORMAT_DVD_STRUCTURE_LIST	0xff
 
-
-unsigned char *dvd_format_phys_info(struct scsi_cmd *cmd, unsigned char *data, int format, int layer, int write_header)
+static unsigned char *dvd_format_phys_info(struct scsi_cmd *cmd,
+					   unsigned char *data, int format,
+					   int layer, int write_header)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
 	unsigned char *old_data;
@@ -1772,7 +1786,7 @@ unsigned char *dvd_format_phys_info(struct scsi_cmd *cmd, unsigned char *data, i
 		return data;
 	}
 
-	if (layer != 0) {
+	if (layer) {
 		/* we only support single layer disks */
 		scsi_set_in_resid_by_actual(cmd, 0);
 		sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
@@ -1816,8 +1830,7 @@ unsigned char *dvd_format_phys_info(struct scsi_cmd *cmd, unsigned char *data, i
 		*data++ = 0;
 
 		/* just leave the media specific area as 0 */
-		data+=2031;
-
+		data += 2031;
 		break;
 	case PROFILE_DVD_PLUS_R:
 		/* book type DVD+R, part version */
@@ -1897,7 +1910,7 @@ unsigned char *dvd_format_phys_info(struct scsi_cmd *cmd, unsigned char *data, i
 		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
 		*data++ = 0x00; *data++ = 0x00; *data++ = 0x00;
 
-		data=old_data+2031;
+		data = old_data + 2031;
 
 		break;
 	default:
@@ -1909,13 +1922,15 @@ unsigned char *dvd_format_phys_info(struct scsi_cmd *cmd, unsigned char *data, i
 	return data;
 }
 
-unsigned char *dvd_format_adip_info(struct scsi_cmd *cmd, unsigned char *data, int format, int layer, int write_header)
+static unsigned char *dvd_format_adip_info(struct scsi_cmd *cmd,
+					   unsigned char *data, int format,
+					   int layer, int write_header)
 {
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
 
 	if (write_header) {
 		*data++ = DVD_FORMAT_ADIP_INFO;
-		switch(mmc->current_profile){
+		switch (mmc->current_profile) {
 		case PROFILE_DVD_PLUS_R:
 			*data++ = 0x40;	/* readable */
 			break;
@@ -2006,7 +2021,10 @@ unsigned char *dvd_format_adip_info(struct scsi_cmd *cmd, unsigned char *data, i
 	return data;
 }
 
-unsigned char *dvd_format_copyright_info(struct scsi_cmd *cmd, unsigned char *data, int format, int layer, int write_header)
+static unsigned char *dvd_format_copyright_info(struct scsi_cmd *cmd,
+						unsigned char *data,
+						int format, int layer,
+						int write_header)
 {
 	if (write_header) {
 		*data++ = DVD_FORMAT_DVD_COPYRIGHT_INFO;
@@ -2016,7 +2034,7 @@ unsigned char *dvd_format_copyright_info(struct scsi_cmd *cmd, unsigned char *da
 		return data;
 	}
 
-	if (layer != 0) {
+	if (layer) {
 		/* we only support single layer disks */
 		scsi_set_in_resid_by_actual(cmd, 0);
 		sense_data_build(cmd, NOT_READY, ASC_INVALID_FIELD_IN_CDB);
@@ -2032,16 +2050,21 @@ unsigned char *dvd_format_copyright_info(struct scsi_cmd *cmd, unsigned char *da
 	/* reserved */
 	*data++ = 0;
 	*data++ = 0;
-	
+
 	return data;
 }
 
-unsigned char *dvd_format_dvd_structure_list(struct scsi_cmd *cmd, unsigned char *data, int format, int layer, int write_header);
-
+static unsigned char *dvd_format_dvd_structure_list(struct scsi_cmd *cmd,
+						    unsigned char *data,
+						    int format,
+						    int layer,
+						    int write_header);
 struct dvd_format {
 	int format;
-	unsigned char *(*func)(struct scsi_cmd *cmd, unsigned char *data, int format, int layer, int write_header);
+	unsigned char *(*func)(struct scsi_cmd *cmd, unsigned char *data,
+			       int format, int layer, int write_header);
 };
+
 struct dvd_format dvd_formats[] = {
 	{DVD_FORMAT_PHYS_INFO,		dvd_format_phys_info},
 	{DVD_FORMAT_DVD_COPYRIGHT_INFO,	dvd_format_copyright_info},
@@ -2050,20 +2073,22 @@ struct dvd_format dvd_formats[] = {
 	{0, NULL}
 };
 
-unsigned char *dvd_format_dvd_structure_list(struct scsi_cmd *cmd, unsigned char *data, int format, int layer, int write_header)
+static unsigned char *dvd_format_dvd_structure_list(struct scsi_cmd *cmd,
+						    unsigned char *data,
+						    int format,
+						    int layer, int write_header)
 {
 	struct dvd_format *f;
 
 	/* list all format headers */
-	for (f=dvd_formats;f->func;f++) {
+	for (f = dvd_formats; f->func; f++) {
 		/* we dont report ourself back in the format list */
 		if (f->format == 0xff)
 			continue;
-		
+
 		data = f->func(cmd, data, format, layer, 1);
-		if (data == NULL) {
+		if (!data)
 			return NULL;
-		}
 	}
 
 	return data;
@@ -2094,24 +2119,23 @@ static int mmc_read_dvd_structure(int host_no, struct scsi_cmd *cmd)
 	memset(buf, 0, sizeof(buf));
 	data = &buf[4];
 
-	for (f=dvd_formats;f->func;f++) {
+	for (f = dvd_formats; f->func; f++) {
 		if (f->format == format) {
 			int tmp;
 
 			data = f->func(cmd, data, format, layer, 0);
-			if (data == NULL) {
+			if (!data)
 				return SAM_STAT_CHECK_CONDITION;
-			}
 
-			tmp = data-buf;
+			tmp = data - buf;
 			tmp -= 2;
-			buf[0] = (tmp>>8)&0xff;
-			buf[1] = (tmp   )&0xff;
+			buf[0] = (tmp >> 8) & 0xff;
+			buf[1] = tmp & 0xff;
 			buf[2] = 0;
 			buf[3] = 0;
 			memcpy(scsi_get_in_buffer(cmd), buf,
-		       		min(scsi_get_in_length(cmd),
-					(uint32_t) sizeof(buf)));
+			       min_t(uint32_t,
+				     scsi_get_in_length(cmd), sizeof(buf)));
 			return SAM_STAT_GOOD;
 		}
 	}
@@ -2137,7 +2161,7 @@ static int mmc_lu_init(struct scsi_lu *lu)
 	struct mmc_info *mmc;
 
 	mmc = zalloc(sizeof(struct mmc_info));
-	if (mmc == NULL)
+	if (!mmc)
 		return -ENOMEM;
 
 	lu->mmc_p = mmc;
@@ -2153,7 +2177,8 @@ static int mmc_lu_init(struct scsi_lu *lu)
 	}
 	lu->bst = bst;
 
-	strncpy(lu->attrs.product_id, "VIRTUAL-CDROM", sizeof(lu->attrs.product_id));
+	strncpy(lu->attrs.product_id, "VIRTUAL-CDROM",
+		sizeof(lu->attrs.product_id));
 	lu->attrs.sense_format = 0;
 	lu->attrs.version_desc[0] = 0x02A0; /* MMC3, no version claimed */
 	lu->attrs.version_desc[1] = 0x0960; /* iSCSI */
@@ -2198,23 +2223,21 @@ static int mmc_lu_online(struct scsi_lu *lu)
 
 	mmc->current_profile = PROFILE_NO_PROFILE;
 
-	if (lu->fd == -1) {
+	if (lu->fd == -1)
 		return TGTADM_INVALID_REQUEST;
-	}
 
 	lu->attrs.online = 1;
 
-	if (stat(lu->path, &st) != 0) {	
+	if (stat(lu->path, &st)) {
 		mmc->current_profile = PROFILE_NO_PROFILE;
 		lu->attrs.online = 0;
 	} else {
-		if (st.st_size == 0) {
+		if (!st.st_size)
 			mmc->current_profile = PROFILE_DVD_PLUS_R;
-		} else {
+		else
 			mmc->current_profile = PROFILE_DVD_ROM;
-		}
 	}
-	
+
 	return 0;
 }
 
