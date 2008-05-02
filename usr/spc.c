@@ -419,7 +419,7 @@ int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 		data[0] = len - 1;
 		data[3] = dbd ? 0 : BLOCK_DESCRIPTOR_LEN;
 	} else {
-		*(uint16_t *)(data) = __cpu_to_be16(len - 3);
+		*(uint16_t *)(data) = __cpu_to_be16(len - 2);
 		data[7] = dbd ? 0 : BLOCK_DESCRIPTOR_LEN;
 	}
 
