@@ -833,6 +833,9 @@ static char *feature_dvd_plus_r(struct scsi_cmd *cmd, char *data,
 static char *feature_lun_serial_no(struct scsi_cmd *cmd, char *data,
 				   int only_current)
 {
+	struct lu_phy_attr *attrs;
+	struct vpd *vpd_pg;
+
 	/* feature code */
 	*data++ = 0x01;
 	*data++ = 0x08;
@@ -843,15 +846,13 @@ static char *feature_lun_serial_no(struct scsi_cmd *cmd, char *data,
 	/* additional length */
 	*data++ = 8;
 
-	/* XXX */
-	*data++ = 'D';
-	*data++ = 'V';
-	*data++ = 'D';
-	*data++ = '#';
-	*data++ = '1';
-	*data++ = '2';
-	*data++ = '3';
-	*data++ = '4';
+	/* serial number */
+	attrs = &cmd->dev->attrs;
+	vpd_pg = attrs->lu_vpd[PCODE_OFFSET(0x80)];
+	if (vpd_pg->size == 8)
+		memcpy(data, vpd_pg->data, 8);
+
+	data += 8;
 
 	return data;
 }
