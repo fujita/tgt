@@ -37,6 +37,13 @@ operations in which case it may or may not work.
 It is the intent that the emulation will be enhanced to provide compatibility
 with all DVD burning applications on all important platforms.
 
+The emulation is also compatible with Linux:dvdrecorder but you must
+specify the command arguments -dao -ignsize -overburn
+
+Example:
+dvdrecord -dao -ignsize -overburn dev=/dev/sg3 ./IMAGE.iso
+
+
 Please report incompatibilities with other burning applications other than
 Windows/DVD-Decrypter to ronniesahlberg@gmail.com and I will try to
 enhance the emulation to also support your application of choice.

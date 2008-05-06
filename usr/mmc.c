@@ -54,6 +54,7 @@
 
 struct mmc_info {
 	int current_profile;
+	uint64_t reserve_track_len;
 };
 
 static int mmc_rw(int host_no, struct scsi_cmd *cmd)
@@ -61,6 +62,7 @@ static int mmc_rw(int host_no, struct scsi_cmd *cmd)
 	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
 	int ret;
 	uint64_t end_offset;
+	uint64_t offset, length;
 
 	if (mmc->current_profile == PROFILE_NO_PROFILE) {
 		scsi_set_in_resid_by_actual(cmd, 0);
@@ -97,11 +99,13 @@ static int mmc_rw(int host_no, struct scsi_cmd *cmd)
 
 	cmd->scsi_cmd_done = target_cmd_io_done;
 
-	cmd->offset = (scsi_rw_offset(cmd->scb) << MMC_BLK_SHIFT);
+	offset = scsi_rw_offset(cmd->scb);
+	cmd->offset = (offset << MMC_BLK_SHIFT);
 
 	/* update the size of the device */
-	end_offset = cmd->offset +
-		(((uint64_t)scsi_rw_count(cmd->scb)) << MMC_BLK_SHIFT);
+	length = scsi_rw_count(cmd->scb);
+	end_offset = cmd->offset + (length << MMC_BLK_SHIFT);
+
 	if (end_offset > cmd->dev->size)
 		cmd->dev->size = end_offset;
 
@@ -116,6 +120,12 @@ static int mmc_rw(int host_no, struct scsi_cmd *cmd)
 		sense_data_build(cmd, ILLEGAL_REQUEST, ASC_LUN_NOT_SUPPORTED);
 		return SAM_STAT_CHECK_CONDITION;
 	} else {
+		if ((mmc->current_profile == PROFILE_DVD_PLUS_R) &&
+			(mmc->reserve_track_len == (offset + length))) {
+			/* once we close the track it becomes a DVD_ROM */
+			mmc->current_profile = PROFILE_DVD_ROM;
+		}
+
 		set_cmd_mmapio(cmd);
 		return SAM_STAT_GOOD;
 	}
@@ -2146,6 +2156,31 @@ static int mmc_read_dvd_structure(int host_no, struct scsi_cmd *cmd)
 	return SAM_STAT_CHECK_CONDITION;
 }
 
+static int mmc_reserve_track(int host_no, struct scsi_cmd *cmd)
+{
+	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	uint64_t tmp;
+
+	tmp = cmd->scb[5];
+	tmp = (tmp << 8) | cmd->scb[6];
+	tmp = (tmp << 8) | cmd->scb[7];
+	tmp = (tmp << 8) | cmd->scb[8];
+
+	mmc->reserve_track_len = tmp;
+
+	return SAM_STAT_GOOD;
+}
+
+static int mmc_mode_select(int host_no, struct scsi_cmd *cmd)
+{
+	return SAM_STAT_GOOD;
+}
+
+static int mmc_set_cd_speed(int host_no, struct scsi_cmd *cmd)
+{
+	return SAM_STAT_GOOD;
+}
+
 static int mmc_mode_sense(int host_no, struct scsi_cmd *cmd)
 {
 	uint8_t *scb = cmd->scb;
@@ -2222,7 +2257,11 @@ static int mmc_lu_init(struct scsi_lu *lu)
 			  "0x83:0x00:0x00:0x02:0xc2:0x00:0x00:0x00:"
 			  "0x00:0x00:0x00:0x00:0x00:0x00:0x00:0x00:"
 			  "0x00");
-
+	/* Write parameters */
+	add_mode_page(lu, "0x05:0:0x32:0x62:5:8:0x10:0:0:0:0:0:0:0:"
+			  "0x10:0:0x96:0:0:0:0:0:0:0:0:0:0:0:0:0:0:"
+			  "0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:"
+			  "0:0");
 	return 0;
 }
 
@@ -2232,6 +2271,7 @@ static int mmc_lu_online(struct scsi_lu *lu)
 	struct stat st;
 
 	mmc->current_profile = PROFILE_NO_PROFILE;
+	mmc->reserve_track_len = 0;
 
 	if (lu->fd == -1)
 		return TGTADM_INVALID_REQUEST;
@@ -2363,9 +2403,9 @@ static struct device_type_template mmc_template = {
 		{spc_illegal_op,},
 		{mmc_read_disc_information,},
 		{mmc_read_track_information,},
+		{mmc_reserve_track,},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{mmc_mode_select,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 
@@ -2412,7 +2452,7 @@ static struct device_type_template mmc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{mmc_set_cd_speed,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
