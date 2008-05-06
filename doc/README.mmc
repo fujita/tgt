@@ -65,13 +65,6 @@ tgtadm --lld iscsi --mode logicalunit --op new --tid 1 --lun 1 -b /tmp/empty-dis
 SN=XYZ123
 tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 1 --params vendor_id=STGT_DVD,product_id=DVD101,product_rev=0010,scsi_sn=$SN,removable=1
 
-# Vendor Uniq - Mode page 0..
-tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 1 --params mode_page=0:0:0
-# ctrl mode page
-tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 1 --params mode_page=10:0:10:2:0:0:0:0:0:0:0:2:0
-# Informational Exceptions Control Mode Page
-tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 1 --params mode_page=0x1c:0:10:8:0:0:0:0:0:0:0:0:0
-
 
 # Allow ALL initiators to connect to this target
 tgtadm --lld iscsi --mode target --op bind --tid 1 -I ALL
