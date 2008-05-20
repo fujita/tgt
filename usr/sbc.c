@@ -126,6 +126,11 @@ sense:
 	return SAM_STAT_CHECK_CONDITION;
 }
 
+static int sbc_verify(int host_no, struct scsi_cmd *cmd)
+{
+	return SAM_STAT_GOOD;
+}
+
 static int sbc_service_action(int host_no, struct scsi_cmd *cmd)
 {
 	uint32_t *data;
@@ -293,7 +298,7 @@ static struct device_type_template sbc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{sbc_verify,},
 
 		/* 0x30 */
 		{spc_illegal_op,},
