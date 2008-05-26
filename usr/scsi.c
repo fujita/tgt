@@ -44,6 +44,16 @@ static unsigned char scsi_command_size[8] = {6, 10, 10, 12, 16, 12, 10, 10};
 #define CDB_SIZE(cmd) (((((cmd)->scb[0] >> 5) & 7) < 6) ? \
 				COMMAND_SIZE((cmd)->scb[0]) : (cmd)->scb_len)
 
+int get_scsi_command_size(unsigned char op)
+{
+	return COMMAND_SIZE(op);
+}
+
+int get_scsi_cdb_size(struct scsi_cmd *cmd)
+{
+	return CDB_SIZE(cmd);
+}
+
 void sense_data_build(struct scsi_cmd *cmd, uint8_t key, uint16_t asc)
 {
 

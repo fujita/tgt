@@ -431,6 +431,176 @@ sense:
 	return SAM_STAT_CHECK_CONDITION;
 }
 
+static int report_opcodes_all(struct scsi_cmd *cmd, int rctd,
+			      uint32_t alloc_len)
+{
+	uint8_t buf[2048], *data;
+	struct device_type_operations *ops;
+	struct service_action *service_action;
+	int i;
+	uint32_t len;
+	int cdb_length;
+
+	/* cant request RCTD for all descriptors */
+	if (rctd) {
+		scsi_set_in_resid_by_actual(cmd, 0);
+		sense_data_build(cmd, ILLEGAL_REQUEST,
+				 ASC_INVALID_FIELD_IN_CDB);
+		return SAM_STAT_CHECK_CONDITION;
+	}
+
+	memset(buf, 0, sizeof(buf));
+	data = &buf[4];
+
+	ops = cmd->dev->dev_type_template.ops;
+	for (i = 0; i < 256; i++) {
+		if (ops[i].cmd_perform == spc_illegal_op)
+			continue;
+
+		/* this command does not take a service action, so just
+		   report the opcode
+		*/
+		if (!ops[i].service_actions) {
+			*data++ = i;
+
+			/* reserved */
+			data++;
+
+			/* service action */
+			data += 2;
+
+			/* reserved */
+			data++;
+
+			/* flags : no service action, no command descriptor */
+			data++;
+
+			/* cdb length */
+			cdb_length = get_scsi_command_size(i);
+			*data++ = (cdb_length >> 8) & 0xff;
+			*data++ = cdb_length & 0xff;
+
+			continue;
+		}
+
+		for (service_action = ops[i].service_actions;
+		     service_action->cmd_perform;
+		     service_action++) {
+			/* opcode */
+			*data++ = i;
+
+			/* reserved */
+			data++;
+
+			/* service action */
+			*data++ = (service_action->service_action >> 8) & 0xff;
+			*data++ = service_action->service_action & 0xff;
+
+			/* reserved */
+			data++;
+
+			/* flags : service action */
+			*data++ = 0x01;
+
+			/* cdb length */
+			cdb_length = get_scsi_command_size(i);
+			*data++ = (cdb_length >> 8) & 0xff;
+			*data++ = cdb_length & 0xff;
+		}
+	}
+
+	len = data - &buf[0];
+	len -= 4;
+	buf[0] = (len >> 24) & 0xff;
+	buf[1] = (len >> 16) & 0xff;
+	buf[2] = (len >> 8)  & 0xff;
+	buf[3] = len & 0xff;
+
+	memcpy(scsi_get_in_buffer(cmd), buf,
+	       min(scsi_get_in_length(cmd), len+4));
+
+	scsi_set_in_resid_by_actual(cmd, len+4);
+
+	return SAM_STAT_GOOD;
+}
+
+int spc_report_supported_opcodes(int host_no, struct scsi_cmd *cmd)
+{
+	uint8_t reporting_options;
+	uint8_t requested_opcode;
+	uint16_t requested_service_action;
+	uint32_t alloc_len;
+	int rctd;
+	int ret = SAM_STAT_GOOD;
+
+	reporting_options = cmd->scb[2] & 0x07;
+
+	requested_opcode = cmd->scb[3];
+
+	requested_service_action = cmd->scb[4];
+	requested_service_action <<= 8;
+	requested_service_action |= cmd->scb[5];
+
+	alloc_len = (uint32_t)cmd->scb[6] << 24 |
+		(uint32_t)cmd->scb[7] << 16 |
+		(uint32_t)cmd->scb[8] << 8 |
+		(uint32_t)cmd->scb[9];
+
+	rctd = cmd->scb[2] & 0x80;
+
+	switch (reporting_options) {
+	case 0x00: /* report all */
+		ret = report_opcodes_all(cmd, rctd, alloc_len);
+		break;
+	case 0x01: /* report one no service action*/
+	case 0x02: /* report one service action */
+	default:
+		scsi_set_in_resid_by_actual(cmd, 0);
+		sense_data_build(cmd, ILLEGAL_REQUEST,
+			ASC_INVALID_FIELD_IN_CDB);
+		ret = SAM_STAT_CHECK_CONDITION;
+	}
+
+	return ret;
+}
+
+struct service_action maint_in_service_actions[] = {
+	{0x0c, spc_report_supported_opcodes},
+	{0, NULL}
+};
+
+struct service_action *
+find_service_action(struct service_action *service_action, uint32_t action)
+{
+	while (service_action->cmd_perform) {
+		if (service_action->service_action == action)
+			return service_action;
+		service_action++;
+	}
+	return NULL;
+}
+
+/**
+ * This functions emulates the various commands using the 0xa3 cdb opcode
+ */
+int spc_maint_in(int host_no, struct scsi_cmd *cmd)
+{
+	uint8_t action;
+	struct service_action *service_action;
+
+	action = cmd->scb[1] & 0x1f;
+	service_action = find_service_action(maint_in_service_actions, action);
+
+	if (!service_action) {
+		scsi_set_in_resid_by_actual(cmd, 0);
+		sense_data_build(cmd, ILLEGAL_REQUEST,
+				ASC_INVALID_FIELD_IN_CDB);
+		return SAM_STAT_CHECK_CONDITION;
+	}
+
+	return service_action->cmd_perform(host_no, cmd);
+}
+
 int spc_request_sense(int host_no, struct scsi_cmd *cmd)
 {
 	scsi_set_in_resid_by_actual(cmd, 0);

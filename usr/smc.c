@@ -805,7 +805,7 @@ struct device_type_template smc_template = {
 		{spc_report_luns,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{spc_maint_in, maint_in_service_actions,},
 		{spc_illegal_op,},
 		{smc_move_medium,},
 		{spc_illegal_op,},

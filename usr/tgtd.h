@@ -80,8 +80,14 @@ struct it_nexus_lu_info {
 	struct list_head pending_ua_sense_list;
 };
 
+struct service_action {
+	uint32_t service_action;
+	int (*cmd_perform)(int host_no, struct scsi_cmd *cmd);
+};
+
 struct device_type_operations {
 	int (*cmd_perform)(int host_no, struct scsi_cmd *cmd);
+	struct service_action *service_actions;
 };
 
 struct device_type_template {
@@ -218,6 +224,8 @@ extern uint64_t scsi_rw_offset(uint8_t *scb);
 extern uint32_t scsi_rw_count(uint8_t *scb);
 extern int scsi_is_io_opcode(unsigned char op);
 extern enum data_direction scsi_data_dir_opcode(unsigned char op);
+extern int get_scsi_cdb_size(struct scsi_cmd *cmd);
+extern int get_scsi_command_size(unsigned char op);
 
 extern enum scsi_target_state tgt_get_target_state(int tid);
 extern int tgt_set_target_state(int tid, char *str);
