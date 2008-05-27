@@ -335,20 +335,24 @@ int spc_test_unit(int host_no, struct scsi_cmd *cmd)
  *
  * Returns number of bytes copied.
  */
-static int build_mode_page(uint8_t *data, struct mode_pg *pg, int update)
+static int build_mode_page(uint8_t *data, struct mode_pg *pg, uint16_t *alloc_len)
 {
 	uint8_t *p;
 	int len;
 
 	len = pg->pcode_size;
-	if (update) {
+	if (*alloc_len >= 2) {
 		data[0] = pg->pcode;
 		data[1] = len;
 	}
+	*alloc_len -= min_t(uint16_t, *alloc_len, 2);
+
 	p = &data[2];
 	len += 2;
-	if (update)
+	if (*alloc_len >= pg->pcode_size)
 		memcpy(p, pg->mode_data, pg->pcode_size);
+
+	*alloc_len -= min_t(uint16_t, *alloc_len, pg->pcode_size);
 
 	return len;
 }
@@ -362,9 +366,8 @@ static int build_mode_page(uint8_t *data, struct mode_pg *pg, int update)
  */
 int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 {
-	int len = 0;
 	uint8_t *data = NULL, *scb, mode6, dbd, pcode, subpcode;
-	uint16_t alloc_len;
+	uint16_t alloc_len, len = 0;
 	unsigned char key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 	struct mode_pg *pg;
@@ -393,11 +396,14 @@ int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 		goto sense;
 	memset(data, 0, alloc_len);
 
+	alloc_len -= min(alloc_len, len);
+
 	if (!dbd) {
-		if (alloc_len >= len)
+		if (alloc_len >= BLOCK_DESCRIPTOR_LEN)
 			memcpy(data + len, cmd->dev->mode_block_descriptor,
 			       BLOCK_DESCRIPTOR_LEN);
 		len += BLOCK_DESCRIPTOR_LEN;
+		alloc_len -= min_t(uint16_t, alloc_len, BLOCK_DESCRIPTOR_LEN);
 	}
 
 	if (pcode == 0x3f) {
@@ -405,14 +411,13 @@ int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 		for (i = 0; i < ARRAY_SIZE(cmd->dev->mode_pgs); i++) {
 			pg = cmd->dev->mode_pgs[i];
 			if (pg)
-				len += build_mode_page(data + len, pg,
-						       alloc_len >= len);
+				len += build_mode_page(data + len, pg, &alloc_len);
 		}
 	} else {
 		pg = cmd->dev->mode_pgs[pcode];
 		if (!pg)
 			goto sense;
-		len += build_mode_page(data + len, pg, alloc_len >= len);
+		len += build_mode_page(data + len, pg, &alloc_len);
 	}
 
 	if (mode6) {
