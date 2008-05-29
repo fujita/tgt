@@ -1232,8 +1232,8 @@ out:
 /*
  * Copy the remote va and stag that were temporarily saved in conn_info.
  */
-struct iscsi_task *iscsi_iser_alloc_task(struct iscsi_connection *conn,
-					 size_t ext_len)
+static struct iscsi_task *iscsi_iser_alloc_task(struct iscsi_connection *conn,
+						size_t ext_len)
 {
 	struct conn_info *ci = RDMA_CONN(conn);
 	struct iser_task *itask;
