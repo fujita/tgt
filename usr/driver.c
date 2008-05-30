@@ -49,12 +49,11 @@ int register_driver(struct tgt_driver *drv)
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(tgt_drivers) && tgt_drivers[i]; i++)
-		;
+	for (i = 0; i < ARRAY_SIZE(tgt_drivers); i++)
+		if (!tgt_drivers[i]) {
+			tgt_drivers[i] = drv;
+			return 0;
+		}
 
-	if (tgt_drivers[i])
-		return -1;
-
-	tgt_drivers[i] = drv;
-	return 0;
+	return -1;
 }
