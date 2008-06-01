@@ -366,7 +366,7 @@ static int build_mode_page(uint8_t *data, struct mode_pg *pg, uint16_t *alloc_le
  */
 int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 {
-	uint8_t *data = NULL, *scb, mode6, dbd, pcode, subpcode;
+	uint8_t *data = NULL, *scb, mode6, dbd, pcode, subpcode, pctrl;
 	uint16_t alloc_len, len = 0;
 	unsigned char key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
@@ -376,10 +376,15 @@ int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 	mode6 = (scb[0] == 0x1a);
 	dbd = scb[1] & 0x8; /* Disable Block Descriptors */
 	pcode = scb[2] & 0x3f;
+	pctrl = (scb[2] & 0xc0) >> 6;
 	subpcode = scb[3];
 
 	/* Currently not implemented */
 	if (subpcode)
+		goto sense;
+
+	/* Changeable values are currently not implemented */
+	if (pctrl == 0x1)
 		goto sense;
 
 	data = scsi_get_in_buffer(cmd);
