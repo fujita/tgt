@@ -152,7 +152,7 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 	struct vpd *vpd_pg;
 	uint8_t buf[256];
 
-	if (((scb[1] & 0x3) == 0x3) || (!(scb[1] & 0x3) && scb[2]))
+	if (!(scb[1] & 0x1) && scb[2])
 		goto sense;
 
 	if (scsi_get_in_length(cmd) < scb[4])
@@ -168,7 +168,7 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 	devtype = (attrs->qualifier & 0x7) << 5;
 	devtype |= (attrs->device_type & 0x1f);
 
-	if (!(scb[1] & 0x3)) {
+	if (!(scb[1] & 0x1)) {
 		int i;
 		uint16_t *desc;
 
@@ -189,13 +189,6 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 
 		len = 66;
 		data[4] = len - 5;	/* Additional Length */
-		ret = SAM_STAT_GOOD;
-	} else if (scb[1] & 0x2) {
-		/* CmdDt bit is set */
-		/* We do not support it now. */
-		data[1] = 0x1;
-		data[5] = 0;
-		len = 6;
 		ret = SAM_STAT_GOOD;
 	} else if (scb[1] & 0x1) {
 		uint8_t pcode = scb[2];
