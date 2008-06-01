@@ -58,8 +58,8 @@ struct lu_phy_attr {
 
 	uint16_t version_desc[VERSION_DESCRIPTOR_LEN];
 
- 	char device_type;	/* Peripheral device type */
- 	char qualifier;		/* Peripheral Qualifier */
+	char device_type;	/* Peripheral device type */
+	char qualifier;		/* Peripheral Qualifier */
 	char removable;		/* Removable media */
 	char online;		/* Logical Unit online */
 	char sense_format;	/* Descrptor format sense data supported */
