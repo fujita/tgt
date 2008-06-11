@@ -24,6 +24,8 @@
 #define _TAB3 _TAB1 _TAB1 _TAB1
 #define _TAB4 _TAB2 _TAB2
 
+#define dtype_priv(lu) (lu)->xxc_p
+
 enum tgt_system_state {
 	TGT_SYSTEM_OFFLINE = 1,
 	TGT_SYSTEM_READY,
@@ -148,10 +150,10 @@ struct scsi_lu {
 
 	struct lu_phy_attr attrs;
 
-	/* TODO: needs a structure for lots of device parameters */
-	/* Currently only used by smc and mmc modules */
-	void *smc_p;
-	void *mmc_p;
+	/* A pointer for each modules private use.
+	 * Currently used by smc and mmc modules.
+	 */
+	void *xxc_p;
 };
 
 struct mgmt_req {

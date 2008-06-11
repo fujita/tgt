@@ -232,7 +232,7 @@ static int build_element_descriptors(uint8_t *data, struct list_head *head,
  */
 static int smc_read_element_status(int host_no, struct scsi_cmd *cmd)
 {
-	struct smc_info *smc = (struct smc_info *)cmd->dev->smc_p;
+	struct smc_info *smc = dtype_priv(cmd->dev);
 	uint8_t *data = NULL;
 	uint8_t *scb;
 	uint8_t element_type;
@@ -354,7 +354,7 @@ sense:
  */
 static int smc_move_medium(int host_no, struct scsi_cmd *cmd)
 {
-	struct smc_info *smc = (struct smc_info *)cmd->dev->smc_p;
+	struct smc_info *smc = dtype_priv(cmd->dev);
 	uint8_t *scb;
 	uint16_t src;
 	uint16_t dest;
@@ -435,7 +435,7 @@ static int smc_lu_init(struct scsi_lu *lu)
 
 	smc = zalloc(sizeof(struct smc_info));
 	if (smc)
-		lu->smc_p = smc;
+		dtype_priv(lu) = smc;
 	else
 		return -ENOMEM;
 
@@ -473,7 +473,7 @@ static int smc_lu_init(struct scsi_lu *lu)
 
 static void smc_lu_exit(struct scsi_lu *lu)
 {
-	struct smc_info *smc = lu->smc_p;
+	struct smc_info *smc = dtype_priv(lu);
 
 	dprintf("Medium Changer shutdown() called\n");
 
@@ -547,7 +547,7 @@ static void slot_dump(struct list_head *head)
 
 static int add_slt(struct scsi_lu *lu, struct tmp_param *tmp)
 {
-	struct smc_info *smc = lu->smc_p;
+	struct smc_info *smc = dtype_priv(lu);
 	int ret = TGTADM_INVALID_REQUEST;
 	struct mode_pg *pg;
 	struct slot *s;
@@ -606,7 +606,7 @@ dont_do_slots:
 
 static int config_slot(struct scsi_lu *lu, struct tmp_param *tmp)
 {
-	struct smc_info *smc = lu->smc_p;
+	struct smc_info *smc = dtype_priv(lu);
 	struct mode_pg *m = NULL;
 	struct slot *s = NULL;
 	int ret = TGTADM_INVALID_REQUEST;
@@ -649,7 +649,7 @@ static int config_slot(struct scsi_lu *lu, struct tmp_param *tmp)
 
 static int __smc_lu_config(struct scsi_lu *lu, char *params)
 {
-	struct smc_info *smc = (struct smc_info *)lu->smc_p;
+	struct smc_info *smc = dtype_priv(lu);
 	int err = TGTADM_SUCCESS;
 	char *p;
 	char buf[256];

@@ -59,7 +59,7 @@ struct mmc_info {
 
 static int mmc_rw(int host_no, struct scsi_cmd *cmd)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 	int ret;
 	uint64_t end_offset;
 	uint64_t offset, length;
@@ -134,7 +134,7 @@ static int mmc_rw(int host_no, struct scsi_cmd *cmd)
 
 static int mmc_read_capacity(int host_no, struct scsi_cmd *cmd)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 	uint64_t size;
 	uint32_t *data;
 
@@ -164,7 +164,7 @@ overflow:
 
 static int mmc_read_toc(int host_no, struct scsi_cmd *cmd)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 	uint8_t *data;
 	uint8_t buf[32];
 	int toc_time, toc_format, toc_track;
@@ -282,7 +282,7 @@ static int mmc_read_toc(int host_no, struct scsi_cmd *cmd)
 
 static int mmc_close_track(int host_no, struct scsi_cmd *cmd)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 
 	/* once we close the track it becomes a DVD_ROM */
 	mmc->current_profile = PROFILE_DVD_ROM;
@@ -292,7 +292,7 @@ static int mmc_close_track(int host_no, struct scsi_cmd *cmd)
 
 static int mmc_read_disc_information(int host_no, struct scsi_cmd *cmd)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 	unsigned char buf[34];
 
 	if (mmc->current_profile == PROFILE_NO_PROFILE) {
@@ -460,7 +460,7 @@ static int mmc_read_disc_information(int host_no, struct scsi_cmd *cmd)
 
 static void profile_dvd_rom(struct scsi_cmd *cmd, char *data)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 
 	/* profile number */
 	*data++ = 0;
@@ -478,7 +478,7 @@ static void profile_dvd_rom(struct scsi_cmd *cmd, char *data)
 
 static void profile_dvd_plus_r(struct scsi_cmd *cmd, char *data)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 
 	/* profile number */
 	*data++ = 0;
@@ -634,7 +634,7 @@ static char *feature_removable_medium(struct scsi_cmd *cmd, char *data,
 static char *feature_random_readable(struct scsi_cmd *cmd, char *data,
 				     int only_current)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 	int is_current;
 
 	/* this feature is only current in DVD_ROM */
@@ -684,7 +684,7 @@ static char *feature_random_readable(struct scsi_cmd *cmd, char *data,
 static char *feature_dvd_read(struct scsi_cmd *cmd, char *data,
 			      int only_current)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 	int is_current;
 
 	/* this feature is only current in DVD_ROM */
@@ -749,7 +749,7 @@ static char *feature_timeout(struct scsi_cmd *cmd, char *data, int only_current)
 static char *feature_real_time_streaming(struct scsi_cmd *cmd, char *data,
 					 int only_current)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 	int is_current;
 
 	/* this feature is only current in DVD_ROM */
@@ -791,7 +791,7 @@ static char *feature_real_time_streaming(struct scsi_cmd *cmd, char *data,
 static char *feature_dvd_plus_r(struct scsi_cmd *cmd, char *data,
 				int only_current)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 	int is_current;
 
 	/* this feature is only current in DVD+R */
@@ -875,7 +875,7 @@ static char *feature_multi_read(struct scsi_cmd *cmd, char *data,
 
 static char *feature_dcbs(struct scsi_cmd *cmd, char *data, int only_current)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 	int is_current;
 
 	/* this feature is only current in DVD+R */
@@ -961,7 +961,7 @@ struct feature_descriptor features[] = {
 
 static int mmc_get_configuration(int host_no, struct scsi_cmd *cmd)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 	char *data;
 	char buf[1024];
 	int rt, start;
@@ -1017,7 +1017,7 @@ static int mmc_get_configuration(int host_no, struct scsi_cmd *cmd)
 static unsigned char *track_type_lba(struct scsi_cmd *cmd, unsigned char *data,
 				     unsigned int lba)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 	unsigned long tmp;
 
 	switch (mmc->current_profile) {
@@ -1170,7 +1170,7 @@ static unsigned char *track_type_lba(struct scsi_cmd *cmd, unsigned char *data,
 static unsigned char *track_type_track(struct scsi_cmd *cmd,
 				       unsigned char *data, unsigned int lba)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 	unsigned long tmp;
 
 	switch (mmc->current_profile) {
@@ -1352,7 +1352,7 @@ struct track_type track_types[] = {
 
 static int mmc_read_track_information(int host_no, struct scsi_cmd *cmd)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 	struct track_type *t;
 	unsigned char *data;
 	unsigned char buf[4096];
@@ -1402,7 +1402,7 @@ static int mmc_read_track_information(int host_no, struct scsi_cmd *cmd)
 
 static int mmc_read_buffer_capacity(int host_no, struct scsi_cmd *cmd)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 	int blocks;
 	unsigned char buf[12];
 	long tmp;
@@ -1457,7 +1457,7 @@ static int mmc_read_buffer_capacity(int host_no, struct scsi_cmd *cmd)
 
 static int mmc_synchronize_cache(int host_no, struct scsi_cmd *cmd)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 
 	if (mmc->current_profile == PROFILE_NO_PROFILE) {
 		scsi_set_in_resid_by_actual(cmd, 0);
@@ -1473,7 +1473,7 @@ static unsigned char *perf_type_write_speed(struct scsi_cmd *cmd,
 					    unsigned int type,
 					    unsigned int data_type)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 
 	/* write/except */
 	*data++ = 0x00;
@@ -1628,7 +1628,7 @@ static unsigned char *perf_type_perf_data(struct scsi_cmd *cmd,
 					  unsigned int type,
 					  unsigned int data_type)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 	int tolerance;
 	int write_flag;
 	int except;
@@ -1786,7 +1786,7 @@ static unsigned char *dvd_format_phys_info(struct scsi_cmd *cmd,
 					   unsigned char *data, int format,
 					   int layer, int write_header)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 	unsigned char *old_data;
 
 	if (write_header) {
@@ -1937,7 +1937,7 @@ static unsigned char *dvd_format_adip_info(struct scsi_cmd *cmd,
 					   unsigned char *data, int format,
 					   int layer, int write_header)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 
 	if (write_header) {
 		*data++ = DVD_FORMAT_ADIP_INFO;
@@ -2107,7 +2107,7 @@ static unsigned char *dvd_format_dvd_structure_list(struct scsi_cmd *cmd,
 
 static int mmc_read_dvd_structure(int host_no, struct scsi_cmd *cmd)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 	long address;
 	int format, layer;
 	unsigned char *data;
@@ -2159,7 +2159,7 @@ static int mmc_read_dvd_structure(int host_no, struct scsi_cmd *cmd)
 
 static int mmc_reserve_track(int host_no, struct scsi_cmd *cmd)
 {
-	struct mmc_info *mmc = (struct mmc_info *)cmd->dev->mmc_p;
+	struct mmc_info *mmc = dtype_priv(cmd->dev);
 	uint64_t tmp;
 
 	tmp = cmd->scb[5];
@@ -2200,7 +2200,7 @@ static int mmc_lu_init(struct scsi_lu *lu)
 	if (!mmc)
 		return -ENOMEM;
 
-	lu->mmc_p = mmc;
+	lu->xxc_p = mmc;
 
 	if (spc_lu_init(lu))
 		return TGTADM_NOMEM;
@@ -2268,7 +2268,7 @@ static int mmc_lu_init(struct scsi_lu *lu)
 
 static int mmc_lu_online(struct scsi_lu *lu)
 {
-	struct mmc_info *mmc = (struct mmc_info *)lu->mmc_p;
+	struct mmc_info *mmc = dtype_priv(lu);
 	struct stat st;
 
 	mmc->current_profile = PROFILE_NO_PROFILE;
