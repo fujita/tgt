@@ -379,7 +379,7 @@ static int isns_deregister(void)
 
 static inline int list_length_is_one(const struct list_head *head)
 {
-        return head->next == head->prev;
+        return (!list_empty(head) && head->next == head->prev);
 }
 
 int isns_target_register(char *name)
