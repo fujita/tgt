@@ -164,6 +164,11 @@ int fcoe_create_interface(char *ifname)
 	/* todo */
 	fdev->fd_link_status = TRANS_LINK_UP;
 
+	if (!ifname) {
+		eprintf("no interface specified.\n");
+		return -ENODEV;
+	}
+
 	memcpy(fdev->ifname, ifname, IFNAMSIZ);
 
 	ret = fcoe_sock_open(fdev);
@@ -204,9 +209,7 @@ int fcoe_create_interface(char *ifname)
 static int fcoe_init(int index, char *args)
 {
 	eprintf("%s\n", args);
-	fcoe_create_interface(args);
-
-	return 0;
+	return fcoe_create_interface(args);
 }
 
 static struct tgt_driver fcoe = {
