@@ -116,7 +116,7 @@ struct sa_state_table *sa_state_table_alloc(const char *name,
 		case SST_STATE:
 			if (dp->sd_in == 0) {
 				eprintf("state table %s has invalid state %d "
-				       "at STATE entry %d",
+				       "at STATE entry %ld",
 				       name, dp->sd_in, dp - state_desc);
 				error++;
 			}
@@ -127,7 +127,7 @@ struct sa_state_table *sa_state_table_alloc(const char *name,
 		case SST_FROM:
 			if (dp->sd_in == 0) {
 				eprintf("state table %s has invalid state %d "
-				       "at FROM entry %d",
+				       "at FROM entry %ld",
 				       name, dp->sd_in, dp - state_desc);
 				error++;
 			}
@@ -136,7 +136,7 @@ struct sa_state_table *sa_state_table_alloc(const char *name,
 		case SST_EVENT:
 			if (dp->sd_in == 0) {
 				eprintf("state table %s has invalid event %d "
-				       "at EVENT entry %d",
+				       "at EVENT entry %ld",
 				       name, dp->sd_in, dp - state_desc);
 				error++;
 			}
@@ -146,7 +146,7 @@ struct sa_state_table *sa_state_table_alloc(const char *name,
 		case SST_HANDLER:
 			if (dp->sd_ptr == NULL) {
 				eprintf("state table %s has invalid hander %d "
-				       "at HANDLER entry %d",
+				       "at HANDLER entry %ld",
 				       name, dp->sd_in, dp - state_desc);
 				error++;
 			}
@@ -156,19 +156,19 @@ struct sa_state_table *sa_state_table_alloc(const char *name,
 		case SST_NEXT:
 			if (cur_state == 0) {
 				eprintf("state table %s has no current state "
-				       "for NEXT entry %d",
+				       "for NEXT entry %ld",
 				       name, dp - state_desc);
 				error++;
 			}
 			if (dp->sd_in >= event_limit) {
 				eprintf("state table %s has event %d "
-				       "out of range at NEXT entry %d",
+				       "out of range at NEXT entry %ld",
 				       name, dp->sd_in, dp - state_desc);
 				error++;
 			}
 			if (dp->sd_next == 0 || dp->sd_next >= state_limit) {
 				eprintf("state table %s has state %d "
-				       "out of range at NEXT entry %d",
+				       "out of range at NEXT entry %ld",
 				       name, dp->sd_next, dp - state_desc);
 				error++;
 			}

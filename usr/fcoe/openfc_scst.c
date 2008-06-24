@@ -214,7 +214,7 @@ openfc_scsi_send_data(struct fc_scsi_pkt *fsp, struct fc_seq *sp)
 
 	len = scsi_get_in_length(&fsp->scmd) - scsi_get_in_resid(&fsp->scmd);
 
-	dprintf("%p %d %d\n", fsp, data_len, scsi_get_in_resid(&fsp->scmd));
+	dprintf("%p %zu %d\n", fsp, data_len, scsi_get_in_resid(&fsp->scmd));
 	len = min(data_len, len);
 
 	if (offset != fsp->xfer_len) {
@@ -242,7 +242,7 @@ openfc_scsi_send_data(struct fc_scsi_pkt *fsp, struct fc_seq *sp)
 				fc_frame_set_offset(fp, buf_offset);
 			}
 
-			dprintf("%d %d %d\n", tlen, remaining, buf_offset);
+			dprintf("%zu %zu %zu\n", tlen, remaining, buf_offset);
 			page_addr = (char *)scsi_get_in_buffer(&fsp->scmd) + buf_offset;
 
 			memcpy(data, (char *) page_addr, tlen);
@@ -260,7 +260,7 @@ openfc_scsi_send_data(struct fc_scsi_pkt *fsp, struct fc_seq *sp)
 				continue;
 			}
 
-			dprintf("%d %d %d\n", tlen, remaining, error);
+			dprintf("%zu %zu %d\n", tlen, remaining, error);
 			fp = NULL;
 			if (error) {
 				/*

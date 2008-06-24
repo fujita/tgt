@@ -107,11 +107,11 @@ struct fcs_state *fcs_create(struct fcs_create_args *ap)
 	outer_port = ap->fca_port;
 	mfs = fc_port_get_max_frame_size(outer_port);
 	if (mfs < FC_MIN_MAX_PAYLOAD) {
-		eprintf("port max frame size only %d (0x%x) bytes - "
+		eprintf("port max frame size only %zu (0x%zx) bytes - "
 		       "setting to %d", mfs, mfs, FC_MIN_MAX_PAYLOAD);
 		mfs = 1024;
 	} else if (mfs > FC_MAX_PAYLOAD + sizeof(struct fc_frame_header)) {
-		eprintf("port max frame size too large: %d (0x%x) bytes\n",
+		eprintf("port max frame size too large: %zu (0x%zx) bytes\n",
 		       mfs, mfs);
 		mfs = FC_MAX_PAYLOAD + sizeof(struct fc_frame_header);
 	}
