@@ -115,7 +115,7 @@ static int minimum_check_val(struct iscsi_key *key, unsigned int *val)
 		err = -EINVAL;
 	}
 
-	return 0;
+	return err;
 }
 
 static int min_or_zero_check_val(struct iscsi_key *key, unsigned int *val)
@@ -127,7 +127,7 @@ static int min_or_zero_check_val(struct iscsi_key *key, unsigned int *val)
 		err = -EINVAL;
 	}
 
-	return 0;
+	return err;
 }
 
 static int maximum_check_val(struct iscsi_key *key, unsigned int *val)
@@ -139,7 +139,7 @@ static int maximum_check_val(struct iscsi_key *key, unsigned int *val)
 		err = -EINVAL;
 	}
 
-	return 0;
+	return err;
 }
 
 static int minimum_set_val(struct param *param, int idx, unsigned int *val)
