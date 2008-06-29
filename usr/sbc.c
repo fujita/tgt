@@ -43,6 +43,35 @@
 
 #define BLK_SHIFT	9
 
+static int sbc_mode_page_update(struct scsi_cmd *cmd, uint8_t *data, int *changed)
+{
+	uint8_t pcode = data[0] & 0x3f;
+	struct mode_pg *pg = cmd->dev->mode_pgs[pcode];
+	uint8_t old;
+
+	eprintf("%x %x\n", pg->mode_data[0], data[2]);
+
+	if (pcode == 0x08) {
+		old = pg->mode_data[0];
+		if (0x4 & data[2])
+			pg->mode_data[0] |= 0x4;
+		else
+			pg->mode_data[0] &= ~0x4;
+
+		if (old != pg->mode_data[0])
+			*changed = 1;
+
+		return 0;
+	}
+
+	return 1;
+}
+
+static int sbc_mode_select(int host_no, struct scsi_cmd *cmd)
+{
+	return spc_mode_select(host_no, cmd, sbc_mode_page_update);
+}
+
 static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 {
 	int ret;
@@ -228,6 +257,14 @@ static int sbc_lu_init(struct scsi_lu *lu)
 	/* Caching Page */
 	add_mode_page(lu, "8:0:18:0x14:0:0xff:0xff:0:0:"
 		      "0xff:0xff:0xff:0xff:0x80:0x14:0:0:0:0:0:0");
+	{
+		uint8_t mask[18];
+		memset(mask, 0, sizeof(mask));
+		mask[0] = 0x4;
+
+		set_mode_page_changeable_mask(lu, 8, mask);
+	}
+
 	/* Control page */
 	add_mode_page(lu, "10:0:10:2:0x10:0:0:0:0:0:0:2:0");
 	/* Informational Exceptions Control page */
@@ -268,7 +305,7 @@ static struct device_type_template sbc_template = {
 		{spc_inquiry,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{sbc_mode_select},
 		{sbc_reserve,},
 		{sbc_release,},
 
@@ -327,7 +364,7 @@ static struct device_type_template sbc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{sbc_mode_select,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 

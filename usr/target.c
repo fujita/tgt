@@ -194,6 +194,32 @@ static void it_nexus_del_lu_info(struct it_nexus *itn)
 	}
 }
 
+void ua_sense_add_other_it_nexus(uint64_t itn_id, struct scsi_lu *lu,
+				 uint16_t asc)
+{
+	struct it_nexus *itn;
+	struct it_nexus_lu_info *itn_lu;
+	int ret;
+
+	list_for_each_entry(itn, &lu->tgt->it_nexus_list, nexus_siblings) {
+
+		if (itn->itn_id == itn_id)
+			continue;
+
+		list_for_each_entry(itn_lu, &itn->it_nexus_lu_info_list,
+				    lu_info_siblings) {
+
+			if (itn_lu->lu != lu)
+				continue;
+
+			ret = ua_sense_add(itn_lu, asc);
+			if (ret)
+				eprintf("fail to add ua %llu %llu\n",
+					lu->lun, itn_id);
+		}
+	}
+}
+
 int it_nexus_create(int tid, uint64_t itn_id, int host_no, char *info)
 {
 	int i, ret;

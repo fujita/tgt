@@ -318,6 +318,131 @@ int spc_test_unit(int host_no, struct scsi_cmd *cmd)
 	return SAM_STAT_CHECK_CONDITION;
 }
 
+int spc_mode_select(int host_no, struct scsi_cmd *cmd,
+		    int (*update)(struct scsi_cmd *, uint8_t *, int *))
+{
+	uint8_t *scb = cmd->scb;
+	uint8_t *data = NULL;
+	uint8_t pf, sp, pcode;
+	uint32_t in_len;
+	unsigned char key = ILLEGAL_REQUEST;
+	uint16_t asc = ASC_INVALID_FIELD_IN_PARMS;
+	uint32_t offset = 0;
+	uint8_t parameter_header_len;
+	uint16_t block_descriptor_len;
+	int add_ua = 0;
+
+	if (device_reserved(cmd))
+		return SAM_STAT_RESERVATION_CONFLICT;
+
+	pf = scb[1] & 0x10;
+	sp = scb[1] & 0x01;
+
+	if (!pf || sp) {
+		asc = ASC_INVALID_FIELD_IN_CDB;
+		goto sense;
+	}
+
+	in_len = scsi_get_out_length(cmd);
+	data = scsi_get_out_buffer(cmd);
+
+	if (scb[0] == MODE_SELECT) {
+		in_len = min_t(uint32_t, scb[4], in_len);
+		parameter_header_len = 4;
+	} else if (scb[0] == MODE_SELECT_10) {
+		in_len = min_t(uint32_t, (scb[7] << 8) + scb[8], in_len);
+		parameter_header_len = 8;
+	} else {
+		eprintf("bug %u\n", scb[0]);
+		exit(1);
+	}
+
+	if (in_len < parameter_header_len) {
+		asc = ASC_INVALID_FIELD_IN_CDB;
+		goto sense;
+	}
+
+	offset = parameter_header_len;
+
+	if (scb[0] == MODE_SELECT)
+		block_descriptor_len = data[3];
+	else
+		block_descriptor_len = (data[6] << 8) + data[7];
+
+	if (block_descriptor_len) {
+		if (block_descriptor_len != BLOCK_DESCRIPTOR_LEN)
+			goto sense;
+
+		offset += 8;
+	}
+
+	while (in_len > offset + 2) {
+		struct mode_pg *pg;
+		uint8_t *mask;
+		int i, ret, changed;
+
+		if (0x80 & data[offset])
+			goto sense;
+
+		pcode = data[offset] & 0x3f;
+
+		pg = cmd->dev->mode_pgs[pcode];
+		if (!pg)
+			goto sense;
+
+		if (in_len - (offset + 2) < pg->pcode_size)
+			goto sense;
+
+		mask = pg->mode_data + pg->pcode_size;
+		for (i = 0; i < pg->pcode_size; i++) {
+			uint8_t *p, v;
+
+			p = data + (offset + 2);
+
+			v = p[i] ^ pg->mode_data[i];
+			if (v && (v & ~mask[i]))
+				goto sense;
+		}
+
+		changed = 0;
+		ret = update(cmd, data + offset, &changed);
+		if (ret)
+			goto sense;
+
+		if (changed)
+			add_ua = 1;
+
+		offset += (data[offset + 1] + 2);
+	}
+
+	if (add_ua)
+		ua_sense_add_other_it_nexus(cmd->cmd_itn_id, cmd->dev,
+					    ASC_MODE_PARAMETERS_CHANGED);
+
+	if (in_len != offset) {
+		asc = ASC_PARAMETER_LIST_LENGTH_ERR;
+		goto sense;
+	}
+
+	return SAM_STAT_GOOD;
+sense:
+	scsi_set_in_resid_by_actual(cmd, 0);
+	sense_data_build(cmd, key, asc);
+	return SAM_STAT_CHECK_CONDITION;
+}
+
+int set_mode_page_changeable_mask(struct scsi_lu *lu, uint8_t pcode,
+				  uint8_t *mask)
+{
+	struct mode_pg *pg = lu->mode_pgs[pcode];
+
+	if (pg) {
+		memcpy(pg->mode_data + pg->pcode_size, mask, pg->pcode_size);
+		return 0;
+	}
+	return 1;
+}
+
 /**
  * build_mode_page - static routine used by spc_mode_sense()
  * @data:	destination pointer
@@ -383,6 +508,11 @@ int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 	/* Currently not implemented */
 	if (subpcode)
 		goto sense;
+
+	if (pctrl == 3) {
+		asc = ASC_SAVING_PARMS_UNSUP;
+		goto sense;
+	}
 
 	data = scsi_get_in_buffer(cmd);
 
