@@ -606,8 +606,22 @@ int spc_maint_in(int host_no, struct scsi_cmd *cmd)
 
 int spc_request_sense(int host_no, struct scsi_cmd *cmd)
 {
-	scsi_set_in_resid_by_actual(cmd, 0);
+	uint8_t *data;
+	uint32_t len;
+
+	data = scsi_get_in_buffer(cmd);
+	len = scsi_get_in_length(cmd);
+
 	sense_data_build(cmd, NO_SENSE, NO_ADDITIONAL_SENSE);
+
+	memcpy(data, cmd->sense_buffer, min_t(uint32_t, len, cmd->sense_len));
+
+	scsi_set_in_resid_by_actual(cmd, cmd->sense_len);
+
+	/* reset sense buffer in cmnd */
+	memset(cmd->sense_buffer, 0, sizeof(cmd->sense_buffer));
+	cmd->sense_len = 0;
+
 	return SAM_STAT_GOOD;
 }
 
