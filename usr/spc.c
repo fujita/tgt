@@ -328,10 +328,12 @@ int spc_test_unit(int host_no, struct scsi_cmd *cmd)
  *
  * Returns number of bytes copied.
  */
-static int build_mode_page(uint8_t *data, struct mode_pg *pg, uint16_t *alloc_len)
+static int build_mode_page(uint8_t *data, struct mode_pg *pg,
+			   uint8_t pc, uint16_t *alloc_len)
 {
 	uint8_t *p;
 	int len;
+	uint8_t *mode_data;
 
 	len = pg->pcode_size;
 	if (*alloc_len >= 2) {
@@ -342,8 +344,14 @@ static int build_mode_page(uint8_t *data, struct mode_pg *pg, uint16_t *alloc_le
 
 	p = &data[2];
 	len += 2;
-	if (*alloc_len >= pg->pcode_size)
-		memcpy(p, pg->mode_data, pg->pcode_size);
+	if (*alloc_len >= pg->pcode_size) {
+		if (pc == 1)
+			mode_data = pg->mode_data + pg->pcode_size;
+		else
+			mode_data = pg->mode_data;
+
+		memcpy(p, mode_data, pg->pcode_size);
+	}
 
 	*alloc_len -= min_t(uint16_t, *alloc_len, pg->pcode_size);
 
@@ -376,10 +384,6 @@ int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 	if (subpcode)
 		goto sense;
 
-	/* Changeable values are currently not implemented */
-	if (pctrl == 0x1)
-		goto sense;
-
 	data = scsi_get_in_buffer(cmd);
 
 	if (mode6) {
@@ -409,13 +413,14 @@ int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 		for (i = 0; i < ARRAY_SIZE(cmd->dev->mode_pgs); i++) {
 			pg = cmd->dev->mode_pgs[i];
 			if (pg)
-				len += build_mode_page(data + len, pg, &alloc_len);
+				len += build_mode_page(data + len, pg, pctrl,
+						       &alloc_len);
 		}
 	} else {
 		pg = cmd->dev->mode_pgs[pcode];
 		if (!pg)
 			goto sense;
-		len += build_mode_page(data + len, pg, &alloc_len);
+		len += build_mode_page(data + len, pg, pctrl, &alloc_len);
 	}
 
 	if (mode6) {
@@ -643,7 +648,7 @@ static struct mode_pg *alloc_mode_pg(uint8_t pcode, uint8_t subpcode,
 {
 	struct mode_pg *pg;
 
-	pg = zalloc(sizeof(*pg) + size);
+	pg = zalloc(sizeof(*pg) + size * 2);
 	if (!pg)
 		return NULL;
 
