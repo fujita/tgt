@@ -89,7 +89,14 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 		ret = pwrite64(fd, scsi_get_out_buffer(cmd), length,
 			       cmd->offset);
 		if (ret == length) {
-			if ((cmd->scb[0] != WRITE_6) && (cmd->scb[1] & 0x8))
+			/*
+			 * it would be better not to access to pg
+			 * directy.
+			 */
+			struct mode_pg *pg = cmd->dev->mode_pgs[0x8];
+
+			if (((cmd->scb[0] != WRITE_6) && (cmd->scb[1] & 0x8)) ||
+			    !(pg->mode_data[0] & 0x04))
 				bs_sync_sync_range(cmd, length, &result, &key,
 						   &asc);
 		} else
