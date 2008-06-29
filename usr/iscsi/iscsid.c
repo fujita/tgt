@@ -901,12 +901,17 @@ static void calc_residual(struct iscsi_cmd_rsp *rsp, struct iscsi_task *task)
 	}
 }
 
+struct iscsi_sense_data {
+	uint16_t length;
+	uint8_t  data[0];
+} __packed;
+
 static int iscsi_cmd_rsp_build(struct iscsi_task *task)
 {
 	struct iscsi_connection *conn = task->conn;
 	struct iscsi_cmd_rsp *rsp = (struct iscsi_cmd_rsp *) &conn->rsp.bhs;
-
-	dprintf("%p %x\n", task, task->scmd.scb[0]);
+	struct iscsi_sense_data *sense;
+	unsigned char sense_len;
 
 	memset(rsp, 0, sizeof(*rsp));
 	rsp->opcode = ISCSI_OP_SCSI_CMD_RSP;
@@ -920,42 +925,17 @@ static int iscsi_cmd_rsp_build(struct iscsi_task *task)
 
 	calc_residual(rsp, task);
 
-	return 0;
-}
-
-struct iscsi_sense_data {
-	uint16_t length;
-	uint8_t  data[0];
-} __packed;
-
-static int iscsi_sense_rsp_build(struct iscsi_task *task)
-{
-	struct iscsi_connection *conn = task->conn;
-	struct iscsi_cmd_rsp *rsp = (struct iscsi_cmd_rsp *) &conn->rsp.bhs;
-	struct iscsi_sense_data *sense;
-	unsigned char sense_len;
-
-	memset(rsp, 0, sizeof(*rsp));
-	rsp->opcode = ISCSI_OP_SCSI_CMD_RSP;
-	rsp->itt = task->tag;
-	rsp->flags = ISCSI_FLAG_CMD_FINAL;
-	rsp->response = ISCSI_STATUS_CMD_COMPLETED;
-	rsp->cmd_status = SAM_STAT_CHECK_CONDITION;
-	rsp->statsn = cpu_to_be32(conn->stat_sn++);
-	rsp->exp_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn);
-	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn + MAX_QUEUE_CMD);
-
-	calc_residual(rsp, task);
-
-	sense = (struct iscsi_sense_data *)task->scmd.sense_buffer;
 	sense_len = task->scmd.sense_len;
+	if (sense_len) {
+		sense = (struct iscsi_sense_data *)task->scmd.sense_buffer;
 
-	memmove(sense->data, sense, sense_len);
-	sense->length = cpu_to_be16(sense_len);
+		memmove(sense->data, sense, sense_len);
+		sense->length = cpu_to_be16(sense_len);
 
-	conn->rsp.datasize = sense_len + sizeof(*sense);
-	hton24(rsp->dlength, sense_len + sizeof(*sense));
-	conn->rsp.data = sense;
+		conn->rsp.datasize = sense_len + sizeof(*sense);
+		hton24(rsp->dlength, sense_len + sizeof(*sense));
+		conn->rsp.data = sense;
+	}
 
 	return 0;
 }
@@ -1628,8 +1608,6 @@ static int iscsi_scsi_cmd_tx_start(struct iscsi_task *task)
 		err = iscsi_r2t_build(task);
 	else if (task->offset < task->len)
 		err = iscsi_data_rsp_build(task);
-	else if (scsi_get_result(&task->scmd) != SAM_STAT_GOOD)
-		err = iscsi_sense_rsp_build(task);
 	else
 		err = iscsi_cmd_rsp_build(task);
 
