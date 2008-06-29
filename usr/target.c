@@ -214,7 +214,7 @@ void ua_sense_add_other_it_nexus(uint64_t itn_id, struct scsi_lu *lu,
 
 			ret = ua_sense_add(itn_lu, asc);
 			if (ret)
-				eprintf("fail to add ua %llu %llu\n",
+				eprintf("fail to add ua %" PRIu64 " %" PRIu64 "\n",
 					lu->lun, itn_id);
 		}
 	}
