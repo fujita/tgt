@@ -36,7 +36,6 @@
 #include "fc_types.h"
 #include "fc_frame.h"
 #include "fc_encaps.h"
-#define	FCOE_T11_AUG07		/* use new FCoE version */
 #include "fc_fcoe.h"
 #include "fc_fcoe_old.h"
 #include "fcdev.h"
@@ -127,6 +126,7 @@ int fcoe_xmit(struct fcdev *fdev, struct fc_frame *fp)
 	struct fcoe_crc_eof *cp;
 	int wlen, ret, total;
 	struct ethhdr *eh;
+	struct fcoe_hdr *hp;
 
 	dprintf("op %x\n", fc_frame_payload_op(fp));
 
@@ -164,8 +164,6 @@ int fcoe_xmit(struct fcdev *fdev, struct fc_frame *fp)
 	 */
 	hlen = fc->fcoe_hlen;
 	tlen = sizeof(struct fcoe_crc_eof);
-	if (hlen == sizeof(struct fcoe_hdr_old))
-		tlen = sizeof(struct fcoe_crc_eof_old);
 
 	cp = (struct fcoe_crc_eof *)((char *)fh + fp->fr_len);
 
@@ -192,20 +190,11 @@ int fcoe_xmit(struct fcdev *fdev, struct fc_frame *fp)
 
 	eh->h_proto = htons(ETH_P_FCOE);
 
-	if (hlen == sizeof(struct fcoe_hdr)) {
-		struct fcoe_hdr *hp;
-
-		hp = (struct fcoe_hdr *)(eh + 1);
-		memset(hp, 0, sizeof(*hp));
-		if (FC_FCOE_VER)
-			FC_FCOE_ENCAPS_VER(hp, FC_FCOE_VER);
-		hp->fcoe_sof = sof;
-	} else {
-		struct fcoe_hdr_old *ohp;
-
-		ohp = (struct fcoe_hdr_old *)(eh + 1);
-		net16_put(&ohp->fcoe_plen, FC_FCOE_ENCAPS_LEN_SOF(wlen, sof));
-	}
+	hp = (struct fcoe_hdr *)(eh + 1);
+	memset(hp, 0, sizeof(*hp));
+	if (FC_FCOE_VER)
+		FC_FCOE_ENCAPS_VER(hp, FC_FCOE_VER);
+	hp->fcoe_sof = sof;
 
 	total = fp->fr_len + tlen + sizeof(*eh) + hlen;
 	ret = write(fdev->fd, eh, total);
@@ -223,11 +212,11 @@ int fcoe_rcv(struct fcdev *fdev)
 	struct fcoe_softc *fc;
 	struct ethhdr *eh;
 	uint64_t mac = 0;
-	enum fc_sof sof;
 	int ret;
 	struct fcoe_dev_stats *stats;
 	struct fcoe_crc_eof *cp;
 	struct fc_frame *fp;
+	struct fcoe_hdr *hp;
 
 	fc = fdev->drv_priv;
 
@@ -254,31 +243,26 @@ int fcoe_rcv(struct fcdev *fdev)
 		mac = net48_get((net48_t *)eh->h_source);
 
 	hlen = fc->fcoe_hlen;
-	if (hlen == sizeof(struct fcoe_hdr)) {
-		struct fcoe_hdr *hp = (struct fcoe_hdr *)(eh + 1);
-
-		if (FC_FCOE_DECAPS_VER(hp) != FC_FCOE_VER) {
-			eprintf("unknown FCoE version %x\n",
-				FC_FCOE_DECAPS_VER(hp));
-			stats->ErrorFrames++;
-			free(buf);
-			goto out;
-		}
-		sof = hp->fcoe_sof;
-		fr_len = ret -(sizeof(*eh) +
-			       sizeof(*hp) + sizeof(struct fcoe_crc_eof));
-		tlen = sizeof(struct fcoe_crc_eof);
-	} else {
-		struct fcoe_hdr_old *fchp = (struct fcoe_hdr_old *)(eh + 1);
-		u_int len;
-
-		len = net16_get(&fchp->fcoe_plen);
-		fr_len = FC_FCOE_DECAPS_LEN(len);
-		fr_len = fr_len * FCOE_WORD_TO_BYTE;
-		sof = FC_FCOE_DECAPS_SOF(len);
-		fr_len -= sizeof(cp->fcoe_crc32);
-		tlen = sizeof(struct fcoe_crc_eof_old);
+	if (hlen != sizeof(struct fcoe_hdr)) {
+		eprintf("Wrong fcoe header size. Got %u, but should "
+			"be %u. Make sure you are using a initiator that "
+			"is using the current header format\n",
+			hlen, sizeof(struct fcoe_hdr));
+		stats->ErrorFrames++;
+		goto out;
 	}
+
+	hp = (struct fcoe_hdr *)(eh + 1);
+	if (FC_FCOE_DECAPS_VER(hp) != FC_FCOE_VER) {
+		eprintf("unknown FCoE version %x\n",
+			FC_FCOE_DECAPS_VER(hp));
+		stats->ErrorFrames++;
+		free(buf);
+		goto out;
+	}
+	fr_len = ret -(sizeof(*eh) +
+		       sizeof(*hp) + sizeof(struct fcoe_crc_eof));
+	tlen = sizeof(struct fcoe_crc_eof);
 
 	if (fr_len + tlen > ret) {
 		eprintf("short frame fr_len %x len %x\n",
@@ -296,7 +280,7 @@ int fcoe_rcv(struct fcdev *fdev)
 	fp->fr_len = fr_len;
 	cp = (struct fcoe_crc_eof *)((char *)fp->fr_hdr + fr_len);
 	fp->fr_eof = cp->fcoe_eof;
-	fp->fr_sof = sof;
+	fp->fr_sof = hp->fcoe_sof;
 
 	/*
 	 * Check the CRC here, unless it's solicited data for SCSI.

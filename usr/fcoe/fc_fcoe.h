@@ -54,54 +54,6 @@
 #define	FC_FCOE_ENCAPS_ID(n)	(((u_int64_t) FC_FCOE_OUI << 24) | (n))
 #define	FC_FCOE_DECAPS_ID(n)	((n) >> 24)
 
-#ifndef FCOE_T11_AUG07				/* old version */
-
-/*
- * Start of frame values.
- * For FCOE the SOF value is encoded in 4 bits by simply trimming the
- * standard RFC 3643 encapsulation values.  See fc/encaps.h.
- *
- * The following macros work for class 3 and class F traffic.
- * It is still required to use net access functions to do the byte swapping.
- *
- * SOF code	Normal	 FCOE
- *  SOFf	0x28	    8
- *  SOFi3	0x2e	    e
- *  SOFn3	0x36	    6
- */
-#define	FC_FCOE_ENCAPS_LEN_SOF(len, sof) \
-		((FC_FCOE_VER << 14) | (((len) & 0x3ff) << 4) | ((sof) & 0xf))
-#define	FC_FCOE_DECAPS_VER(n)	((n) >> 14)
-#define	FC_FCOE_DECAPS_LEN(n)	(((n) >> 4) & 0x3ff)
-#define	FC_FCOE_DECAPS_SOF(n) \
-		(((n) & 0x8) ? (((n) & 0xf) + 0x20) : (((n) & 0xf) + 0x30))
-
-/*
- * FCoE frame header
- *
- * NB: This is the old version, defined before August 2007.
- *
- * This follows the VLAN header, which includes the ethertype.
- * The version is the MS 2 bits, followed by the 10-bit length (in 32b words),
- * followed by the 4-bit encoded SOF as the LSBs.
- */
-struct fcoe_hdr {
-	net16_t		fcoe_plen;	/* fc frame len and SOF */
-};
-
-/*
- * FCoE CRC & EOF
- * NB: This is the old version, defined before August 2007.
- */
-struct fcoe_crc_eof {
-	u_int32_t	fcoe_crc32;	/* CRC for FC packet */
-	net8_t		fcoe_eof;	/* EOF from RFC 3643 */
-} __attribute__((packed));
-
-#define	FCOE_CRC_LEN	4	/* byte length of the FC CRC */
-
-#else /* FCOE_T11_AUG07 */
-
 /*
  * FCoE frame header - 14 bytes
  *
@@ -125,8 +77,6 @@ struct fcoe_crc_eof {
 	net8_t		fcoe_eof;	/* EOF from RFC 3643 */
 	net8_t		fcoe_resvd[3];	/* reserved - send zero and ignore */
 } __attribute__((packed));
-
-#endif /* FCOE_T11_AUG07 */
 
 /*
  * Store OUI + DID into MAC address field.

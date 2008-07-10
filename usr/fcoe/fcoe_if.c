@@ -38,7 +38,6 @@
 #include "fc_types.h"
 #include "fc_frame.h"
 #include "fc_encaps.h"
-#define FCOE_T11_AUG07		/* use new FCoE version */
 #include "fc_fcoe.h"
 #include "fc_fcoe_old.h"
 #include "fc_fs.h"
