@@ -159,7 +159,7 @@ int fcoe_create_interface(char *ifname)
 	}
 
 	fc = (struct fcoe_softc *)fdev->drv_priv;
-	fc->fcoe_hlen = sizeof(struct fcoe_hdr_old);
+	fc->fcoe_hlen = sizeof(struct fcoe_hdr);
 
 	/* todo */
 	fdev->fd_link_status = TRANS_LINK_UP;
