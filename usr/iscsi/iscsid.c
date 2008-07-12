@@ -1691,7 +1691,7 @@ static int iscsi_scsi_cmd_tx_done(struct iscsi_connection *conn)
 		    scsi_get_data_dir(&task->scmd) == DATA_BIDIRECTIONAL ||
 		    conn->tp->rdma) {
 			dprintf("more data or sense or bidir %x\n", hdr->itt);
-			list_add_tail(&task->c_list, &task->conn->tx_clist);
+			list_add(&task->c_list, &task->conn->tx_clist);
 			return 0;
 		}
 	case ISCSI_OP_SCSI_CMD_RSP:
