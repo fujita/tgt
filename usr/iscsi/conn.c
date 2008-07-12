@@ -85,7 +85,7 @@ void conn_close(struct iscsi_connection *conn)
 
 	conn->tp->ep_close(conn);
 
-	dprintf("connection closed\n");
+	eprintf("connection closed %p\n", conn);
 
 	/* may not have been in FFP yet */
 	if (!conn->session)
@@ -100,28 +100,44 @@ void conn_close(struct iscsi_connection *conn)
 		if (task->conn != conn)
 			continue;
 
-		dprintf("Forcing release of pending task %" PRIx64 "\n",
-			task->tag);
+		eprintf("Forcing release of pending task %p %" PRIx64 "\n",
+			task, task->tag);
 		list_del(&task->c_list);
 		iscsi_free_task(task);
 	}
 
 	list_for_each_entry_safe(task, tmp, &conn->tx_clist, c_list) {
-		dprintf("Forcing release of tx task %" PRIx64 "\n",
-			task->tag);
-		iscsi_free_cmd_task(task);
+		uint8_t op;
+
+		op = task->req.opcode & ISCSI_OPCODE_MASK;
+
+		eprintf("Forcing release of tx task %p %" PRIx64 " %x\n",
+			task, task->tag, op);
+		switch (op) {
+		case ISCSI_OP_SCSI_CMD:
+			iscsi_free_cmd_task(task);
+			break;
+		case ISCSI_OP_NOOP_OUT:
+		case ISCSI_OP_LOGOUT:
+		case ISCSI_OP_SCSI_TMFUNC:
+			iscsi_free_task(task);
+			break;
+		default:
+			eprintf("%x\n", op);
+			break;
+		}
 	}
 
 	if (conn->rx_task) {
-		dprintf("Forcing release of rx task %" PRIx64 "\n",
-			conn->rx_task->tag);
+		eprintf("Forcing release of rx task %p %" PRIx64 "\n",
+			conn->rx_task, conn->rx_task->tag);
 		iscsi_free_task(conn->rx_task);
 	}
 	conn->rx_task = NULL;
 
 	if (conn->tx_task) {
-		dprintf("Forcing release of tx task %" PRIx64 "\n",
-			conn->tx_task->tag);
+		eprintf("Forcing release of tx task %p %" PRIx64 "\n",
+			conn->tx_task, conn->tx_task->tag);
 		iscsi_free_task(conn->tx_task);
 	}
 	conn->tx_task = NULL;
