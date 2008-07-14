@@ -59,8 +59,6 @@ struct logarea {
 	union semun semarg;
 };
 
-struct logarea *la;
-
 extern int log_init (char * progname, int size, int daemon, int debug);
 extern void log_close (void);
 extern void dump_logmsg (void *);

@@ -39,8 +39,9 @@
 #define logdbg(file, fmt, args...) do {} while (0)
 #endif
 
+static struct logarea *la;
 static char *log_name;
-static int is_daemon, is_debug;
+static int is_debug;
 
 static int logarea_init (int size)
 {
@@ -235,7 +236,7 @@ static void log_syslog (void * buff)
 
 static void dolog(int prio, const char *fmt, va_list ap)
 {
-	if (is_daemon) {
+	if (la) {
 		la->ops[0].sem_op = -1;
 		if (semop(la->semid, la->ops, 1) < 0) {
 			syslog(LOG_ERR, "semop up failed");
@@ -303,12 +304,12 @@ static void log_flush(void)
 
 int log_init(char *program_name, int size, int daemon, int debug)
 {
-	is_daemon = daemon;
 	is_debug = debug;
 
 	logdbg(stderr,"enter log_init\n");
 	log_name = program_name;
-	if (is_daemon) {
+
+	if (daemon) {
 		struct sigaction sa_old;
 		struct sigaction sa_new;
 		pid_t pid;
@@ -349,9 +350,8 @@ int log_init(char *program_name, int size, int daemon, int debug)
 
 void log_close (void)
 {
-	if (is_daemon) {
+	if (la) {
 		closelog();
 		free_logarea();
 	}
-	return;
 }
