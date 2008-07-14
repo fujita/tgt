@@ -85,7 +85,7 @@ void conn_close(struct iscsi_connection *conn)
 
 	conn->tp->ep_close(conn);
 
-	eprintf("connection closed %p\n", conn);
+	eprintf("connection closed %p %u\n", conn, conn->refcount);
 
 	/* may not have been in FFP yet */
 	if (!conn->session)
@@ -177,5 +177,30 @@ int conn_take_fd(struct iscsi_connection *conn)
 	dprintf("%u %u %u %" PRIx64 "\n", conn->cid, conn->stat_sn,
 		conn->exp_stat_sn, sid64(conn->isid, conn->tsih));
 	conn->session->conn_cnt++;
+	return 0;
+}
+
+int conn_close_force(uint32_t tid, uint64_t sid, uint32_t cid)
+{
+	struct iscsi_target* target = NULL;
+	struct iscsi_session *session;
+	struct iscsi_connection *conn;
+
+	target = target_find_by_id(tid);
+	if (!target)
+		return 0;
+
+	list_for_each_entry(session, &target->sessions_list, slist) {
+		if (session->tsih == sid) {
+			list_for_each_entry(conn, &session->conn_list, clist) {
+				if (conn->cid == cid) {
+					eprintf("close %" PRIx64 " %u\n", sid, cid);
+					conn_close(conn);
+					goto out;
+				}
+			}
+		}
+	}
+out:
 	return 0;
 }

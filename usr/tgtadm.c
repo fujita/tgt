@@ -549,6 +549,7 @@ int main(int argc, char **argv)
 	req->op = op;
 	req->tid = tid;
 	req->sid = sid;
+	req->cid = cid;
 	req->lun = lun;
 	req->mode = mode;
 	req->host_no = hostno;

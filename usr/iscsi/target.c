@@ -327,7 +327,8 @@ static int iscsi_session_param_update(struct iscsi_target* target, int idx, char
 	return 0;
 }
 
-int iscsi_target_update(int mode, int tid, char *name)
+int iscsi_target_update(int mode, int op, int tid, uint64_t sid, uint64_t lun,
+			uint32_t cid, char *name)
 {
 	int idx, err = -EINVAL;
 	char *str;
@@ -349,6 +350,10 @@ int iscsi_target_update(int mode, int tid, char *name)
 		idx = param_index_by_name(name, session_keys);
 		if (idx >= 0)
 			err = iscsi_session_param_update(target, idx, str);
+		break;
+	case MODE_CONNECTION:
+		if (op == OP_DELETE)
+			err = conn_close_force(tid, sid, cid);
 		break;
 	default:
 		break;

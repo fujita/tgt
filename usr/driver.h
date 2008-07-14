@@ -9,7 +9,7 @@ struct tgt_driver {
 
 	int (*lu_create)(struct scsi_lu *);
 
-	int (*update)(int, int, char *);
+	int (*update)(int, int, int ,uint64_t, uint64_t, uint32_t, char *);
 	int (*show)(int, int, uint64_t, uint32_t, uint64_t, char *, int);
 
 	uint64_t (*scsi_get_lun)(uint8_t *);

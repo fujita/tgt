@@ -256,6 +256,7 @@ extern int conn_get(struct iscsi_connection *conn);
 extern struct iscsi_connection * conn_find(struct iscsi_session *session, uint32_t cid);
 extern int conn_take_fd(struct iscsi_connection *conn);
 extern void conn_add_to_session(struct iscsi_connection *conn, struct iscsi_session *session);
+extern int conn_close_force(uint32_t tid, uint64_t sid, uint32_t cid);
 
 /* iscsid.c */
 extern char *text_key_find(struct iscsi_connection *conn, char *searchKey);
@@ -284,7 +285,8 @@ extern int iscsi_target_create(struct target *);
 extern void iscsi_target_destroy(int);
 extern int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid,
 			     uint64_t lun, char *buf, int rest);
-extern int iscsi_target_update(int, int, char *);
+int iscsi_target_update(int mode, int op, int tid, uint64_t sid, uint64_t lun,
+			uint32_t cid, char *name);
 
 /* param.c */
 int param_index_by_name(char *name, struct iscsi_key *keys);
