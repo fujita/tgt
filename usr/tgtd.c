@@ -370,6 +370,8 @@ int main(int argc, char **argv)
 
 	lld_exit();
 
+	ipc_exit();
+
 	log_close();
 
 	return 0;

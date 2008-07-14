@@ -58,6 +58,8 @@ struct mgmt_task {
 /* 	struct tgt_work work; */
 };
 
+static int ipc_fd;
+
 static void set_show_results(struct tgtadm_rsp *rsp, int *err)
 {
 	if (*err < 0)
@@ -563,8 +565,16 @@ int ipc_init(void)
 	if (err)
 		goto out;
 
+	ipc_fd = fd;
+
 	return 0;
 out:
 	close(fd);
 	return -1;
+}
+
+void ipc_exit(void)
+{
+	tgt_event_del(ipc_fd);
+	close(ipc_fd);
 }
