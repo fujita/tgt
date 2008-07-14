@@ -236,9 +236,14 @@ static void log_syslog (void * buff)
 
 static void dolog(int prio, const char *fmt, va_list ap)
 {
+	struct timespec ts;
+
 	if (la) {
+		ts.tv_sec = 0;
+		ts.tv_nsec = 10000;
+
 		la->ops[0].sem_op = -1;
-		if (semop(la->semid, la->ops, 1) < 0) {
+		if (semtimedop(la->semid, la->ops, 1, &ts) < 0) {
 			syslog(LOG_ERR, "semop up failed");
 			return;
 		}
