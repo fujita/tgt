@@ -38,6 +38,7 @@
 
 static void iscsi_tcp_event_handler(int fd, int events, void *data);
 
+static int listen_fds[8];
 static struct iscsi_transport iscsi_tcp;
 
 struct iscsi_tcp_connection {
@@ -233,13 +234,28 @@ static int iscsi_tcp_init(void)
 		ret = tgt_event_add(fd, EPOLLIN, accept_connection, NULL);
 		if (ret)
 			close(fd);
-		else
+		else {
+			listen_fds[nr_sock] = fd;
 			nr_sock++;
+		}
 	}
 
 	freeaddrinfo(res0);
 
 	return !nr_sock;
+}
+
+static void iscsi_tcp_exit(void)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(listen_fds); i++) {
+		if (!listen_fds[i])
+			break;
+
+		tgt_event_del(listen_fds[i]);
+		close(listen_fds[i]);
+	}
 }
 
 static int iscsi_tcp_conn_login_complete(struct iscsi_connection *conn)
@@ -373,6 +389,7 @@ static struct iscsi_transport iscsi_tcp = {
 	.rdma			= 0,
 	.data_padding		= PAD_WORD_LEN,
 	.ep_init		= iscsi_tcp_init,
+	.ep_exit		= iscsi_tcp_exit,
 	.ep_login_complete	= iscsi_tcp_conn_login_complete,
 	.alloc_task		= iscsi_tcp_alloc_task,
 	.free_task		= iscsi_tcp_free_task,
