@@ -271,6 +271,13 @@ static int sys_mgmt(int lld_no, struct mgmt_task *mtask)
 		}
 		set_show_results(rsp, &err);
 		break;
+	case OP_DELETE:
+		if (is_system_inactive())
+			err = 0;
+
+		rsp->err = err;
+		rsp->len = sizeof(*rsp);
+		break;
 	default:
 		break;
 	}
@@ -423,8 +430,14 @@ static void mtask_handler(int fd, int events, void *data)
 		if (err > 0) {
 			mtask->done += err;
 
-			if (mtask->done == rsp->len)
+			if (mtask->done == rsp->len) {
+				if (req->mode == MODE_SYSTEM &&
+				    req->op == OP_DELETE &&
+				    !rsp->err)
+					system_active = 0;
+
 				goto out;
+			}
 		} else
 			if (errno != EAGAIN)
 				goto out;

@@ -176,6 +176,8 @@ static inline int kreq_init(void)	\
 }
 #endif
 
+extern int system_active;
+
 extern int kspace_send_tsk_mgmt_res(struct mgmt_req *mreq);
 extern int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *);
 
@@ -195,6 +197,7 @@ extern int tgt_target_show_all(char *buf, int rest);
 int system_set_state(char *str);
 int system_show(int mode, char *buf, int rest);
 int is_system_available(void);
+int is_system_inactive(void);
 
 extern int tgt_bind_host_to_target(int tid, int host_no);
 extern int tgt_unbind_host_to_target(int tid, int host_no);

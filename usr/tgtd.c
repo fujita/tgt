@@ -53,6 +53,7 @@ struct tgt_event {
 
 unsigned long pagesize, pageshift, pagemask;
 
+int system_active = 1;
 static int ep_fd;
 static char program_name[] = "tgtd";
 static LIST_HEAD(tgt_events_list);
@@ -253,7 +254,8 @@ retry:
 	} else
 		schedule();
 
-	goto retry;
+	if (system_active)
+		goto retry;
 }
 
 static int lld_init(int *use_kernel, char *args)
@@ -353,6 +355,8 @@ int main(int argc, char **argv)
 		exit(1);
 
 	event_loop();
+
+	log_close();
 
 	return 0;
 }

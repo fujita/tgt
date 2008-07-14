@@ -27,6 +27,7 @@
 #include <sys/shm.h>
 #include <sys/ipc.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 
 #include "log.h"
 
@@ -42,6 +43,7 @@
 static struct logarea *la;
 static char *log_name;
 static int is_debug;
+static pid_t pid;
 
 static int logarea_init (int size)
 {
@@ -110,7 +112,6 @@ static int logarea_init (int size)
 	la->ops[0].sem_flg = 0;
 
 	return 0;
-
 }
 
 static void free_logarea (void)
@@ -119,7 +120,6 @@ static void free_logarea (void)
 	shmdt(la->buff);
 	shmdt(la->start);
 	shmdt(la);
-	return;
 }
 
 #if LOGDBG
@@ -312,7 +312,6 @@ int log_init(char *program_name, int size, int daemon, int debug)
 	if (daemon) {
 		struct sigaction sa_old;
 		struct sigaction sa_new;
-		pid_t pid;
 
 		openlog(log_name, 0, LOG_DAEMON);
 		setlogmask (LOG_UPTO (LOG_DEBUG));
@@ -322,6 +321,7 @@ int log_init(char *program_name, int size, int daemon, int debug)
 			return 1;
 		}
 
+		la->active = 1;
 		pid = fork();
 		if (pid < 0) {
 			syslog(LOG_ERR, "fail to fork the logger\n");
@@ -338,19 +338,23 @@ int log_init(char *program_name, int size, int daemon, int debug)
 		sa_new.sa_flags = 0;
 		sigaction(SIGSEGV, &sa_new, &sa_old );
 
-		while(1) {
+		while (la->active) {
 			log_flush();
 			sleep(1);
 		}
+
 		exit(0);
 	}
 
 	return 0;
 }
 
-void log_close (void)
+void log_close(void)
 {
 	if (la) {
+		la->active = 0;
+		waitpid(pid, NULL, 0);
+
 		closelog();
 		free_logarea();
 	}

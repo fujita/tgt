@@ -1813,3 +1813,8 @@ int is_system_available(void)
 {
 	return (sys_state == TGT_SYSTEM_READY);
 }
+
+int is_system_inactive(void)
+{
+	return list_empty(&target_list);
+}

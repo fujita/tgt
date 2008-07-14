@@ -49,6 +49,7 @@ struct logmsg {
 
 struct logarea {
 	int empty;
+	int active;
 	void *head;
 	void *tail;
 	void *start;
