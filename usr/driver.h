@@ -3,6 +3,7 @@ struct tgt_driver {
 	int use_kernel;
 
 	int (*init)(int, char *);
+	void (*exit)(void);
 
 	int (*target_create)(struct target *);
 	void (*target_destroy)(int);

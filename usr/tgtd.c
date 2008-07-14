@@ -279,6 +279,16 @@ static int lld_init(int *use_kernel, char *args)
 	return nr;
 }
 
+static void lld_exit(void)
+{
+	int i;
+
+	for (i = 0; tgt_drivers[i]; i++) {
+		if (tgt_drivers[i]->exit)
+			tgt_drivers[i]->exit();
+	}
+}
+
 int main(int argc, char **argv)
 {
 	struct sigaction sa_old;
@@ -357,6 +367,8 @@ int main(int argc, char **argv)
 		exit(1);
 
 	event_loop();
+
+	lld_exit();
 
 	log_close();
 
