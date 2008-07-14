@@ -123,6 +123,7 @@ int tgt_event_add(int fd, int events, event_handler_t handler, void *data)
 	tev->handler = handler;
 	tev->fd = fd;
 
+	memset(&ev, 0, sizeof(ev));
 	ev.events = events;
 	ev.data.ptr = tev;
 	err = epoll_ctl(ep_fd, EPOLL_CTL_ADD, fd, &ev);
@@ -213,6 +214,7 @@ int tgt_event_modify(int fd, int events)
 		return -EINVAL;
 	}
 
+	memset(&ev, 0, sizeof(ev));
 	ev.events = events;
 	ev.data.ptr = tev;
 
