@@ -15,6 +15,7 @@ struct iscsi_transport {
 	int data_padding;
 
 	int (*ep_init) (void);
+	void (*ep_exit) (void);
 	int (*ep_login_complete)(struct iscsi_connection *conn);
 	struct iscsi_task *(*alloc_task)(struct iscsi_connection *conn,
 					 size_t ext_len);

@@ -293,6 +293,7 @@ int param_index_by_name(char *name, struct iscsi_key *keys);
 
 /* transport.c */
 extern int iscsi_init(int, char *);
+extern void iscsi_exit(void);
 
 /* isns.c */
 extern int isns_init(void);

@@ -48,6 +48,16 @@ int iscsi_init(int index, char *args)
 	return !nr;
 }
 
+void iscsi_exit(void)
+{
+	struct iscsi_transport *t;
+
+	list_for_each_entry(t, &iscsi_transport_list,
+			    iscsi_transport_siblings)
+		if (t->ep_exit)
+			t->ep_exit();
+}
+
 int iscsi_transport_register(struct iscsi_transport *t)
 {
 	list_add_tail(&t->iscsi_transport_siblings, &iscsi_transport_list);

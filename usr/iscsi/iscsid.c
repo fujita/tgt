@@ -2132,6 +2132,7 @@ static struct tgt_driver iscsi = {
 	.name			= "iscsi",
 	.use_kernel		= 0,
 	.init			= iscsi_init,
+	.exit			= iscsi_exit,
 	.target_create		= iscsi_target_create,
 	.target_destroy		= iscsi_target_destroy,
 
