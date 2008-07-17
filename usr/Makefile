@@ -57,7 +57,7 @@ LIBS += -lpthread
 PROGRAMS += tgtd tgtadm
 SCRIPTS += ../scripts/tgt-setup-lun
 TGTD_OBJS += tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o \
-		parser.o spc.o sbc.o mmc.o osd.o scc.o smc.o bs.o
+		parser.o spc.o sbc.o mmc.o osd.o scc.o smc.o ssc.o bs_ssc.o bs.o
 MANPAGES = ../doc/manpages/tgtadm.8 ../doc/manpages/tgt-setup-lun.8
 
 TGTD_DEP = $(TGTD_OBJS:.o=.d)
