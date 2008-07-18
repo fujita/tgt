@@ -350,13 +350,13 @@ int tgt_device_path_update(struct target *target, struct scsi_lu *lu, char *path
 		if (lu->attrs.online)
 			return TGTADM_INVALID_REQUEST;
 
+		lu->dev_type_template.lu_offline(lu);
 		lu->bst->bs_close(lu);
 		free(lu->path);
 		lu->fd = 0;
 		lu->addr = 0;
 		lu->size = 0;
 		lu->path = NULL;
-		lu->dev_type_template.lu_online(lu);
 	}
 
 	path = strdup(path);
