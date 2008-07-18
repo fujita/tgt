@@ -65,7 +65,7 @@ static void rdwr_request(struct scsi_cmd *cmd)
 	case REZERO_UNIT:
 		rew = lseek(fd, 0, SEEK_SET);
 		curr_pos = lseek(fd, 0, SEEK_CUR);
-		if (ret)
+		if (rew)
 			set_medium_error(&result, &key, &asc);
 		eprintf("Rewind Successful, File Pointer at %" PRIu64",%m\n",
 			curr_pos);
