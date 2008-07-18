@@ -977,11 +977,10 @@ int lu_config(struct scsi_lu *lu, char *params, match_fn_t *fn)
 			break;
 		case Opt_online:
 			match_strncpy(buf, &args[0], sizeof(buf));
-			if (atoi(buf)) {
+			if (atoi(buf))
 				lu->dev_type_template.lu_online(lu);
-			} else {
+			else
 				lu->dev_type_template.lu_offline(lu);
-			}
 			break;
 		case Opt_mode_page:
 			match_strncpy(buf, &args[0], sizeof(buf));
