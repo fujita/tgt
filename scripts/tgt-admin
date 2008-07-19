@@ -1,0 +1,263 @@
+#!/usr/bin/perl
+#
+# This tools parses /etc/tgt/targets.conf file and configures tgt
+#
+# You can find more info on http://wpkg.org/TGT-admin and download the 
+# source code by pointing wget to http://wpkg.org/tgt-admin
+#
+# Author:  Tomasz Chmielewski
+# License: GPLv2
+#
+
+use strict;
+use Config::General;
+use Data::Dumper;
+use Getopt::Long;
+
+# Our config file
+my $configfile = "/etc/tgt/targets.conf";
+
+# Parse the config file with Config::General
+my %conf = ParseConfig(-ConfigFile => "$configfile", -UseApacheInclude => 1, -IncludeGlob => 1,);
+
+sub usage {
+	print <<EOF;
+Usage:
+tgt-admin [OPTION]...
+This tool configures tgt targets.
+
+  -e, --execute   read $configfile and execute tgtadm commands
+  -f, --force     don't exit on tgtadm errors
+  -p, --pretend   only print tgtadm options
+  -v, --verbose   increase verbosity (no effect in "pretend" mode)
+  -h, --help      show this help
+
+EOF
+	exit;
+}
+
+
+my $param = $ARGV[0];
+
+my $execute = 0;
+my $force = 0;
+my $pretend = 0;
+my $verbose = 0;
+my $help = 0;
+my $result = GetOptions (
+	"e|execute" => \$execute,
+	"f|force"   => \$force,
+	"p|pretend" => \$pretend,
+	"v|verbose" => \$verbose,
+	"h|help"    => \$help,
+);
+
+if (($help == 1) || ($param eq undef)) {
+	&usage
+}
+
+
+# Some variables/arrays/hashes we will use globally
+my %tgtadm_output;
+my %tgtadm_output_tid;
+my @largest_tid;
+my $next_tid;
+
+# Add targets, if they are not configured already
+my $target;
+my $option;
+my $value;
+
+sub add_targets {
+	foreach my $k (sort keys %conf) {
+		if ( $k eq "target" ) {
+			foreach my $k2 (sort keys %{$conf{$k}}) {
+				$target = $k2;
+				my $allowall = 1;
+				if ( $tgtadm_output{$k2} eq undef ) {
+					# We have to find available tid
+					$next_tid = $next_tid + 1;
+
+					execute("# Adding target: $target");
+					execute("tgtadm --lld iscsi --op new --mode target --tid $next_tid -T $target");
+					
+					foreach my $k3 (sort keys %{$conf{$k}{$k2}}) {
+						$option = $k3;
+						$value = $conf{$k}{$k2}{$k3};
+						&process_options;
+						# If there was no option called "initiator-address", it means
+						# we want to allow ALL initiators for this target
+						if ( $option eq "initiator-address" ) {
+							$allowall = 0;
+						}
+					}
+
+					if ( $allowall == 1 ) {
+						execute("tgtadm --lld iscsi --op bind --mode target --tid $next_tid -I ALL");
+					}
+				} else {
+					execute("# Target $target already exists!");
+				}
+				execute();
+			}
+		}
+	}
+}
+
+
+# Process options from the config file
+sub process_options {
+	if ( $option eq "backing-store" ) {
+		if (ref($value) eq "ARRAY") {
+			my @value_arr = @$value;
+			my $i = 1;
+                        foreach my $backing_store (@value_arr) {
+                                execute("tgtadm --lld iscsi --op new --mode logicalunit --tid $next_tid --lun $i -b $backing_store");
+				$i += 1;
+                        }
+		} else {
+			execute("tgtadm --lld iscsi --op new --mode logicalunit --tid $next_tid --lun 1 -b $value");
+		}
+	}
+
+	if ( $option eq "incominguser" ) {
+		if (ref($value) eq "ARRAY") {
+			my @value_arr = @$value;
+			foreach my $incominguser (@value_arr) {
+				my @userpass = split(/ /, $incominguser);
+				execute("tgtadm --lld iscsi --mode account --op delete --user=$userpass[0]");
+				execute("tgtadm --lld iscsi --mode account --op new --user=$userpass[0] --password=$userpass[1]");
+				execute("tgtadm --lld iscsi --mode account --op bind --tid=$next_tid --user=$userpass[0]");
+			}
+		} else {
+			my @userpass = split(/ /, $value);
+			execute("tgtadm --lld iscsi --mode account --op delete --user=$userpass[0]");
+			execute("tgtadm --lld iscsi --mode account --op new --user=$userpass[0] --password=$userpass[1]");
+			execute("tgtadm --lld iscsi --mode account --op bind --tid=$next_tid --user=$userpass[0]");
+		}
+	}
+
+	if ( $option eq "outgoinguser" ) {
+		if (ref($value) eq "ARRAY") {
+			execute("# Warning: only one outgoinguser is allowed. Will only use the first one.");
+			my @userpass = split(/ /, @$value[0]);
+			execute("tgtadm --lld iscsi --mode account --op delete --user=$userpass[0]");
+			execute("tgtadm --lld iscsi --mode account --op new --user=$userpass[0] --password=$userpass[1]");
+			execute("tgtadm --lld iscsi --mode account --op bind --tid=$next_tid --user=$userpass[0] --outgoing");
+		} else {
+			my @userpass = split(/ /, $value);
+			execute("tgtadm --lld iscsi --mode account --op delete --user=$userpass[0]");
+			execute("tgtadm --lld iscsi --mode account --op new --user=$userpass[0] --password=$userpass[1]");
+			execute("tgtadm --lld iscsi --mode account --op bind --tid=$next_tid --user=$userpass[0] --outgoing");
+		}
+	}
+
+	if ( $option eq "initiator-address" ) {
+		if (ref($value) eq "ARRAY") {
+			my @value_arr = @$value;
+			foreach my $initiator_address (@value_arr) {
+				execute("tgtadm --lld iscsi --op bind --mode target --tid $next_tid -I $initiator_address");
+			}
+		} else {
+			execute("tgtadm --lld iscsi --op bind --mode target --tid $next_tid -I $value");
+		}
+	}
+}
+
+
+# Look up which targets are configured
+sub process_configs {
+	# We need to run as root
+	if ( $> ) {
+		die("You must be root to run this program.\n");
+	}	
+	
+	my @show_target = `tgtadm --lld iscsi --op show --mode target`;
+	my $tid;
+	my $targetname;
+	
+	# Here, we create hashes of target names (all target data) and target tids
+	foreach my $show_target_line (@show_target) {
+		if ( $show_target_line =~ m/^Target (\d*): (.+)/ ) {
+			$tid = $1;
+			$targetname = $2;
+			$tgtadm_output{$targetname} = $show_target_line;
+			$tgtadm_output_tid{$targetname} = $tid;
+		} else {
+			$tgtadm_output{$targetname} .= $show_target_line;
+		}
+	}
+
+	# What is the largest tid?
+	my @tids = values %tgtadm_output_tid;
+	@largest_tid = sort { $a <=> $b } @tids;
+	$next_tid = $largest_tid[$#largest_tid];
+}
+
+ 
+# If the target is configured, but not present in the config file,
+# offline it and try to remove it
+sub remove_targets {
+	
+	&process_configs;
+	my @all_targets = keys %tgtadm_output_tid;
+
+	foreach my $existing_target (@all_targets) {
+		my $dontremove = 0;
+		my $k2;
+		foreach my $k (sort keys %conf) {
+			foreach $k2 (sort keys %{$conf{$k}}) {
+				if ( $k2 eq $existing_target ) {
+					$dontremove = 1;
+				}
+			}
+
+			if ( $dontremove == 0 ) {
+				# Right now, it is not possible to remove a target if any initiators
+				# are connected to it. We'll do our best - offline the target first
+				# (so it won't accept any new connections), and remove.
+				# Note that remove will only work if no initiator is connected.
+				execute("# Removing target: $existing_target");
+				execute("tgtadm --op update --mode target --tid=$tgtadm_output_tid{$existing_target} -n state -v offline");
+				execute("tgtadm --mode target --op delete --tid=$tgtadm_output_tid{$existing_target}");
+			}
+		}
+	}
+	
+}
+
+# Execute or just print (or both) everything we start or would start
+sub execute {
+	if ($pretend == 0) {
+		
+		my $args = "@_";
+		if ($verbose == 1) {
+			print "$args\n";
+		}
+		# Don't try to execute if it's a comment
+		my @execargs = split(/#/, $args);
+		if ( $execargs[0] ne undef  ) {
+			system($args);
+			
+			# If non-zero exit code was return, exit
+			my $exit_value  = $? >> 8;
+			if (($exit_value != 0) && ($force == 0)) {
+				print "Command:\n\t$args\nexited with code: $exit_value.\n";
+				exit $exit_value;
+			}
+		}
+
+	} elsif ( $pretend == 1 ) {
+		print "@_\n";
+	}
+}
+
+if (($execute == 1) || ($pretend == 1)) {
+	&process_configs;
+	
+	&add_targets;
+	
+	&remove_targets;
+} else {
+	print "No action specified.\n";
+}
