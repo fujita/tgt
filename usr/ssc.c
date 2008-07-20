@@ -102,6 +102,7 @@ static int ssc_lu_init(struct scsi_lu *lu)
 	lu->attrs.version_desc[0] = 0x0200; /* SSC no version claimed */
 	lu->attrs.version_desc[1] = 0x0960; /* iSCSI */
 	lu->attrs.version_desc[2] = 0x0300; /* SPC-3 */
+	lu->attrs.removable = 1;
 
 	data = lu->mode_block_descriptor;
 	size = lu->size >> BLK_SHIFT;
