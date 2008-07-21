@@ -35,6 +35,7 @@
 #include "tgtadm_error.h"
 
 #define BLK_SHIFT	9
+#define GRANULARITY	9
 
 
 static int ssc_rw(int host_no, struct scsi_cmd *cmd)
@@ -73,16 +74,17 @@ static int ssc_read_block_limit(int host_no, struct scsi_cmd *cmd)
 {
 	uint8_t *data;
 	uint8_t buf[256];
-	uint16_t blk_len = 0x200;
+	uint16_t blk_len = 1 << GRANULARITY;
 
 	memset(buf, 0, sizeof(buf));
 	data = buf;
 
-	data[0] = 9;
-	data[2] = blk_len >> 8;
-	data[3] = blk_len & 0x0ff;
-	data[5] = blk_len >> 8;
-	data[6] = blk_len & 0x0ff;
+	data[0] = GRANULARITY;
+	data[1] = (blk_len >> 16) &0xff;
+	data[2] = (blk_len >> 8) &0xff;
+	data[3] = blk_len & 0xff;
+	data[4] = (blk_len >> 8) &0xff;
+	data[5] = blk_len & 0xff;
 
 	memcpy(scsi_get_in_buffer(cmd), data, 6);
 	eprintf("In ssc_read_block_limit \n");
