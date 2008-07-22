@@ -103,26 +103,29 @@ sub add_targets {
 				if ( $tgtadm_output{$k2} eq undef ) {
 					# We have to find available tid
 					$next_tid = $next_tid + 1;
-
-					execute("# Adding target: $target");
-					execute("tgtadm --lld iscsi --op new --mode target --tid $next_tid -T $target");
+				}
+				else {
+					execute("# Target $target already exist!");
+					execute("# Updating Target $target");
+					execute("tgtadm --op update --mode target --tid=$next_tid -n state -v offline");
+					execute("tgtadm --mode target --op delete --tid=$next_tid");
+				}
+				execute("# Adding target: $target");
+				execute("tgtadm --lld iscsi --op new --mode target --tid $next_tid -T $target");
 					
-					foreach my $k3 (sort keys %{$conf{$k}{$k2}}) {
-						$option = $k3;
-						$value = $conf{$k}{$k2}{$k3};
-						&process_options;
-						# If there was no option called "initiator-address", it means
-						# we want to allow ALL initiators for this target
-						if ( $option eq "initiator-address" ) {
-							$allowall = 0;
-						}
+				foreach my $k3 (sort keys %{$conf{$k}{$k2}}) {
+					$option = $k3;
+					$value = $conf{$k}{$k2}{$k3};
+					&process_options;
+					# If there was no option called "initiator-address", it means
+					# we want to allow ALL initiators for this target
+					if ( $option eq "initiator-address" ) {
+						$allowall = 0;
 					}
+				}
 
-					if ( $allowall == 1 ) {
-						execute("tgtadm --lld iscsi --op bind --mode target --tid $next_tid -I ALL");
-					}
-				} else {
-					execute("# Target $target already exists!");
+				if ( $allowall == 1 ) {
+					execute("tgtadm --lld iscsi --op bind --mode target --tid $next_tid -I ALL");
 				}
 				execute();
 			}
