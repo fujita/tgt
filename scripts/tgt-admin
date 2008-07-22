@@ -10,7 +10,7 @@
 #
 
 use strict;
-use Config::General;
+use Config::General qw(ParseConfig);
 use Data::Dumper;
 use Getopt::Long;
 
