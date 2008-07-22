@@ -133,19 +133,25 @@ sub add_targets {
 	}
 }
 
-
 # Process options from the config file
 sub process_options {
 	if ( $option eq "backing-store" ) {
-		if (ref($value) eq "ARRAY") {
-			my @value_arr = @$value;
-			my $i = 1;
-                        foreach my $backing_store (@value_arr) {
-                                execute("tgtadm --lld iscsi --op new --mode logicalunit --tid $next_tid --lun $i -b $backing_store");
+        # if we have one command, force it to be an array anyway
+		unless (ref($value) eq 'ARRAY') {
+			$value = [ $value ];
+		}
+		my @value_arr = @$value;
+		my $i = 1;
+		foreach my $backing_store (@value_arr) {
+			# Check if device exists
+			if ( -e $backing_store) {
+				execute("tgtadm --lld iscsi --op new --mode logicalunit --tid $next_tid --lun $i -b $backing_store");
 				$i += 1;
-                        }
-		} else {
-			execute("tgtadm --lld iscsi --op new --mode logicalunit --tid $next_tid --lun 1 -b $value");
+			}
+			else {
+				print("skipping device $backing_store\n");
+				print("$backing_store does not exist - please check the configuration file\n");
+			}
 		}
 	}
 
@@ -182,16 +188,13 @@ sub process_options {
 	}
 
 	if ( $option eq "incominguser" ) {
-		if (ref($value) eq "ARRAY") {
-			my @value_arr = @$value;
-			foreach my $incominguser (@value_arr) {
-				my @userpass = split(/ /, $incominguser);
-				execute("tgtadm --lld iscsi --mode account --op delete --user=$userpass[0]");
-				execute("tgtadm --lld iscsi --mode account --op new --user=$userpass[0] --password=$userpass[1]");
-				execute("tgtadm --lld iscsi --mode account --op bind --tid=$next_tid --user=$userpass[0]");
-			}
-		} else {
-			my @userpass = split(/ /, $value);
+	        # if we have one command, force it to be an array anyway
+		unless (ref($value) eq 'ARRAY') {
+			$value = [ $value ];
+		}
+		my @value_arr = @$value;
+		foreach my $incominguser (@value_arr) {
+			my @userpass = split(/ /, $incominguser);
 			execute("tgtadm --lld iscsi --mode account --op delete --user=$userpass[0]");
 			execute("tgtadm --lld iscsi --mode account --op new --user=$userpass[0] --password=$userpass[1]");
 			execute("tgtadm --lld iscsi --mode account --op bind --tid=$next_tid --user=$userpass[0]");
@@ -199,32 +202,28 @@ sub process_options {
 	}
 
 	if ( $option eq "outgoinguser" ) {
-		if (ref($value) eq "ARRAY") {
-			execute("# Warning: only one outgoinguser is allowed. Will only use the first one.");
-			my @userpass = split(/ /, @$value[0]);
-			execute("tgtadm --lld iscsi --mode account --op delete --user=$userpass[0]");
-			execute("tgtadm --lld iscsi --mode account --op new --user=$userpass[0] --password=$userpass[1]");
-			execute("tgtadm --lld iscsi --mode account --op bind --tid=$next_tid --user=$userpass[0] --outgoing");
-		} else {
-			my @userpass = split(/ /, $value);
-			execute("tgtadm --lld iscsi --mode account --op delete --user=$userpass[0]");
-			execute("tgtadm --lld iscsi --mode account --op new --user=$userpass[0] --password=$userpass[1]");
-			execute("tgtadm --lld iscsi --mode account --op bind --tid=$next_tid --user=$userpass[0] --outgoing");
+	        # if we have one command, force it to be an array anyway
+		unless (ref($value) eq 'ARRAY') {
+			$value = [ $value ];
 		}
+		execute("# Warning: only one outgoinguser is allowed. Will only use the first one.");
+		my @userpass = split(/ /, @$value[0]);
+		execute("tgtadm --lld iscsi --mode account --op delete --user=$userpass[0]");
+		execute("tgtadm --lld iscsi --mode account --op new --user=$userpass[0] --password=$userpass[1]");
+		execute("tgtadm --lld iscsi --mode account --op bind --tid=$next_tid --user=$userpass[0] --outgoing");
 	}
 
 	if ( $option eq "initiator-address" ) {
-		if (ref($value) eq "ARRAY") {
-			my @value_arr = @$value;
-			foreach my $initiator_address (@value_arr) {
-				execute("tgtadm --lld iscsi --op bind --mode target --tid $next_tid -I $initiator_address");
-			}
-		} else {
-			execute("tgtadm --lld iscsi --op bind --mode target --tid $next_tid -I $value");
+	        # if we have one command, force it to be an array anyway
+		unless (ref($value) eq 'ARRAY') {
+			$value = [ $value ];
+		}
+		my @value_arr = @$value;
+		foreach my $initiator_address (@value_arr) {
+			execute("tgtadm --lld iscsi --op bind --mode target --tid $next_tid -I $initiator_address");
 		}
 	}
 }
-
 
 # Look up which targets are configured
 sub process_configs {
