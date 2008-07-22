@@ -146,6 +146,38 @@ sub process_options {
 		}
 	}
 
+	if ( $option eq "direct-store" ) {
+		my $inq;
+		my $vendor_id="";
+		my $prod_id="";
+		my $prod_rev="";
+		my $scsi_serial="";
+	        # if we have one command, force it to be an array anyway
+		unless (ref($value) eq 'ARRAY') {
+			$value = [ $value ];
+		}
+		my @value_arr = @$value;
+		my $i = 1;
+		foreach my $direct_store (@value_arr) {
+			$inq=`sg_inq $direct_store`;
+			if ($inq=~/Vendor identification:\s*(\w+)\s*\n*Product identification:\s*([\w\s\/\-]+)\n\s*\n*Product revision level:\s*(\w*)\s*\n*Unit serial number:\s*(\w+)/)
+			{
+				$vendor_id="$1";
+				$prod_id="$2";
+				$prod_rev="$3";
+				$scsi_serial="$4";
+			}
+			$vendor_id =~ s/\s+$//;
+			$prod_id =~ s/\s+$//;
+			$prod_rev =~ s/\s+$//;
+			$scsi_serial =~ s/\s+$//;
+
+			execute("tgtadm --lld iscsi --op new --mode logicalunit --tid $next_tid --lun 1 -b $direct_store");
+			execute("tgtadm --lld iscsi --op update --mode logicalunit --tid  $next_tid --lun 1 --params vendor_id=\"$vendor_id\",product_id=\"$prod_id\",product_rev=\"$prod_rev\",scsi_sn=\"$scsi_serial\"");
+			$i += 1;
+		}
+	}
+
 	if ( $option eq "incominguser" ) {
 		if (ref($value) eq "ARRAY") {
 			my @value_arr = @$value;
