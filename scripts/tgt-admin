@@ -27,6 +27,7 @@ tgt-admin [OPTION]...
 This tool configures tgt targets.
 
   -e, --execute   read $configfile and execute tgtadm commands
+  -d, --delete    delete all the targets
   -f, --force     don't exit on tgtadm errors
   -p, --pretend   only print tgtadm options
   -v, --verbose   increase verbosity (no effect in "pretend" mode)
@@ -40,12 +41,14 @@ EOF
 my $param = $ARGV[0];
 
 my $execute = 0;
+my $delete = 0;
 my $force = 0;
 my $pretend = 0;
 my $verbose = 0;
 my $help = 0;
 my $result = GetOptions (
 	"e|execute" => \$execute,
+	"d|delete"  => \$delete,
 	"f|force"   => \$force,
 	"p|pretend" => \$pretend,
 	"v|verbose" => \$verbose,
@@ -258,6 +261,21 @@ if (($execute == 1) || ($pretend == 1)) {
 	&add_targets;
 	
 	&remove_targets;
+} elsif ($delete == 1) {
+	&delete;
+	%conf = ParseConfig(-ConfigFile => "$configfile", -UseApacheInclude => 1, -IncludeGlob => 1,);
+	&remove_targets;
 } else {
 	print "No action specified.\n";
+}
+
+# Delete all the targets and backup the current conf file
+sub delete {
+	print "deleting targets...\n";
+	print "a copy of the conf file is on:/etc/tgt/targets.conf.bkp\n";
+	`mv $configfile /etc/tgt/targets.conf.bkp`;
+	open FILE, ">", "$configfile" or die $!;
+	print FILE "<target>\n";
+	print FILE "</target>\n";
+	close FILE;
 }
