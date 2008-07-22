@@ -26,13 +26,14 @@ Usage:
 tgt-admin [OPTION]...
 This tool configures tgt targets.
 
-  -e, --execute   read $configfile and execute tgtadm commands
-  -d, --delete    delete all the targets
-  -s, --show      show all the targets
-  -f, --force     don't exit on tgtadm errors
-  -p, --pretend   only print tgtadm options
-  -v, --verbose   increase verbosity (no effect in "pretend" mode)
-  -h, --help      show this help
+  -e, --execute              read $configfile and execute tgtadm commands
+  -d, --delete               delete all the targets
+  -s, --show                 show all the targets
+  -c, --conf <conf file>     specify an alternative configuration file
+  -f, --force                don't exit on tgtadm errors
+  -p, --pretend              only print tgtadm options
+  -v, --verbose              increase verbosity (no effect in "pretend" mode)
+  -h, --help                 show this help
 
 EOF
 	exit;
@@ -44,6 +45,7 @@ my $param = $ARGV[0];
 my $execute = 0;
 my $delete = 0;
 my $show = 0;
+my $alternate_conf="0";
 my $force = 0;
 my $pretend = 0;
 my $verbose = 0;
@@ -52,6 +54,7 @@ my $result = GetOptions (
 	"e|execute" => \$execute,
 	"d|delete"  => \$delete,
 	"s|show"    => \$show,
+	"c|conf=s"    => \$alternate_conf,
 	"f|force"   => \$force,
 	"p|pretend" => \$pretend,
 	"v|verbose" => \$verbose,
@@ -66,6 +69,18 @@ if (($help == 1) || ($param eq undef)) {
 if ($show == 1) {
 	execute("tgtadm --lld iscsi --op show --mode target");
 	exit;
+}
+
+# Check if alternative configuration file was given
+if ($alternate_conf ne 0) {
+	# Check if alternative configuration file exist
+	if (-e $alternate_conf) {
+		execute("# Using $alternate_conf as configuration file\n");
+		%conf = ParseConfig(-ConfigFile => "$alternate_conf", -UseApacheInclude => 1, -IncludeGlob => 1,);
+	}
+	else {
+		die("file $alternate_conf not found. Exiting...\n");
+	}
 }
 
 # Some variables/arrays/hashes we will use globally
