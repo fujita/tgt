@@ -17,9 +17,6 @@ use Getopt::Long;
 # Our config file
 my $configfile = "/etc/tgt/targets.conf";
 
-# Parse the config file with Config::General
-my %conf = ParseConfig(-ConfigFile => "$configfile", -UseApacheInclude => 1, -IncludeGlob => 1,);
-
 sub usage {
 	print <<EOF;
 Usage:
@@ -39,6 +36,8 @@ EOF
 	exit;
 }
 
+# Parse the config file with Config::General
+my %conf = ParseConfig(-ConfigFile => "$configfile", -UseApacheInclude => 1, -IncludeGlob => 1,);
 
 my $param = $ARGV[0];
 
