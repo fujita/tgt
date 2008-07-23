@@ -88,6 +88,8 @@ static void fcoe_recv_flogi(struct fcoe_softc *fc, struct fc_frame *fp,
 static void fcoe_frame_free(struct fc_frame *fp)
 {
 	dprintf("%p\n", fp->fr_free_priv);
+	if (fp->fr_destructor)
+		fp->fr_destructor(fp->fr_arg);
 	free(fp->fr_free_priv);
 }
 
@@ -200,6 +202,7 @@ int fcoe_xmit(struct fcdev *fdev, struct fc_frame *fp)
 	ret = write(fdev->fd, eh, total);
 	if (ret <= 0)
 		eprintf("%d %d %d\n", fdev->fd, total, ret);
+	fc_frame_free(fp);
 	return 0;
 }
 
