@@ -13,6 +13,7 @@
 #include "util.h"
 #include "tgtd.h"
 #include "scsi.h"
+#include "target.h"
 
 #include "fc_types.h"
 #include "fc_port.h"
@@ -30,6 +31,9 @@ extern void openfct_rcv_cmd(struct fc_seq *sp, struct fc_frame *fp, void *arg);
 extern void openfct_send_xfer_rdy(struct fc_scsi_pkt *);
 extern void openfct_scsi_send_status(struct fc_scsi_pkt *pkt);
 extern int openfct_scsi_send_data_status(struct fc_scsi_pkt *pkt);
+extern void openfct_scsi_send_tmf_rsp(struct fc_scsi_pkt *pkt, uint8_t rsp);
+
+static struct target *fc_target;
 
 static struct openfct_sess *openfct_find_sess_by_fcid(struct openfct_tgt *tgt,
 						      u_int32_t fcid)
@@ -61,7 +65,7 @@ int fcoe_cmd_done(uint64_t nid, int result, struct scsi_cmd *scmd)
 		pkt->residual = scsi_get_in_resid(scmd);
 
 		if (scsi_get_result(scmd) != SAM_STAT_GOOD) {
-			pkt->flags = OPENFC_SENSE_VALID;
+			pkt->flags |= OPENFC_SENSE_VALID;
 			pkt->rq_result |= SS_SENSE_LEN_VALID;
 			data_sense_flag = 1;
 		}
@@ -97,6 +101,54 @@ static int cmd_attr(struct fcp_cmnd *fcmd)
 	return attr;
 }
 
+int fcoe_tmf_done(struct mgmt_req *mreq)
+{
+	struct fc_scsi_pkt *pkt;
+	uint8_t rsp;
+
+	dprintf("tmf result %d\n", mreq->result);
+
+	pkt = (struct fc_scsi_pkt *) (unsigned long) mreq->mid;
+	switch (mreq->result) {
+	case 0:
+		rsp = FCP_TMF_CMPL;
+		break;
+	default:
+		/* we do not seem to get enough info to return something else */
+		rsp = FCP_TMF_FAILED;
+	}
+
+	openfct_scsi_send_tmf_rsp(pkt, rsp);
+	return 0;
+}
+
+static int openfct_process_tmf(struct fc_scsi_pkt *fsp, struct fcp_cmnd *fcmd)
+{
+	int fn = 0, err = 0;
+
+	dprintf("tmf cmd %0x\n", fcmd->fc_tm_flags);
+
+	switch (fcmd->fc_tm_flags) {
+	case FCP_TMF_LUN_RESET:
+		fn = LOGICAL_UNIT_RESET;
+		break;
+	default:
+		err = -ENOSYS;
+		eprintf("Unsupported task management function %d.\n",
+			fcmd->fc_tm_flags);
+	}
+
+	if (!err) {
+		fsp->flags |= OPENFC_TMF_PKT;
+		/* tid is busted - need a target create */
+		target_mgmt_request(fc_target->tid, fsp->fcid,
+				    (unsigned long ) fsp, fn,
+				    fcmd->fc_lun, fsp->exid, 0);
+	}
+	return err;
+
+}
+
 int openfct_process_scsi_cmd(struct openfchba_softc *openfcp,
 			     struct fc_scsi_pkt *fsp, struct fcp_cmnd *fcmd)
 {
@@ -126,6 +178,10 @@ int openfct_process_scsi_cmd(struct openfchba_softc *openfcp,
 	}
 
 	fsp->tgt = tgt;
+
+	if (fcmd->fc_tm_flags)
+		return openfct_process_tmf(fsp, fcmd);
+
 	memcpy(scmd->lun, fsp->lunp, 8);
 	scmd->scb = fsp->cdb;
 	scmd->tag = fsp->exid;
@@ -301,6 +357,29 @@ static struct fcs_create_args openfct_fcs_args = {
         .fca_e_d_tov = 2 * 1000,        /* FC-FS default */
 
 };
+
+/*
+ * We currently only support one target
+ */
+int fcoe_target_create(struct target *t)
+{
+	if (fc_target) {
+		eprintf("Only one fcoe target supported. Currently fcoe tid "
+			"%u is running\n", fc_target->tid);
+		return -EINVAL;
+	}
+	fc_target = t;
+	return 0;
+}
+
+void fcoe_target_destroy(int tid)
+{
+	if (!fc_target)
+		return;
+	if (fc_target->tid != tid)
+		return;
+	fc_target = NULL;
+}
 
 /**
  * openfct_attach: Called by bus code for each adapter

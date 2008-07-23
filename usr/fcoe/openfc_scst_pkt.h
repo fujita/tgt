@@ -67,6 +67,7 @@ struct openfct_tgt;
 #define OPENFC_CMD_WAIT_FOR_DATA 5
 
 #define OPENFC_SENSE_VALID 1
+#define OPENFC_TMF_PKT 2
 /*
  * Status entry SCSI status bit definitions.
  */
@@ -89,6 +90,7 @@ struct openfct_sess {
 
 struct openfct_tgt {
 	u_int32_t	handle;
+	int		tid;
 	void	       *ha;
 	int		status;
 	/* Target's flags, serialized by ha->hardware_lock */

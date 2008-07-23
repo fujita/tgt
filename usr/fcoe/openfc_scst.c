@@ -137,6 +137,7 @@ void openfct_rcv_cmd(struct fc_seq *sp, struct fc_frame *fp, void *arg)
 		pkt->lun = net64_get((net64_t *) & fcmd->fc_lun);
 		memcpy(pkt->lunp, fcmd->fc_lun, 8);
 		memcpy(pkt->cdb, fcmd->fc_cdb, 16);
+
 		fc_seq_set_recv(sp, openfct_rcv_data, (void *)pkt);
 		openfct_process_scsi_cmd(hba, pkt, fcmd);
 		break;
@@ -151,17 +152,52 @@ void openfc_scst_completion(void *arg)
 	struct fc_scsi_pkt *pkt  = arg;
 	struct scsi_cmd *scmd = &pkt->scmd;
 
+	eprintf("pkt->cnt %u\n", pkt->cnt);
+
 	if (!(--pkt->cnt)) {
 		if (pkt->seq_ptr)
 			fc_seq_exch_complete(pkt->seq_ptr);
 		pkt->seq_ptr = NULL;
 
+		if (!(pkt->flags & OPENFC_TMF_PKT))
+			target_cmd_done(scmd);
 		if (scsi_get_in_buffer(scmd))
 			free(scsi_get_in_buffer(scmd));
 		if (scsi_get_out_buffer(scmd))
 			free(scsi_get_out_buffer(scmd));
 		free(pkt);
 	}
+}
+
+void openfct_scsi_send_tmf_rsp(struct fc_scsi_pkt *pkt, uint8_t rsp)
+{
+	struct fc_seq  *sp = pkt->seq_ptr;
+	struct fc_frame *fp;
+	struct fcp_resp *fc_rp;
+	struct fcp_resp_ext *fc_exrp;
+	struct fcp_resp_rsp_info *fc_rsp_info;
+	unsigned int len;
+
+	len = sizeof(*fc_rp) + sizeof(*fc_exrp) + sizeof(*fc_rsp_info);
+
+	fp = fc_frame_alloc(pkt->openfcp->fcs_port, len);
+	if (!fp)
+		return;
+	pkt->cnt = 1;
+	fp->fr_destructor = openfc_scst_completion;
+	fp->fr_arg = pkt;
+	fc_rp = fc_frame_payload_get(fp, sizeof(*fc_rp));
+	memset(fc_rp, 0, len);
+	sp = fc_seq_start_next(sp);
+
+	fc_rp->fr_flags = SS_RESPONSE_INFO_LEN_VALID;
+	fc_exrp = (struct fcp_resp_ext *) (fc_rp + 1);
+	net32_put(&fc_exrp->fr_rsp_len, sizeof(*fc_rsp_info));
+
+	fc_rsp_info = (struct fcp_resp_rsp_info *) (fc_exrp + 1);
+	fc_rsp_info->rsp_code = rsp;
+
+	fc_seq_send_last(sp, fp, FC_RCTL_DD_CMD_STATUS, FC_TYPE_FCP);
 }
 
 void openfct_scsi_send_status(struct fc_scsi_pkt *pkt)

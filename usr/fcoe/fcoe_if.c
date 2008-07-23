@@ -34,6 +34,7 @@
 #include "util.h"
 #include "tgtd.h"
 #include "driver.h"
+#include "target.h"
 
 #include "fc_types.h"
 #include "fc_frame.h"
@@ -46,6 +47,9 @@
 #include "fcoe_def.h"
 
 extern int fcoe_cmd_done(uint64_t nid, int result, struct scsi_cmd *scmd);
+extern int fcoe_tmf_done(struct mgmt_req *mreq);
+extern int fcoe_target_create(struct target *t);
+extern void fcoe_target_destroy(int tid);
 
 static struct openfc_port_operations fcoe_port_ops = {
 	.send = fcoe_xmit,
@@ -214,8 +218,12 @@ static int fcoe_init(int index, char *args)
 static struct tgt_driver fcoe = {
 	.name			= "fcoe",
 	.use_kernel		= 0,
+	.target_create		= fcoe_target_create,
+	.target_destroy		= fcoe_target_destroy,
 	.init			= fcoe_init,
+
 	.cmd_end_notify		= fcoe_cmd_done,
+	.mgmt_end_notify	= fcoe_tmf_done,
 	.default_bst		= "rdwr",
 };
 
