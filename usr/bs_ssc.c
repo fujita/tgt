@@ -19,32 +19,11 @@
 #define LONG_BIT            2
 #define BT_BIT              1
 
-static void set_medium_error(int *result, uint8_t *key, uint16_t *asc)
-{
-	*result = SAM_STAT_CHECK_CONDITION;
-	*key = MEDIUM_ERROR;
-	*asc = ASC_READ_ERROR;
-}
-
-static void ssc_sense_data_build(struct scsi_cmd *cmd, uint8_t key,
-				 uint16_t asc)
-{
-	int len = 0xa;
-	cmd->sense_buffer[0] = 0x70;
-	cmd->sense_buffer[2] = NO_SENSE;
-	cmd->sense_buffer[7] = len;
-	cmd->sense_buffer[12] = (asc >> 8) & 0xff;
-	cmd->sense_buffer[13] = asc & 0xff;
-	cmd->sense_len = len + 8;
-}
-
 static void rdwr_request(struct scsi_cmd *cmd)
 {
 	int ret, fd = cmd->dev->fd, code;
 	uint32_t length, i, transfer_length, residue;
 	int result = SAM_STAT_GOOD;
-	uint8_t key;
-	uint16_t asc;
 	uint8_t buff[512];
 	char *buf;
 	off_t rew;
@@ -54,8 +33,6 @@ static void rdwr_request(struct scsi_cmd *cmd)
 	ret = 0;
 	length = 0;
 	i = 0;
-	key = 0;
-	asc = 0;
 	transfer_length = 0;
 	residue = 0;
 	count = 0;
@@ -65,8 +42,11 @@ static void rdwr_request(struct scsi_cmd *cmd)
 	case REZERO_UNIT:
 		rew = lseek(fd, 0, SEEK_SET);
 		curr_pos = lseek(fd, 0, SEEK_CUR);
-		if (rew)
-			set_medium_error(&result, &key, &asc);
+		if (rew) {
+			sense_data_build(cmd, MEDIUM_ERROR,
+					ASC_SEQUENTIAL_POSITION_ERR);
+			result = SAM_STAT_CHECK_CONDITION;
+		}
 		eprintf("Rewind Successful, File Pointer at %" PRIu64",%m\n",
 			curr_pos);
 		break;
@@ -74,9 +54,10 @@ static void rdwr_request(struct scsi_cmd *cmd)
 		length = sizeof(buff);
 		memset(buff, 28, sizeof(buff));
 		ret = write(fd, buff, length);
-
-		if (ret != length)
-			set_medium_error(&result, &key, &asc);
+		if (ret != length) {
+			sense_data_build(cmd, MEDIUM_ERROR, ASC_WRITE_ERROR);
+			result = SAM_STAT_CHECK_CONDITION;
+		}
 		eprintf("Write Filemark Successfull %d\n", ret);
 		curr_pos = lseek(fd, 0, SEEK_CUR);
 		eprintf("File Pointer at %" PRIu64",%m\n", curr_pos);
@@ -86,15 +67,16 @@ static void rdwr_request(struct scsi_cmd *cmd)
 		ret = read(fd, scsi_get_in_buffer(cmd), length);
 		buf = (char *)(unsigned long)scsi_get_in_buffer(cmd);
 		/* buf = (char *)buf; */
-		if (ret != length)
-			set_medium_error(&result, &key, &asc);
-		else {
+		if (ret != length) {
+			sense_data_build(cmd, MEDIUM_ERROR, ASC_READ_ERROR);
+			result = SAM_STAT_CHECK_CONDITION;
+		} else {
 			for (i = 0; i < ret; i += 512) {
 				eprintf("buf[%d]=%d", i, buf[i]);
 				if (buf[i] == 28) {
+					sense_data_build(cmd, NO_SENSE,
+							ASC_MARK);
 					result = SAM_STAT_CHECK_CONDITION;
-					key = NO_SENSE;
-					asc = ASC_MARK;
 					transfer_length = ((cmd->scb[2] << 16) |
 							   (cmd->scb[3] << 8) |
 							   (cmd->scb[4]));
@@ -119,8 +101,10 @@ static void rdwr_request(struct scsi_cmd *cmd)
 	case WRITE_6:
 		length = scsi_get_out_length(cmd);
 		ret = write(fd, scsi_get_out_buffer(cmd), length);
-		if (ret != length)
-			set_medium_error(&result, &key, &asc);
+		if (ret != length) {
+			sense_data_build(cmd, MEDIUM_ERROR, ASC_WRITE_ERROR);
+			result = SAM_STAT_CHECK_CONDITION;
+		}
 		eprintf("Executed WRITE_6, writen %d bytes\n", ret);
 		curr_pos = lseek(fd, 0, SEEK_CUR);
 		eprintf("File Pointer at %" PRIu64",%m\n", curr_pos);
@@ -133,17 +117,20 @@ static void rdwr_request(struct scsi_cmd *cmd)
 		if (code == 0) {
 			for (i = 0; i < count; i++) {
 				ret = read(fd, buff, sizeof(buff));
-				if (ret != sizeof(buff))
-					set_medium_error(&result, &key, &asc);
+				if (ret != sizeof(buff)) {
+					sense_data_build(cmd, MEDIUM_ERROR,
+						ASC_SEQUENTIAL_POSITION_ERR);
+					result = SAM_STAT_CHECK_CONDITION;
+				}
 
 				curr_pos = lseek(fd, 0, SEEK_CUR);
 				eprintf("File Pointer at %" PRIu64",%m\n",
 					curr_pos);
 
 				if (buff[i*512] == 28) {
+					sense_data_build(cmd, NO_SENSE,
+						ASC_MARK);
 					result = SAM_STAT_CHECK_CONDITION;
-					key = NO_SENSE;
-					asc = ASC_MARK;
 				}
 			}
 		} else if (code == 1) {
@@ -166,9 +153,12 @@ static void rdwr_request(struct scsi_cmd *cmd)
 		uint8_t *data;
 
 		eprintf("Size of in_buffer = %d ", scsi_get_in_length(cmd));
-		if (tclp == 1 || tclp != long_bit || (bt == 1 && long_bit == 1))
+		if (tclp == 1 || tclp != long_bit ||
+						(bt == 1 && long_bit == 1)) {
+			sense_data_build(cmd, ILLEGAL_REQUEST,
+						ASC_INVALID_FIELD_IN_CDB);
 			result = SAM_STAT_CHECK_CONDITION;
-		else {
+		} else {
 			memset(buff, 0, sizeof(buff));
 			data = buff;
 			curr_pos = lseek(fd, 0, SEEK_CUR);
@@ -189,11 +179,9 @@ static void rdwr_request(struct scsi_cmd *cmd)
 
 	scsi_set_result(cmd, result);
 
-	if (result != SAM_STAT_GOOD) {
+	if (result != SAM_STAT_GOOD)
 		eprintf("io error %p %x %d %d %" PRIu64 ", %m\n",
 			cmd, cmd->scb[0], ret, length, cmd->offset);
-		ssc_sense_data_build(cmd, key, asc);
-	}
 }
 
 
