@@ -36,9 +36,6 @@ EOF
 	exit;
 }
 
-# Parse the config file with Config::General
-my %conf = ParseConfig(-ConfigFile => "$configfile", -UseApacheInclude => 1, -IncludeGlob => 1,);
-
 my $param = $ARGV[0];
 
 my $execute = 0;
@@ -63,6 +60,9 @@ my $result = GetOptions (
 if (($help == 1) || ($param eq undef)) {
 	&usage
 }
+
+# Parse the config file with Config::General
+my %conf = ParseConfig(-ConfigFile => "$configfile", -UseApacheInclude => 1, -IncludeGlob => 1,);
 
 # Show all the targets and exit
 if ($show == 1) {
