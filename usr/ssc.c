@@ -131,17 +131,21 @@ static int ssc_lu_init(struct scsi_lu *lu)
 
 	/* Vendor uniq - However most apps seem to call for mode page 0*/
 	add_mode_page(lu, "0:0:0");
-	/* Disconnect page */
+	/* Read-Write Error Recovery - Mandatory - SSC3 8.3.5 */
+	add_mode_page(lu, "1:0:10:0:8:0:0:0:0:8:0:0:0");
+	/* Disconnect page - Mandatory - SPC-4 */
 	add_mode_page(lu, "2:0:14:0x80:0x80:0:0xa:0:0:0:0:0:0:0:0:0:0");
-	/* Data Compression Page */
-	add_mode_page(lu, "15:0:12:0:0:0:0:0:0:0:0:0:0:0:0");
-	/* Device Configuration Page */
-	add_mode_page(lu, "0x10:0:11:0:0:0:0:0:0:0:0:0x48:0:0");
-	/* Control page */
+	/* Control page - Mandatory - SPC-4 */
 	add_mode_page(lu, "10:0:10:2:0:0:0:0:0:0:0:2:0");
-	/* Informational Exceptions Control page */
+	/* Data Compression - Mandatory - SSC3 8.3.2 */
+	add_mode_page(lu, "15:0:14:0:0:0:0:0:0:0:0:0:0:0:0:0:0");
+	/* Device Configuration - Mandatory - SSC3 8.3.3 */
+	add_mode_page(lu, "16:0:14:0:0:0:128:128:0:0:0:0:0:0:0:0:0");
+	/* Informational Exceptions Control page - Mandatory - SSC3 8.3.6 */
 	add_mode_page(lu, "0x1c:0:10:8:0:0:0:0:0:0:0:0:0");
-
+	/* Medium Configuration - Mandatory - SSC3 8.3.7 */
+	add_mode_page(lu, "0x1d:0:0x1e:1:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0"
+				":0:0:0:0:0:0:0:0:0:0:0:0:0");
 	return 0;
 }
 
