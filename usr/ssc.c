@@ -32,11 +32,14 @@
 #include "driver.h"
 #include "scsi.h"
 #include "spc.h"
+#include "ssc.h"
 #include "tgtadm_error.h"
 
 #define BLK_SHIFT	9
 #define GRANULARITY	9
 
+#define MAX_BLK_SIZE	1048576
+#define MIN_BLK_SIZE	4
 
 static int ssc_rw(int host_no, struct scsi_cmd *cmd)
 {
@@ -49,9 +52,6 @@ static int ssc_rw(int host_no, struct scsi_cmd *cmd)
 		return SAM_STAT_RESERVATION_CONFLICT;
 
 	cmd->scsi_cmd_done = target_cmd_io_done;
-
-/* 	cmd->offset = (((cmd->scb[2] << 16) | (cmd->scb[3] << 8) | */
-/* 			(cmd->scb[4])) << BLK_SHIFT); */
 
 	ret = cmd->dev->bst->bs_cmd_submit(cmd);
 	if (ret) {
@@ -70,31 +70,45 @@ static int ssc_rw(int host_no, struct scsi_cmd *cmd)
 	return SAM_STAT_CHECK_CONDITION;
 }
 
+#define READ_BLK_LIMITS_SZ	6
 static int ssc_read_block_limit(int host_no, struct scsi_cmd *cmd)
 {
-	uint8_t *data;
-	uint8_t buf[256];
-	uint16_t blk_len = 1 << GRANULARITY;
+	struct ssc_info *ssc = dtype_priv(cmd->dev);
+	uint8_t buf[READ_BLK_LIMITS_SZ];
 
 	memset(buf, 0, sizeof(buf));
-	data = buf;
 
-	data[0] = GRANULARITY;
-	data[1] = (blk_len >> 16) &0xff;
-	data[2] = (blk_len >> 8) &0xff;
-	data[3] = blk_len & 0xff;
-	data[4] = (blk_len >> 8) &0xff;
-	data[5] = blk_len & 0xff;
+	if (ssc->blk_sz) {	/* Fixed block size */
+		buf[0] = GRANULARITY;
+		buf[1] = (ssc->blk_sz >> 16) & 0xff;
+		buf[2] = (ssc->blk_sz >> 8) & 0xff;
+		buf[3] = ssc->blk_sz & 0xff;
+		buf[4] = (ssc->blk_sz >> 8) & 0xff;
+		buf[5] = ssc->blk_sz & 0xff;
+	} else {	/* Variable block size */
+		buf[0] = GRANULARITY;
+		buf[1] = (MAX_BLK_SIZE >> 16) & 0xff;
+		buf[2] = (MAX_BLK_SIZE >> 8) & 0xff;
+		buf[3] = MAX_BLK_SIZE & 0xff;
+		buf[4] = (MIN_BLK_SIZE >> 8) & 0xff;
+		buf[5] = MIN_BLK_SIZE & 0xff;
+	}
 
-	memcpy(scsi_get_in_buffer(cmd), data, 6);
+	memcpy(scsi_get_in_buffer(cmd), buf, READ_BLK_LIMITS_SZ);
 	eprintf("In ssc_read_block_limit \n");
 	return SAM_STAT_GOOD;
 }
 
 static int ssc_lu_init(struct scsi_lu *lu)
 {
-	uint64_t size;
 	uint8_t *data;
+	struct ssc_info *ssc;
+
+	ssc = zalloc(sizeof(struct ssc_info));
+	if (ssc)
+		dtype_priv(lu) = ssc;
+	else
+		return -ENOMEM;
 
 	if (spc_lu_init(lu))
 		return TGTADM_NOMEM;
@@ -107,11 +121,13 @@ static int ssc_lu_init(struct scsi_lu *lu)
 	lu->attrs.removable = 1;
 
 	data = lu->mode_block_descriptor;
-	size = lu->size >> BLK_SHIFT;
+	ssc->blk_sz = 1 << BLK_SHIFT;
 
-	*(uint32_t *)(data) = (size >> 32) ?
-			__cpu_to_be32(0xffffffff) : __cpu_to_be32(size);
-	*(uint32_t *)(data + 4) = __cpu_to_be32(1 << BLK_SHIFT);
+	/* SSC devices do not need to set number of blks */
+	*(uint32_t *)(data) = 0;
+
+	/* Set default blk size */
+	*(uint32_t *)(data + 4) = __cpu_to_be32(ssc->blk_sz);
 
 	/* Vendor uniq - However most apps seem to call for mode page 0*/
 	add_mode_page(lu, "0:0:0");
