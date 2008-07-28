@@ -328,10 +328,23 @@ if (($execute == 1) || ($pretend == 1)) {
 # Delete all the targets and backup the current conf file
 sub delete {
 	print "deleting targets...\n";
-	print "a copy of the conf file is on:/etc/tgt/targets.conf.bkp\n";
-	`mv $configfile /etc/tgt/targets.conf.bkp`;
-	open FILE, ">", "$configfile" or die $!;
-	print FILE "<target>\n";
-	print FILE "</target>\n";
-	close FILE;
+	# We need to run as root
+	if ( $> ) {
+		die("You must be root to run this program.\n");
+	}
+
+	my @show_target = `tgtadm --lld iscsi --op show --mode target`;
+	my @tids=();
+
+	# Find all the active targets' tids
+	foreach my $show_target_line (@show_target) {
+		if ( $show_target_line =~ m/^Target (\d*): (.+)/ ) {
+			push(@tids,$1);
+		}
+	}
+        # Run over all the active targets and delete them
+        foreach my $tid (@tids) {
+		execute("tgtadm --op update --mode target --tid=$tid -n state -v offline");
+		execute("tgtadm --mode target --op delete --tid=$tid");
+	}
 }
