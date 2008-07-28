@@ -66,7 +66,7 @@ if (($help == 1) || ($param eq undef)) {
 
 # Show all the targets and exit
 if ($show == 1) {
-	execute("tgtadm --lld iscsi --op show --mode target");
+	execute("tgtadm --op show --mode target");
 	exit;
 }
 
@@ -83,7 +83,7 @@ sub process_targets {
 		die("You must be root to run this program.\n");
 	}
 
-	my @show_target = `tgtadm --lld iscsi --op show --mode target`;
+	my @show_target = `tgtadm --op show --mode target`;
 	my $tid;
 	my $targetname;
 
@@ -127,17 +127,38 @@ sub parse_configs {
 }
 
 # Add targets, if they are not configured already
+my $default_driver;
 my $target;
 my $option;
 my $value;
 
 sub add_targets {
+
+	foreach my $k (sort keys %conf) {
+
+		if ( $k eq "default-driver" ) {
+			if ( not length ref($conf{$k}) ) {
+				$default_driver = $conf{$k};
+			} else {
+				print "Multiple default-driver definitions are not allowed!\n";
+				print "Check your config file for errors.\n";
+				exit 1;
+			}
+		}
+	}
+
+	# If $default_driver is empty, default to iscsi
+	if ( not defined $default_driver ) {
+		execute("# default-driver not defined, defaulting to iscsi.\n");
+		$default_driver = "iscsi";
+	}
+
 	foreach my $k (sort keys %conf) {
 		if ( $k eq "target" ) {
 			foreach my $k2 (sort keys %{$conf{$k}}) {
 				$target = $k2;
 				my $allowall = 1;
-				if ( $tgtadm_output{$k2} eq undef ) {
+				if ( not defined $tgtadm_output{$k2} ) {
 					# We have to find available tid
 					$next_tid = $next_tid + 1;
 				}
@@ -147,12 +168,33 @@ sub add_targets {
 					execute("tgtadm --op update --mode target --tid=$next_tid -n state -v offline");
 					execute("tgtadm --mode target --op delete --tid=$next_tid");
 				}
-				execute("# Adding target: $target");
-				execute("tgtadm --lld iscsi --op new --mode target --tid $next_tid -T $target");
+
+				# Before we add a target, we need to know its type
+				my $driver;
 				foreach my $k3 (sort keys %{$conf{$k}{$k2}}) {
 					$option = $k3;
 					$value = $conf{$k}{$k2}{$k3};
-					&process_options;
+					&check($value);
+					if ( $option eq "driver" ) {
+						if (ref($value) eq "ARRAY") {
+						print "Multiple driver definitions not allowed!\n";
+						print "Check your config file for errors (target: $target).\n";
+						exit 1;
+						}
+					$driver = $value;
+					}
+				}
+
+				if ( not defined $driver ) {
+					$driver = $default_driver;
+				}
+				execute("# Adding target: $target");
+				execute("tgtadm --lld $driver --op new --mode target --tid $next_tid -T $target");
+				foreach my $k3 (sort keys %{$conf{$k}{$k2}}) {
+					$option = $k3;
+					$value = $conf{$k}{$k2}{$k3};
+					&check($value);
+					&process_options($driver);
 					# If there was no option called "initiator-address", it means
 					# we want to allow ALL initiators for this target
 					if ( $option eq "initiator-address" ) {
@@ -161,7 +203,7 @@ sub add_targets {
 				}
 
 				if ( $allowall == 1 ) {
-					execute("tgtadm --lld iscsi --op bind --mode target --tid $next_tid -I ALL");
+					execute("tgtadm --lld $driver --op bind --mode target --tid $next_tid -I ALL");
 				}
 				execute();
 			}
@@ -171,6 +213,7 @@ sub add_targets {
 
 # Process options from the config file
 sub process_options {
+	my $driver = $_[0];
 	if ( $option eq "backing-store" ) {
         # if we have one command, force it to be an array anyway
 		unless (ref($value) eq 'ARRAY') {
@@ -178,10 +221,11 @@ sub process_options {
 		}
 		my @value_arr = @$value;
 		my $i = 1;
+
 		foreach my $backing_store (@value_arr) {
 			# Check if device exists
 			if ( -e $backing_store) {
-				execute("tgtadm --lld iscsi --op new --mode logicalunit --tid $next_tid --lun $i -b $backing_store");
+				execute("tgtadm --lld $driver --op new --mode logicalunit --tid $next_tid --lun $i -b $backing_store");
 				$i += 1;
 			}
 			else {
@@ -217,8 +261,8 @@ sub process_options {
 			$prod_rev =~ s/\s+$//;
 			$scsi_serial =~ s/\s+$//;
 
-			execute("tgtadm --lld iscsi --op new --mode logicalunit --tid $next_tid --lun 1 -b $direct_store");
-			execute("tgtadm --lld iscsi --op update --mode logicalunit --tid  $next_tid --lun 1 --params vendor_id=\"$vendor_id\",product_id=\"$prod_id\",product_rev=\"$prod_rev\",scsi_sn=\"$scsi_serial\"");
+			execute("tgtadm --lld $driver --op new --mode logicalunit --tid $next_tid --lun 1 -b $direct_store");
+			execute("tgtadm --lld $driver --op update --mode logicalunit --tid  $next_tid --lun 1 --params vendor_id=\"$vendor_id\",product_id=\"$prod_id\",product_rev=\"$prod_rev\",scsi_sn=\"$scsi_serial\"");
 			$i += 1;
 		}
 	}
@@ -231,9 +275,10 @@ sub process_options {
 		my @value_arr = @$value;
 		foreach my $incominguser (@value_arr) {
 			my @userpass = split(/ /, $incominguser);
-			execute("tgtadm --lld iscsi --mode account --op delete --user=$userpass[0]");
-			execute("tgtadm --lld iscsi --mode account --op new --user=$userpass[0] --password=$userpass[1]");
-			execute("tgtadm --lld iscsi --mode account --op bind --tid=$next_tid --user=$userpass[0]");
+			&check($userpass[1]);
+			execute("tgtadm --lld $driver --mode account --op delete --user=$userpass[0]");
+			execute("tgtadm --lld $driver --mode account --op new --user=$userpass[0] --password=$userpass[1]");
+			execute("tgtadm --lld $driver --mode account --op bind --tid=$next_tid --user=$userpass[0]");
 		}
 	}
 
@@ -244,9 +289,10 @@ sub process_options {
 		}
 		execute("# Warning: only one outgoinguser is allowed. Will only use the first one.");
 		my @userpass = split(/ /, @$value[0]);
-		execute("tgtadm --lld iscsi --mode account --op delete --user=$userpass[0]");
-		execute("tgtadm --lld iscsi --mode account --op new --user=$userpass[0] --password=$userpass[1]");
-		execute("tgtadm --lld iscsi --mode account --op bind --tid=$next_tid --user=$userpass[0] --outgoing");
+		&check($userpass[1]);
+		execute("tgtadm --lld $driver --mode account --op delete --user=$userpass[0]");
+		execute("tgtadm --lld $driver --mode account --op new --user=$userpass[0] --password=$userpass[1]");
+		execute("tgtadm --lld $driver --mode account --op bind --tid=$next_tid --user=$userpass[0] --outgoing");
 	}
 
 	if ( $option eq "initiator-address" ) {
@@ -256,7 +302,7 @@ sub process_options {
 		}
 		my @value_arr = @$value;
 		foreach my $initiator_address (@value_arr) {
-			execute("tgtadm --lld iscsi --op bind --mode target --tid $next_tid -I $initiator_address");
+			execute("tgtadm --lld $driver --op bind --mode target --tid $next_tid -I $initiator_address");
 		}
 	}
 }
@@ -272,20 +318,22 @@ sub remove_targets {
 		my $dontremove = 0;
 		my $k2;
 		foreach my $k (sort keys %conf) {
-			foreach $k2 (sort keys %{$conf{$k}}) {
-				if ( $k2 eq $existing_target ) {
-					$dontremove = 1;
+			if ( $k eq "target" ) {
+				foreach $k2 (sort keys %{$conf{$k}}) {
+					if ( $k2 eq $existing_target ) {
+						$dontremove = 1;
+					}
 				}
-			}
 
-			if ( $dontremove == 0 ) {
-				# Right now, it is not possible to remove a target if any initiators
-				# are connected to it. We'll do our best - offline the target first
-				# (so it won't accept any new connections), and remove.
-				# Note that remove will only work if no initiator is connected.
-				execute("# Removing target: $existing_target");
-				execute("tgtadm --op update --mode target --tid=$tgtadm_output_tid{$existing_target} -n state -v offline");
-				execute("tgtadm --mode target --op delete --tid=$tgtadm_output_tid{$existing_target}");
+				if ( $dontremove == 0 ) {
+					# Right now, it is not possible to remove a target if any initiators
+					# are connected to it. We'll do our best - offline the target first
+					# (so it won't accept any new connections), and remove.
+					# Note that remove will only work if no initiator is connected.
+					execute("# Removing target: $existing_target");
+					execute("tgtadm --op update --mode target --tid=$tgtadm_output_tid{$existing_target} -n state -v offline");
+					execute("tgtadm --mode target --op delete --tid=$tgtadm_output_tid{$existing_target}");
+				}
 			}
 		}
 	}
@@ -355,6 +403,16 @@ sub dump_config {
 	}
 }
 
+# Some checks
+sub check {
+	if ( not defined $_[0] or not length $_[0] ) {
+		print "\nOption $option has a missing value!\n";
+		print "Check your config file for errors (target: $target)\n";
+		exit 1;
+	}
+}
+
+
 # Execute or just print (or both) everything we start or would start
 sub execute {
 	if ($pretend == 0) {
@@ -404,7 +462,7 @@ sub delete {
 		die("You must be root to run this program.\n");
 	}
 
-	my @show_target = `tgtadm --lld iscsi --op show --mode target`;
+	my @show_target = `tgtadm --op show --mode target`;
 	my @tids=();
 
 	# Find all the active targets' tids
