@@ -37,8 +37,8 @@ EOF
 	exit;
 }
 
+my %conf;
 my $param = $ARGV[0];
-
 my $execute = 0;
 my $delete = 0;
 my $show = 0;
@@ -52,7 +52,7 @@ my $result = GetOptions (
 	"e|execute" => \$execute,
 	"d|delete"  => \$delete,
 	"s|show"    => \$show,
-	"c|conf=s"    => \$alternate_conf,
+	"c|conf=s"  => \$alternate_conf,
 	"f|force"   => \$force,
 	"p|pretend" => \$pretend,
 	"dump"      => \$dump,
@@ -64,25 +64,10 @@ if (($help == 1) || ($param eq undef)) {
 	&usage
 }
 
-# Parse the config file with Config::General
-my %conf = ParseConfig(-ConfigFile => "$configfile", -UseApacheInclude => 1, -IncludeGlob => 1,);
-
 # Show all the targets and exit
 if ($show == 1) {
 	execute("tgtadm --lld iscsi --op show --mode target");
 	exit;
-}
-
-# Check if alternative configuration file was given
-if ($alternate_conf ne 0) {
-	# Check if alternative configuration file exist
-	if (-e $alternate_conf) {
-		execute("# Using $alternate_conf as configuration file\n");
-		%conf = ParseConfig(-ConfigFile => "$alternate_conf", -UseApacheInclude => 1, -IncludeGlob => 1,);
-	}
-	else {
-		die("file $alternate_conf not found. Exiting...\n");
-	}
 }
 
 # Some variables/arrays/hashes we will use globally
@@ -90,6 +75,56 @@ my %tgtadm_output;
 my %tgtadm_output_tid;
 my @largest_tid;
 my $next_tid;
+
+# Look up which targets are configured
+sub process_targets {
+	# We need to run as root
+	if ( $> ) {
+		die("You must be root to run this program.\n");
+	}
+
+	my @show_target = `tgtadm --lld iscsi --op show --mode target`;
+	my $tid;
+	my $targetname;
+
+	# Here, we create hashes of target names (all target data) and target tids
+	foreach my $show_target_line (@show_target) {
+		if ( $show_target_line =~ m/^Target (\d*): (.+)/ ) {
+			$tid = $1;
+			$targetname = $2;
+			$tgtadm_output{$targetname} = $show_target_line;
+			$tgtadm_output_tid{$targetname} = $tid;
+		} else {
+			$tgtadm_output{$targetname} .= $show_target_line;
+		}
+	}
+	# What is the largest tid?
+	my @tids = values %tgtadm_output_tid;
+	@largest_tid = sort { $a <=> $b } @tids;
+	$next_tid = $largest_tid[$#largest_tid];
+}
+
+# Parse config file(s)
+sub parse_configs {
+	# Parse the config
+	if ($alternate_conf ne 0) {
+		# Check if alternative configuration file exist
+		if (-e "$alternate_conf") {
+			execute("# Using $alternate_conf as configuration file\n");
+			%conf = ParseConfig(-ConfigFile => "$alternate_conf", -UseApacheInclude => 1, -IncludeGlob => 1,);
+		}
+		else {
+			die("file $alternate_conf not found. Exiting...\n");
+		}
+	} else {
+		# Parse the config file with Config::General
+		if (-e "$configfile") {
+			%conf = ParseConfig(-ConfigFile => "$configfile", -UseApacheInclude => 1, -IncludeGlob => 1,);
+		} else {
+			die("Config file $configfile not found. Exiting...\n");
+		}
+	}
+}
 
 # Add targets, if they are not configured already
 my $target;
@@ -226,41 +261,11 @@ sub process_options {
 	}
 }
 
-# Look up which targets are configured
-sub process_configs {
-	# We need to run as root
-	if ( $> ) {
-		die("You must be root to run this program.\n");
-	}
-
-	my @show_target = `tgtadm --lld iscsi --op show --mode target`;
-	my $tid;
-	my $targetname;
-
-	# Here, we create hashes of target names (all target data) and target tids
-	foreach my $show_target_line (@show_target) {
-		if ( $show_target_line =~ m/^Target (\d*): (.+)/ ) {
-			$tid = $1;
-			$targetname = $2;
-			$tgtadm_output{$targetname} = $show_target_line;
-			$tgtadm_output_tid{$targetname} = $tid;
-		} else {
-			$tgtadm_output{$targetname} .= $show_target_line;
-		}
-	}
-
-	# What is the largest tid?
-	my @tids = values %tgtadm_output_tid;
-	@largest_tid = sort { $a <=> $b } @tids;
-	$next_tid = $largest_tid[$#largest_tid];
-}
-
-
 # If the target is configured, but not present in the config file,
 # offline it and try to remove it
 sub remove_targets {
 
-	&process_configs;
+	&process_targets;
 	my @all_targets = keys %tgtadm_output_tid;
 
 	foreach my $existing_target (@all_targets) {
@@ -289,7 +294,7 @@ sub remove_targets {
 # Dump current tgtd configuration
 sub dump_config {
 
-	&process_configs;
+	&process_targets;
 
 	my @all_targets = keys %tgtadm_output_tid;
 
@@ -377,14 +382,13 @@ sub execute {
 }
 
 if (($execute == 1) || ($pretend == 1)) {
-	&process_configs;
-
+	&process_targets;
+	&parse_configs;
 	&add_targets;
-
 	&remove_targets;
 } elsif ($delete == 1) {
 	&delete;
-	%conf = ParseConfig(-ConfigFile => "$configfile", -UseApacheInclude => 1, -IncludeGlob => 1,);
+	&parse_configs;
 	&remove_targets;
 } elsif ($dump == 1) {
 	&dump_config;
