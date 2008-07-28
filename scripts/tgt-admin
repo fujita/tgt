@@ -29,6 +29,7 @@ This tool configures tgt targets.
   -c, --conf <conf file>     specify an alternative configuration file
   -f, --force                don't exit on tgtadm errors
   -p, --pretend              only print tgtadm options
+      --dump                 dump current tgtd configuration
   -v, --verbose              increase verbosity (no effect in "pretend" mode)
   -h, --help                 show this help
 
@@ -44,6 +45,7 @@ my $show = 0;
 my $alternate_conf="0";
 my $force = 0;
 my $pretend = 0;
+my $dump = 0;
 my $verbose = 0;
 my $help = 0;
 my $result = GetOptions (
@@ -53,6 +55,7 @@ my $result = GetOptions (
 	"c|conf=s"    => \$alternate_conf,
 	"f|force"   => \$force,
 	"p|pretend" => \$pretend,
+	"dump"      => \$dump,
 	"v|verbose" => \$verbose,
 	"h|help"    => \$help,
 );
@@ -283,6 +286,70 @@ sub remove_targets {
 	}
 }
 
+# Dump current tgtd configuration
+sub dump_config {
+
+	&process_configs;
+
+	my @all_targets = keys %tgtadm_output_tid;
+
+	foreach my $target (@all_targets) {
+		foreach my $show_target_line ($tgtadm_output{$target}) {
+		    if ( $show_target_line =~ m/^Target (\d*): (.+)/ ) {
+			print "<target $2>\n";
+		    }
+
+		    if ( $show_target_line =~ m/\s+Driver: (.+)/ ) {
+			print "\tdriver $1\n";
+		    }
+
+		    if ( $show_target_line =~ m/\s+Backing store: (?!No backing store)(.+)/ ) {
+			print "\tbacking-store $1\n";
+		    }
+		}
+
+		# Process account and ACL information
+		my $account_acl;
+
+		foreach my $show_target_line ($tgtadm_output{$target}) {
+		    $account_acl .= $show_target_line
+		}
+
+		# start with account information...
+		while ($account_acl =~ m{
+			\s+Account\ information:\n(.*)ACL\ information:
+			     }xmgs
+		      ) {
+
+			my @account = split(/\n/, $1);
+
+			foreach my $user (@account) {
+				my @var = split(/^\s+/, $user);
+				@var = split(/\s/, $var[1]);
+
+				if ( $var[1] eq "(outgoing)" ) {
+					print "\toutgoinguser $var[0] PLEASE_CORRECT_THE_PASSWORD\n";
+				} elsif ( ($var[0] ne "") && ($var[1] eq "") ) {
+					print "\tincominguser $var[0] PLEASE_CORRECT_THE_PASSWORD\n";
+				}
+			}
+		}
+
+		#...and finish with ACL information
+		while ($account_acl =~ m{
+			\s+ACL\ information:\n(.*)
+			     }xmgs
+		      ) {
+		    my @ini_addresses = split(/\n/, $1);
+		    foreach my $ini_address (@ini_addresses) {
+			my @var = split(/^\s+/, $ini_address);
+			print "\tinitiator-address $var[1]\n";
+			}
+		}
+		print "</target>\n\n";
+	}
+}
+
 # Execute or just print (or both) everything we start or would start
 sub execute {
 	if ($pretend == 0) {
@@ -319,6 +386,8 @@ if (($execute == 1) || ($pretend == 1)) {
 	&delete;
 	%conf = ParseConfig(-ConfigFile => "$configfile", -UseApacheInclude => 1, -IncludeGlob => 1,);
 	&remove_targets;
+} elsif ($dump == 1) {
+	&dump_config;
 } else {
 	print "No action specified.\n";
 }
