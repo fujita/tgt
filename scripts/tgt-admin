@@ -111,7 +111,6 @@ sub add_targets {
 				}
 				execute("# Adding target: $target");
 				execute("tgtadm --lld iscsi --op new --mode target --tid $next_tid -T $target");
-					
 				foreach my $k3 (sort keys %{$conf{$k}{$k2}}) {
 					$option = $k3;
 					$value = $conf{$k}{$k2}{$k3};
@@ -229,12 +228,12 @@ sub process_configs {
 	# We need to run as root
 	if ( $> ) {
 		die("You must be root to run this program.\n");
-	}	
-	
+	}
+
 	my @show_target = `tgtadm --lld iscsi --op show --mode target`;
 	my $tid;
 	my $targetname;
-	
+
 	# Here, we create hashes of target names (all target data) and target tids
 	foreach my $show_target_line (@show_target) {
 		if ( $show_target_line =~ m/^Target (\d*): (.+)/ ) {
@@ -253,11 +252,11 @@ sub process_configs {
 	$next_tid = $largest_tid[$#largest_tid];
 }
 
- 
+
 # If the target is configured, but not present in the config file,
 # offline it and try to remove it
 sub remove_targets {
-	
+
 	&process_configs;
 	my @all_targets = keys %tgtadm_output_tid;
 
@@ -282,13 +281,12 @@ sub remove_targets {
 			}
 		}
 	}
-	
 }
 
 # Execute or just print (or both) everything we start or would start
 sub execute {
 	if ($pretend == 0) {
-		
+
 		my $args = "@_";
 		if ($verbose == 1) {
 			print "$args\n";
@@ -297,7 +295,7 @@ sub execute {
 		my @execargs = split(/#/, $args);
 		if ( $execargs[0] ne undef  ) {
 			system($args);
-			
+
 			# If non-zero exit code was return, exit
 			my $exit_value  = $? >> 8;
 			if (($exit_value != 0) && ($force == 0)) {
@@ -313,9 +311,9 @@ sub execute {
 
 if (($execute == 1) || ($pretend == 1)) {
 	&process_configs;
-	
+
 	&add_targets;
-	
+
 	&remove_targets;
 } elsif ($delete == 1) {
 	&delete;
