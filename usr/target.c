@@ -1549,7 +1549,7 @@ int tgt_target_show_all(char *buf, int rest)
 		shprintf(total, buf, rest, _TAB1 "I_T nexus information:\n");
 
 		list_for_each_entry(nexus, &target->it_nexus_list, nexus_siblings) {
-			shprintf(total, buf, rest, _TAB2 "I_T nexus: %" PRIx64 "\n",
+			shprintf(total, buf, rest, _TAB2 "I_T nexus: %" PRIu64 "\n",
 				 nexus->itn_id);
 			if (nexus->info)
 				shprintf(total, buf, rest, "%s", nexus->info);
