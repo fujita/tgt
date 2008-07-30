@@ -23,19 +23,21 @@ Usage:
 tgt-admin [OPTION]...
 This tool configures tgt targets.
 
-  -e, --execute              read $configfile and execute tgtadm commands
-  -d, --delete               delete all the targets
-      --offline <value>      put all or selected targets in offline state
-                             (see "--offline help" for more info)
-      --ready <value>        put all or selected targets in ready state
-                             (see "--ready help" for more info)
-  -s, --show                 show all the targets
-  -c, --conf <conf file>     specify an alternative configuration file
-  -f, --force                don't exit on tgtadm errors
-  -p, --pretend              only print tgtadm options
-      --dump                 dump current tgtd configuration
-  -v, --verbose              increase verbosity (no effect in "pretend" mode)
-  -h, --help                 show this help
+  -e, --execute			read $configfile and execute tgtadm commands
+      --delete <value>		delete all or selected targets
+				(see "--delete help" for more info)
+      --offline <value>		put all or selected targets in offline state
+				(see "--offline help" for more info)
+      --ready <value>		put all or selected targets in ready state
+				(see "--ready help" for more info)
+  -s, --show			show all the targets
+  -c, --conf <conf file>	specify an alternative configuration file
+      --ignore-errors		continue even if tgtadm exits with non-zero code
+  -f, --force			force some operations even if the target is in use
+  -p, --pretend			only print tgtadm options
+      --dump			dump current tgtd configuration
+  -v, --verbose			increase verbosity (show tgtadm commands)
+  -h, --help			show this help
 
 EOF
 	exit;
@@ -49,23 +51,25 @@ my $offline = 0;
 my $ready = 0;
 my $show = 0;
 my $alternate_conf="0";
+my $ignore_errors = 0;
 my $force = 0;
 my $pretend = 0;
 my $dump = 0;
 my $verbose = 0;
 my $help = 0;
 my $result = GetOptions (
-	"e|execute" => \$execute,
-	"d|delete"  => \$delete,
-	"offline=s" => \$offline,
-	"ready=s"   => \$ready,
-	"s|show"    => \$show,
-	"c|conf=s"  => \$alternate_conf,
-	"f|force"   => \$force,
-	"p|pretend" => \$pretend,
-	"dump"      => \$dump,
-	"v|verbose" => \$verbose,
-	"h|help"    => \$help,
+	"e|execute"     => \$execute,
+	"delete=s"      => \$delete,
+	"offline=s"     => \$offline,
+	"ready=s"       => \$ready,
+	"s|show"        => \$show,
+	"c|conf=s"      => \$alternate_conf,
+	"ignore-errors" => \$ignore_errors,
+	"f|force"       => \$force,
+	"p|pretend"     => \$pretend,
+	"dump"          => \$dump,
+	"v|verbose"     => \$verbose,
+	"h|help"        => \$help,
 );
 
 if (($help == 1) || ($param eq undef)) {
@@ -81,6 +85,7 @@ if ($show == 1) {
 # Some variables/arrays/hashes we will use globally
 my %tgtadm_output;
 my %tgtadm_output_tid;
+my %tgtadm_output_name;
 my @largest_tid;
 my $next_tid;
 
@@ -102,6 +107,7 @@ sub process_targets {
 			$targetname = $2;
 			$tgtadm_output{$targetname} = $show_target_line;
 			$tgtadm_output_tid{$targetname} = $tid;
+			$tgtadm_output_name{$tid} = $targetname;
 		} else {
 			$tgtadm_output{$targetname} .= $show_target_line;
 		}
@@ -421,17 +427,17 @@ sub ready_offline_targets {
 		$off_ready = $ready
 	} else {
 		print "Invalid value (you can't use both ready and offline)!\n";
-		exit 1
+		exit 1;
 	}
 	if ($off_ready eq "help") {
 		print <<EOF;
-"$ENV{_} --$var <value>" - $var all or selected targets.
+      --$var <value>		$var all or selected targets
 
 Example usage:
-	--$var help  - display this help
-	--$var ALL   - $var all targets
-	--$var tid=4 - $var target 4 (target with tid 4)
-	--$var iqn.2008-08.com.example:some.target - $var this target
+      --$var help	      - display this help
+      --$var ALL	      - $var all targets
+      --$var tid=4	      - $var target 4 (target with tid 4)
+      --$var iqn.2008-08.com.example:some.target - $var this target
 
 EOF
 	} elsif ($off_ready eq "ALL") {
@@ -452,6 +458,114 @@ EOF
 			print "There is no target with name \"$off_ready\", can't $var it!\n";
 			exit 1;
 		}
+	}
+}
+
+# Show info for a given target
+sub show_target_info {
+	my $existing_target = $_[0];
+	my $task = $_[1];
+	# Returns driver information
+	if ($task eq "driver") {
+		if ( $tgtadm_output{$existing_target} =~ m/\s+Driver: (.+)/ ) {
+			print $1;
+			return $1;
+		}
+	# Returns ACL information
+	} elsif ($task eq "acl_information") {
+		while ($tgtadm_output{$existing_target} =~ m{
+			\s+ACL\ information:\n(.*)
+				}xmgs
+			) {
+			my @ini_addresses = split(/\n/, $1);
+			my @acls;
+			foreach my $ini_address (@ini_addresses) {
+				my @var = split(/^\s+/, $ini_address);
+				push(@acls, $var[1]);
+			}
+			return @acls;
+		}
+	# Returns sessions
+	} elsif ($task eq "sessions") {
+		my @var = split(/\n/, $tgtadm_output{$existing_target});
+		my @sids;
+		foreach my $sid (@var) {
+			if ( $sid =~ m/\s+I_T nexus: (.+)/ ) {
+				push(@sids, $1);
+			}
+		}
+		return @sids;
+	}
+}
+
+# Delete the targets which are not in use
+sub delete_targets {
+
+	# Check if the target is used by an initiator
+	sub check_in_use {
+		my $existing_target = $_[0];
+		my $cur_option = $_[1];
+		my $cur_tid = $_[2];
+		if ($tgtadm_output{$existing_target} =~ m/\s+Connection:/) {
+			if ($force == 1) {
+				# Remove ACLs first
+				my @acl_info = &show_target_info($existing_target, "acl_information");
+				foreach my $acl (@acl_info) {
+					execute("tgtadm --op unbind --mode target --tid $tgtadm_output_tid{$existing_target} -I $acl");
+				}
+				# Now, remove all sessions / connections from that tid
+				my @sessions = &show_target_info($existing_target, "sessions");
+				foreach my $session (@sessions) {
+					execute("tgtadm --op delete --mode conn --tid $tgtadm_output_tid{$existing_target} --sid $session --cid 0");
+				}
+				execute("tgtadm --mode target --op delete --tid=$tgtadm_output_tid{$existing_target}");
+			} else {
+				execute("# Target with tid $tgtadm_output_tid{$existing_target} ($existing_target) is in use, it won't be deleted.");
+			}
+		} elsif (length $tgtadm_output_tid{$existing_target}) {
+			execute("tgtadm --mode target --op delete --tid=$tgtadm_output_tid{$existing_target}");
+		} else {
+			if ($cur_option eq "tid") {
+				execute("# Target with tid $cur_tid does not exist!");
+			} else {
+				execute("# Target $existing_target does not exist!");
+			}
+		}
+	}
+
+	if ($delete eq "help") {
+		print <<EOF;
+      --delete <value>		delete all or selected targets
+				The target will be deleted only if it's not used
+				(no initiator is connected to it).
+				If you want to delete targets which are in use,
+				you have to add "--force" flag
+
+Example usage:
+      --delete help	      - display this help
+      --delete ALL	      - delete all targets
+      --delete tid=4	      - delete target 4 (target with tid 4)
+      --delete iqn.2008-08.com.example:some.target - delete this target
+
+EOF
+		exit;
+	} elsif ($delete eq "ALL") {
+		&process_targets;
+		# Run over all targets and delete them if they are not in use
+		my @all_targets = keys %tgtadm_output_tid;
+		foreach my $existing_target (@all_targets) {
+		&check_in_use($existing_target);
+		}
+	} elsif ($delete =~ m/tid=(.+)/) {
+		# Delete by tid
+		&process_targets;
+		my $existing_target = $1;
+		&check_in_use($tgtadm_output_name{$existing_target}, "tid", $existing_target);
+	} else {
+		# Delete by name
+		&process_targets;
+		my $existing_target = $delete;
+		&check_in_use($existing_target);
 	}
 }
 
@@ -480,7 +594,7 @@ sub execute {
 
 			# If non-zero exit code was return, exit
 			my $exit_value  = $? >> 8;
-			if (($exit_value != 0) && ($force == 0)) {
+			if (($exit_value != 0) && ($ignore_errors == 0)) {
 				print "Command:\n\t$args\nexited with code: $exit_value.\n";
 				exit $exit_value;
 			}
@@ -496,10 +610,8 @@ if ($execute == 1) {
 	&parse_configs;
 	&add_targets;
 	&remove_targets;
-} elsif ($delete == 1) {
-	&delete;
-	&parse_configs;
-	&remove_targets;
+} elsif ($delete ne 0) {
+	&delete_targets;
 } elsif ($dump == 1) {
 	&dump_config;
 } elsif ($offline ne 0) {
@@ -510,26 +622,3 @@ if ($execute == 1) {
 	print "No action specified.\n";
 }
 
-# Delete all the targets and backup the current conf file
-sub delete {
-	print "deleting targets...\n";
-	# We need to run as root
-	if ( $> ) {
-		die("You must be root to run this program.\n");
-	}
-
-	my @show_target = `tgtadm --op show --mode target`;
-	my @tids=();
-
-	# Find all the active targets' tids
-	foreach my $show_target_line (@show_target) {
-		if ( $show_target_line =~ m/^Target (\d*): (.+)/ ) {
-			push(@tids,$1);
-		}
-	}
-        # Run over all the active targets and delete them
-        foreach my $tid (@tids) {
-		execute("tgtadm --op update --mode target --tid=$tid -n state -v offline");
-		execute("tgtadm --mode target --op delete --tid=$tid");
-	}
-}
