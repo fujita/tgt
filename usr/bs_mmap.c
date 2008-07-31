@@ -81,28 +81,28 @@ static void bs_mmap_request(struct scsi_cmd *cmd)
 
 static int bs_mmap_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 {
-	int ret;
-	struct bs_thread_info *info = BS_THREAD_I(lu);
-
 	*fd = backed_file_open(path, O_RDWR| O_LARGEFILE, size);
 	if (*fd < 0)
 		return *fd;
-
-	ret = bs_thread_open(info, bs_mmap_request);
-	if (ret) {
-		close(*fd);
-		return -1;
-	}
 
 	return 0;
 }
 
 static void bs_mmap_close(struct scsi_lu *lu)
 {
-	struct bs_thread_info *info = BS_THREAD_I(lu);
-
-	bs_thread_close(info);
 	close(lu->fd);
+}
+
+static int bs_mmap_init(struct scsi_lu *lu)
+{
+	struct bs_thread_info *info = BS_THREAD_I(lu);
+	return bs_thread_open(info, bs_mmap_request);
+}
+
+static void bs_mmap_exit(struct scsi_lu *lu)
+{
+	struct bs_thread_info *info = BS_THREAD_I(lu);
+	bs_thread_close(info);
 }
 
 #define pgcnt(size, offset)	((((size) + ((offset) & (pagesize - 1))) + (pagesize - 1)) >> pageshift)
@@ -173,6 +173,8 @@ static int bs_mmap_cmd_done(struct scsi_cmd *cmd)
 static struct backingstore_template mmap_bst = {
 	.bs_name		= "mmap",
 	.bs_datasize		= sizeof(struct bs_thread_info),
+	.bs_init		= bs_mmap_init,
+	.bs_exit		= bs_mmap_exit,
 	.bs_open		= bs_mmap_open,
 	.bs_close		= bs_mmap_close,
 	.bs_cmd_submit		= bs_mmap_cmd_submit,

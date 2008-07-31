@@ -19,7 +19,7 @@
 #define LONG_BIT            2
 #define BT_BIT              1
 
-static void rdwr_request(struct scsi_cmd *cmd)
+static void ssc_rdwr_request(struct scsi_cmd *cmd)
 {
 	int ret, fd = cmd->dev->fd, code;
 	uint32_t length, i, transfer_length, residue;
@@ -184,11 +184,8 @@ static void rdwr_request(struct scsi_cmd *cmd)
 			cmd, cmd->scb[0], ret, length, cmd->offset);
 }
 
-
 static int bs_ssc_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 {
-	int ret;
-	struct bs_thread_info *info = BS_THREAD_I(lu);
 	uint64_t curr_pos;
 
 	eprintf("In bs_ssc_open\n");
@@ -200,22 +197,24 @@ static int bs_ssc_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 	curr_pos = lseek(*fd, 0, SEEK_CUR);
 	eprintf("File %s File Pointer at %" PRIu64",%m\n", path, curr_pos);
 
-	ret = bs_thread_open(info, rdwr_request);
-	if (ret) {
-		close(*fd);
-		return -1;
-	}
-
 	return 0;
 }
 
 static void bs_ssc_close(struct scsi_lu *lu)
 {
-	struct bs_thread_info *info = BS_THREAD_I(lu);
-
-	bs_thread_close(info);
-
 	close(lu->fd);
+}
+
+static int bs_ssc_init(struct scsi_lu *lu)
+{
+	struct bs_thread_info *info = BS_THREAD_I(lu);
+	return bs_thread_open(info, ssc_rdwr_request);
+}
+
+static void bs_ssc_exit(struct scsi_lu *lu)
+{
+	struct bs_thread_info *info = BS_THREAD_I(lu);
+	bs_thread_close(info);
 }
 
 static int bs_ssc_cmd_done(struct scsi_cmd *cmd)
@@ -226,6 +225,8 @@ static int bs_ssc_cmd_done(struct scsi_cmd *cmd)
 static struct backingstore_template ssc_bst = {
 	.bs_name		= "ssc",
 	.bs_datasize		= sizeof(struct bs_thread_info),
+	.bs_init		= bs_ssc_init,
+	.bs_exit		= bs_ssc_exit,
 	.bs_open		= bs_ssc_open,
 	.bs_close		= bs_ssc_close,
 	.bs_cmd_submit		= bs_thread_cmd_submit,

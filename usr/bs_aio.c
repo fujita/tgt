@@ -112,18 +112,22 @@ get_events:
 
 static int bs_aio_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 {
+	*fd = backed_file_open(path, O_RDWR|O_LARGEFILE|O_DIRECT, size);
+	if (*fd < 0)
+		return *fd;
+	return 0;
+}
+
+static int bs_aio_init(struct scsi_lu *lu)
+{
 	int ret, afd;
 	struct bs_aio_info *info =
 		(struct bs_aio_info *) ((char *)lu + sizeof(*lu));
 
-	*fd = backed_file_open(path, O_RDWR|O_LARGEFILE|O_DIRECT, size);
-	if (*fd < 0)
-		return *fd;
-
 	ret = io_setup(MAX_AIO_REQS, &info->ctx);
 	if (ret) {
 		eprintf("fail to create aio_queue, %m\n");
-		goto close_dev_fd;
+		return -1;
 	}
 
 	afd = eventfd(0);
@@ -145,23 +149,26 @@ static int bs_aio_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 	info->afd = afd;
 
 	return 0;
+
 close_eventfd:
 	close(afd);
 close_ctx:
 	io_destroy(info->ctx);
-close_dev_fd:
-	close(*fd);
 	return -1;
 }
 
 static void bs_aio_close(struct scsi_lu *lu)
+{
+	close(lu->fd);
+}
+
+static void bs_aio_exit(struct scsi_lu *lu)
 {
 	struct bs_aio_info *info =
 		(struct bs_aio_info *) ((char *)lu + sizeof(*lu));
 
 	close(info->afd);
 	io_destroy(info->ctx);
-	close(lu->fd);
 }
 
 static int bs_aio_cmd_submit(struct scsi_cmd *cmd)
@@ -226,6 +233,8 @@ static int bs_aio_cmd_done(struct scsi_cmd *cmd)
 static struct backingstore_template aio_bst = {
 	.bs_name		= "aio",
 	.bs_datasize		= sizeof(struct bs_aio_info),
+	.bs_init		= bs_aio_init,
+	.bs_exit		= bs_aio_exit,
 	.bs_open		= bs_aio_open,
 	.bs_close		= bs_aio_close,
 	.bs_cmd_submit		= bs_aio_cmd_submit,

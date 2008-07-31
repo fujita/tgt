@@ -485,18 +485,24 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
  	if (lu->dev_type_template.lu_init) {
 		ret = lu->dev_type_template.lu_init(lu);
 		if (ret)
-			goto free_lu;
+			goto fail_lu_init;
+	}
+
+	if (lu->bst->bs_init) {
+		ret = lu->bst->bs_init(lu);
+		if (ret)
+			goto fail_bs_init;
 	}
 
 	if (backing && !path && !lu->attrs.removable) {
 		ret = TGTADM_INVALID_REQUEST;
-		goto free_lu;
+		goto fail_bs_init;
 	}
 
 	if (backing && path) {
 		ret = tgt_device_path_update(target, lu, path);
 		if (ret)
-			goto free_lu;
+			goto fail_bs_init;
 	}
 
 	if (tgt_drivers[target->lid]->lu_create)
@@ -538,7 +544,10 @@ out:
 	if (path)
 		free(path);
 	return ret;
-free_lu:
+fail_bs_init:
+	if (lu->bst->bs_exit)
+		lu->bst->bs_exit(lu);
+fail_lu_init:
 	free(lu);
 	goto out;
 }
@@ -573,6 +582,9 @@ int tgt_device_destroy(int tid, uint64_t lun, int force)
 		free(lu->path);
 		lu->bst->bs_close(lu);
 	}
+
+	if (lu->bst->bs_exit)
+		lu->bst->bs_exit(lu);
 
 	list_for_each_entry(itn, &target->it_nexus_list, nexus_siblings) {
 		list_for_each_entry_safe(itn_lu, next, &itn->it_nexus_lu_info_list,
@@ -633,7 +645,7 @@ int dtd_load_unload(int tid, uint64_t lun, int load, char *file)
 		return TGTADM_INVALID_REQUEST;
 
 	if (lu->path) {
-		close(lu->fd);
+		lu->bst->bs_close(lu);
 		free(lu->path);
 		lu->path = NULL;
 	}
@@ -646,9 +658,12 @@ int dtd_load_unload(int tid, uint64_t lun, int load, char *file)
 		lu->path = strdup(file);
 		if (!lu->path)
 			return TGTADM_NOMEM;
-		lu->fd = backed_file_open(file, O_RDWR|O_LARGEFILE, &lu->size);
-		if (lu->fd < 0)
+		lu->bst->bs_open(lu, file, &lu->fd, &lu->size);
+		if (lu->fd < 0) {
+			free(lu->path);
+			lu->path = NULL;
 			return TGTADM_UNSUPPORTED_OPERATION;
+		}
 		lu->dev_type_template.lu_online(lu);
 	}
 	return err;

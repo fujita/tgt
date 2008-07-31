@@ -131,29 +131,30 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 
 static int bs_rdwr_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 {
-	int ret;
-	struct bs_thread_info *info = BS_THREAD_I(lu);
-
 	*fd = backed_file_open(path, O_RDWR| O_LARGEFILE, size);
 	if (*fd < 0)
 		return *fd;
-
-	ret = bs_thread_open(info, bs_rdwr_request);
-	if (ret) {
-		close(*fd);
-		return -1;
-	}
 
 	return 0;
 }
 
 static void bs_rdwr_close(struct scsi_lu *lu)
 {
+	close(lu->fd);
+}
+
+static int bs_rdwr_init(struct scsi_lu *lu)
+{
+	struct bs_thread_info *info = BS_THREAD_I(lu);
+
+	return bs_thread_open(info, bs_rdwr_request);
+}
+
+static void bs_rdwr_exit(struct scsi_lu *lu)
+{
 	struct bs_thread_info *info = BS_THREAD_I(lu);
 
 	bs_thread_close(info);
-
-	close(lu->fd);
 }
 
 static int bs_rdwr_cmd_done(struct scsi_cmd *cmd)
@@ -166,6 +167,8 @@ static struct backingstore_template rdwr_bst = {
 	.bs_datasize		= sizeof(struct bs_thread_info),
 	.bs_open		= bs_rdwr_open,
 	.bs_close		= bs_rdwr_close,
+	.bs_init		= bs_rdwr_init,
+	.bs_exit		= bs_rdwr_exit,
 	.bs_cmd_submit		= bs_thread_cmd_submit,
 	.bs_cmd_done		= bs_rdwr_cmd_done,
 };
