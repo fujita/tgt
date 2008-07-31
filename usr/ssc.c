@@ -108,7 +108,7 @@ static int ssc_lu_init(struct scsi_lu *lu)
 	if (ssc)
 		dtype_priv(lu) = ssc;
 	else
-		return -ENOMEM;
+		return TGTADM_NOMEM;
 
 	if (spc_lu_init(lu))
 		return TGTADM_NOMEM;
