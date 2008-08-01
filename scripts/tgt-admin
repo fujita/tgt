@@ -30,6 +30,8 @@ This tool configures tgt targets.
 				(see "--offline help" for more info)
       --ready <value>		put all or selected targets in ready state
 				(see "--ready help" for more info)
+      --update <value>		update configuration for all or selected targets
+				(see "--update help" for more info)
   -s, --show			show all the targets
   -c, --conf <conf file>	specify an alternative configuration file
       --ignore-errors		continue even if tgtadm exits with non-zero code
@@ -49,6 +51,7 @@ my $execute = 0;
 my $delete = 0;
 my $offline = 0;
 my $ready = 0;
+my $update = 0;
 my $show = 0;
 my $alternate_conf="0";
 my $ignore_errors = 0;
@@ -62,6 +65,7 @@ my $result = GetOptions (
 	"delete=s"      => \$delete,
 	"offline=s"     => \$offline,
 	"ready=s"       => \$ready,
+	"update=s"      => \$update,
 	"s|show"        => \$show,
 	"c|conf=s"      => \$alternate_conf,
 	"ignore-errors" => \$ignore_errors,
@@ -147,7 +151,10 @@ my $option;
 my $value;
 
 sub add_targets {
-
+	my $single_target = $_[0];
+	my $configured = $_[1];
+	my $connected = $_[2];
+	my $in_configfile = $_[3];
 	foreach my $k (sort keys %conf) {
 
 		if ( $k eq "default-driver" ) {
@@ -170,57 +177,80 @@ sub add_targets {
 	foreach my $k (sort keys %conf) {
 		if ( $k eq "target" ) {
 			foreach my $k2 (sort keys %{$conf{$k}}) {
-				$target = $k2;
+				# Do we run update or execute?
+				if (length $single_target) {
+					if ($single_target ne $k2) {
+						next;
+					} else {
+						$target = $single_target;
+					}
+				} else {
+					$target = $k2;
+				}
+				if (length $single_target) {
+					&main_delete($target);
+				}
 				my $allowall = 1;
-				if ( not defined $tgtadm_output{$k2} ) {
+				if ((not defined $tgtadm_output{$k2}) || (length $single_target && $force == 1)) {
 					# We have to find available tid
-					$next_tid = $next_tid + 1;
-				}
-				else {
-					execute("# Target $target already exist!");
-					execute("# Updating Target $target");
-					execute("tgtadm --op update --mode target --tid=$next_tid -n state -v offline");
-					execute("tgtadm --mode target --op delete --tid=$next_tid");
-				}
-
-				# Before we add a target, we need to know its type
-				my $driver;
-				foreach my $k3 (sort keys %{$conf{$k}{$k2}}) {
-					$option = $k3;
-					$value = $conf{$k}{$k2}{$k3};
-					&check($value);
-					if ( $option eq "driver" ) {
-						if (ref($value) eq "ARRAY") {
-						print "Multiple driver definitions not allowed!\n";
-						print "Check your config file for errors (target: $target).\n";
-						exit 1;
+					if (($in_configfile == 1) && ($configured == 0)) {
+						my $maxtid = &find_max_tid;
+						$next_tid = $maxtid + 1;
+					} elsif (length $single_target) {
+						$next_tid = $tgtadm_output_tid{$target};
+					} else {
+						$next_tid = $next_tid + 1;
+					}
+					# Before we add a target, we need to know its type
+					my $driver;
+					foreach my $k3 (sort keys %{$conf{$k}{$k2}}) {
+						$option = $k3;
+						$value = $conf{$k}{$k2}{$k3};
+						&check_value($value);
+						if ($option eq "driver") {
+							if (ref($value) eq "ARRAY") {
+							print "Multiple driver definitions not allowed!\n";
+							print "Check your config file for errors (target: $target).\n";
+							exit 1;
+							}
+						$driver = $value;
 						}
-					$driver = $value;
+					}
+
+					if (not defined $driver) {
+						$driver = $default_driver;
+					}
+
+					execute("# Adding target: $target");
+					execute("tgtadm --lld $driver --op new --mode target --tid $next_tid -T $target");
+					foreach my $k3 (sort keys %{$conf{$k}{$k2}}) {
+						$option = $k3;
+						$value = $conf{$k}{$k2}{$k3};
+						&check_value($value);
+						&process_options($driver);
+						# If there was no option called "initiator-address", it means
+						# we want to allow ALL initiators for this target
+						if ($option eq "initiator-address") {
+							$allowall = 0;
+						}
+					}
+
+					if ($allowall == 1) {
+						execute("tgtadm --lld $driver --op bind --mode target --tid $next_tid -I ALL");
+					}
+
+				} else {
+					if (not length $update) {
+						execute("# Target $target already exists!");
 					}
 				}
-
-				if ( not defined $driver ) {
-					$driver = $default_driver;
-				}
-				execute("# Adding target: $target");
-				execute("tgtadm --lld $driver --op new --mode target --tid $next_tid -T $target");
-				foreach my $k3 (sort keys %{$conf{$k}{$k2}}) {
-					$option = $k3;
-					$value = $conf{$k}{$k2}{$k3};
-					&check($value);
-					&process_options($driver);
-					# If there was no option called "initiator-address", it means
-					# we want to allow ALL initiators for this target
-					if ( $option eq "initiator-address" ) {
-						$allowall = 0;
-					}
-				}
-
-				if ( $allowall == 1 ) {
-					execute("tgtadm --lld $driver --op bind --mode target --tid $next_tid -I ALL");
-				}
-				execute();
 			}
+			if (length $single_target && $in_configfile == 0 && $configured == 0) {
+				print "Target $single_target is $connected currently not configured\n";
+				print "and does not exist in the config file - can't continue!\n";
+				exit 1;
+			}
+			execute();
 		}
 	}
 }
@@ -289,7 +319,7 @@ sub process_options {
 		my @value_arr = @$value;
 		foreach my $incominguser (@value_arr) {
 			my @userpass = split(/ /, $incominguser);
-			&check($userpass[1]);
+			&check_value($userpass[1]);
 			execute("tgtadm --lld $driver --mode account --op delete --user=$userpass[0]");
 			execute("tgtadm --lld $driver --mode account --op new --user=$userpass[0] --password=$userpass[1]");
 			execute("tgtadm --lld $driver --mode account --op bind --tid=$next_tid --user=$userpass[0]");
@@ -303,7 +333,7 @@ sub process_options {
 		}
 		execute("# Warning: only one outgoinguser is allowed. Will only use the first one.");
 		my @userpass = split(/ /, @$value[0]);
-		&check($userpass[1]);
+		&check_value($userpass[1]);
 		execute("tgtadm --lld $driver --mode account --op delete --user=$userpass[0]");
 		execute("tgtadm --lld $driver --mode account --op new --user=$userpass[0] --password=$userpass[1]");
 		execute("tgtadm --lld $driver --mode account --op bind --tid=$next_tid --user=$userpass[0] --outgoing");
@@ -340,13 +370,8 @@ sub remove_targets {
 				}
 
 				if ( $dontremove == 0 ) {
-					# Right now, it is not possible to remove a target if any initiators
-					# are connected to it. We'll do our best - offline the target first
-					# (so it won't accept any new connections), and remove.
-					# Note that remove will only work if no initiator is connected.
-					execute("# Removing target: $existing_target");
-					execute("tgtadm --op update --mode target --tid=$tgtadm_output_tid{$existing_target} -n state -v offline");
-					execute("tgtadm --mode target --op delete --tid=$tgtadm_output_tid{$existing_target}");
+					# Remove the target
+					&main_delete($existing_target);
 				}
 			}
 		}
@@ -498,40 +523,52 @@ sub show_target_info {
 	}
 }
 
-# Delete the targets which are not in use
-sub delete_targets {
-
-	# Check if the target is used by an initiator
-	sub check_in_use {
-		my $existing_target = $_[0];
-		my $cur_option = $_[1];
-		my $cur_tid = $_[2];
-		if ($tgtadm_output{$existing_target} =~ m/\s+Connection:/) {
-			if ($force == 1) {
-				# Remove ACLs first
-				my @acl_info = &show_target_info($existing_target, "acl_information");
-				foreach my $acl (@acl_info) {
-					execute("tgtadm --op unbind --mode target --tid $tgtadm_output_tid{$existing_target} -I $acl");
-				}
-				# Now, remove all sessions / connections from that tid
-				my @sessions = &show_target_info($existing_target, "sessions");
-				foreach my $session (@sessions) {
-					execute("tgtadm --op delete --mode conn --tid $tgtadm_output_tid{$existing_target} --sid $session --cid 0");
-				}
-				execute("tgtadm --mode target --op delete --tid=$tgtadm_output_tid{$existing_target}");
-			} else {
-				execute("# Target with tid $tgtadm_output_tid{$existing_target} ($existing_target) is in use, it won't be deleted.");
+# Main subroutine for deleting targets
+sub main_delete {
+	my $current_target = $_[0];
+	my $current_tid = $_[1];
+	my $configured = &check_configured($current_target);
+	my $del_upd_text;
+	# Check if the target has initiators connected
+	if ($tgtadm_output{$current_target} =~ m/\s+Connection:/) {
+		if ($force == 1) {
+			execute("# Removing target: $current_target");
+			# Remove ACLs first
+			my @acl_info = &show_target_info($current_target, "acl_information");
+			foreach my $acl (@acl_info) {
+				execute("tgtadm --op unbind --mode target --tid $tgtadm_output_tid{$current_target} -I $acl");
 			}
-		} elsif (length $tgtadm_output_tid{$existing_target}) {
-			execute("tgtadm --mode target --op delete --tid=$tgtadm_output_tid{$existing_target}");
+			# Now, remove all sessions / connections from that tid
+			my @sessions = &show_target_info($current_target, "sessions");
+			foreach my $session (@sessions) {
+				execute("tgtadm --op delete --mode conn --tid $tgtadm_output_tid{$current_target} --sid $session --cid 0");
+			}
+			execute("tgtadm --mode target --op delete --tid=$tgtadm_output_tid{$current_target}");
 		} else {
-			if ($cur_option eq "tid") {
-				execute("# Target with tid $cur_tid does not exist!");
+			if ($update ne 0) {
+				$del_upd_text = "updated";
 			} else {
-				execute("# Target $existing_target does not exist!");
+				$del_upd_text = "deleted";
 			}
+			execute("# Target with tid $tgtadm_output_tid{$current_target} ($current_target) is in use, it won't be $del_upd_text.");
+		}
+	} elsif (length $tgtadm_output_tid{$current_target}) {
+		execute("# Removing target: $current_target");
+		execute("tgtadm --mode target --op delete --tid=$tgtadm_output_tid{$current_target}");
+	} else {
+		if (length $current_tid) {
+			execute("# Target with $current_target tid $current_tid does not exist!");
+		} else {
+			execute("# Target with name $current_target does not exist!");
 		}
 	}
+	if ($configured ne 0) {
+		execute();
+	}
+}
+
+# Delete the targets
+sub delete_targets {
 
 	if ($delete eq "help") {
 		print <<EOF;
@@ -539,7 +576,7 @@ sub delete_targets {
 				The target will be deleted only if it's not used
 				(no initiator is connected to it).
 				If you want to delete targets which are in use,
-				you have to add "--force" flag
+				you have to add "--force" flag.
 
 Example usage:
       --delete help	      - display this help
@@ -551,26 +588,130 @@ EOF
 		exit;
 	} elsif ($delete eq "ALL") {
 		&process_targets;
-		# Run over all targets and delete them if they are not in use
+		# Run over all targets and delete them
 		my @all_targets = keys %tgtadm_output_tid;
-		foreach my $existing_target (@all_targets) {
-		&check_in_use($existing_target);
+		foreach my $current_target (@all_targets) {
+			&main_delete($current_target);
 		}
-	} elsif ($delete =~ m/tid=(.+)/) {
+	} elsif ($delete =~ m/^tid=(.+)/) {
 		# Delete by tid
 		&process_targets;
-		my $existing_target = $1;
-		&check_in_use($tgtadm_output_name{$existing_target}, "tid", $existing_target);
+		my $current_target = $tgtadm_output_name{$1};
+		&main_delete($current_target, $1);
 	} else {
 		# Delete by name
 		&process_targets;
-		my $existing_target = $delete;
-		&check_in_use($existing_target);
+		my $current_target = $delete;
+		&main_delete($current_target);
 	}
 }
 
-# Some checks
-sub check {
+# Update targets
+sub update_targets {
+	if ($update eq "help") {
+		print <<EOF;
+      --update <value>		update all or selected targets
+				The target will be update only if it's not used
+				(no initiator is connected to it).
+				If you want to update targets which are in use,
+				you have to add "--force" flag.
+
+Example usage:
+      --update help	      - display this help
+      --update ALL	      - update all targets
+      --update tid=4	      - update target 4 (target with tid 4)
+      --update iqn.2008-08.com.example:some.target - update this target
+
+EOF
+		exit;
+	} elsif ($update eq "ALL") {
+		# Run over all targets and delete them if they are not in use
+		&parse_configs;
+		&process_targets;
+#		my @all_targets = keys %tgtadm_output_tid;
+		my @targets_combined = &combine_targets;
+		foreach my $current_target (@targets_combined) {
+			my $configured = &check_configured($current_target);
+			my $connected = &check_connected($current_target);
+			my $in_configfile = &check_in_configfile($current_target);
+			&combine_targets;
+			if (($in_configfile == 0) && ($configured == 1)) {
+				# Delete the target if it's not in the config file
+				&main_delete($current_target);
+			} else {
+				&add_targets($current_target, $configured, $connected, $in_configfile);
+			}
+
+		}
+	} elsif ($update =~ m/^tid=(.+)/) {
+		# Update by tid
+		&parse_configs;
+		&process_targets;
+		my $current_target = $tgtadm_output_name{$1};
+		my $configured = &check_configured($current_target);
+		my $connected = &check_connected($current_target);
+		my $in_configfile = &check_in_configfile($current_target);
+		if (($in_configfile == 0) && ($configured == 1)) {
+			# Delete the target if it's not in the config file
+			&main_delete($current_target);
+		} elsif ($configured == 1) {
+			&add_targets($current_target, $configured, $connected);
+		} else {
+			print "There is no target with tid $1, can't continue!\n";
+			exit 1;
+		}
+	} else {
+		# Update by name
+		&parse_configs;
+		&process_targets;
+		my $current_target = $update;
+		my $configured = &check_configured($current_target);
+		my $connected = &check_connected($current_target);
+		my $in_configfile = &check_in_configfile($current_target);
+		if (($in_configfile == 0) && ($configured == 1)) {
+			# Delete the target if it's not in the config file
+			&main_delete($current_target);
+		} else {
+			&add_targets($current_target, $configured, $connected);
+		}
+	}
+}
+
+# Find the biggest tid
+sub find_max_tid {
+	my @all_targets = keys %tgtadm_output_tid;
+	my $maxtid = 0;
+	foreach my $var (@all_targets) {
+		if ($tgtadm_output_tid{$var} > $maxtid) {
+			$maxtid = $tgtadm_output_tid{$var};
+		}
+		return $maxtid;
+	}
+}
+
+# Combine targets from the config file and currently configured targets
+sub combine_targets {
+	my @targets_in_configfile;
+	my @all_targets = keys %tgtadm_output_tid;
+	my @targets_combined;
+	# Make an array of targets in the config file
+	foreach my $k (sort keys %conf) {
+		if ( $k eq "target" ) {
+			foreach my $k2 (sort keys %{$conf{$k}}) {
+				push(@targets_in_configfile, $k2)
+			}
+		}
+	}
+	# Use only unique elements from bot arrays
+	foreach my $target (@all_targets) {
+		push (@targets_combined, $target) unless grep { $_ eq $target } @targets_in_configfile;
+	}
+	@targets_combined = (@targets_combined, @targets_in_configfile);
+	return @targets_combined;
+}
+
+# Check if a value is correct
+sub check_value {
 	if ( not defined $_[0] or not length $_[0] ) {
 		print "\nOption $option has a missing value!\n";
 		print "Check your config file for errors (target: $target)\n";
@@ -578,6 +719,42 @@ sub check {
 	}
 }
 
+# Check if the target is in the config file
+sub check_in_configfile {
+	my $current_target = $_[0];
+	my $result;
+	foreach my $k (sort keys %conf) {
+		if ( $k eq "target" ) {
+			foreach my $k2 (sort keys %{$conf{$k}}) {
+				if ($k2 eq $current_target) {
+					return 1;
+				}
+			}
+			# If we're here, we didn't find a match
+			return 0;
+		}
+	}
+}
+
+# Check if the target is configured in tgtd
+sub check_configured {
+	my $current_target = $_[0];
+	if (length $tgtadm_output_tid{$current_target}) {
+		return 1;
+	} else {
+		return 0;
+	}
+}
+
+# Check if any initiators are connected to the target
+sub check_connected {
+	my $current_target = $_[0];
+	if ($tgtadm_output{$current_target} =~ m/\s+Connection:/) {
+		return 1;
+	} else {
+		return 0;
+	}
+}
 
 # Execute or just print (or both) everything we start or would start
 sub execute {
@@ -612,6 +789,8 @@ if ($execute == 1) {
 	&remove_targets;
 } elsif ($delete ne 0) {
 	&delete_targets;
+} elsif ($update ne 0) {
+	&update_targets;
 } elsif ($dump == 1) {
 	&dump_config;
 } elsif ($offline ne 0) {
