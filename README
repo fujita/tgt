@@ -42,7 +42,7 @@ directory.
 Developer Notes
 -------------
 The central resource for tgt development is the mailing list
-(stgt-devel@lists.berlios.de).
+(stgt@vger.kernel.org).
 
 First, please read the following documents (in short, follow Linux
 kernel development rules):
