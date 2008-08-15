@@ -396,7 +396,8 @@ sub dump_config {
 		    }
 
 		    if ( $show_target_line =~ m/\s+Backing store: (?!No backing store)(.+)/ ) {
-			print "\tbacking-store $1\n";
+			my @backing = $show_target_line =~ m{\s+Backing Store: (?!No backing store)(.+)}gi;
+			foreach my $back (@backing) { print "\tbacking-store $back\n"; }
 		    }
 		}
 
