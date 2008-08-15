@@ -187,11 +187,16 @@ sub add_targets {
 				} else {
 					$target = $k2;
 				}
+
+				my $in_use = 0;
 				if (length $single_target) {
-					&main_delete($target);
+					$in_use = &main_delete($target);
 				}
 				my $allowall = 1;
-				if ((not defined $tgtadm_output{$k2}) || (length $single_target && $force == 1)) {
+				if ((not defined $tgtadm_output{$k2}) ||
+					($update ne 0 && $in_use == 0) ||
+					($update ne 0 && $in_use == 1 && $pretend == 1 && $force == 1))
+					 {
 					# We have to find available tid
 					if (($in_configfile == 1) && ($configured == 0)) {
 						my $maxtid = &find_max_tid;
@@ -240,7 +245,7 @@ sub add_targets {
 					}
 
 				} else {
-					if (not length $update) {
+					if (not length $configured || $in_use eq 1) {
 						execute("# Target $target already exists!");
 					}
 				}
@@ -352,7 +357,7 @@ sub process_options {
 }
 
 # If the target is configured, but not present in the config file,
-# offline it and try to remove it
+# try to remove it
 sub remove_targets {
 
 	&process_targets;
@@ -385,58 +390,50 @@ sub dump_config {
 
 	my @all_targets = keys %tgtadm_output_tid;
 
-	foreach my $target (@all_targets) {
-		foreach my $show_target_line ($tgtadm_output{$target}) {
-		    if ( $show_target_line =~ m/^Target (\d*): (.+)/ ) {
-			print "<target $2>\n";
-		    }
+	# If all targets use the same driver, us it only once in the config
+	my $skip_driver = 0;
+	my @drivers_combined;
+	foreach my $current_target (@all_targets) {
+		my $driver = &show_target_info($current_target, "driver");
+		push (@drivers_combined, $driver);
+	}
 
-		    if ( $show_target_line =~ m/\s+Driver: (.+)/ ) {
-			print "\tdriver $1\n";
-		    }
+	my %drivers_uniq;
+	@drivers_uniq{@drivers_combined} = ();
+	my @drivers_combined_uniq = sort keys %drivers_uniq;
 
-		    if ( $show_target_line =~ m/\s+Backing store: (?!No backing store)(.+)/ ) {
-			my @backing = $show_target_line =~ m{\s+Backing Store: (?!No backing store)(.+)}gi;
-			foreach my $back (@backing) { print "\tbacking-store $back\n"; }
-		    }
+	if (scalar @drivers_combined_uniq == 1) {
+		print "default-driver $drivers_combined_uniq[0]\n\n";
+	}
+
+	# Print everything else in the config
+	foreach my $current_target (@all_targets) {
+		my $target_name = &show_target_info($current_target, "target_name");
+		print "<target $target_name>\n";
+
+		if (scalar @drivers_combined_uniq gt 1) {
+			my $driver = &show_target_info($current_target, "driver");
+			print "\tdriver $driver\n";
 		}
 
-		# Process account and ACL information
-		my $account_acl;
-
-		foreach my $show_target_line ($tgtadm_output{$target}) {
-		    $account_acl .= $show_target_line
+		my @backing_stores = &show_target_info($current_target, "backing_stores");
+		foreach my $backing_store (@backing_stores) {
+			print "\tbacking-store $backing_store\n";
 		}
 
-		# start with account information...
-		while ($account_acl =~ m{
-			\s+Account\ information:\n(.*)ACL\ information:
-			     }xmgs
-		      ) {
-
-			my @account = split(/\n/, $1);
-
-			foreach my $user (@account) {
-				my @var = split(/^\s+/, $user);
-				@var = split(/\s/, $var[1]);
-
-				if ( $var[1] eq "(outgoing)" ) {
-					print "\toutgoinguser $var[0] PLEASE_CORRECT_THE_PASSWORD\n";
-				} elsif ( ($var[0] ne "") && ($var[1] eq "") ) {
-					print "\tincominguser $var[0] PLEASE_CORRECT_THE_PASSWORD\n";
-				}
+		my @account_information = &show_target_info($current_target, "account_information");
+		foreach my $account (@account_information) {
+			if ($account =~ /(.+)\ \(outgoing\)/) {
+				print "\toutgoinguser $1 PLEASE_CORRECT_THE_PASSWORD\n";
+			} elsif (length $account) {
+				print "\tincominguser $account PLEASE_CORRECT_THE_PASSWORD\n";
 			}
 		}
 
-		#...and finish with ACL information
-		while ($account_acl =~ m{
-			\s+ACL\ information:\n(.*)
-			     }xmgs
-		      ) {
-		    my @ini_addresses = split(/\n/, $1);
-		    foreach my $ini_address (@ini_addresses) {
-			my @var = split(/^\s+/, $ini_address);
-			print "\tinitiator-address $var[1]\n";
+		my @acl_information = &show_target_info($current_target, "acl_information");
+		if (scalar(@acl_information) != 1 || $acl_information[0] ne "ALL") {
+			foreach my $ini_address (@acl_information) {
+				print "\tinitiator-address $ini_address\n";
 			}
 		}
 		print "</target>\n\n";
@@ -491,17 +488,42 @@ EOF
 sub show_target_info {
 	my $existing_target = $_[0];
 	my $task = $_[1];
+	# Returns target information
+	if ($task eq "target_name") {
+		if ($tgtadm_output{$existing_target} =~ m/^Target (\d*): (.+)/ ) {
+			return $2;
+		}
 	# Returns driver information
-	if ($task eq "driver") {
-		if ( $tgtadm_output{$existing_target} =~ m/\s+Driver: (.+)/ ) {
-			print $1;
+	} elsif ($task eq "driver") {
+		if ($tgtadm_output{$existing_target} =~ m/\s+Driver: (.+)/ ) {
 			return $1;
+		}
+	# Returns backing store
+	} elsif ($task eq "backing_stores") {
+		if ($tgtadm_output{$existing_target} =~ m/\s+Backing store: (?!No backing store)(.+)/ ) {
+			my @backing_stores = $tgtadm_output{$existing_target} =~ m{\s+Backing store: (?!No backing store\n)(.+)}g;
+			return @backing_stores;
+		}
+		return;
+	# Returns account information:
+	} elsif ($task eq "account_information") {
+		if ($tgtadm_output{$existing_target} =~ m{
+			\s+Account\ information:\n(.*)\n\s+ACL\ information:
+			     }xs
+		      ) {
+			my @accounts = split(/\n/, $1);
+			my @account_information;
+			foreach my $user (@accounts) {
+				my @var = split(/^\s+/, $user);
+				push(@account_information, $var[1]);
+			}
+			return @account_information;
 		}
 	# Returns ACL information
 	} elsif ($task eq "acl_information") {
-		while ($tgtadm_output{$existing_target} =~ m{
+		if ($tgtadm_output{$existing_target} =~ m{
 			\s+ACL\ information:\n(.*)
-				}xmgs
+				}xs
 			) {
 			my @ini_addresses = split(/\n/, $1);
 			my @acls;
@@ -513,14 +535,27 @@ sub show_target_info {
 		}
 	# Returns sessions
 	} elsif ($task eq "sessions") {
-		my @var = split(/\n/, $tgtadm_output{$existing_target});
-		my @sids;
-		foreach my $sid (@var) {
-			if ( $sid =~ m/\s+I_T nexus: (.+)/ ) {
-				push(@sids, $1);
+		my %sessions;
+		if ($tgtadm_output{$existing_target} =~ m{
+			\s+I_T\ nexus\ information:\n(.*)LUN\ information:
+				}xs
+			) {
+			my @var = split(/\n/, $1);
+			my $sid;
+			my $cid;
+
+			foreach my $line (@var) {
+			if ($line =~ m/\s+I_T nexus:\ (.+)/) {
+					$sid = $1;
+				} else {
+					if ($line =~ m/\s+Connection:\ (.+)/) {
+						$cid = $1;
+						$sessions{$sid} = $cid;
+					}
+				}
 			}
 		}
-		return @sids;
+		return %sessions;
 	}
 }
 
@@ -540,9 +575,11 @@ sub main_delete {
 				execute("tgtadm --op unbind --mode target --tid $tgtadm_output_tid{$current_target} -I $acl");
 			}
 			# Now, remove all sessions / connections from that tid
-			my @sessions = &show_target_info($current_target, "sessions");
-			foreach my $session (@sessions) {
-				execute("tgtadm --op delete --mode conn --tid $tgtadm_output_tid{$current_target} --sid $session --cid 0");
+			my %sessions = &show_target_info($current_target, "sessions");
+			foreach my $sid (keys %sessions) {
+				foreach my $cid ($sessions{$sid}) {
+					execute("tgtadm --op delete --mode conn --tid $tgtadm_output_tid{$current_target} --sid $sid --cid $cid");
+				}
 			}
 			execute("tgtadm --mode target --op delete --tid=$tgtadm_output_tid{$current_target}");
 		} else {
@@ -552,13 +589,14 @@ sub main_delete {
 				$del_upd_text = "deleted";
 			}
 			execute("# Target with tid $tgtadm_output_tid{$current_target} ($current_target) is in use, it won't be $del_upd_text.");
+			return 1;
 		}
 	} elsif (length $tgtadm_output_tid{$current_target}) {
 		execute("# Removing target: $current_target");
 		execute("tgtadm --mode target --op delete --tid=$tgtadm_output_tid{$current_target}");
 	} else {
 		if (length $current_tid) {
-			execute("# Target with $current_target tid $current_tid does not exist!");
+			execute("# Target with tid $current_tid does not exist!");
 		} else {
 			execute("# Target with name $current_target does not exist!");
 		}
@@ -566,6 +604,7 @@ sub main_delete {
 	if ($configured ne 0) {
 		execute();
 	}
+	return 0;
 }
 
 # Delete the targets
@@ -703,9 +742,9 @@ sub combine_targets {
 			}
 		}
 	}
-	# Use only unique elements from bot arrays
-	foreach my $target (@all_targets) {
-		push (@targets_combined, $target) unless grep { $_ eq $target } @targets_in_configfile;
+	# Use only unique elements from both arrays
+	foreach my $current_target (@all_targets) {
+		push (@targets_combined, $current_target) unless grep { $_ eq $current_target } @targets_in_configfile;
 	}
 	@targets_combined = (@targets_combined, @targets_in_configfile);
 	return @targets_combined;
