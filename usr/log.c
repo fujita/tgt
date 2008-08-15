@@ -108,9 +108,6 @@ static int logarea_init (int size)
 		return 1;
 	}
 
-	la->ops[0].sem_num = 0;
-	la->ops[0].sem_flg = 0;
-
 	return 0;
 }
 
@@ -237,21 +234,24 @@ static void log_syslog (void * buff)
 static void dolog(int prio, const char *fmt, va_list ap)
 {
 	struct timespec ts;
+	struct sembuf ops;
 
 	if (la) {
 		ts.tv_sec = 0;
 		ts.tv_nsec = 10000;
 
-		la->ops[0].sem_op = -1;
-		if (semtimedop(la->semid, la->ops, 1, &ts) < 0) {
+		ops.sem_num = 0;
+		ops.sem_flg = 0;
+		ops.sem_op = -1;
+		if (semtimedop(la->semid, &ops, 1, &ts) < 0) {
 			syslog(LOG_ERR, "semop up failed");
 			return;
 		}
 
 		log_enqueue(prio, fmt, ap);
 
-		la->ops[0].sem_op = 1;
-		if (semop(la->semid, la->ops, 1) < 0) {
+		ops.sem_op = 1;
+		if (semop(la->semid, &ops, 1) < 0) {
 			syslog(LOG_ERR, "semop down failed");
 			return;
 		}
@@ -291,15 +291,21 @@ void log_debug(const char *fmt, ...)
 
 static void log_flush(void)
 {
+	struct sembuf ops;
+
 	while (!la->empty) {
-		la->ops[0].sem_op = -1;
-		if (semop(la->semid, la->ops, 1) < 0) {
+		ops.sem_num = 0;
+		ops.sem_flg = 0;
+		ops.sem_op = -1;
+		if (semop(la->semid, &ops, 1) < 0) {
 			syslog(LOG_ERR, "semop up failed");
 			exit(1);
 		}
+
 		log_dequeue(la->buff);
-		la->ops[0].sem_op = 1;
-		if (semop(la->semid, la->ops, 1) < 0) {
+
+		ops.sem_op = 1;
+		if (semop(la->semid, &ops, 1) < 0) {
 			syslog(LOG_ERR, "semop down failed");
 			exit(1);
 		}
