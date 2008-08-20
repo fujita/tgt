@@ -225,6 +225,24 @@ static int build_element_descriptors(uint8_t *data, struct list_head *head,
 }
 
 /**
+ * smc_initialize_element_status - INITIALIZE ELEMENT STATUS op code
+ *
+ * Some backup libraries seem to require this.
+ *
+ * Support the SCSI op code INITIALIZE_ELEMENT_STATUS
+ * Ref: smc3r10a, 6.2
+ */
+static int smc_initialize_element_status(int host_no, struct scsi_cmd *cmd)
+{
+	scsi_set_in_resid_by_actual(cmd, 0);
+
+	if (device_reserved(cmd))
+		return SAM_STAT_RESERVATION_CONFLICT;
+	else
+		return SAM_STAT_GOOD;
+}
+
+/**
  * smc_read_element_status  -  READ ELEMENT STATUS op code
  *
  * Support the SCSI op code READ ELEMENT STATUS
@@ -748,7 +766,7 @@ struct device_type_template smc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{smc_initialize_element_status,},
 
 		{spc_illegal_op,},
 		{spc_illegal_op,},
