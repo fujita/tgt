@@ -225,6 +225,23 @@ static int build_element_descriptors(uint8_t *data, struct list_head *head,
 }
 
 /**
+ * smc_initialize_element_status with range
+ *                      - INITIALIZE ELEMENT STATUS WITH RANGE op code
+ *
+ * Support the SCSI op code INITIALIZE_ELEMENT_STATUS_WITH_RANGE
+ * Ref: smc3r11, 6.5
+ */
+static int smc_initialize_element_status_range(int host_no, struct scsi_cmd *cmd)
+{
+	scsi_set_in_resid_by_actual(cmd, 0);
+
+	if (device_reserved(cmd))
+		return SAM_STAT_RESERVATION_CONFLICT;
+	else
+		return SAM_STAT_GOOD;
+}
+
+/**
  * smc_initialize_element_status - INITIALIZE ELEMENT STATUS op code
  *
  * Some backup libraries seem to require this.
@@ -796,7 +813,28 @@ struct device_type_template smc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 
-		[0x20 ... 0x4f] = {spc_illegal_op,},
+		[0x20 ... 0x2f] = {spc_illegal_op,},
+
+		/* 0x30 */
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{smc_initialize_element_status_range,},
+
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+
+		[0x40 ... 0x4f] = {spc_illegal_op,},
 
 		/* 0x50 */
 		{spc_illegal_op,},
