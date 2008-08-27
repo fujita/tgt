@@ -192,7 +192,7 @@ static struct device_type_template ssc_template = {
 		{spc_start_stop,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{spc_prevent_allow_media_removal,},
 		{spc_illegal_op,},
 
 		/* 0x20 */
