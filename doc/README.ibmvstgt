@@ -1,5 +1,13 @@
 Starting
 -------------
+If you want IBM VIO target driver, get kernel version 2.6.20, rebuild
+the kernel, and reboot with the new kernel. Note you need to enable
+SCSI_TGT, SCSI_SRP, and SCSI_IBMVSCSIS kernel options.
+
+host:~/tgt/usr$ make KERNELSRC=<kernel-src-directory> IBMVIO=1
+
+Make sure that everything is built successfully.
+
 Try the following commands:
 
 host:~/tgt$ su

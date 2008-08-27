@@ -5,6 +5,13 @@ This show a simple example to set up some targets.
 
 Starting the daemon
 -------------
+The iSCSI target driver works with the 2.6.X kernels. It requires
+OpenSSL library (libssl-dev for debian, openssl-devel for Fedora).
+
+First, you need to compile the source code:
+
+host:~/tgt/usr$ make ISCSI=1
+
 Try the following commands:
 
 host:~/tgt$ su

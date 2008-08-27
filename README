@@ -3,40 +3,47 @@ Introduction
 Linux target framework (tgt) aims to simplify various SCSI target
 driver (iSCSI, Fibre Channel, SRP, etc) creation and maintenance.
 
+Currently, tgt supports the following target drivers:
+
+- iSCSI software target driver for Ethernet NICs
+
+- iSER software target driver for Infiniband and RDMA NICs
+
+- IBM System p VIO server
+
+- FCoE software target driver for Ethernet NICs (in progress)
+
+- Qlogic qla2xxx FC target driver (in progress)
+
 Tgt consists of kernel modules, user-space daemon, and user-space
-tools. Some target drivers uses all of them and some use only
-user-space daemon and tools (i.e. they completely runs in user space).
+tools. iSCSI, iSER, and FCoE target drivers use only user-space daemon
+and tools (i.e. they are just user-space applications. They don't need
+any kernel support).
 
-Currently, tgt supports three target drivers:
+tgt can emulate the following device types:
 
-- IBM VIO server (ibmvstgt)
-- iSCSI
-- Xen vscsifront/back
+- SBC: a virtual disk drive that can use a file to store the content.
 
-Note that tgt is under active development. Don't play with important
-data.
+- SMC: a virtual media jukebox that can be controlled by the "mtx"
+tool (partially functional).
+
+- MMC: a virtual DVD drive that can read DVD-ROM iso files and create
+burnable DVD+R. It can be combined with SMC to provide a fully
+operational DVD jukebox.
+
+- SSC: a virtual tape device (aka VTL) that can use a file to store
+the content (in progress).
+
+- OSD: a virtual object-based storage device that can use a file to
+store the content (in progress).
 
 The code is under the GNU General Public License version 2.
 
 
 Preparation
 -------------
-The iSCSI target driver can works with the 2.6.X kernels. It requires
-OpenSSL library (libssl-dev for debian, openssl-devel for Fedora).
-
-host:~/tgt/usr$ make ISCSI=1
-
-If you want IBM VIO target driver, get kernel version 2.6.20, rebuild
-the kernel, and reboot with the new kernel. Note you need to enable
-SCSI_TGT, SCSI_SRP, and SCSI_IBMVSCSIS kernel options.
-
-host:~/tgt/usr$ make KERNELSRC=<kernel-src-directory> IBMVIO=1
-
-Make sure that everything is built successfully.
-
-Now you can run tgt. Target drivers have their own ways for
-configuration. So find an appropriate documentation in the doc
-directory.
+Target drivers have their own ways to build, configure, etc. So find
+an appropriate documentation in the doc directory.
 
 
 Developer Notes
