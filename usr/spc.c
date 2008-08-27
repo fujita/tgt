@@ -318,6 +318,16 @@ int spc_test_unit(int host_no, struct scsi_cmd *cmd)
 	return SAM_STAT_CHECK_CONDITION;
 }
 
+int spc_prevent_allow_media_removal(int host_no, struct scsi_cmd *cmd)
+{
+	/* TODO: implement properly */
+
+	if (device_reserved(cmd))
+		return SAM_STAT_RESERVATION_CONFLICT;
+	else
+		return SAM_STAT_GOOD;
+}
+
 int spc_mode_select(int host_no, struct scsi_cmd *cmd,
 		    int (*update)(struct scsi_cmd *, uint8_t *, int *))
 {
