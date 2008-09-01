@@ -297,22 +297,29 @@ sub process_options {
 		my @value_arr = @$value;
 		my $i = 1;
 		foreach my $direct_store (@value_arr) {
-			$inq=`sg_inq $direct_store`;
-			if ($inq=~/Vendor identification:\s*(\w+)\s*\n*Product identification:\s*([\w\s\/\-]+)\n\s*\n*Product revision level:\s*(\w*)\s*\n*Unit serial number:\s*(\w+)/)
-			{
-				$vendor_id="$1";
-				$prod_id="$2";
-				$prod_rev="$3";
-				$scsi_serial="$4";
-			}
-			$vendor_id =~ s/\s+$//;
-			$prod_id =~ s/\s+$//;
-			$prod_rev =~ s/\s+$//;
-			$scsi_serial =~ s/\s+$//;
+			# Check if device exists
+			if ( -e $direct_store) {
+				$inq=`sg_inq $direct_store`;
+				if ($inq=~/Vendor identification:\s*(\w+)\s*\n*Product identification:\s*([\w\s\/\-]+)\n\s*\n*Product revision level:\s*(\w*)\s*\n*Unit serial number:\s*(\w+)/)
+				{
+					$vendor_id="$1";
+					$prod_id="$2";
+					$prod_rev="$3";
+					$scsi_serial="$4";
+				}
+				$vendor_id =~ s/\s+$//;
+				$prod_id =~ s/\s+$//;
+				$prod_rev =~ s/\s+$//;
+				$scsi_serial =~ s/\s+$//;
 
-			execute("tgtadm --lld $driver --op new --mode logicalunit --tid $next_tid --lun 1 -b $direct_store");
-			execute("tgtadm --lld $driver --op update --mode logicalunit --tid  $next_tid --lun 1 --params vendor_id=\"$vendor_id\",product_id=\"$prod_id\",product_rev=\"$prod_rev\",scsi_sn=\"$scsi_serial\"");
-			$i += 1;
+				execute("tgtadm --lld $driver --op new --mode logicalunit --tid $next_tid --lun 1 -b $direct_store");
+				execute("tgtadm --lld $driver --op update --mode logicalunit --tid  $next_tid --lun 1 --params vendor_id=\"$vendor_id\",product_id=\"$prod_id\",product_rev=\"$prod_rev\",scsi_sn=\"$scsi_serial\"");
+				$i += 1;
+			}
+			else {
+				print("skipping device $direct_store\n");
+				print("$direct_store does not exist - please check the configuration file\n");
+			}
 		}
 	}
 
