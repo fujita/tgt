@@ -92,6 +92,7 @@ my %tgtadm_output_tid;
 my %tgtadm_output_name;
 my @largest_tid;
 my $next_tid;
+my @rootfs_dev;
 
 # Look up which targets are configured
 sub process_targets {
@@ -273,13 +274,20 @@ sub process_options {
 
 		foreach my $backing_store (@value_arr) {
 			# Check if device exists
-			if ( -e $backing_store) {
+			if ( ! -e $backing_store) {
+				print "skipping device $backing_store\n";
+				print "$backing_store does not exists - please check the configuration file\n";
+				next;
+			}
+
+			(my $can_alloc, my $dev) = check_device($backing_store);
+			if ($can_alloc) {
 				execute("tgtadm --lld $driver --op new --mode logicalunit --tid $next_tid --lun $i -b $backing_store");
 				$i += 1;
 			}
 			else {
-				print("skipping device $backing_store\n");
-				print("$backing_store does not exist - please check the configuration file\n");
+				print "skipping device $backing_store\n";
+				print "rootfs is mounted on this device: $dev\n";
 			}
 		}
 	}
@@ -298,7 +306,14 @@ sub process_options {
 		my $i = 1;
 		foreach my $direct_store (@value_arr) {
 			# Check if device exists
-			if ( -e $direct_store) {
+			if ( ! -e $direct_store) {
+				print "skipping device $direct_store\n" ;
+				print "$direct_store does not exists - please check the configuration file\n";
+				next;
+			}
+
+			(my $can_alloc, my $dev) = check_device($direct_store);
+			if ($can_alloc) {
 				$inq=`sg_inq $direct_store`;
 				if ($inq=~/Vendor identification:\s*(\w+)\s*\n*Product identification:\s*([\w\s\/\-]+)\n\s*\n*Product revision level:\s*(\w*)\s*\n*Unit serial number:\s*(\w+)/)
 				{
@@ -317,9 +332,10 @@ sub process_options {
 				$i += 1;
 			}
 			else {
-				print("skipping device $direct_store\n");
-				print("$direct_store does not exist - please check the configuration file\n");
+				print "skipping device $direct_store\n";
+				print "rootfs is mounted on this device: $dev \n";
 			}
+
 		}
 	}
 
@@ -827,6 +843,65 @@ sub execute {
 	} elsif ( $pretend == 1 ) {
 		print "@_\n";
 	}
+}
+
+#Check if a device can be allocated
+sub check_device {
+	my $tmp_dev = $_[0];
+
+	# Check if force flag is set
+	if ( $force == 0) {
+		# Check for rootfs devices
+		&find_rootfs_device();
+		$tmp_dev =~ s/\d//g;
+		# Check if device is on the same disk as rootfs
+		if (grep {$_ eq $tmp_dev} @rootfs_dev) {
+			return (0,$tmp_dev);
+		}
+	}
+	return 1;
+}
+
+# finds all the devices that rootfs is mounted on
+sub find_rootfs_device {
+	my @files=("/etc/mtab","/proc/mounts");
+	my @lines;
+	# read files
+	foreach my $file (@files){
+		if (open(FH,"$file")) {
+			@lines=(@lines,<FH>);
+			close (FH);
+		}
+	}
+
+	# parse files and finds all the device which mounted on /
+	foreach my $line (@lines){
+		chomp $line;
+		if (($line=~/^\/dev\//) && ($line=~/ \/ /)){
+			my @ln=split(' ',$line);
+			$ln[0]=~s/\d//g;
+			push(@rootfs_dev,$ln[0]);
+		}
+	}
+
+	# read swap file
+	my $swap_file="/proc/swap";
+	if (open(FH,"$swap_file")) {
+		@lines=<FH>;
+		close (FH);
+	}
+	# parse swap file and finds all the swap devices
+	foreach my $line (@lines){
+		chomp $line;
+		if ($line=~/^\/dev\//) {
+			my @ln=split(' ',$line);
+			$ln[0]=~s/\d//g;
+			push(@rootfs_dev,$ln[0]);
+		}
+	}
+	# remove duplicate entries from @rootfs_dev
+	my %seen = ();
+	@rootfs_dev = grep { ! $seen{ $_ }++ } @rootfs_dev;
 }
 
 if ($execute == 1) {
