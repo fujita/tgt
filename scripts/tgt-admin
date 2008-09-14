@@ -315,7 +315,7 @@ sub process_options {
 			(my $can_alloc, my $dev) = check_device($direct_store);
 			if ($can_alloc) {
 				$inq=`sg_inq $direct_store`;
-				if ($inq=~/Vendor identification:\s*(\w+)\s*\n*Product identification:\s*([\w\s\/\-]+)\n\s*\n*Product revision level:\s*(\w*)\s*\n*Unit serial number:\s*(\w+)/)
+				if ($inq=~/Vendor identification:\s*(\w+)\s*\n*Product identification:\s*([\w\s\/\-]+)\n\s*\n*Product revision level:\s*(\S*)\s*\n*Unit serial number:\s*(\S+)/)
 				{
 					$vendor_id="$1";
 					$prod_id="$2";
