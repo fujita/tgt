@@ -125,7 +125,15 @@ static void bs_thread_request_done(int fd, int events, void *data)
 		cmd->scsi_cmd_done(cmd, scsi_get_result(cmd));
 	}
 
-	write(info->command_fd[1], &nr_events, sizeof(nr_events));
+rewrite:
+	ret = write(info->command_fd[1], &nr_events, sizeof(nr_events));
+	if (ret < 0) {
+		eprintf("can't write done, %m\n");
+		if (errno == EAGAIN || errno == EINTR)
+			goto rewrite;
+
+		return;
+	}
 }
 
 static void *bs_thread_worker_fn(void *arg)
@@ -202,7 +210,13 @@ int bs_thread_open(struct bs_thread_info *info, request_func_t *rfn)
 				     bs_thread_worker_fn, info);
 	}
 
-	write(info->command_fd[1], &ret, sizeof(ret));
+rewrite:
+	ret = write(info->command_fd[1], &ret, sizeof(ret));
+	if (ret < 0) {
+		eprintf("can't write done, %m\n");
+		if (errno == EAGAIN || errno == EINTR)
+			goto rewrite;
+	}
 
 	return 0;
 event_del:
