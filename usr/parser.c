@@ -30,6 +30,7 @@ static int match_one(char *s, char *p, substring_t args[])
 {
 	char *meta;
 	int argc = 0;
+	unsigned long long ret;
 
 	if (!p)
 		return 1;
@@ -68,16 +69,16 @@ static int match_one(char *s, char *p, substring_t args[])
 			args[argc].to = s + len;
 			break;
 		case 'd':
-			strtol(s, &args[argc].to, 0);
+			ret = strtol(s, &args[argc].to, 0);
 			goto num;
 		case 'u':
-			strtoul(s, &args[argc].to, 0);
+			ret = strtoul(s, &args[argc].to, 0);
 			goto num;
 		case 'o':
-			strtoul(s, &args[argc].to, 8);
+			ret = strtoul(s, &args[argc].to, 8);
 			goto num;
 		case 'x':
-			strtoul(s, &args[argc].to, 16);
+			ret = strtoul(s, &args[argc].to, 16);
 		num:
 			if (args[argc].to == args[argc].from)
 				return 0;
