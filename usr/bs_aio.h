@@ -44,6 +44,10 @@ enum {
 #define __NR_eventfd 284
 #elif defined(__i386__)
 #define __NR_eventfd 323
+#elif defined(__powerpc__)
+#define __NR_eventfd 307
+#elif defined(__powerpc64__)
+#define __NR_eventfd 307
 #elif defined(__ia64__)
 #define __NR_eventfd 1309
 #elif defined(__sparc__) || defined(__sparc64__)
