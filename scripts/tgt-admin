@@ -11,7 +11,6 @@
 
 use strict;
 use Config::General qw(ParseConfig);
-use Data::Dumper;
 use Getopt::Long;
 
 # Our config file
@@ -37,7 +36,8 @@ This tool configures tgt targets.
       --ignore-errors		continue even if tgtadm exits with non-zero code
   -f, --force			force some operations even if the target is in use
   -p, --pretend			only print tgtadm options
-      --dump			dump current tgtd configuration
+      --dump			dump current tgtd configuration (note: does not
+				include detailed parameters, like write caching)
   -v, --verbose			increase verbosity (show tgtadm commands)
   -h, --help			show this help
 
@@ -77,7 +77,7 @@ my $result = GetOptions (
 );
 
 if (($help == 1) || ($param eq undef)) {
-	&usage
+	usage;
 }
 
 # Show all the targets and exit
@@ -92,7 +92,6 @@ my %tgtadm_output_tid;
 my %tgtadm_output_name;
 my @largest_tid;
 my $next_tid;
-my @rootfs_dev;
 
 # Look up which targets are configured
 sub process_targets {
@@ -104,7 +103,6 @@ sub process_targets {
 	my @show_target = `tgtadm --op show --mode target`;
 	my $tid;
 	my $targetname;
-
 	# Here, we create hashes of target names (all target data) and target tids
 	foreach my $show_target_line (@show_target) {
 		if ( $show_target_line =~ m/^Target (\d*): (.+)/ ) {
@@ -133,7 +131,7 @@ sub parse_configs {
 			%conf = ParseConfig(-ConfigFile => "$alternate_conf", -UseApacheInclude => 1, -IncludeGlob => 1,);
 		}
 		else {
-			die("file $alternate_conf not found. Exiting...\n");
+			die("Config file $alternate_conf not found. Exiting...\n");
 		}
 	} else {
 		# Parse the config file with Config::General
@@ -150,6 +148,7 @@ my $default_driver;
 my $target;
 my $option;
 my $value;
+my $lun;
 
 sub add_targets {
 	my $single_target = $_[0];
@@ -158,8 +157,8 @@ sub add_targets {
 	my $in_configfile = $_[3];
 	foreach my $k (sort keys %conf) {
 
-		if ( $k eq "default-driver" ) {
-			if ( not length ref($conf{$k}) ) {
+		if ($k eq "default-driver") {
+			if (not length ref($conf{$k})) {
 				$default_driver = $conf{$k};
 			} else {
 				print "Multiple default-driver definitions are not allowed!\n";
@@ -170,13 +169,13 @@ sub add_targets {
 	}
 
 	# If $default_driver is empty, default to iscsi
-	if ( not defined $default_driver ) {
+	if (not defined $default_driver) {
 		execute("# default-driver not defined, defaulting to iscsi.\n");
 		$default_driver = "iscsi";
 	}
 
 	foreach my $k (sort keys %conf) {
-		if ( $k eq "target" ) {
+		if ($k eq "target") {
 			foreach my $k2 (sort keys %{$conf{$k}}) {
 				# Do we run update or execute?
 				if (length $single_target) {
@@ -191,49 +190,47 @@ sub add_targets {
 
 				my $in_use = 0;
 				if (length $single_target) {
-					$in_use = &main_delete($target);
+					$in_use = main_delete($target);
 				}
 				my $allowall = 1;
 				if ((not defined $tgtadm_output{$k2}) ||
 					($update ne 0 && $in_use == 0) ||
 					($update ne 0 && $in_use == 1 && $pretend == 1 && $force == 1))
-					 {
+					{
 					# We have to find available tid
-					if (($in_configfile == 1) && ($configured == 0)) {
-						my $maxtid = &find_max_tid;
+					if ($in_configfile == 1 && $configured == 0 && $pretend == 0) {
+						my $maxtid = find_max_tid();
 						$next_tid = $maxtid + 1;
-					} elsif (length $single_target) {
+					} elsif (length $single_target && $configured == 1) {
 						$next_tid = $tgtadm_output_tid{$target};
 					} else {
 						$next_tid = $next_tid + 1;
 					}
+
 					# Before we add a target, we need to know its type
-					my $driver;
+					# and other parameters which can be specified globally
+					my %target_options;
+					my $target_options_ref;
 					foreach my $k3 (sort keys %{$conf{$k}{$k2}}) {
+						$lun = 1;
 						$option = $k3;
 						$value = $conf{$k}{$k2}{$k3};
-						&check_value($value);
-						if ($option eq "driver") {
-							if (ref($value) eq "ARRAY") {
-							print "Multiple driver definitions not allowed!\n";
-							print "Check your config file for errors (target: $target).\n";
-							exit 1;
-							}
-						$driver = $value;
-						}
+						check_value($value);
+						$target_options{$option} = $value;
+						$target_options_ref = \%target_options;
 					}
 
-					if (not defined $driver) {
-						$driver = $default_driver;
+					if (not defined $target_options{"driver"}) {
+						$target_options{"driver"} = $default_driver;
 					}
-
+					my $driver = $target_options{"driver"};
 					execute("# Adding target: $target");
 					execute("tgtadm --lld $driver --op new --mode target --tid $next_tid -T $target");
 					foreach my $k3 (sort keys %{$conf{$k}{$k2}}) {
 						$option = $k3;
 						$value = $conf{$k}{$k2}{$k3};
-						&check_value($value);
-						&process_options($driver);
+						check_value($value);
+						process_options($target_options_ref);
 						# If there was no option called "initiator-address", it means
 						# we want to allow ALL initiators for this target
 						if ($option eq "initiator-address") {
@@ -252,7 +249,7 @@ sub add_targets {
 				}
 			}
 			if (length $single_target && $in_configfile == 0 && $configured == 0) {
-				print "Target $single_target is $connected currently not configured\n";
+				print "Target $single_target is currently not configured\n";
 				print "and does not exist in the config file - can't continue!\n";
 				exit 1;
 			}
@@ -261,93 +258,232 @@ sub add_targets {
 	}
 }
 
-# Process options from the config file
-sub process_options {
-	my $driver = $_[0];
-	if ( $option eq "backing-store" ) {
-        # if we have one command, force it to be an array anyway
-		unless (ref($value) eq 'ARRAY') {
-			$value = [ $value ];
-		}
-		my @value_arr = @$value;
-		my $i = 1;
+# Some options can be specified only once
+sub check_if_hash_array {
+	my $check = $_[0];
+	my $definition = $_[1];
+	if (ref($check) eq 'ARRAY' || ref($check) eq "HASH") {
+		print "Multiple '$definition' definitions in '$option' not allowed!\n";
+		print "Check your config file for errors (target: $target).\n";
+		exit 1;
+	}
+}
 
-		foreach my $backing_store (@value_arr) {
-			# Check if device exists
-			if ( ! -e $backing_store) {
-				print "skipping device $backing_store\n";
-				print "$backing_store does not exists - please check the configuration file\n";
-				next;
-			}
+# Force an array if we just have one command
+sub force_array {
+	unless (ref($value) eq 'ARRAY') {
+		$value = [ $value ];
+	}
+}
 
-			(my $can_alloc, my $dev) = check_device($backing_store);
-			if ($can_alloc) {
-				execute("tgtadm --lld $driver --op new --mode logicalunit --tid $next_tid --lun $i -b $backing_store");
-				$i += 1;
-			}
-			else {
-				print "skipping device $backing_store\n";
-				print "rootfs is mounted on this device: $dev\n";
-			}
+# If we start any external command, we want to know if it exists
+sub check_exe {
+	my $command = $_[0];
+	my $option = $_[1];
+	my @path = split(":", $ENV{PATH});
+	my $exists = 0;
+	foreach my $path (@path) {
+		if ( -x "$path/$command" && -f "$path/$command" ) { $exists = 1 }
+	}
+	if ( $exists == 0 ) {
+		print "Command $command (needed by $option option in your config file) is not in your path - can't continue!\n";
+		exit 1;
+	}
+}
+
+# Apply additional parameters
+sub add_params {
+	my $param = shift;
+	my $param_value = shift;
+	my $lun = shift;
+	my $driver = shift;
+
+	if ($param eq "write-cache") {
+		if ($param_value eq "off") {
+			execute("tgtadm --lld $driver --op update --mode logicalunit --tid $next_tid --lun=$lun --params mode_page=8:0:18:0x10:0:0xff:0xff:0:0:0xff:0xff:0xff:0xff:0x80:0x14:0:0:0:0:0:0");
+		} elsif ($param_value eq "on" || not length $param_value) {
+			execute("# Write cache is enabled (default) for lun $lun.");
+		} else {
+			execute("# WARNING! Unknown value ($param_value) to write-cache! Accepted values are \"on\" and \"off\".");
 		}
 	}
 
-	if ( $option eq "direct-store" ) {
-		my $inq;
-		my $vendor_id="";
-		my $prod_id="";
-		my $prod_rev="";
-		my $scsi_serial="";
-	        # if we have one command, force it to be an array anyway
-		unless (ref($value) eq 'ARRAY') {
-			$value = [ $value ];
+	if ($param eq "scsi_id" || $param eq "scsi_sn" || $param eq "vendor_id" || $param eq "product_id" ||
+	    $param eq "product_rev" || $param eq "sense_format" || $param eq "removable" || $param eq "online" ||
+	    $param eq "path" || $param eq "mode_page") {
+		execute("tgtadm --lld $driver --op update --mode logicalunit --tid $next_tid --lun=$lun --params $param=\"$param_value\"");
+	}
+}
+
+# Add backing or direct store
+sub add_backing_direct {
+	my $backing_store = $_[0];
+	my $target_options_ref = $_[1];
+	my $lun = $_[2];
+	my $direct_store = $_[3];
+	my $driver = $$target_options_ref{"driver"};
+
+	# Is the device in use?
+	(my $can_alloc, my $dev) = check_device($backing_store);
+
+	# Needed if the config file has mixed definitions
+	if (ref($backing_store) eq "HASH") {
+		foreach my $backing_store (sort keys %$value) {
+			add_backing_direct($backing_store,$target_options_ref,$lun,$direct_store);
+			$lun += 1;
 		}
-		my @value_arr = @$value;
-		my $i = 1;
-		foreach my $direct_store (@value_arr) {
-			# Check if device exists
-			if ( ! -e $direct_store) {
-				print "skipping device $direct_store\n" ;
-				print "$direct_store does not exists - please check the configuration file\n";
-				next;
-			}
-
-			(my $can_alloc, my $dev) = check_device($direct_store);
-			if ($can_alloc) {
-				$inq=`sg_inq $direct_store`;
-				if ($inq=~/Vendor identification:\s*(\w+)\s*\n*Product identification:\s*([\w\s\/\-]+)\n\s*\n*Product revision level:\s*(\S*)\s*\n*Unit serial number:\s*(\S+)/)
-				{
-					$vendor_id="$1";
-					$prod_id="$2";
-					$prod_rev="$3";
-					$scsi_serial="$4";
+		return $lun;
+	} elsif (-e $backing_store && $can_alloc == 1) {
+		execute("tgtadm --lld $driver --op new --mode logicalunit --tid $next_tid --lun $lun -b $backing_store");
+		# Process parameters for each lun / backing store
+		if (ref $value eq "HASH") {
+			my %params_added;
+			my @mode_page;
+			foreach my $store (keys %$value) {
+				if (ref $$value{$store} eq "HASH" && $store eq $backing_store) {
+					foreach my $store_option (keys %{$$value{$store}}) {
+						my $result = $$value{$store}{$store_option};
+						check_value($result);
+						if ($store_option ne "mode_page") { check_if_hash_array($result,$store_option) }
+						# write-cache can be set globally per target and overridden per lun,
+						# so we treat it differently
+						if ($store_option ne "mode_page" && $store_option ne "write-cache") {
+							add_params($store_option, $result, $lun, $driver);
+							$params_added{$store_option} = 1;
+						}
+						if ($store_option eq "write-cache") {
+							add_params($store_option, $result, $lun, $driver);
+							$params_added{write_cache} = 1;
+						}
+						if ($store_option eq "mode_page") {
+							@mode_page = @$result;
+							foreach my $mode_page (@mode_page) {
+								add_params("mode_page", $mode_page, $lun, $driver);
+							}
+						}
+					}
 				}
-				$vendor_id =~ s/\s+$//;
-				$prod_id =~ s/\s+$//;
-				$prod_rev =~ s/\s+$//;
-				$scsi_serial =~ s/\s+$//;
-
-				execute("tgtadm --lld $driver --op new --mode logicalunit --tid $next_tid --lun 1 -b $direct_store");
-				execute("tgtadm --lld $driver --op update --mode logicalunit --tid  $next_tid --lun 1 --params vendor_id=\"$vendor_id\",product_id=\"$prod_id\",product_rev=\"$prod_rev\",scsi_sn=\"$scsi_serial\"");
-				$i += 1;
 			}
-			else {
-				print "skipping device $direct_store\n";
-				print "rootfs is mounted on this device: $dev \n";
+			# Used only if lun is a direct-store
+			my $sg_inq;
+			my %direct_params;
+			if ($direct_store == 1) {
+				$sg_inq=`sg_inq $backing_store`;
+				if ($sg_inq=~m {
+					Vendor\ identification:\s+?(.*?)\n
+					\s+Product\ identification:\s+(.*?)\n
+					\s+Product\ revision\ level:\s+(.*?)\n
+					(?:\s+Unit\ serial\ number:\s+(.*?)\n)?
+					}xs ) {
+					# If they were not defined globally for a target,
+					# add them now
+					if (not length $$target_options_ref{vendor_id}) {
+						$direct_params{vendor_id} = $1;
+					}
+					if (not length $$target_options_ref{product_id}) {
+						$direct_params{product_id} = $2;
+					}
+					if (not length $$target_options_ref{product_rev}) {
+						$direct_params{product_rev} = $3;
+					}
+					if (not length $$target_options_ref{scsi_sn}) {
+						$direct_params{scsi_sn} = $4;
+					}
+				}
 			}
 
+			# Add these parameters if they were not overwritten in the config file
+			my @opts = ("scsi_id", "sense_format", "removable", "online", "path");
+			foreach my $single_opt (@opts) {
+				check_if_hash_array($$target_options_ref{$single_opt},$single_opt);
+				if ($params_added{$single_opt} ne 1 && length $$target_options_ref{$single_opt}) {
+					add_params($single_opt, $$target_options_ref{$single_opt}, $lun, $driver);
+					$params_added{$single_opt} = 1;
+				}
+			}
+			# These options can be fetched by sg_inq for direct-store
+			my @opts = ("vendor_id", "product_id", "product_rev", "scsi_sn");
+			foreach my $single_opt (@opts) {
+				check_if_hash_array($$target_options_ref{$single_opt},$single_opt);
+				my $this_opt;
+				if (length $$target_options_ref{$single_opt}) {
+					$this_opt = $$target_options_ref{$single_opt};
+				} elsif (length $direct_params{$single_opt}) {
+					$this_opt = $direct_params{$single_opt};
+				}
+				if ($params_added{$single_opt} ne 1 && length $this_opt) {
+					add_params($single_opt, $this_opt, $lun, $driver);
+					$params_added{$single_opt} = 1;
+				}
+			}
+			# write-cache
+			if ($params_added{write_cache} ne 1) {
+				add_params("write-cache", $$target_options_ref{"write-cache"}, $lun, $driver);
+				$params_added{write_cache} = 1;
+			}
+			# mode_page
+			unless (ref($$target_options_ref{mode_page}) eq 'ARRAY') {
+				$$target_options_ref{mode_page} = [ $$target_options_ref{mode_page} ];
+			}
+			foreach my $mode_page (@{$$target_options_ref{"mode_page"}}) {
+				if (length $mode_page) {
+					add_params("mode_page", $mode_page, $lun, $driver);
+				}
+			}
+		} else {
+			print "If you got here, this means your config file is not supported.\n";
+			print "Please report it to stgt mailing list and attach your config files.\n";
+			exit 1;
+		}
+		$lun += 1;
+		return $lun;
+	} elsif ($can_alloc == 0) {
+		execute("# Skipping device $backing_store ($dev is mounted / in use)");
+	} else {
+		execute("# Skipping device: $backing_store");
+		execute("# $backing_store does not exist - please check the configuration file");
+	}
+}
+
+# Process options from the config file
+sub process_options {
+	my $target_options_ref = $_[0];
+	my $driver = $$target_options_ref{"driver"};
+	if ($option eq "backing-store" || $option eq "direct-store") {
+		my $direct_store = 0;
+		if ($option eq "direct-store") {
+			check_exe("sg_inq", "direct-store");
+			$direct_store = 1;
+		}
+
+		# We want to make everything a hash to use it
+		# in the same way later on
+		unless (ref($value)) {
+			$value = { $value }
+		}
+
+		my %arrvalue;
+		if (ref($value) eq "ARRAY") {
+			foreach my $backing_store (@$value) {
+				$arrvalue{$backing_store} = 1;
+			}
+			$value = \%arrvalue;
+		}
+
+		if (ref($value) eq "HASH") {
+			foreach my $backing_store (sort keys %$value) {
+				$lun = add_backing_direct($backing_store,$target_options_ref,$lun,$direct_store);
+			}
 		}
 	}
 
 	if ( $option eq "incominguser" ) {
 	        # if we have one command, force it to be an array anyway
-		unless (ref($value) eq 'ARRAY') {
-			$value = [ $value ];
-		}
+		force_array();
 		my @value_arr = @$value;
 		foreach my $incominguser (@value_arr) {
 			my @userpass = split(/ /, $incominguser);
-			&check_value($userpass[1]);
+			check_value($userpass[1]);
 			execute("tgtadm --lld $driver --mode account --op delete --user=$userpass[0]");
 			execute("tgtadm --lld $driver --mode account --op new --user=$userpass[0] --password=$userpass[1]");
 			execute("tgtadm --lld $driver --mode account --op bind --tid=$next_tid --user=$userpass[0]");
@@ -356,12 +492,10 @@ sub process_options {
 
 	if ( $option eq "outgoinguser" ) {
 	        # if we have one command, force it to be an array anyway
-		unless (ref($value) eq 'ARRAY') {
-			$value = [ $value ];
-		}
+		force_array();
 		execute("# Warning: only one outgoinguser is allowed. Will only use the first one.");
 		my @userpass = split(/ /, @$value[0]);
-		&check_value($userpass[1]);
+		check_value($userpass[1]);
 		execute("tgtadm --lld $driver --mode account --op delete --user=$userpass[0]");
 		execute("tgtadm --lld $driver --mode account --op new --user=$userpass[0] --password=$userpass[1]");
 		execute("tgtadm --lld $driver --mode account --op bind --tid=$next_tid --user=$userpass[0] --outgoing");
@@ -369,11 +503,10 @@ sub process_options {
 
 	if ( $option eq "initiator-address" ) {
 	        # if we have one command, force it to be an array anyway
-		unless (ref($value) eq 'ARRAY') {
-			$value = [ $value ];
-		}
+		force_array();
 		my @value_arr = @$value;
 		foreach my $initiator_address (@value_arr) {
+			check_value($initiator_address);
 			execute("tgtadm --lld $driver --op bind --mode target --tid $next_tid -I $initiator_address");
 		}
 	}
@@ -383,7 +516,7 @@ sub process_options {
 # try to remove it
 sub remove_targets {
 
-	&process_targets;
+	process_targets;
 	my @all_targets = keys %tgtadm_output_tid;
 
 	foreach my $existing_target (@all_targets) {
@@ -399,7 +532,7 @@ sub remove_targets {
 
 				if ( $dontremove == 0 ) {
 					# Remove the target
-					&main_delete($existing_target);
+					main_delete($existing_target);
 				}
 			}
 		}
@@ -409,7 +542,7 @@ sub remove_targets {
 # Dump current tgtd configuration
 sub dump_config {
 
-	&process_targets;
+	process_targets;
 
 	my @all_targets = keys %tgtadm_output_tid;
 
@@ -417,7 +550,7 @@ sub dump_config {
 	my $skip_driver = 0;
 	my @drivers_combined;
 	foreach my $current_target (@all_targets) {
-		my $driver = &show_target_info($current_target, "driver");
+		my $driver = show_target_info($current_target, "driver");
 		push (@drivers_combined, $driver);
 	}
 
@@ -431,20 +564,20 @@ sub dump_config {
 
 	# Print everything else in the config
 	foreach my $current_target (@all_targets) {
-		my $target_name = &show_target_info($current_target, "target_name");
+		my $target_name = show_target_info($current_target, "target_name");
 		print "<target $target_name>\n";
 
 		if (scalar @drivers_combined_uniq gt 1) {
-			my $driver = &show_target_info($current_target, "driver");
+			my $driver = show_target_info($current_target, "driver");
 			print "\tdriver $driver\n";
 		}
 
-		my @backing_stores = &show_target_info($current_target, "backing_stores");
+		my @backing_stores = show_target_info($current_target, "backing_stores");
 		foreach my $backing_store (@backing_stores) {
 			print "\tbacking-store $backing_store\n";
 		}
 
-		my @account_information = &show_target_info($current_target, "account_information");
+		my @account_information = show_target_info($current_target, "account_information");
 		foreach my $account (@account_information) {
 			if ($account =~ /(.+)\ \(outgoing\)/) {
 				print "\toutgoinguser $1 PLEASE_CORRECT_THE_PASSWORD\n";
@@ -453,7 +586,7 @@ sub dump_config {
 			}
 		}
 
-		my @acl_information = &show_target_info($current_target, "acl_information");
+		my @acl_information = show_target_info($current_target, "acl_information");
 		if (scalar(@acl_information) != 1 || $acl_information[0] ne "ALL") {
 			foreach my $ini_address (@acl_information) {
 				print "\tinitiator-address $ini_address\n";
@@ -487,17 +620,17 @@ Example usage:
 
 EOF
 	} elsif ($off_ready eq "ALL") {
-		&process_targets;
+		process_targets;
 		# Run over all targets and offline/ready them
 		my @all_targets = keys %tgtadm_output_tid;
 		foreach my $existing_target (@all_targets) {
 			execute("tgtadm --op update --mode target --tid=$tgtadm_output_tid{$existing_target} -n state -v $var");
 		}
 	} elsif ($off_ready =~ m/tid=(.+)/) {
-		&process_targets;
+		process_targets;
 		execute("tgtadm --op update --mode target --tid=$1 -n state -v $var");
 	} else {
-		&process_targets;
+		process_targets;
 		if (length $tgtadm_output_tid{$off_ready}) {
 			execute("tgtadm --op update --mode target --tid=$tgtadm_output_tid{$off_ready} --name=\"$off_ready\" -n state -v $var");
 		} else {
@@ -586,19 +719,19 @@ sub show_target_info {
 sub main_delete {
 	my $current_target = $_[0];
 	my $current_tid = $_[1];
-	my $configured = &check_configured($current_target);
+	my $configured = check_configured($current_target);
 	my $del_upd_text;
 	# Check if the target has initiators connected
 	if ($tgtadm_output{$current_target} =~ m/\s+Connection:/) {
 		if ($force == 1) {
 			execute("# Removing target: $current_target");
 			# Remove ACLs first
-			my @acl_info = &show_target_info($current_target, "acl_information");
+			my @acl_info = show_target_info($current_target, "acl_information");
 			foreach my $acl (@acl_info) {
 				execute("tgtadm --op unbind --mode target --tid $tgtadm_output_tid{$current_target} -I $acl");
 			}
 			# Now, remove all sessions / connections from that tid
-			my %sessions = &show_target_info($current_target, "sessions");
+			my %sessions = show_target_info($current_target, "sessions");
 			foreach my $sid (keys %sessions) {
 				foreach my $cid ($sessions{$sid}) {
 					execute("tgtadm --op delete --mode conn --tid $tgtadm_output_tid{$current_target} --sid $sid --cid $cid");
@@ -650,22 +783,22 @@ Example usage:
 EOF
 		exit;
 	} elsif ($delete eq "ALL") {
-		&process_targets;
+		process_targets;
 		# Run over all targets and delete them
 		my @all_targets = keys %tgtadm_output_tid;
 		foreach my $current_target (@all_targets) {
-			&main_delete($current_target);
+			main_delete($current_target);
 		}
 	} elsif ($delete =~ m/^tid=(.+)/) {
 		# Delete by tid
-		&process_targets;
+		process_targets;
 		my $current_target = $tgtadm_output_name{$1};
-		&main_delete($current_target, $1);
+		main_delete($current_target, $1);
 	} else {
 		# Delete by name
-		&process_targets;
+		process_targets;
 		my $current_target = $delete;
-		&main_delete($current_target);
+		main_delete($current_target);
 	}
 }
 
@@ -674,7 +807,7 @@ sub update_targets {
 	if ($update eq "help") {
 		print <<EOF;
       --update <value>		update all or selected targets
-				The target will be update only if it's not used
+				The target will be updated only if it's not used
 				(no initiator is connected to it).
 				If you want to update targets which are in use,
 				you have to add "--force" flag.
@@ -689,67 +822,67 @@ EOF
 		exit;
 	} elsif ($update eq "ALL") {
 		# Run over all targets and delete them if they are not in use
-		&parse_configs;
-		&process_targets;
-#		my @all_targets = keys %tgtadm_output_tid;
-		my @targets_combined = &combine_targets;
+		parse_configs;
+		process_targets;
+		my @targets_combined = combine_targets();
 		foreach my $current_target (@targets_combined) {
-			my $configured = &check_configured($current_target);
-			my $connected = &check_connected($current_target);
-			my $in_configfile = &check_in_configfile($current_target);
-			&combine_targets;
+			my $configured = check_configured($current_target);
+			my $connected = check_connected($current_target);
+			my $in_configfile = check_in_configfile($current_target);
+			combine_targets();
 			if (($in_configfile == 0) && ($configured == 1)) {
 				# Delete the target if it's not in the config file
-				&main_delete($current_target);
+				main_delete($current_target);
 			} else {
-				&add_targets($current_target, $configured, $connected, $in_configfile);
+				add_targets($current_target, $configured, $connected, $in_configfile);
 			}
 
 		}
 	} elsif ($update =~ m/^tid=(.+)/) {
 		# Update by tid
-		&parse_configs;
-		&process_targets;
+		parse_configs;
+		process_targets;
 		my $current_target = $tgtadm_output_name{$1};
-		my $configured = &check_configured($current_target);
-		my $connected = &check_connected($current_target);
-		my $in_configfile = &check_in_configfile($current_target);
+		my $configured = check_configured($current_target);
+		my $connected = check_connected($current_target);
+		my $in_configfile = check_in_configfile($current_target);
 		if (($in_configfile == 0) && ($configured == 1)) {
 			# Delete the target if it's not in the config file
-			&main_delete($current_target);
+			main_delete($current_target);
 		} elsif ($configured == 1) {
-			&add_targets($current_target, $configured, $connected);
+			add_targets($current_target, $configured, $connected, $in_configfile);
 		} else {
 			print "There is no target with tid $1, can't continue!\n";
 			exit 1;
 		}
 	} else {
 		# Update by name
-		&parse_configs;
-		&process_targets;
+		parse_configs;
+		process_targets;
 		my $current_target = $update;
-		my $configured = &check_configured($current_target);
-		my $connected = &check_connected($current_target);
-		my $in_configfile = &check_in_configfile($current_target);
-		if (($in_configfile == 0) && ($configured == 1)) {
+		my $configured = check_configured($current_target);
+		my $connected = check_connected($current_target);
+		my $in_configfile = check_in_configfile($current_target);
+		if ($in_configfile == 0 && $configured == 1) {
 			# Delete the target if it's not in the config file
-			&main_delete($current_target);
+			main_delete($current_target);
 		} else {
-			&add_targets($current_target, $configured, $connected);
+			add_targets($current_target, $configured, $connected, $in_configfile);
 		}
 	}
 }
 
 # Find the biggest tid
 sub find_max_tid {
+	process_targets;
 	my @all_targets = keys %tgtadm_output_tid;
 	my $maxtid = 0;
 	foreach my $var (@all_targets) {
 		if ($tgtadm_output_tid{$var} > $maxtid) {
 			$maxtid = $tgtadm_output_tid{$var};
 		}
-		return $maxtid;
 	}
+	return $maxtid;
 }
 
 # Combine targets from the config file and currently configured targets
@@ -819,33 +952,8 @@ sub check_connected {
 	}
 }
 
-# Execute or just print (or both) everything we start or would start
-sub execute {
-	if ($pretend == 0) {
-
-		my $args = "@_";
-		if ($verbose == 1) {
-			print "$args\n";
-		}
-		# Don't try to execute if it's a comment
-		my @execargs = split(/#/, $args);
-		if ( $execargs[0] ne undef  ) {
-			system($args);
-
-			# If non-zero exit code was return, exit
-			my $exit_value  = $? >> 8;
-			if (($exit_value != 0) && ($ignore_errors == 0)) {
-				print "Command:\n\t$args\nexited with code: $exit_value.\n";
-				exit $exit_value;
-			}
-		}
-
-	} elsif ( $pretend == 1 ) {
-		print "@_\n";
-	}
-}
-
-#Check if a device can be allocated
+# Check if a device can be allocated
+my @rootfs_dev;
 sub check_device {
 	my $tmp_dev = $_[0];
 
@@ -904,21 +1012,47 @@ sub find_rootfs_device {
 	@rootfs_dev = grep { ! $seen{ $_ }++ } @rootfs_dev;
 }
 
+# Execute or just print (or both) everything we start or would start
+sub execute {
+	if ($pretend == 0) {
+
+		my $args = "@_";
+		if ($verbose == 1) {
+			print "$args\n";
+		}
+		# Don't try to execute if it's a comment
+		my @execargs = split(/#/, $args);
+		if ($execargs[0] ne undef) {
+			system($args);
+
+			# If non-zero exit code was return, exit
+			my $exit_value  = $? >> 8;
+			if (($exit_value != 0) && ($ignore_errors == 0)) {
+				print "Command:\n\t$args\nexited with code: $exit_value.\n";
+				exit $exit_value;
+			}
+		}
+
+	} elsif ($pretend == 1) {
+		print "@_\n";
+	}
+}
+
 if ($execute == 1) {
-	&process_targets;
-	&parse_configs;
-	&add_targets;
-	&remove_targets;
+	process_targets;
+	parse_configs;
+	add_targets;
+	remove_targets;
 } elsif ($delete ne 0) {
-	&delete_targets;
+	delete_targets;
 } elsif ($update ne 0) {
-	&update_targets;
+	update_targets;
 } elsif ($dump == 1) {
-	&dump_config;
+	dump_config;
 } elsif ($offline ne 0) {
-	&ready_offline_targets("offline");
+	ready_offline_targets("offline");
 } elsif ($ready ne 0) {
-	&ready_offline_targets("ready");
+	ready_offline_targets("ready");
 } else {
 	print "No action specified.\n";
 }
