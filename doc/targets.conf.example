@@ -81,13 +81,13 @@ default-driver iscsi
 # Note that some parameters (write-cache, scsi_sn) were specified "globally".
 # "Global" parameters will be applied to all LUNs; they can be overwritten
 # "locally", per LUN.
-#
 
 <target iqn.2008-09.com.example:server.target5>
 
     <direct-store /dev/sdd>
 	vendor_id VENDOR1
 	removable 1
+	device-type cd
 	# lun 1		# Not yet supported
     </direct-store>
 
@@ -122,6 +122,7 @@ default-driver iscsi
     #path ...
     #mode_page 8:0:18:0x10:0:0xff....
     #mode_page 8:0:18:0x10:0:0xff....
+    #device-type
 
     write-cache off
     scsi_sn multipath-10
