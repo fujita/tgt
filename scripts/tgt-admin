@@ -300,18 +300,18 @@ sub add_params {
 
 	if ($param eq "write-cache") {
 		if ($param_value eq "off") {
-			execute("tgtadm --lld $driver --op update --mode logicalunit --tid $next_tid --lun=$lun --params mode_page=8:0:18:0x10:0:0xff:0xff:0:0:0xff:0xff:0xff:0xff:0x80:0x14:0:0:0:0:0:0");
+			return("tgtadm --lld $driver --op update --mode logicalunit --tid $next_tid --lun=$lun --params mode_page=8:0:18:0x10:0:0xff:0xff:0:0:0xff:0xff:0xff:0xff:0x80:0x14:0:0:0:0:0:0");
 		} elsif ($param_value eq "on" || not length $param_value) {
-			execute("# Write cache is enabled (default) for lun $lun.");
+			return("# Write cache is enabled (default) for lun $lun.");
 		} else {
-			execute("# WARNING! Unknown value ($param_value) to write-cache! Accepted values are \"on\" and \"off\".");
+			return("# WARNING! Unknown value ($param_value) to write-cache! Accepted values are \"on\" and \"off\".");
 		}
 	}
 
 	if ($param eq "scsi_id" || $param eq "scsi_sn" || $param eq "vendor_id" || $param eq "product_id" ||
 	    $param eq "product_rev" || $param eq "sense_format" || $param eq "removable" || $param eq "online" ||
 	    $param eq "path" || $param eq "mode_page") {
-		execute("tgtadm --lld $driver --op update --mode logicalunit --tid $next_tid --lun=$lun --params $param=\"$param_value\"");
+		return("tgtadm --lld $driver --op update --mode logicalunit --tid $next_tid --lun=$lun --params $param=\"$param_value\"");
 	}
 }
 
@@ -334,7 +334,8 @@ sub add_backing_direct {
 		}
 		return $lun;
 	} elsif (-e $backing_store && $can_alloc == 1) {
-		execute("tgtadm --lld $driver --op new --mode logicalunit --tid $next_tid --lun $lun -b $backing_store");
+		my @exec_commands;
+		my $device_type;
 		# Process parameters for each lun / backing store
 		if (ref $value eq "HASH") {
 			my %params_added;
@@ -348,17 +349,24 @@ sub add_backing_direct {
 						# write-cache can be set globally per target and overridden per lun,
 						# so we treat it differently
 						if ($store_option ne "mode_page" && $store_option ne "write-cache") {
-							add_params($store_option, $result, $lun, $driver);
+							my $exec_command = add_params($store_option, $result, $lun, $driver);
+							push(@exec_commands, $exec_command);
 							$params_added{$store_option} = 1;
 						}
 						if ($store_option eq "write-cache") {
-							add_params($store_option, $result, $lun, $driver);
+							my $exec_command = add_params($store_option, $result, $lun, $driver);
 							$params_added{write_cache} = 1;
+							push(@exec_commands, $exec_command);
+						}
+						if ($store_option eq "device-type") {
+							$device_type = $result;
+							$params_added{$store_option} = 1;
 						}
 						if ($store_option eq "mode_page") {
 							@mode_page = @$result;
 							foreach my $mode_page (@mode_page) {
-								add_params("mode_page", $mode_page, $lun, $driver);
+								my $exec_command = add_params("mode_page", $mode_page, $lun, $driver);
+								push(@exec_commands, $exec_command);
 							}
 						}
 					}
@@ -397,7 +405,8 @@ sub add_backing_direct {
 			foreach my $single_opt (@opts) {
 				check_if_hash_array($$target_options_ref{$single_opt},$single_opt);
 				if ($params_added{$single_opt} ne 1 && length $$target_options_ref{$single_opt}) {
-					add_params($single_opt, $$target_options_ref{$single_opt}, $lun, $driver);
+					my $exec_command = add_params($single_opt, $$target_options_ref{$single_opt}, $lun, $driver);
+					push(@exec_commands, $exec_command);
 					$params_added{$single_opt} = 1;
 				}
 			}
@@ -412,13 +421,15 @@ sub add_backing_direct {
 					$this_opt = $direct_params{$single_opt};
 				}
 				if ($params_added{$single_opt} ne 1 && length $this_opt) {
-					add_params($single_opt, $this_opt, $lun, $driver);
+					my $exec_command = add_params($single_opt, $this_opt, $lun, $driver);
+					push(@exec_commands, $exec_command);
 					$params_added{$single_opt} = 1;
 				}
 			}
 			# write-cache
 			if ($params_added{write_cache} ne 1) {
-				add_params("write-cache", $$target_options_ref{"write-cache"}, $lun, $driver);
+				my $exec_command = add_params("write-cache", $$target_options_ref{"write-cache"}, $lun, $driver);
+				push(@exec_commands, $exec_command);
 				$params_added{write_cache} = 1;
 			}
 			# mode_page
@@ -427,13 +438,25 @@ sub add_backing_direct {
 			}
 			foreach my $mode_page (@{$$target_options_ref{"mode_page"}}) {
 				if (length $mode_page) {
-					add_params("mode_page", $mode_page, $lun, $driver);
+					my $exec_command = add_params("mode_page", $mode_page, $lun, $driver);
+					push(@exec_commands, $exec_command);
 				}
+			}
+			# device-type
+			if ($params_added{"device-type"} ne 1) {
+				check_if_hash_array($$target_options_ref{"device-type"}, "device-type");
+				$device_type = $$target_options_ref{"device-type"};
 			}
 		} else {
 			print "If you got here, this means your config file is not supported.\n";
 			print "Please report it to stgt mailing list and attach your config files.\n";
 			exit 1;
+		}
+		# Execute commands for a given LUN
+		if (length $device_type) { $device_type = "--device-type $device_type" };
+		execute("tgtadm --lld $driver --op new --mode logicalunit --tid $next_tid --lun $lun -b $backing_store $device_type");
+		foreach my $exec_command (@exec_commands) {
+			if (length $exec_command) { execute($exec_command) }
 		}
 		$lun += 1;
 		return $lun;
