@@ -491,7 +491,7 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	if (lu->bst->bs_init) {
 		ret = lu->bst->bs_init(lu);
 		if (ret)
-			goto fail_bs_init;
+			goto fail_lu_init;
 	}
 
 	if (backing && !path && !lu->attrs.removable) {

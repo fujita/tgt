@@ -148,7 +148,7 @@ static void *bs_thread_worker_fn(void *arg)
 			pthread_cond_wait(&info->pending_cond, &info->pending_lock);
 			if (info->stop) {
 				pthread_mutex_unlock(&info->pending_lock);
-				break;
+				pthread_exit(NULL);
 			}
 			goto retest;
 		}
@@ -208,8 +208,9 @@ int bs_thread_open(struct bs_thread_info *info, request_func_t *rfn)
 	for (i = 0; i < ARRAY_SIZE(info->worker_thread); i++) {
 		ret = pthread_create(&info->worker_thread[i], NULL,
 				     bs_thread_worker_fn, info);
+		if (ret)
+			goto destroy_threads;
 	}
-
 rewrite:
 	ret = write(info->command_fd[1], &ret, sizeof(ret));
 	if (ret < 0) {
@@ -219,6 +220,20 @@ rewrite:
 	}
 
 	return 0;
+destroy_threads:
+	write(info->command_fd[1], &ret, sizeof(ret));
+	pthread_cancel(info->ack_thread);
+	pthread_cond_signal(&info->finished_cond);
+	pthread_join(info->ack_thread, NULL);
+
+	info->stop = 1;
+	for (i = 0; info->worker_thread[i]; i++) {
+		pthread_cancel(info->worker_thread[i]);
+		pthread_cond_signal(&info->pending_cond);
+	}
+
+	for (i = 0; info->worker_thread[i]; i++)
+		pthread_join(info->worker_thread[i], NULL);
 event_del:
 	tgt_event_del(info->done_fd[0]);
 close_done_fd:
