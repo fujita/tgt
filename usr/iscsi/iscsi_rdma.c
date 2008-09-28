@@ -144,6 +144,8 @@ struct conn_info {
 	/* but count so we can drain CQ on close */
 	int recvl_posted;
 
+	struct tgt_event tx_sched;
+
 	/* login phase resources, freed at full-feature */
 	void *srbuf_login;
 	void *listbuf_login;
@@ -194,6 +196,8 @@ struct iser_device {
 	void *mempool_listbuf;
 	struct ibv_mr *mempool_mr;
 
+	struct tgt_event poll_sched;
+
 	/* free and allocated mempool entries */
 	struct list_head mempool_free, mempool_alloc;
 };
@@ -216,10 +220,6 @@ static struct list_head iser_conn_list;
 
 /* if any task needs an rdma read or write slot to proceed */
 static int waiting_rdma_slot;
-
-/* progress available, used with tgt_counter_event */
-static int num_tx_ready;
-static int num_rx_ready;
 
 #define uint64_from_ptr(p) (uint64_t)(uintptr_t)(p)
 #define ptr_from_int64(p) (void *)(unsigned long)(p)
@@ -251,6 +251,9 @@ static int num_rx_ready;
 #define RDMA_PER_CONN 20
 #define RDMA_TRANSFER_SIZE (512 * 1024)
 
+
+#define MAX_POLL_WC 8
+
 /*
  * Number of allocatable data buffers, each of this size.  Do at least 128
  * for linux iser.  The mempool size is rounded up at initialization time
@@ -270,13 +273,17 @@ static inline struct conn_info *RDMA_CONN(struct iscsi_connection *conn)
 	return container_of(conn, struct conn_info, iscsi_conn);
 }
 
-static void iser_cqe_handler(int fd, int events, void *data);
-static void iser_rx_progress(int *counter, void *data);
+static void iser_cqe_handler(int fd __attribute__((unused)),
+			     int events __attribute__((unused)),
+			     void *data);
 static void iser_rdma_read_completion(struct rdmalist *rdma);
 static void iscsi_rdma_release(struct iscsi_connection *conn);
 static int iscsi_rdma_show(struct iscsi_connection *conn, char *buf,
 			   int rest);
 static void iscsi_rdma_event_modify(struct iscsi_connection *conn, int events);
+static void iser_sched_poll_cq(struct tgt_event *tev);
+static void iser_sched_consume_cq(struct tgt_event *tev);
+static void iser_sched_tx(struct tgt_event *evt);
 
 /*
  * Called when ready for full feature, builds resources.
@@ -612,6 +619,8 @@ static int iser_device_init(struct iser_device *dev)
 		goto out;
 	}
 
+	tgt_init_sched_event(&dev->poll_sched, iser_sched_poll_cq, dev);
+
 	ret = ibv_req_notify_cq(dev->cq, 0);
 	if (ret) {
 		eprintf("ibv_req_notify failed: %s\n", strerror(ret));
@@ -691,6 +700,9 @@ static void iser_accept_connection(struct rdma_cm_event *event)
 	ci->login_phase = LOGIN_PHASE_START;
 	INIT_LIST_HEAD(&ci->conn_tx_ready);
 	list_add(&ci->iser_conn_list, &temp_conn);
+
+	tgt_init_sched_event(&ci->tx_sched, iser_sched_tx, ci);
+
 	/* initiator sits at dst, we are src */
 	memcpy(&ci->peer_addr, &event->id->route.addr.dst_addr,
 	       sizeof(ci->peer_addr));
@@ -940,7 +952,7 @@ static void handle_wc(struct ibv_wc *wc)
 		list_add(&rdmal->list, &ci->rdmal);
 		if (waiting_rdma_slot) {
 			waiting_rdma_slot = 0;
-			num_tx_ready = 1;
+			tgt_add_sched_event(&ci->tx_sched);
 		}
 		break;
 
@@ -957,7 +969,7 @@ static void handle_wc(struct ibv_wc *wc)
 		list_add(&rdmal->list, &ci->rdmal);
 		if (waiting_rdma_slot) {
 			waiting_rdma_slot = 0;
-			num_tx_ready = 1;
+			tgt_add_sched_event(&ci->tx_sched);
 		}
 		break;
 
@@ -974,85 +986,14 @@ close_err:
 }
 
 /*
- * Called directly from main event loop when a CQ notification is
- * available.
- */
-static void iser_cqe_handler(int fd __attribute__((unused)),
-			     int events __attribute__((unused)),
-			     void *data)
-{
-	int ret;
-	void *cq_context;
-	struct iser_device *dev = data;
-
-	ret = ibv_get_cq_event(dev->cq_channel, &dev->cq, &cq_context);
-	if (ret != 0) {
-		eprintf("notification, but no CQ event\n");
-		exit(1);
-	}
-
-	ibv_ack_cq_events(dev->cq, 1);
-
-	ret = ibv_req_notify_cq(dev->cq, 0);
-	if (ret) {
-		eprintf("ibv_req_notify_cq: %s\n", strerror(ret));
-		exit(1);
-	}
-
-	iser_rx_progress(NULL, dev);
-}
-
-/*
- * Called from tgtd when num_tx_ready (counter) non-zero.  Walks the
- * list of active connections and tries to push tx on each, until nothing
- * is ready anymore.  No progress limit here.
- */
-static void iser_tx_progress(int *counter __attribute__((unused)),
-			     void *data __attribute__((unused)))
-{
-	int reloop, ret;
-	struct conn_info *ci, *cin;
-	struct iscsi_connection *conn;
-
-	dprintf("entry\n");
-	num_tx_ready = 0;
-
-	do {
-		reloop = 0;
-		list_for_each_entry_safe(ci, cin, &conn_tx_ready,
-					 conn_tx_ready) {
-			conn = &ci->iscsi_conn;
-			if (conn->state == STATE_CLOSE) {
-				dprintf("ignoring tx for closed conn\n");
-			} else {
-				dprintf("trying tx\n");
-				ret = iscsi_tx_handler(conn);
-				if (conn->state == STATE_CLOSE) {
-					conn_close(conn);
-					dprintf("connection %p closed\n", ci);
-				} else {
-					if (ret == 0) {
-						reloop = 1;
-					} else {
-						/* but leave on tx ready list */
-						waiting_rdma_slot = 1;
-					}
-				}
-			}
-		}
-	} while (reloop);
-}
-
-/*
  * Could read as many entries as possible without blocking, but
  * that just fills up a list of tasks.  Instead pop out of here
  * so that tx progress, like issuing rdma reads and writes, can
  * happen periodically.
  */
-#define MAX_RX_PROGRESS 8
-static void iser_rx_progress_one(struct iser_device *dev)
+static int iser_poll_cq(struct iser_device *dev, int max_wc)
 {
-	int ret, numwc = 0;
+	int ret = 0, numwc = 0;
 	struct ibv_wc wc;
 	struct conn_info *ci;
 	struct recvlist *recvl;
@@ -1069,8 +1010,8 @@ static void iser_rx_progress_one(struct iser_device *dev)
 		VALGRIND_MAKE_MEM_DEFINED(&wc, sizeof(wc));
 		if (wc.status == IBV_WC_SUCCESS) {
 			handle_wc(&wc);
-			if (++numwc == MAX_RX_PROGRESS) {
-				num_rx_ready = 1;
+			if (++numwc == max_wc) {
+				ret = 1;
 				break;
 			}
 		} else if (wc.status == IBV_WC_WR_FLUSH_ERR) {
@@ -1089,23 +1030,114 @@ static void iser_rx_progress_one(struct iser_device *dev)
 				wc.status, (unsigned long long) wc.wr_id);
 		}
 	}
+	return ret;
+}
+
+static void iser_poll_cq_armable(struct iser_device *dev)
+{
+	int ret;
+
+	ret = iser_poll_cq(dev, MAX_POLL_WC);
+	if (ret < 0)
+		exit(1);
+
+	if (ret == 0) {
+		/* no more completions on cq, arm the completion interrupts */
+		ret = ibv_req_notify_cq(dev->cq, 0);
+		if (ret) {
+			eprintf("ibv_req_notify_cq: %s\n", strerror(ret));
+			exit(1);
+		}
+		dev->poll_sched.sched_handler = iser_sched_consume_cq;
+	} else
+		dev->poll_sched.sched_handler = iser_sched_poll_cq;
+
+	tgt_add_sched_event(&dev->poll_sched);
+}
+
+/* Scheduled to poll cq after a completion event has been
+   received and acknowledged, if no more completions are found
+   the interrupts are re-armed */
+static void iser_sched_poll_cq(struct tgt_event *tev)
+{
+	struct iser_device *dev = tev->data;
+	iser_poll_cq_armable(dev);
+}
+
+/* Scheduled to consume completion events that could arrive
+   after the cq had been seen empty but just before
+   the notification interrupts were re-armed.
+   Intended to consume those remaining completions only,
+   this function does not re-arm interrupts. */
+static void iser_sched_consume_cq(struct tgt_event *tev)
+{
+	struct iser_device *dev = tev->data;
+	int ret;
+
+	ret = iser_poll_cq(dev, MAX_POLL_WC);
+	if (ret < 0)
+		exit(1);
 }
 
 /*
- * Only one progress counter, must look across all devs.
+ * Called directly from main event loop when a CQ notification is
+ * available.
  */
-static void iser_rx_progress(int *counter __attribute__((unused)), void *data)
+static void iser_cqe_handler(int fd __attribute__((unused)),
+			     int events __attribute__((unused)),
+			     void *data)
 {
-	struct iser_device *dev;
+	struct iser_device *dev = data;
+	void *cq_context;
+	int ret;
+
+	ret = ibv_get_cq_event(dev->cq_channel, &dev->cq, &cq_context);
+	if (ret != 0) {
+		eprintf("notification, but no CQ event\n");
+		exit(1);
+	}
+
+	ibv_ack_cq_events(dev->cq, 1);
+
+	/* if a poll was previosuly scheduled, remove it,
+	   as it will be scheduled when necessary */
+	if (dev->poll_sched.scheduled)
+		tgt_remove_sched_event(&dev->poll_sched);
+
+	iser_poll_cq_armable(dev);
+}
+
+/*
+ * Called from tgtd as a scheduled event
+ * tries to push tx on a connection, until nothing
+ * is ready anymore.  No progress limit here.
+ */
+static void iser_sched_tx(struct tgt_event *evt)
+{
+	struct conn_info *ci = evt->data;
+	struct iscsi_connection *conn = &ci->iscsi_conn;
+	int ret;
 
 	dprintf("entry\n");
-	num_rx_ready = 0;
-	if (data == NULL) {
-		list_for_each_entry(dev, &iser_dev_list, list)
-			iser_rx_progress_one(dev);
-	} else {
-		dev = data;
-		iser_rx_progress_one(dev);
+
+	if (conn->state == STATE_CLOSE) {
+		dprintf("ignoring tx for closed conn\n");
+		return;
+	}
+
+	for (;;) {
+		dprintf("trying tx\n");
+		ret = iscsi_tx_handler(conn);
+		if (conn->state == STATE_CLOSE) {
+			conn_close(conn);
+			dprintf("connection %p closed\n", ci);
+			break;
+		}
+		if (ret != 0) {
+			/* but leave on tx ready list */
+			waiting_rdma_slot = 1;
+			break;
+		}
 	}
 }
 
@@ -1165,10 +1197,7 @@ static int iscsi_rdma_init(void)
 	INIT_LIST_HEAD(&iser_dev_list);
 	INIT_LIST_HEAD(&iser_conn_list);
 	INIT_LIST_HEAD(&temp_conn);
-	num_tx_ready = 0;
-	num_rx_ready = 0;
-	ret = tgt_counter_event_add(&num_tx_ready, iser_tx_progress, NULL);
-	ret = tgt_counter_event_add(&num_rx_ready, iser_rx_progress, NULL);
+
 	return ret;
 }
 
@@ -1397,10 +1426,6 @@ static void iscsi_iser_write_end(struct iscsi_connection *conn)
 
 	ci->writeb = 0;  /* reset count */
 	ci->send_comm_event = NULL;
-
-	/* wake up the progress engine to do the done */
-	dprintf("inc progress to finish cmd\n");
-	num_tx_ready = 1;
 }
 
 /*
@@ -1505,7 +1530,7 @@ static int iscsi_rdma_rdma_write(struct iscsi_connection *conn)
 		iscsi_rdma_event_modify(conn, EPOLLIN);
 	} else {
 		/* poke ourselves to do the next rdma */
-		num_tx_ready = 1;
+		tgt_add_sched_event(&ci->tx_sched);
 	}
 
 	return ret;
@@ -1628,7 +1653,7 @@ static void iscsi_rdma_event_modify(struct iscsi_connection *conn, int events)
 			dprintf("tx ready adding %p\n", ci);
 			list_add(&ci->conn_tx_ready, &conn_tx_ready);
 		}
-		num_tx_ready = 1;
+		tgt_add_sched_event(&ci->tx_sched);
 	} else {
 		dprintf("tx ready removing %p\n", ci);
 		list_del_init(&ci->conn_tx_ready);

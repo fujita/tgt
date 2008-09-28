@@ -38,26 +38,13 @@
 #include "work.h"
 #include "util.h"
 
-struct tgt_event {
-	union {
-		event_handler_t *handler;
-		counter_event_handler_t *counter_handler;
-	};
-	union {
-		int fd;
-		int *counter;
-	};
-	void *data;
-	struct list_head e_list;
-};
-
 unsigned long pagesize, pageshift, pagemask;
 
 int system_active = 1;
 static int ep_fd;
 static char program_name[] = "tgtd";
 static LIST_HEAD(tgt_events_list);
-static LIST_HEAD(tgt_counter_events_list);
+static LIST_HEAD(tgt_sched_events_list);
 
 static struct option const long_options[] =
 {
@@ -136,39 +123,12 @@ int tgt_event_add(int fd, int events, event_handler_t handler, void *data)
 	return err;
 }
 
-int tgt_counter_event_add(int *counter, counter_event_handler_t handler,
-			  void *data)
-{
-	struct tgt_event *tev;
-
-	tev = zalloc(sizeof(*tev));
-	if (!tev)
-		return -ENOMEM;
-
-	tev->data = data;
-	tev->counter_handler = handler;
-	tev->counter = counter;
-	list_add(&tev->e_list, &tgt_counter_events_list);
-	return 0;
-}
-
 static struct tgt_event *tgt_event_lookup(int fd)
 {
 	struct tgt_event *tev;
 
 	list_for_each_entry(tev, &tgt_events_list, e_list) {
 		if (tev->fd == fd)
-			return tev;
-	}
-	return NULL;
-}
-
-static struct tgt_event *tgt_counter_event_lookup(int *counter)
-{
-	struct tgt_event *tev;
-
-	list_for_each_entry(tev, &tgt_counter_events_list, e_list) {
-		if (tev->counter == counter)
 			return tev;
 	}
 	return NULL;
@@ -185,20 +145,6 @@ void tgt_event_del(int fd)
 	}
 
 	epoll_ctl(ep_fd, EPOLL_CTL_DEL, fd, NULL);
-	list_del(&tev->e_list);
-	free(tev);
-}
-
-void tgt_counter_event_del(int *counter)
-{
-	struct tgt_event *tev;
-
-	tev = tgt_counter_event_lookup(counter);
-	if (!tev) {
-		eprintf("Cannot find counter event %p\n", counter);
-		return;
-	}
-
 	list_del(&tev->e_list);
 	free(tev);
 }
@@ -221,26 +167,62 @@ int tgt_event_modify(int fd, int events)
 	return epoll_ctl(ep_fd, EPOLL_CTL_MOD, fd, &ev);
 }
 
+void tgt_init_sched_event(struct tgt_event *evt,
+			  sched_event_handler_t sched_handler, void *data)
+{
+	evt->sched_handler = sched_handler;
+	evt->scheduled = 0;
+	evt->data = data;
+	INIT_LIST_HEAD(&evt->e_list);
+}
+
+void tgt_add_sched_event(struct tgt_event *evt)
+{
+	if (!evt->scheduled) {
+		evt->scheduled = 1;
+		list_add_tail(&evt->e_list, &tgt_sched_events_list);
+	}
+}
+
+void tgt_remove_sched_event(struct tgt_event *evt)
+{
+	if (evt->scheduled) {
+		evt->scheduled = 0;
+		list_del_init(&evt->e_list);
+	}
+}
+
+static int tgt_exec_scheduled(void)
+{
+	struct list_head *last_sched;
+	struct tgt_event *tev, *tevn;
+	int work_remains = 0;
+
+	if (!list_empty(&tgt_sched_events_list)) {
+		/* execute only work scheduled till now */
+		last_sched = tgt_sched_events_list.prev;
+		list_for_each_entry_safe(tev, tevn, &tgt_sched_events_list,
+					 e_list) {
+			tgt_remove_sched_event(tev);
+			tev->sched_handler(tev);
+			if (&tev->e_list == last_sched)
+				break;
+		}
+		if (!list_empty(&tgt_sched_events_list))
+			work_remains = 1;
+	}
+	return work_remains;
+}
+
 static void event_loop(void)
 {
-	int nevent, i, done, timeout = TGTD_TICK_PERIOD * 1000;
+	int nevent, i, sched_remains, timeout;
 	struct epoll_event events[1024];
-	struct tgt_event *tev, *tevn;
+	struct tgt_event *tev;
 
 retry:
-	/*
-	 * Check the counter events to see if they have any work to run.
-	 */
-	do {
-		done = 1;
-		list_for_each_entry_safe(tev, tevn, &tgt_counter_events_list,
-					e_list) {
-			if (*tev->counter) {
-				done = 0;
-				tev->counter_handler(tev->counter, tev->data);
-			}
-		}
-	} while (!done);
+	sched_remains = tgt_exec_scheduled();
+	timeout = sched_remains ? 0 : TGTD_TICK_PERIOD * 1000;
 
 	nevent = epoll_wait(ep_fd, events, ARRAY_SIZE(events), timeout);
 	if (nevent < 0) {
