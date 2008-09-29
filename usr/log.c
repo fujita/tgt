@@ -59,6 +59,8 @@ static int logarea_init (int size)
 	if (!la)
 		return 1;
 
+	shmctl(shmid, IPC_RMID, NULL);
+
 	if (size < MAX_MSG_SIZE)
 		size = LOG_SPACE_SIZE;
 
@@ -74,6 +76,8 @@ static int logarea_init (int size)
 		return 1;
 	}
 	memset(la->start, 0, size);
+
+	shmctl(shmid, IPC_RMID, NULL);
 
 	la->empty = 1;
 	la->end = la->start + size;
@@ -92,6 +96,8 @@ static int logarea_init (int size)
 		shmdt(la);
 		return 1;
 	}
+
+	shmctl(shmid, IPC_RMID, NULL);
 
 	if ((la->semid = semget(SEMKEY, 1, 0666 | IPC_CREAT)) < 0) {
 		shmdt(la->buff);
