@@ -81,6 +81,7 @@ default-driver iscsi
 # Note that some parameters (write-cache, scsi_sn) were specified "globally".
 # "Global" parameters will be applied to all LUNs; they can be overwritten
 # "locally", per LUN.
+# If lun is not specified, it will be allocated automatically (first available).
 
 <target iqn.2008-09.com.example:server.target5>
 
@@ -88,26 +89,26 @@ default-driver iscsi
 	vendor_id VENDOR1
 	removable 1
 	device-type cd
-	# lun 1		# Not yet supported
+	lun 1
     </direct-store>
 
     <direct-store /dev/sda>
 	vendor_id VENDOR2
-	# lun 2		# Not yet supported
+	lun 2
     </direct-store>
 
     <backing-store /dev/sdb1>
 	vendor_id back1
 	scsi_sn SERIAL
 	write-cache on
-	# lun 3		# Not yet supported
+	# lun 3		# lun is commented out - will be allocated automatically
     </backing-store>
 
     <backing-store /dev/sdd1>
 	vendor_id back2
 	#mode_page 8:0:18:0x10:0:0xff....
 	#mode_page 8:0:18:0x10:0:0xff....
-	# lun 4		# Not yet supported
+	lun 15
     </backing-store>
 
     # Some more parameters which can be specified locally or globally:
@@ -127,7 +128,7 @@ default-driver iscsi
     write-cache off
     scsi_sn multipath-10
 
-    # Parameters below are global. They can't be configured per LUN.
+    # Parameters below are only global. They can't be configured per LUN.
     # Only allow connections from 192.168.100.1 and 192.168.200.5
     initiator-address 192.168.100.1
     initiator-address 192.168.200.5
@@ -142,10 +143,23 @@ default-driver iscsi
 </target>
 
 
+# The device will have lun 1 unless you specify something else
+<target iqn.2008-09.com.example:server.target6>
+    backing-store /dev/LVM/somedevice
+    lun 10
+</target>
+
 
 # Not supported configurations, and therefore, commented out:
 
-#<target iqn.2008-09.com.example:server.target6>
+#<target iqn.2008-09.com.example:server.target7>
+#    backing-store /dev/LVM/somedevice1
+#    backing-store /dev/LVM/somedevice2
+#    lun 10
+#    lun 11
+#</target>
+
+#<target iqn.2008-09.com.example:server.target8>
 #    <direct-store /dev/sdd>
 #        vendor_id VENDOR1
 #    </direct-store>
@@ -155,7 +169,7 @@ default-driver iscsi
 
 # This one will break the parser:
 
-#<target iqn.2008-09.com.example:server.target7>
+#<target iqn.2008-09.com.example:server.target8>
 #    <direct-store /dev/sdd>
 #        vendor_id VENDOR1
 #    </direct-store>
