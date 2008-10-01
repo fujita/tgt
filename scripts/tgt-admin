@@ -211,6 +211,7 @@ sub add_targets {
 					# and other parameters which can be specified globally
 					my %target_options;
 					my $target_options_ref;
+					my $data_key;
 					foreach my $k3 (sort keys %{$conf{$k}{$k2}}) {
 						$lun = 1;
 						$option = $k3;
@@ -218,6 +219,7 @@ sub add_targets {
 						check_value($value);
 						$target_options{$option} = $value;
 						$target_options_ref = \%target_options;
+						$data_key = make_key("lun", $target_options_ref);
 					}
 
 					if (not defined $target_options{"driver"}) {
@@ -230,7 +232,7 @@ sub add_targets {
 						$option = $k3;
 						$value = $conf{$k}{$k2}{$k3};
 						check_value($value);
-						process_options($target_options_ref);
+						process_options($target_options_ref,$data_key);
 						# If there was no option called "initiator-address", it means
 						# we want to allow ALL initiators for this target
 						if ($option eq "initiator-address") {
@@ -256,6 +258,24 @@ sub add_targets {
 			execute();
 		}
 	}
+}
+
+# Pre-parse the config and get some values we need
+sub make_key {
+	my $action = $_[0];
+	my $target_options_ref = $_[1];
+	my %data_key;
+	if (ref $$target_options_ref{'backing-store'} eq "HASH") {
+		foreach my $testlun (keys %{$$target_options_ref{'backing-store'}}) {
+			$data_key{$testlun}{'lun'} = $$target_options_ref{'backing-store'}{$testlun}{$action};
+		}
+	}
+	if (ref $$target_options_ref{'direct-store'} eq "HASH") {
+		foreach my $testlun (keys %{$$target_options_ref{'direct-store'}}) {
+			$data_key{$testlun}{'lun'} = $$target_options_ref{'direct-store'}{$testlun}{$action};
+		}
+	}
+	return \%data_key;
 }
 
 # Some options can be specified only once
@@ -315,27 +335,58 @@ sub add_params {
 	}
 }
 
+# Find next available LUN
+sub find_next_lun {
+	my $backing_store = $_[0];
+	my $data_key_ref = $_[1];
+	my $lun_collision = 0;
+	my $lun_is_free = 0;
+	my $found_lun = 1;
+	while ($lun_is_free == 0) {
+		foreach my $testlun (keys %$data_key_ref) {
+			foreach my $testlun2 (values %{$$data_key_ref{$testlun}}) {
+				if ($found_lun eq $testlun2) {
+					$lun_collision = 1;
+				}
+			}
+		}
+		if ($lun_collision == 0) {
+			$lun_is_free = 1;
+		} else {
+			$found_lun += 1;
+		}
+		$lun_collision = 0;
+	}
+	$$data_key_ref{$backing_store}{'lun'} = $found_lun;
+	return $found_lun;
+}
+
 # Add backing or direct store
 sub add_backing_direct {
 	my $backing_store = $_[0];
 	my $target_options_ref = $_[1];
-	my $lun = $_[2];
+	my $lun;
+	my $data_key_ref = $_[2];
 	my $direct_store = $_[3];
 	my $driver = $$target_options_ref{"driver"};
 
 	# Is the device in use?
 	(my $can_alloc, my $dev) = check_device($backing_store);
 
-	# Needed if the config file has mixed definitions
-	if (ref($backing_store) eq "HASH") {
-		foreach my $backing_store (sort keys %$value) {
-			add_backing_direct($backing_store,$target_options_ref,$lun,$direct_store);
-			$lun += 1;
-		}
-		return $lun;
-	} elsif (-e $backing_store && $can_alloc == 1) {
+	if (-e $backing_store && $can_alloc == 1) {
 		my @exec_commands;
 		my $device_type;
+		my %luns;
+		my @added_luns;
+		# Find out LUNs which are "reserved" in the config file
+		if (ref $value eq "HASH") {
+			if (length $$data_key_ref{$backing_store}{'lun'}) {
+				$lun = $$data_key_ref{$backing_store}{'lun'};
+			} else {
+				# Find an available lun if it wasn't specified
+				$lun = find_next_lun($backing_store,$data_key_ref);
+			}
+		}
 		# Process parameters for each lun / backing store
 		if (ref $value eq "HASH") {
 			my %params_added;
@@ -447,6 +498,11 @@ sub add_backing_direct {
 				check_if_hash_array($$target_options_ref{"device-type"}, "device-type");
 				$device_type = $$target_options_ref{"device-type"};
 			}
+			# lun
+			if (length $$target_options_ref{"lun"}) {
+				check_if_hash_array($$target_options_ref{"lun"}, "lun");
+				$lun = $$target_options_ref{"lun"};
+			}
 		} else {
 			print "If you got here, this means your config file is not supported.\n";
 			print "Please report it to stgt mailing list and attach your config files.\n";
@@ -471,6 +527,7 @@ sub add_backing_direct {
 # Process options from the config file
 sub process_options {
 	my $target_options_ref = $_[0];
+	my $data_key_ref = $_[1];
 	my $driver = $$target_options_ref{"driver"};
 	if ($option eq "backing-store" || $option eq "direct-store") {
 		my $direct_store = 0;
@@ -495,7 +552,13 @@ sub process_options {
 
 		if (ref($value) eq "HASH") {
 			foreach my $backing_store (sort keys %$value) {
-				$lun = add_backing_direct($backing_store,$target_options_ref,$lun,$direct_store);
+				if ($backing_store =~ m/HASH/) {
+					print "\nYour config file is not supported. See targets.conf.example for details.\n";
+					exit 1;
+				}
+			}
+			foreach my $backing_store (sort keys %$value) {
+				add_backing_direct($backing_store,$target_options_ref,$data_key_ref,$direct_store);
 			}
 		}
 	}
