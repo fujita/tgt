@@ -24,6 +24,7 @@
 #include <unistd.h>
 #include <syslog.h>
 #include <signal.h>
+#include <errno.h>
 #include <sys/shm.h>
 #include <sys/ipc.h>
 #include <sys/types.h>
@@ -52,12 +53,16 @@ static int logarea_init (int size)
 	logdbg(stderr,"enter logarea_init\n");
 
 	if ((shmid = shmget(IPC_PRIVATE, sizeof(struct logarea),
-			    0644 | IPC_CREAT | IPC_EXCL)) == -1)
+			    0644 | IPC_CREAT | IPC_EXCL)) == -1) {
+		syslog(LOG_ERR, "shmget logarea failed %d", errno);
 		return 1;
+	}
 
 	la = shmat(shmid, NULL, 0);
-	if (!la)
+	if (!la) {
+		syslog(LOG_ERR, "shmat logarea failed %d", errno);
 		return 1;
+	}
 
 	shmctl(shmid, IPC_RMID, NULL);
 
@@ -66,12 +71,14 @@ static int logarea_init (int size)
 
 	if ((shmid = shmget(IPC_PRIVATE, size,
 			    0644 | IPC_CREAT | IPC_EXCL)) == -1) {
+		syslog(LOG_ERR, "shmget msg failed %d", errno);
 		shmdt(la);
 		return 1;
 	}
 
 	la->start = shmat(shmid, NULL, 0);
 	if (!la->start) {
+		syslog(LOG_ERR, "shmat msg failed %d", errno);
 		shmdt(la);
 		return 1;
 	}
@@ -86,12 +93,14 @@ static int logarea_init (int size)
 
 	if ((shmid = shmget(IPC_PRIVATE, MAX_MSG_SIZE + sizeof(struct logmsg),
 			    0644 | IPC_CREAT | IPC_EXCL)) == -1) {
+		syslog(LOG_ERR, "shmget logmsg failed %d", errno);
 		shmdt(la->start);
 		shmdt(la);
 		return 1;
 	}
 	la->buff = shmat(shmid, NULL, 0);
 	if (!la->buff) {
+		syslog(LOG_ERR, "shmat logmsgfailed %d", errno);
 		shmdt(la->start);
 		shmdt(la);
 		return 1;
@@ -100,6 +109,7 @@ static int logarea_init (int size)
 	shmctl(shmid, IPC_RMID, NULL);
 
 	if ((la->semid = semget(SEMKEY, 1, 0666 | IPC_CREAT)) < 0) {
+		syslog(LOG_ERR, "semget failed %d", errno);
 		shmdt(la->buff);
 		shmdt(la->start);
 		shmdt(la);
@@ -108,6 +118,7 @@ static int logarea_init (int size)
 
 	la->semarg.val=1;
 	if (semctl(la->semid, 0, SETVAL, la->semarg) < 0) {
+		syslog(LOG_ERR, "semctl failed %d", errno);
 		shmdt(la->buff);
 		shmdt(la->start);
 		shmdt(la);
