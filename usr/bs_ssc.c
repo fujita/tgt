@@ -54,11 +54,6 @@ static int32_t be24_to_2comp(uint8_t *c)
 	return count;
 }
 
-static uint32_t be24_to_uint(uint8_t *c)
-{
-	return (c[0] << 16) | (c[1] << 8) | c[2];
-}
-
 static int skip_next_header(struct scsi_lu *lu)
 {
 	ssize_t rd;
@@ -327,7 +322,7 @@ static int resp_fixed_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length)
 	int fd;
 	uint32_t block_length = ssc_get_block_length(cmd->dev);
 
-	count = be24_to_uint(&cmd->scb[2]);
+	count = get_unaligned_be24(&cmd->scb[2]);
 	ssc = dtype_priv(cmd->dev);
 	fd = cmd->dev->fd;
 	ret = 0;
@@ -403,7 +398,7 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 		break;
 
 	case WRITE_FILEMARKS:
-		ret = be24_to_uint(&cmd->scb[2]);
+		ret = get_unaligned_be24(&cmd->scb[2]);
 		eprintf("*** Write %d filemark%s ***\n", ret,
 			((ret > 1) || (ret < 0)) ? "s" : "");
 
@@ -425,7 +420,7 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 		}
 
 		length = scsi_get_in_length(cmd);
-		count = be24_to_uint(&cmd->scb[2]);
+		count = get_unaligned_be24(&cmd->scb[2]);
 		buf = scsi_get_in_buffer(cmd);
 
 		dprintf("*** READ_6: length %d, count %d, fixed block %s\n",
@@ -445,7 +440,7 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 		fixed = cmd->scb[1] & 1;
 
 		buf = scsi_get_out_buffer(cmd);
-		count = be24_to_uint(&cmd->scb[2]);
+		count = get_unaligned_be24(&cmd->scb[2]);
 		length = scsi_get_out_length(cmd);
 
 		if (!fixed) { /* Until supported */
