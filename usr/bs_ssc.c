@@ -347,6 +347,7 @@ static int resp_fixed_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length)
 			put_unaligned_be32(count - i, info);
 			ssc_sense_data_build(cmd, NO_SENSE | SENSE_FILEMARK,
 					     ASC_MARK, info, sizeof(info));
+			skip_next_header(cmd->dev);
 			goto rd_err;
 		}
 
