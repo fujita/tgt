@@ -61,7 +61,7 @@ static int32_t be24_to_2comp(uint8_t *c)
 {
 	int count;
 	count = (c[0] << 16) | (c[1] << 8) | c[2];
-	if (c[1] & 0x80)
+	if (c[0] & 0x80)
 		count += (0xff << 24);
 	return count;
 }
