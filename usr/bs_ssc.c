@@ -319,16 +319,19 @@ static int space_blocks(struct scsi_cmd *cmd, int32_t count)
 }
 
 /* Return error - util written */
-static int resp_var_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length)
+static int resp_var_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length,
+			 int *transferfed)
 {
+	*transferfed = 0;
 	sense_data_build(cmd, ILLEGAL_REQUEST, ASC_INVALID_FIELD_IN_CDB);
-	return 0;
+	return SAM_STAT_CHECK_CONDITION;
 }
 
-static int resp_fixed_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length)
+static int resp_fixed_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length,
+			   int *transferred)
 {
 	struct ssc_info *ssc;
-	int i, ret;
+	int i, ret, result = SAM_STAT_GOOD;
 	int count;
 	ssize_t residue;
 	int fd;
@@ -348,7 +351,8 @@ static int resp_fixed_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length)
 			ssc_sense_data_build(cmd, NO_SENSE | SENSE_FILEMARK,
 					     ASC_MARK, info, sizeof(info));
 			skip_next_header(cmd->dev);
-			goto rd_err;
+			result = SAM_STAT_CHECK_CONDITION;
+			goto out;
 		}
 
 		if (block_length != ssc->c_blk->blk_sz) {
@@ -356,7 +360,8 @@ static int resp_fixed_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length)
 				block_length, ssc->c_blk->blk_sz);
 			sense_data_build(cmd, MEDIUM_ERROR,
 						ASC_MEDIUM_FORMAT_CORRUPT);
-			goto rd_err;
+			result = SAM_STAT_CHECK_CONDITION;
+			goto out;
 		}
 
 		residue = pread(fd, buf, block_length,
@@ -365,7 +370,8 @@ static int resp_fixed_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length)
 			eprintf("Could only read %d bytes, not %d\n",
 					(int)residue, block_length);
 			sense_data_build(cmd, MEDIUM_ERROR, ASC_READ_ERROR);
-			goto rd_err;
+			result = SAM_STAT_CHECK_CONDITION;
+			goto out;
 		}
 		ret += block_length;
 		buf += block_length;
@@ -374,13 +380,14 @@ static int resp_fixed_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length)
 			eprintf("Could not read next header\n");
 			sense_data_build(cmd, MEDIUM_ERROR,
 						ASC_MEDIUM_FORMAT_CORRUPT);
-			goto rd_err;
+			result = SAM_STAT_CHECK_CONDITION;
+			goto out;
 		}
 	}
-	return ret;
 
-rd_err:
-	return 0;
+	*transferred = ret;
+out:
+	return result;
 }
 
 static void tape_rdwr_request(struct scsi_cmd *cmd)
@@ -442,12 +449,9 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 		dprintf("*** READ_6: length %d, count %d, fixed block %s\n",
 				length, count, (fixed) ? "Yes" : "No");
 		if (fixed)
-			ret = resp_fixed_read(cmd, buf, length);
+			result = resp_fixed_read(cmd, buf, length, &ret);
 		else
-			ret = resp_var_read(cmd, buf, length);
-
-		if (!ret)
-			result = SAM_STAT_CHECK_CONDITION;
+			result = resp_var_read(cmd, buf, length, &ret);
 
 		eprintf("Executed READ_6, Read %d bytes\n", ret);
 		break;
