@@ -35,7 +35,6 @@
 #include "ssc.h"
 #include "tgtadm_error.h"
 
-#define BLK_SHIFT	9
 #define GRANULARITY	9
 
 #define MAX_BLK_SIZE	1048576
@@ -121,13 +120,13 @@ static int ssc_lu_init(struct scsi_lu *lu)
 	lu->attrs.removable = 1;
 
 	data = lu->mode_block_descriptor;
-	ssc->blk_sz = 1 << BLK_SHIFT;
 
 	/* SSC devices do not need to set number of blks */
-	*(uint32_t *)(data) = 0;
+	put_unaligned_be24(0, data + 1);
 
 	/* Set default blk size */
-	*(uint32_t *)(data + 4) = __cpu_to_be32(ssc->blk_sz);
+	ssc->blk_sz = 0;
+	put_unaligned_be24(ssc->blk_sz, data + 5);
 
 	/* Vendor uniq - However most apps seem to call for mode page 0*/
 	add_mode_page(lu, "0:0:0");
