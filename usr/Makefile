@@ -58,7 +58,7 @@ PROGRAMS += tgtd tgtadm
 SCRIPTS += ../scripts/tgt-setup-lun ../scripts/tgt-admin
 TGTD_OBJS += tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o \
 		parser.o spc.o sbc.o mmc.o osd.o scc.o smc.o ssc.o bs_ssc.o \
-		bs.o
+		bs_null.o bs.o
 MANPAGES = ../doc/manpages/tgtadm.8 ../doc/manpages/tgt-admin.8 \
 		../doc/manpages/tgt-setup-lun.8
 
