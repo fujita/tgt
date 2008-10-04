@@ -45,6 +45,17 @@ static inline uint32_t ssc_get_block_length(struct scsi_lu *lu)
 	return get_unaligned_be24(lu->mode_block_descriptor + 5);
 }
 
+static int ssc_mode_page_update(struct scsi_cmd *cmd, uint8_t *data,
+				int *changed)
+{
+	return 1;
+}
+
+static int ssc_mode_select(int host_no, struct scsi_cmd *cmd)
+{
+	return spc_mode_select(host_no, cmd, ssc_mode_page_update);
+}
+
 static int ssc_rw(int host_no, struct scsi_cmd *cmd)
 {
 	int ret;
@@ -180,7 +191,7 @@ static struct device_type_template ssc_template = {
 		{spc_inquiry,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{ssc_mode_select,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 
