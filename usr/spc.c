@@ -383,6 +383,9 @@ int spc_mode_select(int host_no, struct scsi_cmd *cmd,
 		if (block_descriptor_len != BLOCK_DESCRIPTOR_LEN)
 			goto sense;
 
+		memcpy(cmd->dev->mode_block_descriptor, data + offset,
+		       BLOCK_DESCRIPTOR_LEN);
+
 		offset += 8;
 	}
 
