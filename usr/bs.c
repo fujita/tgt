@@ -173,7 +173,8 @@ static void *bs_thread_worker_fn(void *arg)
 	return NULL;
 }
 
-int bs_thread_open(struct bs_thread_info *info, request_func_t *rfn)
+int bs_thread_open(struct bs_thread_info *info, request_func_t *rfn,
+		   int nr_threads)
 {
 	int i, ret;
 
@@ -205,12 +206,18 @@ int bs_thread_open(struct bs_thread_info *info, request_func_t *rfn)
 	if (ret)
 		goto event_del;
 
-	for (i = 0; i < ARRAY_SIZE(info->worker_thread); i++) {
+	if (nr_threads > ARRAY_SIZE(info->worker_thread)) {
+		eprintf("too many threads %d\n", nr_threads);
+		nr_threads = ARRAY_SIZE(info->worker_thread);
+	}
+
+	for (i = 0; i < nr_threads; i++) {
 		ret = pthread_create(&info->worker_thread[i], NULL,
 				     bs_thread_worker_fn, info);
 		if (ret)
 			goto destroy_threads;
 	}
+
 rewrite:
 	ret = write(info->command_fd[1], &ret, sizeof(ret));
 	if (ret < 0) {
@@ -261,7 +268,7 @@ void bs_thread_close(struct bs_thread_info *info)
 	info->stop = 1;
 	pthread_cond_broadcast(&info->pending_cond);
 
-	for (i = 0; i < ARRAY_SIZE(info->worker_thread); i++)
+	for (i = 0; i < info->worker_thread[i]; i++)
 		pthread_join(info->worker_thread[i], NULL);
 
 	pthread_cond_destroy(&info->finished_cond);

@@ -208,7 +208,7 @@ static void bs_ssc_close(struct scsi_lu *lu)
 static int bs_ssc_init(struct scsi_lu *lu)
 {
 	struct bs_thread_info *info = BS_THREAD_I(lu);
-	return bs_thread_open(info, ssc_rdwr_request);
+	return bs_thread_open(info, ssc_rdwr_request, 1);
 }
 
 static void bs_ssc_exit(struct scsi_lu *lu)

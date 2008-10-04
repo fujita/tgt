@@ -147,7 +147,7 @@ static int bs_rdwr_init(struct scsi_lu *lu)
 {
 	struct bs_thread_info *info = BS_THREAD_I(lu);
 
-	return bs_thread_open(info, bs_rdwr_request);
+	return bs_thread_open(info, bs_rdwr_request, NR_WORKER_THREADS);
 }
 
 static void bs_rdwr_exit(struct scsi_lu *lu)

@@ -96,7 +96,7 @@ static void bs_mmap_close(struct scsi_lu *lu)
 static int bs_mmap_init(struct scsi_lu *lu)
 {
 	struct bs_thread_info *info = BS_THREAD_I(lu);
-	return bs_thread_open(info, bs_mmap_request);
+	return bs_thread_open(info, bs_mmap_request, NR_WORKER_THREADS);
 }
 
 static void bs_mmap_exit(struct scsi_lu *lu)
