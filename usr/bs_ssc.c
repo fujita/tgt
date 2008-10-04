@@ -496,16 +496,14 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 		count = get_unaligned_be24(&cmd->scb[2]);
 		length = scsi_get_out_length(cmd);
 
-		if (!fixed) { /* Until supported */
-			sense_data_build(cmd, ILLEGAL_REQUEST,
-						ASC_INVALID_FIELD_IN_CDB);
-			result = SAM_STAT_CHECK_CONDITION;
-			break;
+		if (!fixed) {
+			block_length = length;
+			count = 1;
 		}
 
 		for (i = 0, ret = 0; i < count; i++) {
 			if (append_blk(cmd, buf, block_length,
-					block_length, BLK_UNCOMPRESS_DATA)) {
+				       block_length, BLK_UNCOMPRESS_DATA)) {
 				sense_data_build(cmd, MEDIUM_ERROR,
 						ASC_WRITE_ERROR);
 				result = SAM_STAT_CHECK_CONDITION;
