@@ -209,83 +209,83 @@ failed_write:
 
 #define SENSE_FILEMARK 0x80
 
-static int prev_filemark(struct scsi_cmd *cmd)
+static int space_filemark_reverse(struct scsi_cmd *cmd, int32_t count)
 {
 	struct ssc_info *ssc = dtype_priv(cmd->dev);
 
-	if (skip_prev_header(cmd->dev)) {
-		sense_data_build(cmd, MEDIUM_ERROR, ASC_MEDIUM_FORMAT_CORRUPT);
+	count *= -1;
+
+again:
+	if (!ssc->c_blk->prev) {
+		sense_data_build(cmd, NO_SENSE, ASC_BOM);
 		return SAM_STAT_CHECK_CONDITION;
 	}
-	while (ssc->c_blk->blk_type != BLK_FILEMARK)
-		if (skip_prev_header(cmd->dev)) {
-			sense_data_build(cmd, MEDIUM_ERROR,
-						ASC_MEDIUM_FORMAT_CORRUPT);
-			return SAM_STAT_CHECK_CONDITION;
-		}
 
-		if (ssc->c_blk->blk_type == BLK_BOT) {
-			skip_next_header(cmd->dev); /* Can't leave at BOT */
-			sense_data_build(cmd, NO_SENSE, ASC_BOM);
-			return SAM_STAT_CHECK_CONDITION;
-		}
+	if (ssc->c_blk->blk_type == BLK_FILEMARK)
+		count--;
+
+	if (skip_prev_header(cmd->dev)) {
+		sense_data_build(cmd, MEDIUM_ERROR,
+				 ASC_MEDIUM_FORMAT_CORRUPT);
+		return SAM_STAT_CHECK_CONDITION;
+	}
+
+	if (count > 0)
+		goto again;
 
 	return SAM_STAT_GOOD;
 }
 
-static int next_filemark(struct scsi_cmd *cmd)
+static int space_filemark_forward(struct scsi_cmd *cmd, int32_t count)
 {
 	struct ssc_info *ssc = dtype_priv(cmd->dev);
 
-	if (skip_next_header(cmd->dev)) {
-		sense_data_build(cmd, MEDIUM_ERROR, ASC_MEDIUM_FORMAT_CORRUPT);
+again:
+	if (ssc->c_blk->blk_type == BLK_EOD) {
+		sense_data_build(cmd, NO_SENSE, ASC_END_OF_DATA);
 		return SAM_STAT_CHECK_CONDITION;
 	}
 
-	while (ssc->c_blk->blk_type != BLK_FILEMARK) {
-		if (skip_next_header(cmd->dev)) {
-			sense_data_build(cmd, MEDIUM_ERROR,
-						ASC_MEDIUM_FORMAT_CORRUPT);
-			return SAM_STAT_CHECK_CONDITION;
-		}
+	if (ssc->c_blk->blk_type == BLK_FILEMARK)
+		count--;
 
-		if (ssc->c_blk->blk_type == BLK_EOD) {
-			sense_data_build(cmd, NO_SENSE, ASC_END_OF_DATA);
-			return SAM_STAT_CHECK_CONDITION;
-		}
+	if (skip_next_header(cmd->dev)) {
+		sense_data_build(cmd, MEDIUM_ERROR,
+				 ASC_MEDIUM_FORMAT_CORRUPT);
+		return SAM_STAT_CHECK_CONDITION;
 	}
+
+	if (count > 0)
+		goto again;
 
 	return SAM_STAT_GOOD;
 }
 
 static int space_filemark(struct scsi_cmd *cmd, int32_t count)
 {
-	dprintf("*** space %d filemark%s ***\n", count,
-			((count > 1) || (count < 0)) ? "s" : "");
-	while (count != 0) {
-		if (count > 0) {
-			if (next_filemark(cmd)) {
-				return SAM_STAT_CHECK_CONDITION;
-				break;
-			}
-			count--;
-		} else {
-			if (prev_filemark(cmd)) {
-				return SAM_STAT_CHECK_CONDITION;
-				break;
-			}
-			count++;
-		}
-	}
-	return SAM_STAT_GOOD;
+	struct ssc_info *ssc = dtype_priv(cmd->dev);
+	int result;
+
+	eprintf("*** space %d filemarks, %llu\n", count, ssc->c_blk->curr);
+
+	if (count > 0)
+		result = space_filemark_forward(cmd, count);
+	else if (count < 0)
+		result = space_filemark_reverse(cmd, count);
+	else
+		result = SAM_STAT_GOOD;
+
+	eprintf("%llu\n", ssc->c_blk->curr);
+
+	return result;
 }
 
 static int space_blocks(struct scsi_cmd *cmd, int32_t count)
 {
 	struct ssc_info *ssc = dtype_priv(cmd->dev);
 
-	dprintf("*** space %d block%s ***\n", count,
-			((count > 1) || (count < 0)) ? "s" : "");
+	eprintf("*** space %d blocks, %llu\n", count, ssc->c_blk->curr);
+
 	while (count != 0) {
 		if (count > 0) {
 			if (skip_next_header(cmd->dev)) {
@@ -315,6 +315,7 @@ static int space_blocks(struct scsi_cmd *cmd, int32_t count)
 			count++;
 		}
 	}
+	eprintf("%llu\n", ssc->c_blk->curr);
 	return SAM_STAT_GOOD;
 }
 
@@ -479,14 +480,15 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 		count = get_unaligned_be24(&cmd->scb[2]);
 		buf = scsi_get_in_buffer(cmd);
 
-		dprintf("*** READ_6: length %d, count %d, fixed block %s\n",
-				length, count, (fixed) ? "Yes" : "No");
+		eprintf("*** READ_6: length %d, count %d, fixed block %s, %llu, %d\n",
+			length, count, (fixed) ? "Yes" : "No", ssc->c_blk->curr, sti);
 		if (fixed)
 			result = resp_fixed_read(cmd, buf, length, &ret);
 		else
 			result = resp_var_read(cmd, buf, length, &ret);
 
-		eprintf("Executed READ_6, Read %d bytes\n", ret);
+		eprintf("Executed READ_6, Read %d bytes, %llu\n", ret,
+			ssc->c_blk->curr);
 		break;
 
 	case WRITE_6:
