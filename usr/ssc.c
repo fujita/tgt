@@ -40,6 +40,11 @@
 #define MAX_BLK_SIZE	1048576
 #define MIN_BLK_SIZE	4
 
+static inline uint32_t ssc_get_block_length(struct scsi_lu *lu)
+{
+	return get_unaligned_be24(lu->mode_block_descriptor + 5);
+}
+
 static int ssc_rw(int host_no, struct scsi_cmd *cmd)
 {
 	int ret;
@@ -72,25 +77,20 @@ static int ssc_rw(int host_no, struct scsi_cmd *cmd)
 #define READ_BLK_LIMITS_SZ	6
 static int ssc_read_block_limit(int host_no, struct scsi_cmd *cmd)
 {
-	struct ssc_info *ssc = dtype_priv(cmd->dev);
 	uint8_t buf[READ_BLK_LIMITS_SZ];
+	uint8_t block_length = ssc_get_block_length(cmd->dev);
 
 	memset(buf, 0, sizeof(buf));
 
-	if (ssc->blk_sz) {	/* Fixed block size */
-		buf[0] = GRANULARITY;
-		buf[1] = (ssc->blk_sz >> 16) & 0xff;
-		buf[2] = (ssc->blk_sz >> 8) & 0xff;
-		buf[3] = ssc->blk_sz & 0xff;
-		buf[4] = (ssc->blk_sz >> 8) & 0xff;
-		buf[5] = ssc->blk_sz & 0xff;
-	} else {	/* Variable block size */
-		buf[0] = GRANULARITY;
-		buf[1] = (MAX_BLK_SIZE >> 16) & 0xff;
-		buf[2] = (MAX_BLK_SIZE >> 8) & 0xff;
-		buf[3] = MAX_BLK_SIZE & 0xff;
-		buf[4] = (MIN_BLK_SIZE >> 8) & 0xff;
-		buf[5] = MIN_BLK_SIZE & 0xff;
+	buf[0] = GRANULARITY;
+	if (block_length) {
+		/* Fixed block size */
+		put_unaligned_be24(block_length, buf + 1);
+		put_unaligned_be16(block_length, buf + 4);
+	} else {
+		/* Variable block size */
+		put_unaligned_be24(MAX_BLK_SIZE, buf + 1);
+		put_unaligned_be16(MIN_BLK_SIZE, buf + 4);
 	}
 
 	memcpy(scsi_get_in_buffer(cmd), buf, READ_BLK_LIMITS_SZ);
