@@ -39,6 +39,18 @@
 #include "bs_ssc.h"
 #include "ssc.h"
 
+static void ssc_sense_data_build(struct scsi_cmd *cmd, uint8_t key,
+				 uint16_t asc, uint8_t *info, int info_len)
+{
+	/* TODO: support descriptor format */
+
+	sense_data_build(cmd, key, asc);
+	if (info_len) {
+		memcpy(cmd->sense_buffer + 2, info, 4);
+		cmd->sense_buffer[0] |= 0x80;
+	}
+}
+
 static inline uint32_t ssc_get_block_length(struct scsi_lu *lu)
 {
 	return get_unaligned_be24(lu->mode_block_descriptor + 5);
@@ -185,6 +197,8 @@ static int append_blk(struct scsi_cmd *cmd, uint8_t *data,
 	}
 	/* Write new EOD blk header */
 
+	fsync(fd);
+
 	free(curr);
 	return SAM_STAT_GOOD;
 
@@ -192,6 +206,8 @@ failed_write:
 	free(curr);
 	return SAM_STAT_CHECK_CONDITION;
 }
+
+#define SENSE_FILEMARK 0x80
 
 static int prev_filemark(struct scsi_cmd *cmd)
 {
@@ -325,9 +341,12 @@ static int resp_fixed_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length)
 
 	for (i = 0; i < count; i++) {
 		if (ssc->c_blk->blk_type == BLK_FILEMARK) {
+			uint8_t info[4];
+
 			eprintf("Oops - found filemark\n");
-			sense_data_build(cmd, NO_SENSE, ASC_MARK);
-/* FIXME: Need to update sense buffer with remaining byte count. */
+			put_unaligned_be32(count - i, info);
+			ssc_sense_data_build(cmd, NO_SENSE | SENSE_FILEMARK,
+					     ASC_MARK, info, sizeof(info));
 			goto rd_err;
 		}
 

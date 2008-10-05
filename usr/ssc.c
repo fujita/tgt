@@ -125,6 +125,9 @@ static int ssc_lu_init(struct scsi_lu *lu)
 
 	strncpy(lu->attrs.product_id, "VIRTUAL-TAPE",
 		sizeof(lu->attrs.product_id));
+
+	/* use only fixed for now */
+	lu->attrs.sense_format = 0;
 	lu->attrs.version_desc[0] = 0x0200; /* SSC no version claimed */
 	lu->attrs.version_desc[1] = 0x0960; /* iSCSI */
 	lu->attrs.version_desc[2] = 0x0300; /* SPC-3 */
