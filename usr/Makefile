@@ -54,7 +54,7 @@ CFLAGS += -g -O2 -Wall -Wstrict-prototypes -fPIC
 
 LIBS += -lpthread
 
-PROGRAMS += tgtd tgtadm
+PROGRAMS += tgtd tgtadm mktape dump_tape
 SCRIPTS += ../scripts/tgt-setup-lun ../scripts/tgt-admin
 TGTD_OBJS += tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o \
 		parser.o spc.o sbc.o mmc.o osd.o scc.o smc.o ssc.o bs_ssc.o \
