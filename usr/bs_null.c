@@ -1,7 +1,7 @@
 /*
  * NULL I/O backing store routine
  *
- * Copyright (C) 2008 Alexander Nezhinsky <nezhinskyf@gmail.com>
+ * Copyright (C) 2008 Alexander Nezhinsky <nezhinsky@gmail.com>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -32,22 +32,7 @@
 
 int bs_null_cmd_submit(struct scsi_cmd *cmd)
 {
-	int result = SAM_STAT_GOOD;
-	uint16_t asc = 0;
-	uint8_t key = 0;
-	uint8_t scb_op = cmd->scb[0];
-
-	set_cmd_async(cmd);
-
-	scsi_set_result(cmd, result);
-
-	if (result != SAM_STAT_GOOD) {
-		eprintf("io error %p %x %" PRIu64 ", %m\n",
-			cmd, scb_op, cmd->offset);
-		sense_data_build(cmd, key, asc);
-	}
-
-	cmd->scsi_cmd_done(cmd, scsi_get_result(cmd));
+	scsi_set_result(cmd, SAM_STAT_GOOD);
 	return 0;
 }
 
