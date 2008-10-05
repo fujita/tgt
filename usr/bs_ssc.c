@@ -60,7 +60,6 @@ static int skip_next_header(struct scsi_lu *lu)
 	struct ssc_info *ssc = dtype_priv(lu);
 	struct blk_header *h = ssc->c_blk;
 
-	/* FIXME: Need a lock around this read */
 	rd = pread(lu->fd, h, sizeof(struct blk_header), h->next);
 	if (rd != sizeof(struct blk_header))
 		return 1;
@@ -73,7 +72,6 @@ static int skip_prev_header(struct scsi_lu *lu)
 	struct ssc_info *ssc = dtype_priv(lu);
 	struct blk_header *h = ssc->c_blk;
 
-	/* FIXME: Need a lock around this read */
 	rd = pread(lu->fd, h, sizeof(struct blk_header), h->prev);
 	if (rd != sizeof(struct blk_header))
 		return 1;
@@ -130,7 +128,6 @@ static int append_blk(struct scsi_cmd *cmd, uint8_t *data,
 			ssc->c_blk->blk_type, ssc->c_blk->blk_num,
 			ssc->c_blk->ondisk_sz, size);
 
-	/* FIXME: Need lock protection around this */
 	curr = ssc->c_blk;
 	curr->next = curr->curr + size + sizeof(struct blk_header);
 	curr->blk_type = type;
@@ -146,7 +143,6 @@ static int append_blk(struct scsi_cmd *cmd, uint8_t *data,
 	eod->a = 'A';
 	eod->z = 'Z';
 	ssc->c_blk = eod;
-	/* End of protection */
 
 	eprintf("After update  : prev/curr/next"
 		" <%" PRId64 "/%" PRId64 "/%" PRId64 "> type: %d,"
