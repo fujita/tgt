@@ -125,8 +125,7 @@ static int ssc_lu_init(struct scsi_lu *lu)
 	put_unaligned_be24(0, data + 1);
 
 	/* Set default blk size */
-	ssc->blk_sz = 0;
-	put_unaligned_be24(ssc->blk_sz, data + 5);
+	put_unaligned_be24(0, data + 5);
 
 	/* Vendor uniq - However most apps seem to call for mode page 0*/
 	add_mode_page(lu, "0:0:0");

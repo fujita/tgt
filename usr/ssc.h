@@ -52,8 +52,6 @@ struct MAM {
 };
 
 struct ssc_info {
-/* blk_size is 'master'. Build block descriptor data from this value */
-	uint32_t blk_sz;
 	uint64_t bytes_read;	/* Bytes read this load */
 	uint64_t bytes_written;	/* Bytes written this load */
 

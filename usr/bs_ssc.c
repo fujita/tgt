@@ -39,6 +39,11 @@
 #include "bs_ssc.h"
 #include "ssc.h"
 
+static inline uint32_t ssc_get_block_length(struct scsi_lu *lu)
+{
+	return get_unaligned_be24(lu->mode_block_descriptor + 5);
+}
+
 /* I'm sure there is a more efficent method then this */
 static int32_t be24_to_2comp(uint8_t *c)
 {
@@ -320,6 +325,7 @@ static int resp_fixed_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length)
 	int count;
 	ssize_t residue;
 	int fd;
+	uint32_t block_length = ssc_get_block_length(cmd->dev);
 
 	count = be24_to_uint(&cmd->scb[2]);
 	ssc = dtype_priv(cmd->dev);
@@ -334,24 +340,24 @@ static int resp_fixed_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length)
 			goto rd_err;
 		}
 
-		if (ssc->blk_sz != ssc->c_blk->blk_sz) {
+		if (block_length != ssc->c_blk->blk_sz) {
 			eprintf("block size mismatch %d vs %d\n",
-				ssc->blk_sz, ssc->c_blk->blk_sz);
+				block_length, ssc->c_blk->blk_sz);
 			sense_data_build(cmd, MEDIUM_ERROR,
 						ASC_MEDIUM_FORMAT_CORRUPT);
 			goto rd_err;
 		}
 
-		residue = pread(fd, buf, ssc->blk_sz,
+		residue = pread(fd, buf, block_length,
 				ssc->c_blk->curr + sizeof(struct blk_header));
-		if (ssc->blk_sz != residue) {
+		if (block_length != residue) {
 			eprintf("Could only read %d bytes, not %d\n",
-					(int)residue, ssc->blk_sz);
+					(int)residue, block_length);
 			sense_data_build(cmd, MEDIUM_ERROR, ASC_READ_ERROR);
 			goto rd_err;
 		}
-		ret += ssc->blk_sz;
-		buf += ssc->blk_sz;
+		ret += block_length;
+		buf += block_length;
 
 		if (skip_next_header(cmd->dev)) {
 			eprintf("Could not read next header\n");
@@ -376,6 +382,7 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 	int32_t count;
 	int8_t fixed;
 	int8_t sti;
+	uint32_t block_length = ssc_get_block_length(cmd->dev);
 
 	ret = 0;
 	length = 0;
@@ -449,21 +456,21 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 		}
 
 		for (i = 0, ret = 0; i < count; i++) {
-			if (append_blk(cmd, buf, ssc->blk_sz,
-					ssc->blk_sz, BLK_UNCOMPRESS_DATA)) {
+			if (append_blk(cmd, buf, block_length,
+					block_length, BLK_UNCOMPRESS_DATA)) {
 				sense_data_build(cmd, MEDIUM_ERROR,
 						ASC_WRITE_ERROR);
 				result = SAM_STAT_CHECK_CONDITION;
 				break;
 			}
-			buf += ssc->blk_sz;
-			ret += ssc->blk_sz;
+			buf += block_length;
+			ret += block_length;
 		}
 
 		dprintf("*** WRITE_6 count: %d, length: %d, ret: %d, fixed: %s,"
 			" ssc->blk_sz: %d\n",
 			count, length, ret, (fixed) ? "Yes" : "No",
-			ssc->blk_sz);
+			block_length);
 
 		if (ret != length) {
 			sense_data_build(cmd, MEDIUM_ERROR, ASC_WRITE_ERROR);
