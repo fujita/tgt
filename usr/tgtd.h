@@ -153,7 +153,7 @@ struct scsi_lu {
 	struct lu_phy_attr attrs;
 
 	/* A pointer for each modules private use.
-	 * Currently used by smc and mmc modules.
+	 * Currently used by ssc, smc and mmc modules.
 	 */
 	void *xxc_p;
 };

@@ -58,6 +58,8 @@ struct ssc_info {
 	uint64_t bytes_written;	/* Bytes written this load */
 
 	struct MAM mam;
+
+	struct blk_header *c_blk;	/* Current block header */
 };
 
 #endif
