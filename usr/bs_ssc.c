@@ -318,13 +318,46 @@ static int space_blocks(struct scsi_cmd *cmd, int32_t count)
 	return SAM_STAT_GOOD;
 }
 
-/* Return error - util written */
 static int resp_var_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length,
-			 int *transferfed)
+			 int *transferred)
 {
-	*transferfed = 0;
-	sense_data_build(cmd, ILLEGAL_REQUEST, ASC_INVALID_FIELD_IN_CDB);
-	return SAM_STAT_CHECK_CONDITION;
+	struct ssc_info *ssc = dtype_priv(cmd->dev);
+	int ret = 0, result = SAM_STAT_GOOD;
+
+	length = min(length, get_unaligned_be24(&cmd->scb[2]));
+	*transferred = 0;
+
+	if (length != ssc->c_blk->blk_sz) {
+		if (ssc->c_blk->blk_type == BLK_EOD)
+			sense_data_build(cmd, 0x40 | BLANK_CHECK,
+					 NO_ADDITIONAL_SENSE);
+		else
+			sense_data_build(cmd, NO_SENSE, NO_ADDITIONAL_SENSE);
+
+		length = min(length, ssc->c_blk->blk_sz);
+		result = SAM_STAT_CHECK_CONDITION;
+		scsi_set_in_resid_by_actual(cmd, length);
+
+		if (!length)
+			goto out;
+	}
+
+	ret = pread(cmd->dev->fd, buf, length,
+		    ssc->c_blk->curr + sizeof(struct blk_header));
+	if (ret != length) {
+		sense_data_build(cmd, MEDIUM_ERROR, ASC_READ_ERROR);
+		result = SAM_STAT_CHECK_CONDITION;
+		goto out;
+	}
+	*transferred = length;
+
+	ret = skip_next_header(cmd->dev);
+	if (ret) {
+		sense_data_build(cmd, MEDIUM_ERROR, ASC_READ_ERROR);
+		result = SAM_STAT_CHECK_CONDITION;
+	}
+out:
+	return result;
 }
 
 static int resp_fixed_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length,
