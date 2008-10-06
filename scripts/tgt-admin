@@ -125,7 +125,7 @@ sub process_targets {
 sub parse_configs {
 	# Parse the config
 	if ($alternate_conf ne 0) {
-		# Check if alternative configuration file exist
+		# Check if alternative configuration file exists
 		if (-e "$alternate_conf") {
 			execute("# Using $alternate_conf as configuration file\n");
 			%conf = ParseConfig(-ConfigFile => "$alternate_conf", -UseApacheInclude => 1, -IncludeGlob => 1,);
@@ -219,7 +219,7 @@ sub add_targets {
 						check_value($value);
 						$target_options{$option} = $value;
 						$target_options_ref = \%target_options;
-						$data_key = make_key("lun", $target_options_ref);
+						$data_key = make_key($target_options_ref, "lun", "allow-in-use");
 					}
 
 					if (not defined $target_options{"driver"}) {
@@ -262,17 +262,20 @@ sub add_targets {
 
 # Pre-parse the config and get some values we need
 sub make_key {
-	my $action = $_[0];
-	my $target_options_ref = $_[1];
+	my $target_options_ref = shift;
+	my @actions = @_;
 	my %data_key;
-	if (ref $$target_options_ref{'backing-store'} eq "HASH") {
-		foreach my $testlun (keys %{$$target_options_ref{'backing-store'}}) {
-			$data_key{$testlun}{'lun'} = $$target_options_ref{'backing-store'}{$testlun}{$action};
+
+	foreach my $action (@actions) {
+		if (ref $$target_options_ref{'backing-store'} eq "HASH") {
+			foreach my $testlun (keys %{$$target_options_ref{'backing-store'}}) {
+				$data_key{$testlun}{$action} = $$target_options_ref{'backing-store'}{$testlun}{$action};
+			}
 		}
-	}
-	if (ref $$target_options_ref{'direct-store'} eq "HASH") {
-		foreach my $testlun (keys %{$$target_options_ref{'direct-store'}}) {
-			$data_key{$testlun}{'lun'} = $$target_options_ref{'direct-store'}{$testlun}{$action};
+		if (ref $$target_options_ref{'direct-store'} eq "HASH") {
+			foreach my $testlun (keys %{$$target_options_ref{'direct-store'}}) {
+				$data_key{$testlun}{$action} = $$target_options_ref{'direct-store'}{$testlun}{$action};
+			}
 		}
 	}
 	return \%data_key;
@@ -305,9 +308,15 @@ sub check_exe {
 	foreach my $path (@path) {
 		if ( -x "$path/$command" && -f "$path/$command" ) { $exists = 1 }
 	}
-	if ( $exists == 0 ) {
-		print "Command $command (needed by $option option in your config file) is not in your path - can't continue!\n";
-		exit 1;
+	if ($exists == 0) {
+		if ($command eq "sg_inq") {
+			print "Command '$command' (needed by '$option') is not in your path - can't continue!\n";
+			exit 1;
+		} elsif ($command eq "lsof") {
+			execute("# Command '$command' is not in your path.");
+			execute("# Can't reliably check if device is not in use.");
+			return 1;
+		}
 	}
 }
 
@@ -371,9 +380,12 @@ sub add_backing_direct {
 	my $driver = $$target_options_ref{"driver"};
 
 	# Is the device in use?
-	(my $can_alloc, my $dev) = check_device($backing_store);
+	my $can_alloc = 1;
+	if ($force != 1 && $$target_options_ref{'allow-in-use'} ne "yes") {
+		$can_alloc = check_device($backing_store,$data_key_ref);
+	}
 
-	if (-e $backing_store && $can_alloc == 1) {
+	if (-e $backing_store && ! -d $backing_store && $can_alloc == 1) {
 		my @exec_commands;
 		my $device_type;
 		my %luns;
@@ -517,7 +529,9 @@ sub add_backing_direct {
 		$lun += 1;
 		return $lun;
 	} elsif ($can_alloc == 0) {
-		execute("# Skipping device $backing_store ($dev is mounted / in use)");
+		execute("# Skipping device $backing_store - it is in use.");
+		execute("# You can override it with --force or 'allow-in-use yes' config option.");
+		execute("# Note - do so only if you know what you're doing, you may damage your data.");
 	} else {
 		execute("# Skipping device: $backing_store");
 		execute("# $backing_store does not exist - please check the configuration file");
@@ -532,7 +546,7 @@ sub process_options {
 	if ($option eq "backing-store" || $option eq "direct-store") {
 		my $direct_store = 0;
 		if ($option eq "direct-store") {
-			check_exe("sg_inq", "direct-store");
+			check_exe("sg_inq", "option direct-store");
 			$direct_store = 1;
 		}
 
@@ -632,7 +646,7 @@ sub dump_config {
 
 	my @all_targets = keys %tgtadm_output_tid;
 
-	# If all targets use the same driver, us it only once in the config
+	# If all targets use the same driver, use it only once in the config
 	my $skip_driver = 0;
 	my @drivers_combined;
 	foreach my $current_target (@all_targets) {
@@ -1039,63 +1053,43 @@ sub check_connected {
 }
 
 # Check if a device can be allocated
-my @rootfs_dev;
+# Device can be used "by system" (i.e. mounted, used as swap, as a part of
+# a RAID array etc.) or "by user" - i.e., already by tgtd, or someone doing:
+#    dd if=/dev/1st_device of=/dev/2nd_device
+# We shouldn't allow a device to be used more than one time, as it could
+# cause corruption when written several times. Unless the user really wants to.
 sub check_device {
-	my $tmp_dev = $_[0];
+	my $backing_store = $_[0];
+	my $data_key_ref = $_[1];
 
-	# Check if force flag is set
-	if ( $force == 0) {
-		# Check for rootfs devices
-		&find_rootfs_device();
-		$tmp_dev =~ s/\d//g;
-		# Check if device is on the same disk as rootfs
-		if (grep {$_ eq $tmp_dev} @rootfs_dev) {
-			return (0,$tmp_dev);
+	# If allow-in-use is "yes", there is no need to do
+	# farther tests
+	if ($$data_key_ref{$backing_store}{'allow-in-use'} eq "yes") {
+		return 1;
+	}
+
+	# Check if the system uses this device
+	use Fcntl qw(O_RDONLY O_EXCL);
+	use Errno;
+	sysopen(FH, $backing_store, O_RDONLY | O_EXCL);
+	if ($!{EBUSY}) {
+		execute("# Device $backing_store is used by the system (mounted, used by swap?).");
+		return 0;
+	}
+	close(FH);
+
+	# Check if userspace uses this device
+	my $lsof_check = check_exe("lsof");
+	if ($lsof_check ne 1) {
+		system("lsof $backing_store &>/dev/null");
+		my $exit_value  = $? >> 8;
+		if ($exit_value eq 0) {
+			execute("# Device $backing_store is used (already tgtd target?).");
+			execute("# Run 'lsof $backing_store' to see the details.");
+			return 0;
 		}
 	}
 	return 1;
-}
-
-# finds all the devices that rootfs is mounted on
-sub find_rootfs_device {
-	my @files=("/etc/mtab","/proc/mounts");
-	my @lines;
-	# read files
-	foreach my $file (@files){
-		if (open(FH,"$file")) {
-			@lines=(@lines,<FH>);
-			close (FH);
-		}
-	}
-
-	# parse files and finds all the device which mounted on /
-	foreach my $line (@lines){
-		chomp $line;
-		if (($line=~/^\/dev\//) && ($line=~/ \/ /)){
-			my @ln=split(' ',$line);
-			$ln[0]=~s/\d//g;
-			push(@rootfs_dev,$ln[0]);
-		}
-	}
-
-	# read swap file
-	my $swap_file="/proc/swap";
-	if (open(FH,"$swap_file")) {
-		@lines=<FH>;
-		close (FH);
-	}
-	# parse swap file and finds all the swap devices
-	foreach my $line (@lines){
-		chomp $line;
-		if ($line=~/^\/dev\//) {
-			my @ln=split(' ',$line);
-			$ln[0]=~s/\d//g;
-			push(@rootfs_dev,$ln[0]);
-		}
-	}
-	# remove duplicate entries from @rootfs_dev
-	my %seen = ();
-	@rootfs_dev = grep { ! $seen{ $_ }++ } @rootfs_dev;
 }
 
 # Execute or just print (or both) everything we start or would start
