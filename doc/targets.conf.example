@@ -124,6 +124,7 @@ default-driver iscsi
     #mode_page 8:0:18:0x10:0:0xff....
     #mode_page 8:0:18:0x10:0:0xff....
     #device-type
+    #allow-in-use	# if specified globally, can't be overwritten locally
 
     write-cache off
     scsi_sn multipath-10
@@ -150,16 +151,40 @@ default-driver iscsi
 </target>
 
 
+# Devices which are in use (by system: mounted, for swap, part of RAID, or by
+# userspace: dd, by tgtd for another target etc.) can't be used, unless you use
+# --force flag or add 'allow-in-use yes' option
+<target iqn.2008-09.com.example:server.target7>
+    backing-store /dev/LVM/somedevice
+    allow-in-use yes
+</target>
+
+<target iqn.2008-09.com.example:server.target8>
+    <backing-store /dev/LVM/somedevice>
+        scsi_sn serial1
+    </backing-store>
+
+    <backing-store /dev/LVM/somedevice2>
+        scsi_sn serial2
+    </backing-store>
+
+    allow-in-use yes
+</target>
+
+
+
+
+
 # Not supported configurations, and therefore, commented out:
 
-#<target iqn.2008-09.com.example:server.target7>
+#<target iqn.2008-09.com.example:server.target9>
 #    backing-store /dev/LVM/somedevice1
 #    backing-store /dev/LVM/somedevice2
 #    lun 10
 #    lun 11
 #</target>
 
-#<target iqn.2008-09.com.example:server.target8>
+#<target iqn.2008-09.com.example:server.target10>
 #    <direct-store /dev/sdd>
 #        vendor_id VENDOR1
 #    </direct-store>
@@ -169,7 +194,7 @@ default-driver iscsi
 
 # This one will break the parser:
 
-#<target iqn.2008-09.com.example:server.target8>
+#<target iqn.2008-09.com.example:server.target11>
 #    <direct-store /dev/sdd>
 #        vendor_id VENDOR1
 #    </direct-store>
