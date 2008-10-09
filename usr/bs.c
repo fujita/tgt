@@ -268,7 +268,8 @@ void bs_thread_close(struct bs_thread_info *info)
 	info->stop = 1;
 	pthread_cond_broadcast(&info->pending_cond);
 
-	for (i = 0; i < info->worker_thread[i]; i++)
+	for (i = 0; info->worker_thread[i] &&
+		     i < ARRAY_SIZE(info->worker_thread); i++)
 		pthread_join(info->worker_thread[i], NULL);
 
 	pthread_cond_destroy(&info->finished_cond);
