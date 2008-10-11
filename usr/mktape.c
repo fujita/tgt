@@ -33,6 +33,7 @@
 #include "media.h"
 #include "bs_ssc.h"
 #include "ssc.h"
+#include "libssc.h"
 
 const char *mktape_version = "0.01";
 
@@ -49,7 +50,7 @@ int main(int argc, char *argv[])
 {
 	int file;
 	struct blk_header h;
-	struct MAM mam;
+	struct MAM_info mi;
 	uint8_t current_media[1024];
 	long nwrite;
 	char *progname = argv[0];
@@ -57,6 +58,7 @@ int main(int argc, char *argv[])
 	char *media_type = NULL;
 	char *media_capacity = NULL;
 	uint32_t size;
+	int ret;
 
 	if (argc < 2) {
 		usage(progname);
@@ -124,38 +126,40 @@ int main(int argc, char *argv[])
 	h.blk_sz = size;
 	h.prev = 0;
 	h.curr = 0;
-	h.next = sizeof(mam) + sizeof(h);
+	h.next = sizeof(struct MAM) + sizeof(h);
 
 	printf("blk_sz: %d, next %" PRId64 ", %" PRId64 "\n",
 				h.blk_sz, h.next, h.next);
 	printf("Sizeof(mam): %" PRId64 ", sizeof(h): %" PRId64 "\n",
-			(uint64_t)sizeof(mam), (uint64_t)sizeof(h));
-	memset((uint8_t *)&mam, 0, sizeof(mam));
+	       (uint64_t)sizeof(struct MAM), (uint64_t)sizeof(h));
 
-	mam.tape_fmt_version = 2;
-	mam.max_capacity = size * 1048576;
-	mam.remaining_capacity = size * 1048576;
-	mam.MAM_space_remaining = sizeof(mam.vendor_unique);
-	mam.medium_length = 384;	/* 384 tracks */
-	mam.medium_width = 127;		/* 127 x tenths of mm (12.7 mm) */
-	memcpy(&mam.medium_manufacturer, "Foo     ", 8);
-	memcpy(&mam.application_vendor, "Bar     ", 8);
+	memset(&mi, 0, sizeof(mi));
+
+	mi.tape_fmt_version = TGT_TAPE_VERSION;
+	mi.max_capacity = size * 1048576;
+	mi.remaining_capacity = size * 1048576;
+	mi.MAM_space_remaining = sizeof(mi.vendor_unique);
+	mi.medium_length = 384;	/* 384 tracks */
+	mi.medium_width = 127;		/* 127 x tenths of mm (12.7 mm) */
+	memcpy(mi.medium_manufacturer, "Foo     ", 8);
+	memcpy(mi.application_vendor, "Bar     ", 8);
 
 	if (!strncmp("clean", media_type, 5)) {
-		mam.medium_type = CART_CLEAN;
-		mam.medium_type_information = 20; /* Max cleaning loads */
+		mi.medium_type = CART_CLEAN;
+		mi.medium_type_information = 20; /* Max cleaning loads */
 	} else if (!strncmp("WORM", media_type, 4)) {
-		mam.medium_type = CART_WORM;
+		mi.medium_type = CART_WORM;
 	} else {
-		mam.medium_type = CART_DATA;
+		mi.medium_type = CART_DATA;
 	}
 
-	sprintf((char *)mam.medium_serial_number, "%s_%d",
-					barcode, (int)time(NULL));
-	sprintf((char *)mam.barcode, "%-31s", barcode);
-
+	sprintf((char *)mi.medium_serial_number, "%s_%d", barcode,
+		(int)time(NULL));
+	sprintf((char *)mi.barcode, "%-31s", barcode);
 	sprintf((char *)current_media, "%s", barcode);
+
 	syslog(LOG_DAEMON|LOG_INFO, "%s being created", current_media);
+
 	file = creat((char *)current_media, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
 	if (file == -1) {
 		perror("Failed creating file");
@@ -166,8 +170,9 @@ int main(int argc, char *argv[])
 		perror("Unable to write header");
 		exit(1);
 	}
-	nwrite = write(file, &mam, sizeof(mam));
-	if (nwrite <= 0) {
+
+	ret = ssc_write_mam_info(file, &mi);
+	if (ret) {
 		perror("Unable to write MAM");
 		exit(1);
 	}

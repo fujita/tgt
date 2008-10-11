@@ -38,6 +38,7 @@
 #include "media.h"
 #include "bs_ssc.h"
 #include "ssc.h"
+#include "libssc.h"
 
 static void ssc_sense_data_build(struct scsi_cmd *cmd, uint8_t key,
 				 uint16_t asc, uint8_t *info, int info_len)
@@ -604,6 +605,7 @@ static int bs_tape_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 	struct ssc_info *ssc;
 	char *cart = NULL;
 	ssize_t rd;
+	int ret;
 
 	ssc = dtype_priv(lu);
 
@@ -634,11 +636,12 @@ static int bs_tape_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 		goto read_failed;
 	}
 
-	rd = pread(*fd, &ssc->mam, sizeof(struct MAM), rd);
-	if (rd < sizeof(struct MAM)) {
+	ret = ssc_read_mam_info(*fd, &ssc->mam);
+	if (ret) {
 		eprintf("Failed to read MAM: %d %m\n", (int)rd);
 		goto read_failed;
 	}
+
 	rd = pread(*fd, ssc->c_blk, sizeof(struct blk_header),
 					ssc->c_blk->next);
 	if (rd < sizeof(struct blk_header)) {

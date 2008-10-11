@@ -33,6 +33,7 @@
 #include "media.h"
 #include "ssc.h"
 #include "bs_ssc.h"
+#include "libssc.h"
 
 void print_current_header(struct blk_header *pos)
 {
@@ -104,7 +105,7 @@ int main(int argc, char *argv[])
 	char *progname;
 	char datafile[1024] = "";
 	loff_t	nread;
-	struct MAM mam;
+	struct MAM_info mam;
 	struct blk_header current_position;
 	time_t t;
 	int a;
@@ -151,13 +152,15 @@ int main(int argc, char *argv[])
 		perror("Could not read blk header");
 		exit(1);
 	}
-	nread = read(ofp, &mam, sizeof(struct MAM));
-	if (nread < (sizeof(struct MAM))) {
+
+	nread = ssc_read_mam_info(ofp, &mam);
+	if (nread) {
 		perror("Could not read MAM");
 		exit(1);
 	}
 	if (mam.tape_fmt_version != TGT_TAPE_VERSION) {
-		printf("Unknown media format version\n");
+		printf("Unknown media format version %x\n",
+		       mam.tape_fmt_version);
 		exit(1);
 	}
 

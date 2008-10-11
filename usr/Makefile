@@ -57,7 +57,8 @@ LIBS += -lpthread
 PROGRAMS += tgtd tgtadm mktape dump_tape
 SCRIPTS += ../scripts/tgt-setup-lun ../scripts/tgt-admin
 TGTD_OBJS += tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o \
-		parser.o spc.o sbc.o mmc.o osd.o scc.o smc.o ssc.o bs_ssc.o \
+		parser.o spc.o sbc.o mmc.o osd.o scc.o smc.o \
+		ssc.o bs_ssc.o libssc.o \
 		bs_null.o bs.o libcrc32c.o
 MANPAGES = ../doc/manpages/tgtadm.8 ../doc/manpages/tgt-admin.8 \
 		../doc/manpages/tgt-setup-lun.8
@@ -76,6 +77,16 @@ tgtadm: tgtadm.o
 	$(CC) $^ -o $@
 
 -include tgtadm.d
+
+mktape: mktape.o libssc.o
+	$(CC) $^ -o $@
+
+-include mktape.d libssc.d
+
+dump_tape: dump_tape.o libssc.o
+	$(CC) $^ -o $@
+
+-include dump_tape.d libssc.d
 
 %.o: %.c
 	$(CC) -c $(CFLAGS) $*.c -o $*.o

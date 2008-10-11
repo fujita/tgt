@@ -1,3 +1,6 @@
+#ifndef __BS_SSC_H
+#define __BS_SSC_H
+
 /*
  * structure of a 'poor mans double linked list' on disk.
  */
@@ -38,3 +41,60 @@ struct blk_header {
 	uint8_t z;
 };
 
+/*
+ * MAM (media access memory) structure based from IBM Ultrium SCSI
+ * Reference WB1109-02
+ */
+struct MAM {
+	uint32_t tape_fmt_version;
+	uint32_t __pad1;
+
+	uint64_t remaining_capacity;
+	uint64_t max_capacity;
+	uint64_t TapeAlert;
+	uint64_t load_count;
+	uint64_t MAM_space_remaining;
+
+	uint8_t assigning_organization_1[8];
+	uint8_t formatted_density_code;
+	uint8_t __pad2[5];
+	uint8_t initialization_count[2];
+	uint8_t dev_make_serial_last_load[4][40];
+
+	uint64_t written_in_medium_life;
+	uint64_t read_in_medium_life;
+	uint64_t written_in_last_load;
+	uint64_t read_in_last_load;
+
+	uint8_t medium_manufacturer[8];
+	uint8_t medium_serial_number[32];
+	uint32_t medium_length;
+	uint32_t medium_width;
+	uint8_t assigning_organization_2[8];
+	uint8_t medium_density_code;
+	uint8_t __pad3[7];
+	uint8_t medium_manufacture_date[8];
+	uint64_t MAM_capacity;
+	uint8_t medium_type;
+	uint8_t __pad4;
+	uint16_t medium_type_information;
+	uint8_t __pad5[4];
+
+	uint8_t application_vendor[8];
+	uint8_t application_name[32];
+	uint8_t application_version[8];
+	uint8_t user_medium_text_label[160];
+	uint8_t date_time_last_written[12];
+	uint8_t __pad6[3];
+	uint8_t localization_identifier;
+	uint8_t barcode[32];
+	uint8_t owning_host_textual_name[80];
+	uint8_t media_pool[160];
+
+	uint8_t vendor_unique[256];
+
+	uint8_t dirty;
+	uint8_t __reserved[7];
+};
+
+#endif
