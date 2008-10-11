@@ -10,7 +10,7 @@ ifneq ($(ISCSI),)
 CFLAGS += -DISCSI
 TGTD_OBJS += $(addprefix iscsi/, conn.o param.o session.o \
 		iscsid.o target.o chap.o transport.o iscsi_tcp.o \
-		isns.o libcrc32c.o)
+		isns.o)
 TGTD_OBJS += bs_rdwr.o bs_aio.o
 
 LIBS += -lcrypto
@@ -58,7 +58,7 @@ PROGRAMS += tgtd tgtadm mktape dump_tape
 SCRIPTS += ../scripts/tgt-setup-lun ../scripts/tgt-admin
 TGTD_OBJS += tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o \
 		parser.o spc.o sbc.o mmc.o osd.o scc.o smc.o ssc.o bs_ssc.o \
-		bs_null.o bs.o
+		bs_null.o bs.o libcrc32c.o
 MANPAGES = ../doc/manpages/tgtadm.8 ../doc/manpages/tgt-admin.8 \
 		../doc/manpages/tgt-setup-lun.8
 
