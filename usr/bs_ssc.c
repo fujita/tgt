@@ -69,14 +69,10 @@ static int32_t be24_to_2comp(uint8_t *c)
 
 static int skip_next_header(struct scsi_lu *lu)
 {
-	ssize_t rd;
 	struct ssc_info *ssc = dtype_priv(lu);
 	struct blk_header *h = ssc->c_blk;
 
-	rd = pread(lu->fd, h, sizeof(struct blk_header), h->next);
-	if (rd != sizeof(struct blk_header))
-		return 1;
-	return 0;
+	return ssc_read_blkhdr(lu->fd, h, h->next);
 }
 
 static int skip_prev_header(struct scsi_lu *lu)
@@ -85,8 +81,8 @@ static int skip_prev_header(struct scsi_lu *lu)
 	struct ssc_info *ssc = dtype_priv(lu);
 	struct blk_header *h = ssc->c_blk;
 
-	rd = pread(lu->fd, h, sizeof(struct blk_header), h->prev);
-	if (rd != sizeof(struct blk_header))
+	rd = ssc_read_blkhdr(lu->fd, h, h->prev);
+	if (rd)
 		return 1;
 	if (h->blk_type == BLK_BOT)
 		return skip_next_header(lu);
@@ -105,12 +101,11 @@ static int resp_rewind(struct scsi_lu *lu)
 
 	eprintf("*** Backing store fd: %s %d %d ***\n", lu->path, lu->fd, fd);
 
-	rd = pread(fd, h, sizeof(struct blk_header), 0);
-	if (rd < 0)
-		eprintf("Could not read %d bytes:%m\n",
-				(int)sizeof(struct blk_header));
-	if (rd != sizeof(struct blk_header))
+	rd = ssc_read_blkhdr(fd, h, 0);
+	if (rd) {
+		eprintf("Could not read %Zd bytes:%m\n", sizeof(*h));
 		return 1;
+	}
 
 	return skip_next_header(lu);
 }
@@ -172,15 +167,15 @@ static int append_blk(struct scsi_cmd *cmd, uint8_t *data,
 			eod->ondisk_sz);
 
 	/* Rewrite previous header with updated positioning info */
-	ret = pwrite(fd, curr, sizeof(struct blk_header), (off_t)curr->curr);
-	if (ret != sizeof(struct blk_header)) {
+	ret = ssc_write_blkhdr(fd, curr, curr->curr);
+	if (ret) {
 		eprintf("Rewrite of blk header failed: %m\n");
 		sense_data_build(cmd, MEDIUM_ERROR, ASC_WRITE_ERROR);
 		goto failed_write;
 	}
 	/* Write new EOD blk header */
-	ret = pwrite(fd, eod, sizeof(struct blk_header), (off_t)eod->curr);
-	if (ret != sizeof(struct blk_header)) {
+	ret = ssc_write_blkhdr(fd, eod, eod->curr);
+	if (ret) {
 		eprintf("Write of EOD blk header failed: %m\n");
 		sense_data_build(cmd, MEDIUM_ERROR, ASC_WRITE_ERROR);
 		goto failed_write;
@@ -630,8 +625,8 @@ static int bs_tape_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 
 	/* Can't call 'resp_rewind() at this point as lu data not
 	 * setup */
-	rd = pread(*fd, ssc->c_blk, sizeof(struct blk_header), 0);
-	if (rd < sizeof(struct blk_header)) {
+	rd = ssc_read_blkhdr(*fd, ssc->c_blk, 0);
+	if (rd) {
 		eprintf("Failed to read complete blk header: %d %m\n", (int)rd);
 		goto read_failed;
 	}
@@ -642,9 +637,8 @@ static int bs_tape_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 		goto read_failed;
 	}
 
-	rd = pread(*fd, ssc->c_blk, sizeof(struct blk_header),
-					ssc->c_blk->next);
-	if (rd < sizeof(struct blk_header)) {
+	rd = ssc_read_blkhdr(*fd, ssc->c_blk, ssc->c_blk->next);
+	if (rd) {
 		eprintf("Failed to read complete blk header: %d %m\n", (int)rd);
 		goto read_failed;
 	}

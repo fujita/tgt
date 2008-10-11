@@ -178,3 +178,25 @@ int ssc_write_mam_info(int fd, struct MAM_info *i)
 
 	return  0;
 }
+
+int ssc_read_blkhdr(int fd, struct blk_header *h, off_t offset)
+{
+	size_t count;
+
+	count = pread(fd, h, sizeof(*h), offset);
+	if (count != sizeof(*h))
+		return 1;
+
+	return 0;
+}
+
+int ssc_write_blkhdr(int fd, struct blk_header *h, off_t offset)
+{
+	size_t count;
+
+	count = pwrite(fd, h, sizeof(*h), offset);
+	if (count != sizeof(*h))
+		return 1;
+
+	return 0;
+}

@@ -84,19 +84,13 @@ void print_current_header(struct blk_header *pos)
 
 int skip_to_next_header(int fd, struct blk_header *pos)
 {
-	loff_t nread;
+	int ret;
 
-	nread = lseek64(fd, (uint64_t)pos->next, SEEK_SET);
-	if ((uint64_t)pos->next != nread) {
-		printf("Error while seeking to next header\n");
-		return -1;
-	}
-	nread = read(fd, pos, sizeof(struct blk_header));
-	if (nread < sizeof(struct blk_header)) {
+	ret = ssc_read_blkhdr(fd, pos, pos->next);
+	if (ret)
 		printf("Could not read complete blk header - short read!!\n");
-		return -1;
-	}
-	return 0;
+
+	return ret;
 }
 
 int main(int argc, char *argv[])
@@ -147,8 +141,9 @@ int main(int argc, char *argv[])
 		perror("Could not open");
 		exit(1);
 	}
-	nread = read(ofp, &current_position, sizeof(struct blk_header));
-	if (nread < sizeof(current_position)) {
+
+	nread = ssc_read_blkhdr(ofp, &current_position, 0);
+	if (nread) {
 		perror("Could not read blk header");
 		exit(1);
 	}
@@ -203,7 +198,7 @@ int main(int argc, char *argv[])
 	print_current_header(&current_position);
 	while (current_position.blk_type != BLK_EOD) {
 		nread = skip_to_next_header(ofp, &current_position);
-		if (nread == -1)
+		if (nread)
 			break;
 		print_current_header(&current_position);
 	}

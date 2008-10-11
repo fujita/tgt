@@ -52,7 +52,6 @@ int main(int argc, char *argv[])
 	struct blk_header h;
 	struct MAM_info mi;
 	uint8_t current_media[1024];
-	long nwrite;
 	char *progname = argv[0];
 	char *barcode = NULL;
 	char *media_type = NULL;
@@ -165,8 +164,9 @@ int main(int argc, char *argv[])
 		perror("Failed creating file");
 		exit(2);
 	}
-	nwrite = write(file, &h, sizeof(h));
-	if (nwrite <= 0) {
+
+	ret = ssc_write_blkhdr(file, &h, 0);
+	if (ret) {
 		perror("Unable to write header");
 		exit(1);
 	}
@@ -185,8 +185,8 @@ int main(int argc, char *argv[])
 	h.next = lseek64(file, 0, SEEK_CUR);
 	h.curr = h.next;
 
-	nwrite = write(file, &h, sizeof(h));
-	if (nwrite <= 0) {
+	ret = ssc_write_blkhdr(file, &h, h.next);
+	if (ret) {
 		perror("Unable to write header");
 		exit(1);
 	}
