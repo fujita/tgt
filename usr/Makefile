@@ -78,12 +78,12 @@ tgtadm: tgtadm.o
 
 -include tgtadm.d
 
-mktape: mktape.o libssc.o
+mktape: mktape.o libssc.o libcrc32c.o
 	$(CC) $^ -o $@
 
 -include mktape.d libssc.d
 
-dump_tape: dump_tape.o libssc.o
+dump_tape: dump_tape.o libssc.o libcrc32c.o
 	$(CC) $^ -o $@
 
 -include dump_tape.d libssc.d
