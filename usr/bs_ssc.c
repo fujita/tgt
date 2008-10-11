@@ -250,7 +250,8 @@ static int space_filemark(struct scsi_cmd *cmd, int32_t count)
 	struct blk_header_info *h = &ssc->c_blk;
 	int result;
 
-	eprintf("*** space %d filemarks, %llu\n", count, h->curr);
+	eprintf("*** space %d filemarks, %llu\n", count,
+		(unsigned long long)h->curr);
 
 	if (count > 0)
 		result = space_filemark_forward(cmd, count);
@@ -259,7 +260,7 @@ static int space_filemark(struct scsi_cmd *cmd, int32_t count)
 	else
 		result = SAM_STAT_GOOD;
 
-	eprintf("%llu\n", h->curr);
+	eprintf("%llu\n", (unsigned long long)h->curr);
 
 	return result;
 }
@@ -269,7 +270,8 @@ static int space_blocks(struct scsi_cmd *cmd, int32_t count)
 	struct ssc_info *ssc = dtype_priv(cmd->dev);
 	struct blk_header_info *h = &ssc->c_blk;
 
-	eprintf("*** space %d blocks, %llu\n", count, h->curr);
+	eprintf("*** space %d blocks, %llu\n", count,
+		(unsigned long long)h->curr);
 
 	while (count != 0) {
 		if (count > 0) {
@@ -300,7 +302,7 @@ static int space_blocks(struct scsi_cmd *cmd, int32_t count)
 			count++;
 		}
 	}
-	eprintf("%llu\n", h->curr);
+	eprintf("%llu\n", (unsigned long long)h->curr);
 	return SAM_STAT_GOOD;
 }
 
@@ -466,14 +468,14 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 		count = get_unaligned_be24(&cmd->scb[2]);
 		buf = scsi_get_in_buffer(cmd);
 
-		eprintf("*** READ_6: length %d, count %d, fixed block %s, %llu, %d\n",
-			length, count, (fixed) ? "Yes" : "No", h->curr, sti);
+		eprintf("*** READ_6: length %d, count %d, fixed block %s, %llu, %d\n", length, count, (fixed) ? "Yes" : "No", (unsigned long long)h->curr, sti);
 		if (fixed)
 			result = resp_fixed_read(cmd, buf, length, &ret);
 		else
 			result = resp_var_read(cmd, buf, length, &ret);
 
-		eprintf("Executed READ_6, Read %d bytes, %llu\n", ret, h->curr);
+		eprintf("Executed READ_6, Read %d bytes, %llu\n", ret,
+			(unsigned long long)h->curr);
 		break;
 
 	case WRITE_6:
