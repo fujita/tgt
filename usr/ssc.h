@@ -5,6 +5,16 @@
 #ifndef _SSC_H_
 #define _SSC_H_
 
+struct blk_header_info {
+	uint32_t ondisk_sz;
+	uint32_t blk_sz;
+	uint32_t blk_type;
+	uint64_t blk_num;
+	uint64_t prev;
+	uint64_t curr;
+	uint64_t next;
+};
+
 /*
  * MAM structure based from IBM Ultrium SCSI Reference WB1109-02
  */
@@ -59,7 +69,7 @@ struct ssc_info {
 
 	struct MAM_info mam;
 
-	struct blk_header *c_blk;	/* Current block header */
+	struct blk_header_info c_blk;	/* Current block header */
 };
 
 #endif

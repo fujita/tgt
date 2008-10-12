@@ -49,7 +49,7 @@ void usage(char *progname)
 int main(int argc, char *argv[])
 {
 	int file;
-	struct blk_header h;
+	struct blk_header_info hdr, *h = &hdr;
 	struct MAM_info mi;
 	uint8_t current_media[1024];
 	char *progname = argv[0];
@@ -118,19 +118,18 @@ int main(int argc, char *argv[])
 	if (size == 0)
 		size = 8000;
 
-	h.a = 'A';
-	h.z = 'Z';
-	h.blk_type = BLK_BOT;
-	h.blk_num = 0;
-	h.blk_sz = size;
-	h.prev = 0;
-	h.curr = 0;
-	h.next = sizeof(struct MAM) + sizeof(h);
+	memset(h, 0, sizeof(h));
+	h->blk_type = BLK_BOT;
+	h->blk_num = 0;
+	h->blk_sz = size;
+	h->prev = 0;
+	h->curr = 0;
+	h->next = sizeof(struct MAM) + SSC_BLK_HDR_SIZE;
 
 	printf("blk_sz: %d, next %" PRId64 ", %" PRId64 "\n",
-				h.blk_sz, h.next, h.next);
+				h->blk_sz, h->next, h->next);
 	printf("Sizeof(mam): %" PRId64 ", sizeof(h): %" PRId64 "\n",
-	       (uint64_t)sizeof(struct MAM), (uint64_t)sizeof(h));
+	       (uint64_t)sizeof(struct MAM), (uint64_t)SSC_BLK_HDR_SIZE);
 
 	memset(&mi, 0, sizeof(mi));
 
@@ -165,7 +164,7 @@ int main(int argc, char *argv[])
 		exit(2);
 	}
 
-	ret = ssc_write_blkhdr(file, &h, 0);
+	ret = ssc_write_blkhdr(file, h, 0);
 	if (ret) {
 		perror("Unable to write header");
 		exit(1);
@@ -176,16 +175,15 @@ int main(int argc, char *argv[])
 		perror("Unable to write MAM");
 		exit(1);
 	}
-	memset(&h, 0, sizeof(h));
-	h.a = 'A';
-	h.z = 'Z';
-	h.blk_type = BLK_EOD;
-	h.blk_num = 1;
-	h.prev = 0;
-	h.next = lseek64(file, 0, SEEK_CUR);
-	h.curr = h.next;
 
-	ret = ssc_write_blkhdr(file, &h, h.next);
+	memset(h, 0, sizeof(h));
+	h->blk_type = BLK_EOD;
+	h->blk_num = 1;
+	h->prev = 0;
+	h->next = lseek64(file, 0, SEEK_CUR);
+	h->curr = h->next;
+
+	ret = ssc_write_blkhdr(file, h, h->next);
 	if (ret) {
 		perror("Unable to write header");
 		exit(1);

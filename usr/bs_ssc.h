@@ -29,8 +29,10 @@
 
 #define TGT_TAPE_VERSION	2
 
+#define SSC_BLK_HDR_SIZE (sizeof(struct blk_header))
+
 struct blk_header {
-	uint8_t a;
+	uint8_t h_csum[4];
 	uint32_t ondisk_sz;
 	uint32_t blk_sz;
 	uint32_t blk_type;
@@ -38,7 +40,6 @@ struct blk_header {
 	uint64_t prev;
 	uint64_t curr;
 	uint64_t next;
-	uint8_t z;
 };
 
 /*

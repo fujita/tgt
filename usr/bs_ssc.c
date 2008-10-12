@@ -70,7 +70,7 @@ static int32_t be24_to_2comp(uint8_t *c)
 static int skip_next_header(struct scsi_lu *lu)
 {
 	struct ssc_info *ssc = dtype_priv(lu);
-	struct blk_header *h = ssc->c_blk;
+	struct blk_header_info *h = &ssc->c_blk;
 
 	return ssc_read_blkhdr(lu->fd, h, h->next);
 }
@@ -79,7 +79,7 @@ static int skip_prev_header(struct scsi_lu *lu)
 {
 	ssize_t rd;
 	struct ssc_info *ssc = dtype_priv(lu);
-	struct blk_header *h = ssc->c_blk;
+	struct blk_header_info *h = &ssc->c_blk;
 
 	rd = ssc_read_blkhdr(lu->fd, h, h->prev);
 	if (rd)
@@ -94,16 +94,15 @@ static int resp_rewind(struct scsi_lu *lu)
 	int fd;
 	ssize_t rd;
 	struct ssc_info *ssc = dtype_priv(lu);
-	struct blk_header *h;
+	struct blk_header_info *h = &ssc->c_blk;
 
-	h = ssc->c_blk;
 	fd = lu->fd;
 
 	eprintf("*** Backing store fd: %s %d %d ***\n", lu->path, lu->fd, fd);
 
 	rd = ssc_read_blkhdr(fd, h, 0);
 	if (rd) {
-		eprintf("Could not read %Zd bytes:%m\n", sizeof(*h));
+		eprintf("fail to read the first block header\n");
 		return 1;
 	}
 
@@ -111,33 +110,25 @@ static int resp_rewind(struct scsi_lu *lu)
 }
 
 static int append_blk(struct scsi_cmd *cmd, uint8_t *data,
-		 int size, int orig_sz, int type)
+		      int size, int orig_sz, int type)
 {
 	int fd;
-	struct blk_header *curr;
-	struct blk_header *eod;
-	struct ssc_info *ssc;
+	struct ssc_info *ssc = dtype_priv(cmd->dev);
+	struct blk_header_info c, *curr = &c;
+	struct blk_header_info e, *eod = &e;
 	ssize_t ret;
 
-	ssc = dtype_priv(cmd->dev);
 	fd = cmd->dev->fd;
-
-	eod = zalloc(sizeof(struct blk_header));
-	if (!eod) {
-		eprintf("Failed to malloc %" PRId64 " bytes\n",
-						(uint64_t)sizeof(eod));
-		return -ENOMEM;
-	}
+	*curr = ssc->c_blk;
 
 	eprintf("B4 update     : prev/curr/next"
 		" <%" PRId64 "/%" PRId64 "/%" PRId64 "> type: %d,"
 		" num: %" PRIx64 ", ondisk sz: %d, about to write %d\n",
-			ssc->c_blk->prev, ssc->c_blk->curr, ssc->c_blk->next,
-			ssc->c_blk->blk_type, ssc->c_blk->blk_num,
-			ssc->c_blk->ondisk_sz, size);
+		curr->prev, curr->curr, curr->next,
+		curr->blk_type, curr->blk_num,
+		curr->ondisk_sz, size);
 
-	curr = ssc->c_blk;
-	curr->next = curr->curr + size + sizeof(struct blk_header);
+	curr->next = curr->curr + size + SSC_BLK_HDR_SIZE;
 	curr->blk_type = type;
 	curr->ondisk_sz = size;
 	curr->blk_sz = orig_sz;
@@ -148,9 +139,8 @@ static int append_blk(struct scsi_cmd *cmd, uint8_t *data,
 	eod->blk_sz = 0;
 	eod->blk_type = BLK_EOD;
 	eod->blk_num = curr->blk_num + 1;
-	eod->a = 'A';
-	eod->z = 'Z';
-	ssc->c_blk = eod;
+
+	memcpy(&ssc->c_blk, eod, sizeof(*eod));
 
 	eprintf("After update  : prev/curr/next"
 		" <%" PRId64 "/%" PRId64 "/%" PRId64 "> type: %d,"
@@ -171,36 +161,31 @@ static int append_blk(struct scsi_cmd *cmd, uint8_t *data,
 	if (ret) {
 		eprintf("Rewrite of blk header failed: %m\n");
 		sense_data_build(cmd, MEDIUM_ERROR, ASC_WRITE_ERROR);
-		goto failed_write;
+		return SAM_STAT_CHECK_CONDITION;
 	}
 	/* Write new EOD blk header */
 	ret = ssc_write_blkhdr(fd, eod, eod->curr);
 	if (ret) {
 		eprintf("Write of EOD blk header failed: %m\n");
 		sense_data_build(cmd, MEDIUM_ERROR, ASC_WRITE_ERROR);
-		goto failed_write;
+		return SAM_STAT_CHECK_CONDITION;
 	}
 
 	/* Write any data */
 	if (size) {
 		ret = pwrite(fd, data, size,
-			(off_t)curr->curr + sizeof(struct blk_header));
+			     (off_t)curr->curr + SSC_BLK_HDR_SIZE);
 		if (ret != size) {
 			eprintf("Write of data failed: %m\n");
 			sense_data_build(cmd, MEDIUM_ERROR, ASC_WRITE_ERROR);
-			goto failed_write;
+			return SAM_STAT_CHECK_CONDITION;
 		}
 	}
 	/* Write new EOD blk header */
 
 	fsync(fd);
 
-	free(curr);
 	return SAM_STAT_GOOD;
-
-failed_write:
-	free(curr);
-	return SAM_STAT_CHECK_CONDITION;
 }
 
 #define SENSE_FILEMARK 0x80
@@ -208,16 +193,17 @@ failed_write:
 static int space_filemark_reverse(struct scsi_cmd *cmd, int32_t count)
 {
 	struct ssc_info *ssc = dtype_priv(cmd->dev);
+	struct blk_header_info *h = &ssc->c_blk;
 
 	count *= -1;
 
 again:
-	if (!ssc->c_blk->prev) {
+	if (!h->prev) {
 		sense_data_build(cmd, NO_SENSE, ASC_BOM);
 		return SAM_STAT_CHECK_CONDITION;
 	}
 
-	if (ssc->c_blk->blk_type == BLK_FILEMARK)
+	if (h->blk_type == BLK_FILEMARK)
 		count--;
 
 	if (skip_prev_header(cmd->dev)) {
@@ -235,14 +221,15 @@ again:
 static int space_filemark_forward(struct scsi_cmd *cmd, int32_t count)
 {
 	struct ssc_info *ssc = dtype_priv(cmd->dev);
+	struct blk_header_info *h = &ssc->c_blk;
 
 again:
-	if (ssc->c_blk->blk_type == BLK_EOD) {
+	if (h->blk_type == BLK_EOD) {
 		sense_data_build(cmd, NO_SENSE, ASC_END_OF_DATA);
 		return SAM_STAT_CHECK_CONDITION;
 	}
 
-	if (ssc->c_blk->blk_type == BLK_FILEMARK)
+	if (h->blk_type == BLK_FILEMARK)
 		count--;
 
 	if (skip_next_header(cmd->dev)) {
@@ -260,9 +247,10 @@ again:
 static int space_filemark(struct scsi_cmd *cmd, int32_t count)
 {
 	struct ssc_info *ssc = dtype_priv(cmd->dev);
+	struct blk_header_info *h = &ssc->c_blk;
 	int result;
 
-	eprintf("*** space %d filemarks, %llu\n", count, ssc->c_blk->curr);
+	eprintf("*** space %d filemarks, %llu\n", count, h->curr);
 
 	if (count > 0)
 		result = space_filemark_forward(cmd, count);
@@ -271,7 +259,7 @@ static int space_filemark(struct scsi_cmd *cmd, int32_t count)
 	else
 		result = SAM_STAT_GOOD;
 
-	eprintf("%llu\n", ssc->c_blk->curr);
+	eprintf("%llu\n", h->curr);
 
 	return result;
 }
@@ -279,8 +267,9 @@ static int space_filemark(struct scsi_cmd *cmd, int32_t count)
 static int space_blocks(struct scsi_cmd *cmd, int32_t count)
 {
 	struct ssc_info *ssc = dtype_priv(cmd->dev);
+	struct blk_header_info *h = &ssc->c_blk;
 
-	eprintf("*** space %d blocks, %llu\n", count, ssc->c_blk->curr);
+	eprintf("*** space %d blocks, %llu\n", count, h->curr);
 
 	while (count != 0) {
 		if (count > 0) {
@@ -289,7 +278,7 @@ static int space_blocks(struct scsi_cmd *cmd, int32_t count)
 						ASC_MEDIUM_FORMAT_CORRUPT);
 				return SAM_STAT_CHECK_CONDITION;
 			}
-			if (ssc->c_blk->blk_type == BLK_EOD) {
+			if (h->blk_type == BLK_EOD) {
 				sense_data_build(cmd, NO_SENSE,
 						ASC_END_OF_DATA);
 				return SAM_STAT_CHECK_CONDITION;
@@ -301,7 +290,7 @@ static int space_blocks(struct scsi_cmd *cmd, int32_t count)
 						ASC_MEDIUM_FORMAT_CORRUPT);
 				return SAM_STAT_CHECK_CONDITION;
 			}
-			if (ssc->c_blk->blk_type == BLK_BOT) {
+			if (h->blk_type == BLK_BOT) {
 				/* Can't leave at BOT */
 				skip_next_header(cmd->dev);
 
@@ -311,7 +300,7 @@ static int space_blocks(struct scsi_cmd *cmd, int32_t count)
 			count++;
 		}
 	}
-	eprintf("%llu\n", ssc->c_blk->curr);
+	eprintf("%llu\n", h->curr);
 	return SAM_STAT_GOOD;
 }
 
@@ -319,19 +308,20 @@ static int resp_var_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length,
 			 int *transferred)
 {
 	struct ssc_info *ssc = dtype_priv(cmd->dev);
+	struct blk_header_info *h = &ssc->c_blk;
 	int ret = 0, result = SAM_STAT_GOOD;
 
 	length = min(length, get_unaligned_be24(&cmd->scb[2]));
 	*transferred = 0;
 
-	if (length != ssc->c_blk->blk_sz) {
-		if (ssc->c_blk->blk_type == BLK_EOD)
+	if (length != h->blk_sz) {
+		if (h->blk_type == BLK_EOD)
 			sense_data_build(cmd, 0x40 | BLANK_CHECK,
 					 NO_ADDITIONAL_SENSE);
 		else
 			sense_data_build(cmd, NO_SENSE, NO_ADDITIONAL_SENSE);
 
-		length = min(length, ssc->c_blk->blk_sz);
+		length = min(length, h->blk_sz);
 		result = SAM_STAT_CHECK_CONDITION;
 		scsi_set_in_resid_by_actual(cmd, length);
 
@@ -339,8 +329,7 @@ static int resp_var_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length,
 			goto out;
 	}
 
-	ret = pread(cmd->dev->fd, buf, length,
-		    ssc->c_blk->curr + sizeof(struct blk_header));
+	ret = pread(cmd->dev->fd, buf, length, h->curr + SSC_BLK_HDR_SIZE);
 	if (ret != length) {
 		sense_data_build(cmd, MEDIUM_ERROR, ASC_READ_ERROR);
 		result = SAM_STAT_CHECK_CONDITION;
@@ -360,7 +349,8 @@ out:
 static int resp_fixed_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length,
 			   int *transferred)
 {
-	struct ssc_info *ssc;
+	struct ssc_info *ssc = dtype_priv(cmd->dev);
+	struct blk_header_info *h = &ssc->c_blk;
 	int i, ret, result = SAM_STAT_GOOD;
 	int count;
 	ssize_t residue;
@@ -368,12 +358,11 @@ static int resp_fixed_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length,
 	uint32_t block_length = ssc_get_block_length(cmd->dev);
 
 	count = get_unaligned_be24(&cmd->scb[2]);
-	ssc = dtype_priv(cmd->dev);
 	fd = cmd->dev->fd;
 	ret = 0;
 
 	for (i = 0; i < count; i++) {
-		if (ssc->c_blk->blk_type == BLK_FILEMARK) {
+		if (h->blk_type == BLK_FILEMARK) {
 			uint8_t info[4];
 
 			eprintf("Oops - found filemark\n");
@@ -385,9 +374,9 @@ static int resp_fixed_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length,
 			goto out;
 		}
 
-		if (block_length != ssc->c_blk->blk_sz) {
+		if (block_length != h->blk_sz) {
 			eprintf("block size mismatch %d vs %d\n",
-				block_length, ssc->c_blk->blk_sz);
+				block_length, h->blk_sz);
 			sense_data_build(cmd, MEDIUM_ERROR,
 						ASC_MEDIUM_FORMAT_CORRUPT);
 			result = SAM_STAT_CHECK_CONDITION;
@@ -395,7 +384,7 @@ static int resp_fixed_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length,
 		}
 
 		residue = pread(fd, buf, block_length,
-				ssc->c_blk->curr + sizeof(struct blk_header));
+				h->curr + SSC_BLK_HDR_SIZE);
 		if (block_length != residue) {
 			eprintf("Could only read %d bytes, not %d\n",
 					(int)residue, block_length);
@@ -422,7 +411,8 @@ out:
 
 static void tape_rdwr_request(struct scsi_cmd *cmd)
 {
-	struct ssc_info *ssc;
+	struct ssc_info *ssc = dtype_priv(cmd->dev);
+	struct blk_header_info *h = &ssc->c_blk;
 	int ret, code;
 	uint32_t length, i, transfer_length, residue;
 	int result = SAM_STAT_GOOD;
@@ -477,14 +467,13 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 		buf = scsi_get_in_buffer(cmd);
 
 		eprintf("*** READ_6: length %d, count %d, fixed block %s, %llu, %d\n",
-			length, count, (fixed) ? "Yes" : "No", ssc->c_blk->curr, sti);
+			length, count, (fixed) ? "Yes" : "No", h->curr, sti);
 		if (fixed)
 			result = resp_fixed_read(cmd, buf, length, &ret);
 		else
 			result = resp_var_read(cmd, buf, length, &ret);
 
-		eprintf("Executed READ_6, Read %d bytes, %llu\n", ret,
-			ssc->c_blk->curr);
+		eprintf("Executed READ_6, Read %d bytes, %llu\n", ret, h->curr);
 		break;
 
 	case WRITE_6:
@@ -533,7 +522,7 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 			result = space_filemark(cmd, count);
 			break;
 		} else if (code == 3) { /* End of data */
-			while (ssc->c_blk->blk_type != BLK_EOD)
+			while (h->blk_type != BLK_EOD)
 				if (skip_next_header(cmd->dev)) {
 					sense_data_build(cmd, MEDIUM_ERROR,
 						ASC_MEDIUM_FORMAT_CORRUPT);
@@ -601,6 +590,7 @@ static int bs_tape_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 	char *cart = NULL;
 	ssize_t rd;
 	int ret;
+	struct blk_header_info *h;
 
 	ssc = dtype_priv(lu);
 
@@ -612,35 +602,30 @@ static int bs_tape_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 	}
 	eprintf("*** Backing store fd: %d ***\n", *fd);
 
-	if (*size < (sizeof(struct blk_header) + sizeof(struct MAM))) {
+	if (*size < SSC_BLK_HDR_SIZE + sizeof(struct MAM)) {
 		eprintf("backing file too small - not correct media format\n");
 		return -1;
 	}
-	if (!ssc->c_blk)
-		ssc->c_blk = zalloc(sizeof(struct blk_header));
-	if (!ssc->c_blk) {
-		eprintf("malloc(%d) failed\n", (int)sizeof(struct blk_header));
-		goto read_failed;
-	}
 
+	h = &ssc->c_blk;
 	/* Can't call 'resp_rewind() at this point as lu data not
 	 * setup */
-	rd = ssc_read_blkhdr(*fd, ssc->c_blk, 0);
+	rd = ssc_read_blkhdr(*fd, h, 0);
 	if (rd) {
 		eprintf("Failed to read complete blk header: %d %m\n", (int)rd);
-		goto read_failed;
+		return -1;
 	}
 
 	ret = ssc_read_mam_info(*fd, &ssc->mam);
 	if (ret) {
 		eprintf("Failed to read MAM: %d %m\n", (int)rd);
-		goto read_failed;
+		return -1;
 	}
 
-	rd = ssc_read_blkhdr(*fd, ssc->c_blk, ssc->c_blk->next);
+	rd = ssc_read_blkhdr(*fd, h, h->next);
 	if (rd) {
 		eprintf("Failed to read complete blk header: %d %m\n", (int)rd);
-		goto read_failed;
+		return -1;
 	}
 
 	switch (ssc->mam.medium_type) {
@@ -658,14 +643,8 @@ static int bs_tape_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 		break;
 	}
 
-	eprintf("Media size: %d, media type: %s\n",
-			ssc->c_blk->blk_sz, cart);
+	eprintf("Media size: %d, media type: %s\n", h->blk_sz, cart);
 	return 0;
-
-read_failed:
-	free(ssc->c_blk);
-	ssc->c_blk = NULL;
-	return -1;
 }
 
 static void bs_tape_exit(struct scsi_lu *lu)
@@ -678,8 +657,6 @@ static void bs_tape_close(struct scsi_lu *lu)
 {
 	struct ssc_info *ssc;
 	ssc = dtype_priv(lu);
-	free(ssc->c_blk);
-	ssc->c_blk = NULL;
 	dprintf("##### Close #####\n");
 	close(lu->fd);
 }

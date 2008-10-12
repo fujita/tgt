@@ -35,13 +35,8 @@
 #include "bs_ssc.h"
 #include "libssc.h"
 
-void print_current_header(struct blk_header *pos)
+void print_current_header(struct blk_header_info *pos)
 {
-	if (pos->a != 'A')
-		printf("head sanity check failed\n");
-	if (pos->z != 'Z')
-		printf("tail sanity check failed\n");
-
 	switch (pos->blk_type) {
 	case BLK_UNCOMPRESS_DATA:
 		printf(" Uncompressed data");
@@ -82,7 +77,7 @@ void print_current_header(struct blk_header *pos)
 			pos->ondisk_sz);
 }
 
-int skip_to_next_header(int fd, struct blk_header *pos)
+int skip_to_next_header(int fd, struct blk_header_info *pos)
 {
 	int ret;
 
@@ -100,7 +95,7 @@ int main(int argc, char *argv[])
 	char datafile[1024] = "";
 	loff_t	nread;
 	struct MAM_info mam;
-	struct blk_header current_position;
+	struct blk_header_info current_position;
 	time_t t;
 	int a;
 	unsigned char *p;
@@ -153,6 +148,7 @@ int main(int argc, char *argv[])
 		perror("Could not read MAM");
 		exit(1);
 	}
+
 	if (mam.tape_fmt_version != TGT_TAPE_VERSION) {
 		printf("Unknown media format version %x\n",
 		       mam.tape_fmt_version);

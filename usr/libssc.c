@@ -26,7 +26,7 @@
 #include "ssc.h"
 #include "be_byteshift.h"
 
-#define SSC_1ST_HDR_OFFSET (sizeof(struct MAM) + sizeof(struct blk_header))
+#define SSC_1ST_HDR_OFFSET (sizeof(struct MAM) + SSC_BLK_HDR_SIZE)
 
 #define SSC_GET_MAM_INFO_VAL(member, bits)\
 {\
@@ -50,7 +50,7 @@ int ssc_read_mam_info(int fd, struct MAM_info *i)
 
 	m = &mam;
 
-	ret = pread(fd, m, sizeof(struct MAM), sizeof(struct blk_header));
+	ret = pread(fd, m, sizeof(struct MAM), SSC_BLK_HDR_SIZE);
 	if (ret != sizeof(struct MAM))
 		return 1;
 
@@ -169,7 +169,7 @@ int ssc_write_mam_info(int fd, struct MAM_info *i)
 
 	SSC_PUT_MAM_INFO_VAL(dirty, 8);
 
-	ret = pwrite(fd, m, sizeof(struct MAM), sizeof(struct blk_header));
+	ret = pwrite(fd, m, sizeof(struct MAM), SSC_BLK_HDR_SIZE);
 	if (ret != sizeof(struct MAM))
 		return 1;
 
@@ -179,23 +179,41 @@ int ssc_write_mam_info(int fd, struct MAM_info *i)
 	return  0;
 }
 
-int ssc_read_blkhdr(int fd, struct blk_header *h, off_t offset)
+int ssc_read_blkhdr(int fd, struct blk_header_info *i, off_t offset)
 {
 	size_t count;
+	struct blk_header h, *m = &h;
 
-	count = pread(fd, h, sizeof(*h), offset);
-	if (count != sizeof(*h))
+	count = pread(fd, m, SSC_BLK_HDR_SIZE, offset);
+	if (count != SSC_BLK_HDR_SIZE)
 		return 1;
+
+	SSC_GET_MAM_INFO_VAL(ondisk_sz, 32);
+	SSC_GET_MAM_INFO_VAL(blk_sz, 32);
+	SSC_GET_MAM_INFO_VAL(blk_type, 32);
+	SSC_GET_MAM_INFO_VAL(blk_num, 64);
+	SSC_GET_MAM_INFO_VAL(prev, 64);
+	SSC_GET_MAM_INFO_VAL(curr, 64);
+	SSC_GET_MAM_INFO_VAL(next, 64);
 
 	return 0;
 }
 
-int ssc_write_blkhdr(int fd, struct blk_header *h, off_t offset)
+int ssc_write_blkhdr(int fd, struct blk_header_info *i, off_t offset)
 {
 	size_t count;
+	struct blk_header h, *m = &h;
 
-	count = pwrite(fd, h, sizeof(*h), offset);
-	if (count != sizeof(*h))
+	SSC_PUT_MAM_INFO_VAL(ondisk_sz, 32);
+	SSC_PUT_MAM_INFO_VAL(blk_sz, 32);
+	SSC_PUT_MAM_INFO_VAL(blk_type, 32);
+	SSC_PUT_MAM_INFO_VAL(blk_num, 64);
+	SSC_PUT_MAM_INFO_VAL(prev, 64);
+	SSC_PUT_MAM_INFO_VAL(curr, 64);
+	SSC_PUT_MAM_INFO_VAL(next, 64);
+
+	count = pwrite(fd, m, SSC_BLK_HDR_SIZE, offset);
+	if (count != SSC_BLK_HDR_SIZE)
 		return 1;
 
 	return 0;
