@@ -580,13 +580,13 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 			cmd, cmd->scb[0], ret, length, cmd->offset);
 }
 
-static int bs_tape_init(struct scsi_lu *lu)
+static int bs_ssc_init(struct scsi_lu *lu)
 {
 	struct bs_thread_info *info = BS_THREAD_I(lu);
 	return bs_thread_open(info, tape_rdwr_request, 1);
 }
 
-static int bs_tape_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
+static int bs_ssc_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 {
 	struct ssc_info *ssc;
 	char *cart = NULL;
@@ -649,13 +649,13 @@ static int bs_tape_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 	return 0;
 }
 
-static void bs_tape_exit(struct scsi_lu *lu)
+static void bs_ssc_exit(struct scsi_lu *lu)
 {
 	struct bs_thread_info *info = BS_THREAD_I(lu);
 	bs_thread_close(info);
 }
 
-static void bs_tape_close(struct scsi_lu *lu)
+static void bs_ssc_close(struct scsi_lu *lu)
 {
 	struct ssc_info *ssc;
 	ssc = dtype_priv(lu);
@@ -663,23 +663,23 @@ static void bs_tape_close(struct scsi_lu *lu)
 	close(lu->fd);
 }
 
-static int bs_tape_cmd_done(struct scsi_cmd *cmd)
+static int bs_ssc_cmd_done(struct scsi_cmd *cmd)
 {
 	return 0;
 }
 
-static struct backingstore_template tape_bst = {
+static struct backingstore_template ssc_bst = {
 	.bs_name		= "ssc",
 	.bs_datasize		= sizeof(struct bs_thread_info),
-	.bs_init		= bs_tape_init,
-	.bs_exit		= bs_tape_exit,
-	.bs_open		= bs_tape_open,
-	.bs_close		= bs_tape_close,
+	.bs_init		= bs_ssc_init,
+	.bs_exit		= bs_ssc_exit,
+	.bs_open		= bs_ssc_open,
+	.bs_close		= bs_ssc_close,
 	.bs_cmd_submit		= bs_thread_cmd_submit,
-	.bs_cmd_done		= bs_tape_cmd_done,
+	.bs_cmd_done		= bs_ssc_cmd_done,
 };
 
-__attribute__((constructor)) static void bs_tape_constructor(void)
+__attribute__((constructor)) static void bs_ssc_constructor(void)
 {
-	register_backingstore_template(&tape_bst);
+	register_backingstore_template(&ssc_bst);
 }
