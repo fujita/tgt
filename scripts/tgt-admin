@@ -577,7 +577,7 @@ sub process_options {
 		}
 	}
 
-	if ( $option eq "incominguser" ) {
+	if ($option eq "incominguser") {
 	        # if we have one command, force it to be an array anyway
 		force_array();
 		my @value_arr = @$value;
@@ -590,10 +590,12 @@ sub process_options {
 		}
 	}
 
-	if ( $option eq "outgoinguser" ) {
+	if ($option eq "outgoinguser") {
 	        # if we have one command, force it to be an array anyway
 		force_array();
-		execute("# Warning: only one outgoinguser is allowed. Will only use the first one.");
+		if (length @$value[1]) {
+			execute("# Warning: only one $option is allowed. Will only use the first one.");
+		}
 		my @userpass = split(/ /, @$value[0]);
 		check_value($userpass[1]);
 		execute("tgtadm --lld $driver --mode account --op delete --user=$userpass[0]");
@@ -601,7 +603,7 @@ sub process_options {
 		execute("tgtadm --lld $driver --mode account --op bind --tid=$next_tid --user=$userpass[0] --outgoing");
 	}
 
-	if ( $option eq "initiator-address" ) {
+	if ($option eq "initiator-address") {
 	        # if we have one command, force it to be an array anyway
 		force_array();
 		my @value_arr = @$value;
@@ -610,6 +612,35 @@ sub process_options {
 			execute("tgtadm --lld $driver --op bind --mode target --tid $next_tid -I $initiator_address");
 		}
 	}
+
+	if ($option =~ m/^MaxRecvDataSegmentLength$|
+			^MaxXmitDataSegmentLength$|
+			^HeaderDigest$|
+			^DataDigest$|
+			^InitialR2T$|
+			^MaxOutstandingR2T$|
+			^ImmediateData$|
+			^FirstBurstLength$|
+			^MaxBurstLength$|
+			^DataPDUInOrder$|
+			^DataSequenceInOrder$|
+			^ErrorRecoveryLevel$|
+			^IFMarker$|
+			^OFMarker$|
+			^DefaultTime2Wait$|
+			^DefaultTime2Retain$|
+			^OFMarkInt$|
+			^IFMarkInt$|
+			^MaxConnections/x) {
+	        # if we have one command, force it to be an array anyway
+		force_array();
+		if (length @$value[1]) {
+			execute("# Warning: only one $option is allowed. Will only use the first one.");
+		}
+		check_value($option);
+		execute("tgtadm --lld $driver --mode target --op update --tid $next_tid --name $option --value $$value[0]");
+	}
+
 }
 
 # If the target is configured, but not present in the config file,
