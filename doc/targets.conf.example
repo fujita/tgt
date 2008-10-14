@@ -134,6 +134,27 @@ default-driver iscsi
     initiator-address 192.168.100.1
     initiator-address 192.168.200.5
 
+    # Tuning parameters (global, per target)
+    #MaxRecvDataSegmentLength 8192
+    #MaxXmitDataSegmentLength 8192
+    #HeaderDigest None
+    #DataDigest None
+    #InitialR2T Yes
+    #MaxOutstandingR2T 1
+    #ImmediateData Yes
+    #FirstBurstLength 65536
+    #MaxBurstLength 262144
+    #DataPDUInOrder Yes
+    #DataSequenceInOrder Yes
+    #ErrorRecoveryLevel 0
+    #IFMarker No
+    #OFMarker No
+    #DefaultTime2Wait 2
+    #DefaultTime2Retain 20
+    #OFMarkInt Reject
+    #IFMarkInt Reject
+    #MaxConnections 1
+
     # Allowed incoming users
     incominguser user1 secretpass12
     incominguser user2 secretpass23
