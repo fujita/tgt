@@ -67,6 +67,15 @@ static struct target *target_lookup(int tid)
 	return NULL;
 }
 
+static int target_name_lookup(char *name)
+{
+	struct target *target;
+	list_for_each_entry(target, &target_list, target_siblings)
+		if (!strcmp(target->name, name))
+			return 1;
+	return 0;
+}
+
 static struct it_nexus *it_nexus_lookup(int tid, uint64_t itn_id)
 {
 	struct target *target;
@@ -1657,6 +1666,11 @@ int tgt_target_create(int lld, int tid, char *args)
 	target = target_lookup(tid);
 	if (target) {
 		eprintf("Target id %d already exists\n", tid);
+		return TGTADM_TARGET_EXIST;
+	}
+
+	if (target_name_lookup(targetname)) {
+		eprintf("Target name %s already exists\n", targetname);
 		return TGTADM_TARGET_EXIST;
 	}
 
