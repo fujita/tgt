@@ -356,9 +356,27 @@ static int str_to_op(char *str)
 	}
 }
 
-int main(int argc, char **argv)
+static int verify_mode_params(int argc, char **argv, char *allowed)
 {
 	int ch, longindex;
+	int ret = 0;
+
+	optind = 0;
+
+	while ((ch = getopt_long(argc, argv, short_options,
+				 long_options, &longindex)) >= 0) {
+		if (!strchr(allowed, ch)) {
+			ret = ch;
+			break;
+		}
+	}
+
+	return ret;
+}
+
+int main(int argc, char **argv)
+{
+	int ch, longindex, rc;
 	int op, total, tid, rest, mode, dev_type, ac_dir;
 	uint32_t cid, hostno;
 	uint64_t sid, lun;
@@ -370,6 +388,7 @@ int main(int argc, char **argv)
 
 	op = tid = mode = -1;
 	total = cid = hostno = sid = lun = 0;
+	rc = 0;
 	dev_type = TYPE_DISK;
 	ac_dir = ACCOUNT_TYPE_INCOMING;
 	rest = BUFSIZE;
@@ -384,6 +403,7 @@ int main(int argc, char **argv)
 	optind = 1;
 	while ((ch = getopt_long(argc, argv, short_options,
 				 long_options, &longindex)) >= 0) {
+		errno = 0;
 		switch (ch) {
 		case 'L':
 			strncpy(req->lld, optarg, sizeof(req->lld));
@@ -396,6 +416,10 @@ int main(int argc, char **argv)
 			break;
 		case 't':
 			tid = strtol(optarg, NULL, 10);
+			if (errno == EINVAL) {
+				eprintf("invalid tid '%s'\n", optarg);
+				exit(EINVAL);
+			}
 			break;
 		case 's':
 			sid = strtoull(optarg, NULL, 10);
@@ -457,10 +481,7 @@ int main(int argc, char **argv)
 	}
 
 	if (optind < argc) {
-		eprintf("unrecognized options: ");
-		while (optind < argc)
-			eprintf("%s", argv[optind++]);
-		eprintf("\n");
+		eprintf("unrecognized option '%s'\n", argv[optind]);
 		usage(1);
 	}
 
@@ -484,35 +505,63 @@ int main(int argc, char **argv)
 /* 		exit(EINVAL); */
 	}
 
-	if ((name || value) && op != OP_UPDATE) {
-		eprintf("only 'update' operation takes"
-			" 'name' and 'value' options\n");
-		exit(EINVAL);
-	}
-
-	if ((!name && value) || (name && !value)) {
-		eprintf("'name' and 'value' options are necessary\n");
-		exit(EINVAL);
-	}
-
 	if (mode == MODE_TARGET) {
+		if ((tid <= 0 && (op != OP_SHOW))) {
+			eprintf("'tid' option is necessary\n");
+			exit(EINVAL);
+		}
 		switch (op) {
 		case OP_NEW:
-		case OP_DELETE:
-		case OP_BIND:
-		case OP_UNBIND:
-		case OP_UPDATE:
-			if (op == OP_NEW && !targetname) {
-				eprintf("creating a new target needs the name\n");
+			rc = verify_mode_params(argc, argv, "LmotT");
+			if (rc) {
+				eprintf("target mode: option '-%c' is not "
+					  "allowed/supported\n", rc);
 				exit(EINVAL);
 			}
-
-			if (tid < 0) {
-				eprintf("'tid' option is necessary\n");
+			if (!targetname) {
+				eprintf("creating a new target requires name\n");
+				exit(EINVAL);
+			}
+			break;
+		case OP_DELETE:
+		case OP_SHOW:
+			rc = verify_mode_params(argc, argv, "Lmot");
+			if (rc) {
+				eprintf("target mode: option '-%c' is not "
+					  "allowed/supported\n", rc);
+				exit(EINVAL);
+			}
+			break;
+		case OP_BIND:
+		case OP_UNBIND:
+			rc = verify_mode_params(argc, argv, "LmotI");
+			if (rc) {
+				eprintf("target mode: option '-%c' is not "
+					  "allowed/supported\n", rc);
+				exit(EINVAL);
+			}
+			if (!address) {
+				eprintf("%s operation requires initiator-address\n"
+						, op == OP_BIND ? "bind" : "unbind");
+				exit(EINVAL);
+			}
+			break;
+		case OP_UPDATE:
+			rc = verify_mode_params(argc, argv, "Lmotnv");
+			if (rc) {
+				eprintf("target mode: option '-%c' is not "
+					  "allowed/supported\n", rc);
+				exit(EINVAL);
+			}
+			if ((!name || !value)) {
+				eprintf("update operation requires 'name'"
+						" and 'value' options\n");
 				exit(EINVAL);
 			}
 			break;
 		default:
+			eprintf("option %d not supported in target mode\n", op);
+			exit(EINVAL);
 			break;
 		}
 	}
@@ -520,29 +569,106 @@ int main(int argc, char **argv)
 	if (mode == MODE_ACCOUNT) {
 		switch (op) {
 		case OP_NEW:
+			rc = verify_mode_params(argc, argv, "Lmoup");
+			if (rc) {
+				eprintf("logicalunit mode: option '-%c' is not "
+					  "allowed/supported\n", rc);
+				exit(EINVAL);
+			}
 			if (!user || !password) {
 				eprintf("'user' and 'password' options is necessary\n");
 				exit(EINVAL);
 			}
 			break;
 		case OP_SHOW:
+			rc = verify_mode_params(argc, argv, "Lmo");
+			if (rc) {
+				eprintf("target mode: option '-%c' is not "
+					  "allowed/supported\n", rc);
+				exit(EINVAL);
+			}
 			break;
 		case OP_DELETE:
+			rc = verify_mode_params(argc, argv, "Lmou");
+			if (rc) {
+				eprintf("target mode: option '-%c' is not "
+					  "allowed/supported\n", rc);
+				exit(EINVAL);
+			}
+			break;
 		case OP_BIND:
-		case OP_UNBIND:
+			rc = verify_mode_params(argc, argv, "LmotuO");
+			if (rc) {
+				eprintf("target mode: option '-%c' is not "
+					  "allowed/supported\n", rc);
+				exit(EINVAL);
+			}
 			if (!user) {
 				eprintf("'user' option is necessary\n");
 				exit(EINVAL);
 			}
-
-			if ((op == OP_BIND || op == OP_UNBIND) && tid < 0) {
+			if (tid <= 0) {
+				eprintf("'tid' option is necessary\n");
+				exit(EINVAL);
+			}
+			break;
+		case OP_UNBIND:
+			rc = verify_mode_params(argc, argv, "Lmou");
+			if (rc) {
+				eprintf("target mode: option '-%c' is not "
+					  "allowed/supported\n", rc);
+				exit(EINVAL);
+			}
+			if (!user) {
+				eprintf("'user' option is necessary\n");
+				exit(EINVAL);
+			}
+			if (tid <= 0) {
 				eprintf("'tid' option is necessary\n");
 				exit(EINVAL);
 			}
 			break;
 		default:
-			eprintf("the update operation can't"
-				" handle accounts\n");
+			eprintf("option %d not supported in account mode\n", op);
+			exit(EINVAL);
+			break;
+		}
+	}
+
+	if (mode == MODE_DEVICE) {
+		if (tid <= 0) {
+			eprintf("'tid' option is necessary\n");
+			exit(EINVAL);
+		}
+		if (!lun) {
+			eprintf("'lun' option is necessary\n");
+			exit(EINVAL);
+		}
+		switch (op) {
+		case OP_NEW:
+			rc = verify_mode_params(argc, argv, "Lmotlb");
+			if (rc) {
+				eprintf("target mode: option '-%c' is not "
+					  "allowed/supported\n", rc);
+				exit(EINVAL);
+			}
+			if (!path) {
+				eprintf("'backing-store' option "
+						"is necessary\n");
+				exit(EINVAL);
+			}
+			break;
+		case OP_DELETE:
+			rc = verify_mode_params(argc, argv, "Lmotl");
+			if (rc) {
+				eprintf("target mode: option '-%c' is not "
+					  "allowed/supported\n", rc);
+				exit(EINVAL);
+			}
+			break;
+		default:
+			eprintf("option %d not supported in "
+					"logicalunit mode\n", op);
 			exit(EINVAL);
 			break;
 		}
