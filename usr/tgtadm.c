@@ -666,6 +666,14 @@ int main(int argc, char **argv)
 				exit(EINVAL);
 			}
 			break;
+		case OP_UPDATE:
+			rc = verify_mode_params(argc, argv, "LmotlP");
+			if (rc) {
+				eprintf("option '-%c' not supported in "
+					"logicalunit mode\n", rc);
+				exit(EINVAL);
+			}
+			break;
 		default:
 			eprintf("option %d not supported in "
 					"logicalunit mode\n", op);
