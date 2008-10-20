@@ -140,11 +140,12 @@ Linux SCSI Target Framework Administration Utility.\n\
                         enable the target to accept the specific initiators.\n\
   --lld [driver] --mode target --op unbind --tid=[id] --initiator-address=[src]\n\
                         disable the specific permitted initiators.\n\
-  --lld [driver] --mode logicalunit --op new --tid=[id] --lun=[lun] --backing-store=[path]\n\
+  --lld [driver] --mode logicalunit --op new --tid=[id] --lun=[lun] --backing-store=[path] --bstype=[type]\n\
                         add a new logical unit with [lun] to the specific\n\
                         target with [id]. The logical unit is offered\n\
                         to the initiators. [path] must be block device files\n\
                         (including LVM and RAID devices) or regular files.\n\
+                        bstype option is optional.\n\
   --lld [driver] --mode logicalunit --op delete --tid=[id] --lun=[lun]\n\
                         delete the specific logical unit with [lun] that\n\
                         the target with [id] has.\n\
@@ -646,7 +647,7 @@ int main(int argc, char **argv)
 		}
 		switch (op) {
 		case OP_NEW:
-			rc = verify_mode_params(argc, argv, "Lmotlb");
+			rc = verify_mode_params(argc, argv, "LmotlbE");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
