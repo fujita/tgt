@@ -325,6 +325,10 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
+	err = ipc_init();
+	if (err)
+		exit(1);
+
 	if (is_daemon && daemon(0,0))
 		exit(1);
 
@@ -343,10 +347,6 @@ int main(int argc, char **argv)
 			exit(1);
 		}
 	}
-
-	err = ipc_init();
-	if (err)
-		exit(1);
 
 	event_loop();
 
