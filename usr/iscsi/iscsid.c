@@ -498,6 +498,7 @@ static void login_finish(struct iscsi_connection *conn)
 {
 	struct iscsi_login_rsp *rsp = (struct iscsi_login_rsp *) &conn->rsp.bhs;
 	int ret;
+	uint8_t class, detail;
 
 	switch (conn->session_type) {
 	case SESSION_NORMAL:
@@ -513,25 +514,25 @@ static void login_finish(struct iscsi_connection *conn)
 		 */
 		ret = conn->tp->ep_login_complete(conn);
 		if (ret) {
-			rsp->flags = 0;
-			rsp->status_class = ISCSI_STATUS_CLS_TARGET_ERR;
-			rsp->status_detail = ISCSI_LOGIN_STATUS_NO_RESOURCES;
-			conn->state = STATE_EXIT;
-			break;
+			class = ISCSI_STATUS_CLS_TARGET_ERR;
+			detail = ISCSI_LOGIN_STATUS_NO_RESOURCES;
+			goto fail;
 		}
 		if (!conn->session) {
-			session_create(conn);
+			ret = session_create(conn);
+			if (ret) {
+				class = ISCSI_STATUS_CLS_TARGET_ERR;
+				detail = ISCSI_LOGIN_STATUS_TARGET_ERROR;
+				goto fail;
+			}
 		} else {
 			if (conn->tp->rdma ^ conn->session->rdma) {
 				eprintf("new conn rdma %d, but session %d\n",
 					conn->tp->rdma, conn->session->rdma);
-				rsp->flags = 0;
-				rsp->status_class =
-					ISCSI_STATUS_CLS_INITIATOR_ERR;
-				rsp->status_detail =
-					ISCSI_LOGIN_STATUS_INVALID_REQUEST;
-				conn->state = STATE_EXIT;
-				break;
+
+				class = ISCSI_STATUS_CLS_INITIATOR_ERR;
+				detail =ISCSI_LOGIN_STATUS_INVALID_REQUEST;
+				goto fail;
 			}
 		}
 		memcpy(conn->isid, conn->session->isid, sizeof(conn->isid));
@@ -542,6 +543,14 @@ static void login_finish(struct iscsi_connection *conn)
 		conn->tsih = 1;
 		break;
 	}
+
+	return;
+fail:
+	rsp->flags = 0;
+	rsp->status_class = class;
+	rsp->status_detail = detail;
+	conn->state = STATE_EXIT;
+	return;
 }
 
 static int cmnd_exec_auth(struct iscsi_connection *conn)
