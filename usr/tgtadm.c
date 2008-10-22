@@ -637,7 +637,7 @@ int main(int argc, char **argv)
 		}
 		switch (op) {
 		case OP_NEW:
-			rc = verify_mode_params(argc, argv, "LmotlbE");
+			rc = verify_mode_params(argc, argv, "LmotlbEY");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
