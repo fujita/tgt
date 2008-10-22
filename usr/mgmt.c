@@ -319,12 +319,16 @@ static int tgt_mgmt(struct mgmt_task *mtask)
 	struct tgtadm_rsp *rsp = &mtask->rsp;
 	int lld_no, err = TGTADM_INVALID_REQUEST, len = mtask->bsize;
 
-	lld_no = get_driver_index(req->lld);
-	if (lld_no < 0) {
-		eprintf("can't find the driver\n");
-		rsp->err = TGTADM_NO_DRIVER;
-		rsp->len = sizeof(*rsp);
-		return 0;
+	if (!strlen(req->lld))
+		lld_no = 0;
+	else {
+		lld_no = get_driver_index(req->lld);
+		if (lld_no < 0) {
+			eprintf("can't find the driver\n");
+			rsp->err = TGTADM_NO_DRIVER;
+			rsp->len = sizeof(*rsp);
+			return 0;
+		}
 	}
 
 	dprintf("%d %d %d %d %d %" PRIx64 " %" PRIx64 " %s %d\n",

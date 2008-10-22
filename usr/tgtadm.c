@@ -496,16 +496,6 @@ int main(int argc, char **argv)
 		exit(EINVAL);
 	}
 
-	if (!*req->lld) {
-		/*
-		 * workaround. we should set the default lld at the
-		 * compile time.
-		 */
-		strncpy(req->lld, "iscsi", sizeof(req->lld));
-/* 		eprintf("specify the low level driver name\n"); */
-/* 		exit(EINVAL); */
-	}
-
 	if (mode == MODE_TARGET) {
 		if ((tid <= 0 && (op != OP_SHOW))) {
 			eprintf("'tid' option is necessary\n");
