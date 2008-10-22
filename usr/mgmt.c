@@ -417,7 +417,9 @@ static void mtask_handler(int fd, int events, void *data)
 					tgt_mgmt(mtask);
 					mtask->mtask_state =
 						MTASK_STATE_RSP_SEND;
-					tgt_event_modify(fd, EPOLLOUT);
+					if (tgt_event_modify(fd, EPOLLOUT))
+						eprintf("failed to modify\n");
+
 					mtask->done = 0;
 				} else {
 					/* the pdu exists */
@@ -444,7 +446,9 @@ static void mtask_handler(int fd, int events, void *data)
 			if (mtask->done == req->len - (sizeof(*req))) {
 				tgt_mgmt(mtask);
 				mtask->mtask_state = MTASK_STATE_RSP_SEND;
-				tgt_event_modify(fd, EPOLLOUT);
+				if (tgt_event_modify(fd, EPOLLOUT))
+					eprintf("failed to modify\n");
+
 				mtask->done = 0;
 			}
 		} else
@@ -497,16 +501,22 @@ static void mgmt_event_handler(int accept_fd, int events, void *data)
 	struct mgmt_task *mtask;
 
 	fd = ipc_accept(accept_fd);
-	if (fd < 0)
+	if (fd < 0) {
+		eprintf("failed to accept a socket\n");
 		return;
+	}
 
 	err = ipc_perm(fd);
-	if (err < 0)
+	if (err < 0) {
+		eprintf("permission error\n");
 		goto out;
+	}
 
 	err = set_non_blocking(fd);
-	if (err)
+	if (err) {
+		eprintf("failed to set a socket non-blocking\n");
 		goto out;
+	}
 
 	mtask = zalloc(sizeof(*mtask));
 	if (!mtask) {
@@ -516,6 +526,7 @@ static void mgmt_event_handler(int accept_fd, int events, void *data)
 
 	mtask->buf = zalloc(BUFSIZE);
 	if (!mtask->buf) {
+		eprintf("can't allocate mtask buffer\n");
 		free(mtask);
 		goto out;
 	}
@@ -524,6 +535,7 @@ static void mgmt_event_handler(int accept_fd, int events, void *data)
 	mtask->mtask_state = MTASK_STATE_HDR_RECV;
 	err = tgt_event_add(fd, EPOLLIN, mtask_handler, mtask);
 	if (err) {
+		eprintf("failed to add a socket to epoll %d\n", fd);
 		free(mtask->buf);
 		free(mtask);
 		goto out;
