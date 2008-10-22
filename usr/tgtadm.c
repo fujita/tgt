@@ -186,15 +186,13 @@ static int ipc_mgmt_connect(int *fd)
 	       strlen(TGT_IPC_NAMESPACE));
 
 	err = connect(*fd, (struct sockaddr *) &addr, sizeof(addr));
-	if (err < 0) {
-		eprintf("can't connect to the tgt daemon, %m\n");
+	if (err < 0)
 		return errno;
-	}
 
 	return 0;
 }
 
-static int ipc_mgmt_rsp(int fd)
+static int ipc_mgmt_rsp(int fd, struct tgtadm_req *req)
 {
 	struct tgtadm_rsp rsp;
 	int err, rest, len;
@@ -223,6 +221,24 @@ retry:
 		return EINVAL;
 	}
 
+	if (req->mode == MODE_SYSTEM && req->op == OP_DELETE) {
+		while (1) {
+			int __fd, ret;
+			struct timeval tv;
+
+			ret = ipc_mgmt_connect(&__fd);
+			if (ret == ECONNREFUSED)
+				break;
+
+			close(__fd);
+
+			tv.tv_sec = 0;
+			tv.tv_usec = 100 * 1000;
+
+			select(0, NULL, NULL, NULL, &tv);
+		}
+	}
+
 	rest = rsp.len - sizeof(rsp);
 	if (!rest)
 		return 0;
@@ -248,8 +264,10 @@ static int ipc_mgmt_req(struct tgtadm_req *req)
 	int err, fd = 0;
 
 	err = ipc_mgmt_connect(&fd);
-	if (err < 0)
+	if (err < 0) {
+		eprintf("can't connect to the tgt daemon, %m\n");
 		goto out;
+	}
 
 	err = write(fd, (char *) req, req->len);
 	if (err < 0) {
@@ -260,7 +278,7 @@ static int ipc_mgmt_req(struct tgtadm_req *req)
 
 	dprintf("sent to tgtd %d\n", err);
 
-	err = ipc_mgmt_rsp(fd);
+	err = ipc_mgmt_rsp(fd, req);
 out:
 	if (fd > 0)
 		close(fd);
