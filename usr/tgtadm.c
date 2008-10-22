@@ -199,10 +199,23 @@ static int ipc_mgmt_rsp(int fd)
 	struct tgtadm_rsp rsp;
 	int err, rest, len;
 
-	err = read(fd, &rsp, sizeof(rsp));
+retry:
+	err = recv(fd, &rsp, sizeof(rsp), MSG_WAITALL);
 	if (err < 0) {
-		eprintf("can't get the response, %m\n");
+		if (errno == EAGAIN)
+			goto retry;
+		else if (errno == EINTR)
+			eprintf("interrupted by a signal\n");
+		else
+			eprintf("can't get the response, %m\n");
+
 		return errno;
+	} else if (err == 0) {
+		eprintf("tgtd closed the socket\n");
+		return 0;
+	} else if (err != sizeof(rsp)) {
+		eprintf("a partial response\n");
+		return 0;
 	}
 
 	if (rsp.err != TGTADM_SUCCESS) {
