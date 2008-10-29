@@ -329,10 +329,9 @@ static int str_to_device_type(char *str)
 {
 	if (!strcmp(str, "disk"))
 		return TYPE_DISK;
-	else if (!strcmp(str, "tape")) {
-		eprintf("type emulation isn't supported yet\n");
-		exit(EINVAL);
-	} else if (!strcmp(str, "cd"))
+	else if (!strcmp(str, "tape"))
+		return TYPE_TAPE;
+	else if (!strcmp(str, "cd"))
 		return TYPE_MMC;
 	else if (!strcmp(str, "changer"))
 		return TYPE_MEDIUM_CHANGER;
