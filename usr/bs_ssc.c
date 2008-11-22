@@ -47,7 +47,7 @@ static void ssc_sense_data_build(struct scsi_cmd *cmd, uint8_t key,
 
 	sense_data_build(cmd, key, asc);
 	if (info_len) {
-		memcpy(cmd->sense_buffer + 2, info, 4);
+		memcpy(cmd->sense_buffer + 3, info, 4);
 		cmd->sense_buffer[0] |= 0x80;
 	}
 }
