@@ -317,15 +317,27 @@ static int resp_var_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length,
 	*transferred = 0;
 
 	if (length != h->blk_sz) {
+		uint8_t info[4];
+		int val = length - h->blk_sz;
+
+		put_unaligned_be32(val, info);
+
 		if (h->blk_type == BLK_EOD)
 			sense_data_build(cmd, 0x40 | BLANK_CHECK,
 					 NO_ADDITIONAL_SENSE);
 		else
-			sense_data_build(cmd, NO_SENSE, NO_ADDITIONAL_SENSE);
+			ssc_sense_data_build(cmd, NO_SENSE | 0x20,
+					     NO_ADDITIONAL_SENSE,
+					     info, sizeof(info));
+
+		if (length > h->blk_sz)
+			scsi_set_in_resid_by_actual(cmd, length - h->blk_sz);
+		else
+			scsi_set_in_resid_by_actual(cmd, 0);
 
 		length = min(length, h->blk_sz);
+
 		result = SAM_STAT_CHECK_CONDITION;
-		scsi_set_in_resid_by_actual(cmd, length);
 
 		if (!length)
 			goto out;
