@@ -35,7 +35,6 @@
 #include <syscall.h>
 #include <unistd.h>
 #include <linux/fs.h>
-#include <scsi/scsi.h>
 #include <sys/mman.h>
 
 #include "list.h"
