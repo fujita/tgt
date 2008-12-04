@@ -99,7 +99,7 @@ static int oom_adjust(void)
 int tgt_event_add(int fd, int events, event_handler_t handler, void *data)
 {
 	struct epoll_event ev;
-	struct tgt_event *tev;
+	struct event_data *tev;
 	int err;
 
 	tev = zalloc(sizeof(*tev));
@@ -123,9 +123,9 @@ int tgt_event_add(int fd, int events, event_handler_t handler, void *data)
 	return err;
 }
 
-static struct tgt_event *tgt_event_lookup(int fd)
+static struct event_data *tgt_event_lookup(int fd)
 {
-	struct tgt_event *tev;
+	struct event_data *tev;
 
 	list_for_each_entry(tev, &tgt_events_list, e_list) {
 		if (tev->fd == fd)
@@ -136,7 +136,7 @@ static struct tgt_event *tgt_event_lookup(int fd)
 
 void tgt_event_del(int fd)
 {
-	struct tgt_event *tev;
+	struct event_data *tev;
 
 	tev = tgt_event_lookup(fd);
 	if (!tev) {
@@ -152,7 +152,7 @@ void tgt_event_del(int fd)
 int tgt_event_modify(int fd, int events)
 {
 	struct epoll_event ev;
-	struct tgt_event *tev;
+	struct event_data *tev;
 
 	tev = tgt_event_lookup(fd);
 	if (!tev) {
@@ -167,7 +167,7 @@ int tgt_event_modify(int fd, int events)
 	return epoll_ctl(ep_fd, EPOLL_CTL_MOD, fd, &ev);
 }
 
-void tgt_init_sched_event(struct tgt_event *evt,
+void tgt_init_sched_event(struct event_data *evt,
 			  sched_event_handler_t sched_handler, void *data)
 {
 	evt->sched_handler = sched_handler;
@@ -176,7 +176,7 @@ void tgt_init_sched_event(struct tgt_event *evt,
 	INIT_LIST_HEAD(&evt->e_list);
 }
 
-void tgt_add_sched_event(struct tgt_event *evt)
+void tgt_add_sched_event(struct event_data *evt)
 {
 	if (!evt->scheduled) {
 		evt->scheduled = 1;
@@ -184,7 +184,7 @@ void tgt_add_sched_event(struct tgt_event *evt)
 	}
 }
 
-void tgt_remove_sched_event(struct tgt_event *evt)
+void tgt_remove_sched_event(struct event_data *evt)
 {
 	if (evt->scheduled) {
 		evt->scheduled = 0;
@@ -195,7 +195,7 @@ void tgt_remove_sched_event(struct tgt_event *evt)
 static int tgt_exec_scheduled(void)
 {
 	struct list_head *last_sched;
-	struct tgt_event *tev, *tevn;
+	struct event_data *tev, *tevn;
 	int work_remains = 0;
 
 	if (!list_empty(&tgt_sched_events_list)) {
@@ -218,7 +218,7 @@ static void event_loop(void)
 {
 	int nevent, i, sched_remains, timeout;
 	struct epoll_event events[1024];
-	struct tgt_event *tev;
+	struct event_data *tev;
 
 retry:
 	sched_remains = tgt_exec_scheduled();
@@ -232,7 +232,7 @@ retry:
 		}
 	} else if (nevent) {
 		for (i = 0; i < nevent; i++) {
-			tev = (struct tgt_event *) events[i].data.ptr;
+			tev = (struct event_data *) events[i].data.ptr;
 			tev->handler(tev->fd, events[i].events, tev->data);
 		}
 	} else

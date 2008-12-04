@@ -144,7 +144,7 @@ struct conn_info {
 	/* but count so we can drain CQ on close */
 	int recvl_posted;
 
-	struct tgt_event tx_sched;
+	struct event_data tx_sched;
 
 	/* login phase resources, freed at full-feature */
 	void *srbuf_login;
@@ -196,7 +196,7 @@ struct iser_device {
 	void *mempool_listbuf;
 	struct ibv_mr *mempool_mr;
 
-	struct tgt_event poll_sched;
+	struct event_data poll_sched;
 
 	/* free and allocated mempool entries */
 	struct list_head mempool_free, mempool_alloc;
@@ -281,9 +281,9 @@ static void iscsi_rdma_release(struct iscsi_connection *conn);
 static int iscsi_rdma_show(struct iscsi_connection *conn, char *buf,
 			   int rest);
 static void iscsi_rdma_event_modify(struct iscsi_connection *conn, int events);
-static void iser_sched_poll_cq(struct tgt_event *tev);
-static void iser_sched_consume_cq(struct tgt_event *tev);
-static void iser_sched_tx(struct tgt_event *evt);
+static void iser_sched_poll_cq(struct event_data *tev);
+static void iser_sched_consume_cq(struct event_data *tev);
+static void iser_sched_tx(struct event_data *evt);
 
 /*
  * Called when ready for full feature, builds resources.
@@ -1058,7 +1058,7 @@ static void iser_poll_cq_armable(struct iser_device *dev)
 /* Scheduled to poll cq after a completion event has been
    received and acknowledged, if no more completions are found
    the interrupts are re-armed */
-static void iser_sched_poll_cq(struct tgt_event *tev)
+static void iser_sched_poll_cq(struct event_data *tev)
 {
 	struct iser_device *dev = tev->data;
 	iser_poll_cq_armable(dev);
@@ -1069,7 +1069,7 @@ static void iser_sched_poll_cq(struct tgt_event *tev)
    the notification interrupts were re-armed.
    Intended to consume those remaining completions only,
    this function does not re-arm interrupts. */
-static void iser_sched_consume_cq(struct tgt_event *tev)
+static void iser_sched_consume_cq(struct event_data *tev)
 {
 	struct iser_device *dev = tev->data;
 	int ret;
@@ -1112,7 +1112,7 @@ static void iser_cqe_handler(int fd __attribute__((unused)),
  * tries to push tx on a connection, until nothing
  * is ready anymore.  No progress limit here.
  */
-static void iser_sched_tx(struct tgt_event *evt)
+static void iser_sched_tx(struct event_data *evt)
 {
 	struct conn_info *ci = evt->data;
 	struct iscsi_connection *conn = &ci->iscsi_conn;

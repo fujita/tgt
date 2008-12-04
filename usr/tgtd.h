@@ -206,10 +206,10 @@ extern int tgt_bind_host_to_target(int tid, int host_no);
 extern int tgt_unbind_host_to_target(int tid, int host_no);
 extern int tgt_bound_target_lookup(int host_no);
 
-struct tgt_event;
-typedef void (*sched_event_handler_t)(struct tgt_event *tev);
+struct event_data;
+typedef void (*sched_event_handler_t)(struct event_data *tev);
 
-extern void tgt_init_sched_event(struct tgt_event *evt,
+extern void tgt_init_sched_event(struct event_data *evt,
 			  sched_event_handler_t sched_handler, void *data);
 
 typedef void (*event_handler_t)(int fd, int events, void *data);
@@ -217,8 +217,8 @@ typedef void (*event_handler_t)(int fd, int events, void *data);
 extern int tgt_event_add(int fd, int events, event_handler_t handler, void *data);
 extern void tgt_event_del(int fd);
 
-extern void tgt_add_sched_event(struct tgt_event *evt);
-extern void tgt_remove_sched_event(struct tgt_event *evt);
+extern void tgt_add_sched_event(struct event_data *evt);
+extern void tgt_remove_sched_event(struct event_data *evt);
 
 extern int tgt_event_modify(int fd, int events);
 extern int target_cmd_queue(int tid, struct scsi_cmd *cmd);
@@ -269,7 +269,7 @@ extern int dtd_load_unload(int tid, uint64_t lun, int load, char *file);
 extern int register_backingstore_template(struct backingstore_template *bst);
 extern struct backingstore_template *get_backingstore_template(const char *name);
 
-struct tgt_event {
+struct event_data {
 	union {
 		event_handler_t handler;
 		sched_event_handler_t sched_handler;
