@@ -555,15 +555,16 @@ int main(int argc, char **argv)
 			break;
 		case OP_BIND:
 		case OP_UNBIND:
-			rc = verify_mode_params(argc, argv, "LmotI");
+			rc = verify_mode_params(argc, argv, "LmotIB");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
 				exit(EINVAL);
 			}
-			if (!address) {
-				eprintf("%s operation requires initiator-address\n"
-						, op == OP_BIND ? "bind" : "unbind");
+			if (!address && !hostno) {
+				eprintf("%s operation requires"
+					" initiator-address or bus\n",
+					op == OP_BIND ? "bind" : "unbind");
 				exit(EINVAL);
 			}
 			break;
