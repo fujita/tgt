@@ -27,6 +27,7 @@
 
 #include "list.h"
 #include "tgtd.h"
+#include "tgtadm_error.h"
 #include "util.h"
 #include "bs_thread.h"
 
@@ -194,16 +195,22 @@ int bs_thread_open(struct bs_thread_info *info, request_func_t *rfn,
 	pthread_mutex_init(&info->pending_lock, NULL);
 
 	ret = pipe(info->command_fd);
-	if (ret)
+	if (ret) {
+		eprintf("failed to create command pipe, %m\n");
 		goto destroy_cond_mutex;
+	}
 
 	ret = pipe(info->done_fd);
-	if (ret)
+	if (ret) {
+		eprintf("failed to done command pipe, %m\n");
 		goto close_command_fd;
+	}
 
 	ret = tgt_event_add(info->done_fd[0], EPOLLIN, bs_thread_request_done, info);
-	if (ret)
+	if (ret) {
+		eprintf("failed to add epoll event\n");
 		goto close_done_fd;
+	}
 
 	ret = pthread_create(&info->ack_thread, NULL, bs_thread_ack_fn, info);
 	if (ret) {
@@ -219,8 +226,11 @@ int bs_thread_open(struct bs_thread_info *info, request_func_t *rfn,
 	for (i = 0; i < nr_threads; i++) {
 		ret = pthread_create(&info->worker_thread[i], NULL,
 				     bs_thread_worker_fn, info);
-		if (ret)
+		if (ret) {
+			eprintf("failed to create a worker thread, %s\n",
+				strerror(ret));
 			goto destroy_threads;
+		}
 	}
 
 rewrite:
@@ -258,7 +268,7 @@ destroy_cond_mutex:
 	pthread_mutex_destroy(&info->finished_lock);
 	pthread_mutex_destroy(&info->pending_lock);
 
-	return -1;
+	return TGTADM_NOMEM;
 }
 
 void bs_thread_close(struct bs_thread_info *info)
