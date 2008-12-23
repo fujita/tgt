@@ -30,6 +30,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/resource.h>
 #include <sys/epoll.h>
 
 #include "list.h"
@@ -93,6 +94,37 @@ static int oom_adjust(void)
 		return errno;
 	}
 	close(fd);
+	return 0;
+}
+
+static int nr_file_adjust(void)
+{
+	int ret, fd, max = 1024 * 1024;
+	char path[] = "/proc/sys/fs/nr_open";
+	char buf[64];
+	struct rlimit rlim;
+
+	/* Avoid oom-killer */
+	fd = open(path, O_RDONLY);
+	if (fd < 0) {
+		fprintf(stderr, "can't open %s, %m\n", path);
+		goto set_rlimit;
+	}
+	ret = read(fd, buf, sizeof(buf));
+	if (ret < 0) {
+		fprintf(stderr, "can't read %s, %m\n", path);
+		return errno;
+	}
+	close(fd);
+	max = atoi(buf);
+
+set_rlimit:
+	rlim.rlim_cur = rlim.rlim_max = max;
+
+	ret = setrlimit(RLIMIT_NOFILE, &rlim);
+	if (ret < 0)
+		fprintf(stderr, "can't adjust nr_open %d %m\n", max);
+
 	return 0;
 }
 
@@ -337,6 +369,10 @@ int main(int argc, char **argv)
 		exit(1);
 
 	err = oom_adjust();
+	if (err)
+		exit(1);
+
+	err = nr_file_adjust();
 	if (err)
 		exit(1);
 
