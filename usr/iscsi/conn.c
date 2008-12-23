@@ -82,14 +82,27 @@ void conn_exit(struct iscsi_connection *conn)
 void conn_close(struct iscsi_connection *conn)
 {
 	struct iscsi_task *task, *tmp;
+	int ret;
 
-	conn->tp->ep_close(conn);
+	if (conn->closed) {
+		eprintf("already closed %p %u\n", conn, conn->refcount);
+		return;
+	}
 
-	eprintf("connection closed %p %u\n", conn, conn->refcount);
+	conn->closed = 1;
+
+	ret = conn->tp->ep_close(conn);
+	if (ret)
+		eprintf("failed to close a connection, %p %u %s\n",
+			conn, conn->refcount, strerror(errno));
+	else
+		eprintf("connection closed, %p %u\n", conn, conn->refcount);
 
 	/* may not have been in FFP yet */
 	if (!conn->session)
 		goto done;
+
+	eprintf("sesson %p %d\n", conn->session, conn->session->refcount);
 
 	/*
 	 * We just closed the ep so we are not going to send/recv anything.

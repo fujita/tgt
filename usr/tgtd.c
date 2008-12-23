@@ -137,6 +137,7 @@ static struct event_data *tgt_event_lookup(int fd)
 void tgt_event_del(int fd)
 {
 	struct event_data *tev;
+	int ret;
 
 	tev = tgt_event_lookup(fd);
 	if (!tev) {
@@ -144,7 +145,10 @@ void tgt_event_del(int fd)
 		return;
 	}
 
-	epoll_ctl(ep_fd, EPOLL_CTL_DEL, fd, NULL);
+	ret = epoll_ctl(ep_fd, EPOLL_CTL_DEL, fd, NULL);
+	if (ret < 0)
+		eprintf("fail to remove epoll event, %s\n", strerror(errno));
+
 	list_del(&tev->e_list);
 	free(tev);
 }

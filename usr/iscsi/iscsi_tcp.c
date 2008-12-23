@@ -164,8 +164,8 @@ static void iscsi_tcp_event_handler(int fd, int events, void *data)
 		iscsi_tx_handler(conn);
 
 	if (conn->state == STATE_CLOSE) {
+		dprintf("connection closed %p\n", conn);
 		conn_close(conn);
-		dprintf("connection closed\n");
 	}
 }
 

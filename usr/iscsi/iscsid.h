@@ -130,6 +130,10 @@ struct iscsi_task {
 
 struct iscsi_connection {
 	int state;
+
+	/* should be a new state */
+	int closed;
+
 	int rx_iostate;
 	int tx_iostate;
 	int refcount;
