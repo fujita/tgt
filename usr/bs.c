@@ -145,7 +145,11 @@ static void *bs_thread_worker_fn(void *arg)
 	struct bs_thread_info *info = arg;
 	struct scsi_cmd *cmd;
 
-	while (1) {
+	pthread_mutex_lock(&info->startup_lock);
+	dprintf("started this thread\n");
+	pthread_mutex_unlock(&info->startup_lock);
+
+	while (!info->stop) {
 		pthread_mutex_lock(&info->pending_lock);
 	retest:
 		if (list_empty(&info->pending_list)) {
@@ -174,7 +178,7 @@ static void *bs_thread_worker_fn(void *arg)
 		pthread_cond_signal(&info->finished_cond);
 	}
 
-	return NULL;
+	pthread_exit(NULL);
 }
 
 int bs_thread_open(struct bs_thread_info *info, request_func_t *rfn,
@@ -193,6 +197,7 @@ int bs_thread_open(struct bs_thread_info *info, request_func_t *rfn,
 
 	pthread_mutex_init(&info->finished_lock, NULL);
 	pthread_mutex_init(&info->pending_lock, NULL);
+	pthread_mutex_init(&info->startup_lock, NULL);
 
 	ret = pipe(info->command_fd);
 	if (ret) {
@@ -223,16 +228,19 @@ int bs_thread_open(struct bs_thread_info *info, request_func_t *rfn,
 		nr_threads = ARRAY_SIZE(info->worker_thread);
 	}
 
+	pthread_mutex_lock(&info->startup_lock);
 	for (i = 0; i < nr_threads; i++) {
 		ret = pthread_create(&info->worker_thread[i], NULL,
 				     bs_thread_worker_fn, info);
+
 		if (ret) {
-			eprintf("failed to create a worker thread, %s\n",
-				strerror(ret));
-			goto destroy_threads;
+			eprintf("failed to create a worker thread, %d %s\n",
+				i, strerror(ret));
+			if (ret)
+				goto destroy_threads;
 		}
 	}
-
+	pthread_mutex_unlock(&info->startup_lock);
 rewrite:
 	ret = write(info->command_fd[1], &ret, sizeof(ret));
 	if (ret < 0) {
@@ -247,13 +255,13 @@ destroy_threads:
 	write(info->command_fd[1], &ret, sizeof(ret));
 	pthread_join(info->ack_thread, NULL);
 
-	for (i = 0; info->worker_thread[i]; i++) {
-		pthread_cancel(info->worker_thread[i]);
-		pthread_cond_signal(&info->pending_cond);
-	}
+	eprintf("stopped the ack thread\n");
 
-	for (i = 0; info->worker_thread[i]; i++)
-		pthread_join(info->worker_thread[i], NULL);
+	pthread_mutex_unlock(&info->startup_lock);
+	for (; i > 0; i--) {
+		pthread_join(info->worker_thread[i - 1], NULL);
+		eprintf("stopped the worker thread %d\n", i - 1);
+	}
 event_del:
 	tgt_event_del(info->done_fd[0]);
 close_done_fd:
@@ -267,6 +275,7 @@ destroy_cond_mutex:
 	pthread_cond_destroy(&info->pending_cond);
 	pthread_mutex_destroy(&info->finished_lock);
 	pthread_mutex_destroy(&info->pending_lock);
+	pthread_mutex_destroy(&info->startup_lock);
 
 	return TGTADM_NOMEM;
 }
@@ -289,6 +298,7 @@ void bs_thread_close(struct bs_thread_info *info)
 	pthread_cond_destroy(&info->pending_cond);
 	pthread_mutex_destroy(&info->finished_lock);
 	pthread_mutex_destroy(&info->pending_lock);
+	pthread_mutex_destroy(&info->startup_lock);
 
 	tgt_event_del(info->done_fd[0]);
 

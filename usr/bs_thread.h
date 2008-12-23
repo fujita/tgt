@@ -20,6 +20,8 @@ struct bs_thread_info {
 	/* protected by pending_lock */
 	struct list_head pending_list;
 
+	pthread_mutex_t startup_lock;
+
 	int command_fd[2];
 	int done_fd[2];
 
