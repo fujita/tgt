@@ -164,7 +164,7 @@ Linux SCSI Target Framework Administration Utility, version %s\n\
                         target.\n\
   --help                display this help and exit\n\
 \n\
-Report bugs to <stgt-devel@lists.berlios.de>.\n", TGT_VERSION);
+Report bugs to <stgt@vger.kernel.org>.\n", TGT_VERSION);
 	}
 	exit(status == 0 ? 0 : EINVAL);
 }
