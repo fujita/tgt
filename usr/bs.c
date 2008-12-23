@@ -68,6 +68,9 @@ retry:
 		goto out;
 	}
 
+	if (info->stop)
+		goto out;
+
 	pthread_mutex_lock(&info->finished_lock);
 retest:
 	if (list_empty(&info->finished_list)) {
@@ -100,7 +103,7 @@ rewrite:
 
 	goto retry;
 out:
-	return NULL;
+	pthread_exit(NULL);
 }
 
 static void bs_thread_request_done(int fd, int events, void *data)
@@ -203,8 +206,10 @@ int bs_thread_open(struct bs_thread_info *info, request_func_t *rfn,
 		goto close_done_fd;
 
 	ret = pthread_create(&info->ack_thread, NULL, bs_thread_ack_fn, info);
-	if (ret)
+	if (ret) {
+		eprintf("failed to create an ack thread, %s\n", strerror(ret));
 		goto event_del;
+	}
 
 	if (nr_threads > ARRAY_SIZE(info->worker_thread)) {
 		eprintf("too many threads %d\n", nr_threads);
@@ -228,12 +233,10 @@ rewrite:
 
 	return 0;
 destroy_threads:
+	info->stop = 1;
 	write(info->command_fd[1], &ret, sizeof(ret));
-	pthread_cancel(info->ack_thread);
-	pthread_cond_signal(&info->finished_cond);
 	pthread_join(info->ack_thread, NULL);
 
-	info->stop = 1;
 	for (i = 0; info->worker_thread[i]; i++) {
 		pthread_cancel(info->worker_thread[i]);
 		pthread_cond_signal(&info->pending_cond);
