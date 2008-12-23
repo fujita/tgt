@@ -64,11 +64,11 @@ static void usage(int status)
 	else {
 		printf("Usage: %s [OPTION]\n", program_name);
 		printf("\
-Target framework daemon.\n\
+Target framework daemon, version %s\n\
   -f, --foreground        make the program run in the foreground\n\
   -d, --debug debuglevel  print debugging information\n\
   -h, --help              display this help and exit\n\
-");
+", TGT_VERSION);
 	}
 	exit(status);
 }

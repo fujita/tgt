@@ -1,3 +1,6 @@
+VERSION = 0.9.2
+EXTRAVERSION = $(if $(shell git-show-ref 2>/dev/null),-git-$(shell git-show-ref --heads --abbrev|awk '/refs\/heads\/master/{print $$1}'))
+
 mandir = /usr/share/man
 
 ifneq ($(IBMVIO),)
@@ -51,6 +54,7 @@ INCLUDES += -I. -I../include -I$(KERNELSRC)/include
 CFLAGS += -D_GNU_SOURCE
 CFLAGS += $(INCLUDES)
 CFLAGS += -g -O2 -Wall -Wstrict-prototypes -fPIC
+CFLAGS += -DTGT_VERSION=\"$(VERSION)$(EXTRAVERSION)\"
 
 LIBS += -lpthread
 

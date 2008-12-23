@@ -122,7 +122,7 @@ static void usage(int status)
 	else {
 		printf("Usage: %s [OPTION]\n", program_name);
 		printf("\
-Linux SCSI Target Framework Administration Utility.\n\
+Linux SCSI Target Framework Administration Utility, version %s\n\
 \n\
   --lld [driver] --mode target --op new --tid=[id] --targetname [name]\n\
                         add a new target with [id] and [name]. [id] must not be zero.\n\
@@ -164,7 +164,7 @@ Linux SCSI Target Framework Administration Utility.\n\
                         target.\n\
   --help                display this help and exit\n\
 \n\
-Report bugs to <stgt-devel@lists.berlios.de>.\n");
+Report bugs to <stgt-devel@lists.berlios.de>.\n", TGT_VERSION);
 	}
 	exit(status == 0 ? 0 : EINVAL);
 }
