@@ -58,7 +58,7 @@ CFLAGS += -DTGT_VERSION=\"$(VERSION)$(EXTRAVERSION)\"
 
 LIBS += -lpthread
 
-PROGRAMS += tgtd tgtadm tgtimg dump_tape
+PROGRAMS += tgtd tgtadm tgtimg
 SCRIPTS += ../scripts/tgt-setup-lun ../scripts/tgt-admin
 TGTD_OBJS += tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o \
 		parser.o spc.o sbc.o mmc.o osd.o scc.o smc.o \
@@ -86,11 +86,6 @@ tgtimg: tgtimg.o libssc.o libcrc32c.o
 	$(CC) $^ -o $@
 
 -include tgtimg.d libssc.d
-
-dump_tape: dump_tape.o libssc.o libcrc32c.o
-	$(CC) $^ -o $@
-
--include dump_tape.d libssc.d
 
 %.o: %.c
 	$(CC) -c $(CFLAGS) $*.c -o $*.o
