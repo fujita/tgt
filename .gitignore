@@ -29,5 +29,6 @@ GSYMS
 #
 usr/tgtd
 usr/tgtadm
-usr/dump_tape
-usr/mktape
+usr/tgtimg
+
+
