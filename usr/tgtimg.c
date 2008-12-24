@@ -37,6 +37,8 @@
 #include "ssc.h"
 #include "libssc.h"
 
+static char program_name[] = "tgtimg";
+
 static char *short_options = "ho:m:b:s:t:";
 
 struct option const long_options[] = {
@@ -49,23 +51,32 @@ struct option const long_options[] = {
 	{NULL, 0, NULL, 0},
 };
 
-void usage(char *progname)
+static void usage(int status)
 {
-
-	printf("Usage: %s -m barcode -s size -t type\n", progname);
-	printf("       Where 'size' is in Megabytes\n");
-	printf("             'type' is data | clean | WORM\n");
-	printf("             'barcode' is a string of chars\n\n");
+	if (status != 0)
+		fprintf(stderr, "Try `%s --help' for more information.\n", program_name);
+	else {
+		printf("Usage: %s [OPTION]\n", program_name);
+		printf("\
+Linux SCSI Target Framework Image File Utility, version %s\n\
+\n\
+  --barcode=[code] --size=[size] --type=[type]\n\
+		   create a new tape image file. [code] is a string of chars.\n\
+		   [size] is in Megabytes. [type] is data, clean or WORM\n\
+  --help           display this help and exit\n\
+\n\
+Report bugs to <stgt@vger.kernel.org>.\n", TGT_VERSION);
+	}
+	exit(status == 0 ? 0 : EINVAL);
 }
 
 int main(int argc, char **argv)
 {
-	int ch, longindex, rc;
+	int ch, longindex;
 	int file;
 	struct blk_header_info hdr, *h = &hdr;
 	struct MAM_info mi;
 	uint8_t current_media[1024];
-	char *progname = argv[0];
 	char *barcode = NULL;
 	char *media_type = NULL;
 	char *media_capacity = NULL;
@@ -84,20 +95,22 @@ int main(int argc, char **argv)
 		case 't':
 			media_type = optarg;
 			break;
+		case 'h':
+			usage(0);
+			break;
+		default:
+			usage(1);
 		}
 	}
 
 	if (barcode == NULL) {
-		usage(progname);
-		exit(1);
+		usage(1);
 	}
 	if (media_capacity == NULL) {
-		usage(progname);
-		exit(1);
+		usage(1);
 	}
 	if (media_type == NULL) {
-		usage(progname);
-		exit(1);
+		usage(1);
 	}
 
 	sscanf(media_capacity, "%d", &size);
