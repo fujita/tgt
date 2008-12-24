@@ -19,23 +19,35 @@
  *
  */
 
-#include <unistd.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <getopt.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <errno.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <syslog.h>
 #include <string.h>
+#include <syslog.h>
 #include <time.h>
-#include <inttypes.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
 #include "media.h"
 #include "bs_ssc.h"
 #include "ssc.h"
 #include "libssc.h"
 
-const char *mktape_version = "0.01";
+static char *short_options = "ho:m:b:s:t:";
+
+struct option const long_options[] = {
+	{"help", no_argument, NULL, 'h'},
+	{"op", required_argument, NULL, 'o'},
+	{"mode", required_argument, NULL, 'm'},
+	{"barcode", required_argument, NULL, 'b'},
+	{"size", required_argument, NULL, 's'},
+	{"type", required_argument, NULL, 't'},
+	{NULL, 0, NULL, 0},
+};
 
 void usage(char *progname)
 {
@@ -46,8 +58,9 @@ void usage(char *progname)
 	printf("             'barcode' is a string of chars\n\n");
 }
 
-int main(int argc, char *argv[])
+int main(int argc, char **argv)
 {
+	int ch, longindex, rc;
 	int file;
 	struct blk_header_info hdr, *h = &hdr;
 	struct MAM_info mi;
@@ -59,46 +72,19 @@ int main(int argc, char *argv[])
 	uint32_t size;
 	int ret;
 
-	if (argc < 2) {
-		usage(progname);
-		exit(1);
-	}
-
-	while (argc > 0) {
-		if (argv[0][0] == '-') {
-			switch (argv[0][1]) {
-			case 'm':
-				if (argc > 1) {
-					barcode = argv[1];
-				} else {
-					puts("    More args needed for -m\n");
-					exit(1);
-				}
-				break;
-			case 's':
-				if (argc > 1) {
-					media_capacity = argv[1];
-				} else {
-					puts("    More args needed for -s\n");
-					exit(1);
-				}
-				break;
-			case 't':
-				if (argc > 1) {
-					media_type = argv[1];
-				} else {
-					puts("    More args needed for -t\n");
-					exit(1);
-				}
-				break;
-			case 'V':
-				printf("%s: version %s\n",
-						progname, mktape_version);
-				break;
-			}
+	while ((ch = getopt_long(argc, argv, short_options,
+				 long_options, &longindex)) >= 0) {
+		switch (ch) {
+		case 'm':
+			barcode = optarg;
+			break;
+		case 's':
+			media_capacity = optarg;
+			break;
+		case 't':
+			media_type = optarg;
+			break;
 		}
-		argv++;
-		argc--;
 	}
 
 	if (barcode == NULL) {
