@@ -36,18 +36,39 @@
 #include "bs_ssc.h"
 #include "ssc.h"
 #include "libssc.h"
+#include "scsi.h"
+
+#undef eprintf
+#define eprintf(fmt, args...)						\
+do {									\
+	fprintf(stderr, "%s: " fmt, program_name, ##args);		\
+} while (0)
+
+#undef dprintf
+#define dprintf(fmt, args...)						\
+do {									\
+	if (debug)							\
+		fprintf(stderr, "%s %d: " fmt,				\
+			__FUNCTION__, __LINE__, ##args);		\
+} while (0)
+
+enum {
+	OP_NEW,
+	OP_SHOW,
+};
 
 static char program_name[] = "tgtimg";
 
-static char *short_options = "ho:m:b:s:t:";
+static char *short_options = "ho:Y:b:s:t:f:";
 
 struct option const long_options[] = {
 	{"help", no_argument, NULL, 'h'},
 	{"op", required_argument, NULL, 'o'},
-	{"mode", required_argument, NULL, 'm'},
+	{"device-type", required_argument, NULL, 'Y'},
 	{"barcode", required_argument, NULL, 'b'},
 	{"size", required_argument, NULL, 's'},
 	{"type", required_argument, NULL, 't'},
+	{"file", required_argument, NULL, 'f'},
 	{NULL, 0, NULL, 0},
 };
 
@@ -60,60 +81,51 @@ static void usage(int status)
 		printf("\
 Linux SCSI Target Framework Image File Utility, version %s\n\
 \n\
-  --barcode=[code] --size=[size] --type=[type]\n\
-		   create a new tape image file. [code] is a string of chars.\n\
-		   [size] is in Megabytes. [type] is data, clean or WORM\n\
-  --help           display this help and exit\n\
+  --op new --device-type tape --barcode=[code] --size=[size] --type=[type] --file=[path]\n\
+                         create a new tape image file.\n\
+                         [code] is a string of chars.\n\
+                         [size] is media size (in megabytes).\n\
+                         [type] is media type (data, clean or WORM)\n\
+                         [path] is a newly created file\n\
+  --help                 display this help and exit\n\
 \n\
 Report bugs to <stgt@vger.kernel.org>.\n", TGT_VERSION);
 	}
 	exit(status == 0 ? 0 : EINVAL);
 }
 
-int main(int argc, char **argv)
+static int str_to_device_type(char *str)
 {
-	int ch, longindex;
-	int file;
+	if (!strcmp(str, "tape"))
+		return TYPE_TAPE;
+	else {
+		eprintf("unknown target type: %s\n", str);
+		exit(EINVAL);
+	}
+}
+
+static int str_to_op(char *str)
+{
+	if (!strcmp("new", str))
+		return OP_NEW;
+	else if (!strcmp("show", str))
+		return OP_SHOW;
+	else {
+		eprintf("unknown operation: %s\n", str);
+		exit(1);
+	}
+}
+
+static int ssc_new(int op, char *path, char *barcode, char *capacity,
+		   char *media_type)
+{
 	struct blk_header_info hdr, *h = &hdr;
 	struct MAM_info mi;
+	int fd, ret;
 	uint8_t current_media[1024];
-	char *barcode = NULL;
-	char *media_type = NULL;
-	char *media_capacity = NULL;
 	uint32_t size;
-	int ret;
 
-	while ((ch = getopt_long(argc, argv, short_options,
-				 long_options, &longindex)) >= 0) {
-		switch (ch) {
-		case 'm':
-			barcode = optarg;
-			break;
-		case 's':
-			media_capacity = optarg;
-			break;
-		case 't':
-			media_type = optarg;
-			break;
-		case 'h':
-			usage(0);
-			break;
-		default:
-			usage(1);
-		}
-	}
-
-	if (barcode == NULL) {
-		usage(1);
-	}
-	if (media_capacity == NULL) {
-		usage(1);
-	}
-	if (media_type == NULL) {
-		usage(1);
-	}
-
-	sscanf(media_capacity, "%d", &size);
+	sscanf(capacity, "%d", &size);
 	if (size == 0)
 		size = 8000;
 
@@ -144,32 +156,31 @@ int main(int argc, char **argv)
 	if (!strncmp("clean", media_type, 5)) {
 		mi.medium_type = CART_CLEAN;
 		mi.medium_type_information = 20; /* Max cleaning loads */
-	} else if (!strncmp("WORM", media_type, 4)) {
+	} else if (!strncmp("WORM", media_type, 4))
 		mi.medium_type = CART_WORM;
-	} else {
+	else
 		mi.medium_type = CART_DATA;
-	}
 
 	sprintf((char *)mi.medium_serial_number, "%s_%d", barcode,
 		(int)time(NULL));
 	sprintf((char *)mi.barcode, "%-31s", barcode);
 	sprintf((char *)current_media, "%s", barcode);
 
-	syslog(LOG_DAEMON|LOG_INFO, "%s being created", current_media);
+	syslog(LOG_DAEMON|LOG_INFO, "%s being created", path);
 
-	file = creat((char *)current_media, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
-	if (file == -1) {
+	fd = creat(path, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
+	if (fd < 0) {
 		perror("Failed creating file");
 		exit(2);
 	}
 
-	ret = ssc_write_blkhdr(file, h, 0);
+	ret = ssc_write_blkhdr(fd, h, 0);
 	if (ret) {
 		perror("Unable to write header");
 		exit(1);
 	}
 
-	ret = ssc_write_mam_info(file, &mi);
+	ret = ssc_write_mam_info(fd, &mi);
 	if (ret) {
 		perror("Unable to write MAM");
 		exit(1);
@@ -179,16 +190,93 @@ int main(int argc, char **argv)
 	h->blk_type = BLK_EOD;
 	h->blk_num = 1;
 	h->prev = 0;
-	h->next = lseek64(file, 0, SEEK_CUR);
+	h->next = lseek64(fd, 0, SEEK_CUR);
 	h->curr = h->next;
 
-	ret = ssc_write_blkhdr(file, h, h->next);
+	ret = ssc_write_blkhdr(fd, h, h->next);
 	if (ret) {
 		perror("Unable to write header");
 		exit(1);
 	}
-	close(file);
+	close(fd);
 
-exit(0);
+	return 0;
 }
 
+static int ssc_ops(int op, char *path, char *barcode, char *capacity,
+		   char *media_type)
+{
+	if (op == OP_NEW)
+		return ssc_new(op, path, barcode, capacity, media_type);
+	else {
+		eprintf("unknown the operation type\n");
+		usage(1);
+	}
+
+	return 0;
+}
+
+int main(int argc, char **argv)
+{
+	int ch, longindex;
+	char *barcode = NULL;
+	char *media_type = NULL;
+	char *media_capacity = NULL;
+	int dev_type = TYPE_TAPE;
+	int op = -1;
+	char *path = NULL;
+
+	while ((ch = getopt_long(argc, argv, short_options,
+				 long_options, &longindex)) >= 0) {
+		switch (ch) {
+		case 'o':
+			op = str_to_op(optarg);
+			break;
+		case 'Y':
+			dev_type = str_to_device_type(optarg);
+			break;
+		case 'b':
+			barcode = optarg;
+			break;
+		case 's':
+			media_capacity = optarg;
+			break;
+		case 't':
+			media_type = optarg;
+			break;
+		case 'f':
+			path = optarg;
+			break;
+		case 'h':
+			usage(0);
+			break;
+		default:
+			eprintf("unrecognized option '%s'\n", optarg);
+			usage(1);
+		}
+	}
+
+	if (optind < argc) {
+		eprintf("unrecognized option '%s'\n", argv[optind]);
+		usage(1);
+	}
+
+	if (op < 0) {
+		eprintf("specify the operation type\n");
+		usage(1);
+	}
+
+	if (!path) {
+		eprintf("specify a newly created file\n");
+		usage(1);
+	}
+
+	if (dev_type == TYPE_TAPE)
+		ssc_ops(op, path, barcode, media_capacity, media_type);
+	else {
+		eprintf("unsupported the device type operation\n");
+		usage(1);
+	}
+
+	return 0;
+}
