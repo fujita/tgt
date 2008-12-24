@@ -87,6 +87,9 @@ Linux SCSI Target Framework Image File Utility, version %s\n\
                          [size] is media size (in megabytes).\n\
                          [type] is media type (data, clean or WORM)\n\
                          [path] is a newly created file\n\
+  --op show --device-type tape --file=[path]\n\
+                         dump the tape image file contents.\n\
+                         [path] is the tape image file\n\
   --help                 display this help and exit\n\
 \n\
 Report bugs to <stgt@vger.kernel.org>.\n", TGT_VERSION);
@@ -114,6 +117,140 @@ static int str_to_op(char *str)
 		eprintf("unknown operation: %s\n", str);
 		exit(1);
 	}
+}
+
+static void print_current_header(struct blk_header_info *pos)
+{
+	switch (pos->blk_type) {
+	case BLK_UNCOMPRESS_DATA:
+		printf(" Uncompressed data");
+		break;
+	case BLK_FILEMARK:
+		printf("         Filemark");
+		break;
+	case BLK_BOT:
+		printf("Beginning of Tape");
+		break;
+	case BLK_EOD:
+		printf("      End of Data");
+		break;
+	case BLK_NOOP:
+		printf("      No Operation");
+		break;
+	default:
+		printf("      Unknown type");
+		break;
+	}
+	if (pos->blk_type == BLK_BOT)
+		printf("(%d): Capacity %d MB, Blk No.: %" PRId64
+		", prev %" PRId64 ", curr %" PRId64 ", next %" PRId64 "\n",
+			pos->blk_type,
+			pos->blk_sz,
+			pos->blk_num,
+			(uint64_t)pos->prev,
+			(uint64_t)pos->curr,
+			(uint64_t)pos->next);
+	else
+		printf("(%d): Blk No. %" PRId64 ", prev %" PRId64 ""
+			", curr %" PRId64 ",  next %" PRId64 ", sz %d\n",
+			pos->blk_type,
+			pos->blk_num,
+			(uint64_t)pos->prev,
+			(uint64_t)pos->curr,
+			(uint64_t)pos->next,
+			pos->ondisk_sz);
+}
+
+static int skip_to_next_header(int fd, struct blk_header_info *pos)
+{
+	int ret;
+
+	ret = ssc_read_blkhdr(fd, pos, pos->next);
+	if (ret)
+		printf("Could not read complete blk header - short read!!\n");
+
+	return ret;
+}
+
+static int ssc_show(char *path)
+{
+	int ofp;
+	loff_t nread;
+	struct MAM_info mam;
+	struct blk_header_info current_position;
+	time_t t;
+	int a;
+	unsigned char *p;
+
+	ofp = open(path, O_RDONLY|O_LARGEFILE);
+	if (ofp < 0) {
+		eprintf("can't open %s, %m\n", path);
+		exit(1);
+	}
+
+	nread = ssc_read_blkhdr(ofp, &current_position, 0);
+	if (nread) {
+		perror("Could not read blk header");
+		exit(1);
+	}
+
+	nread = ssc_read_mam_info(ofp, &mam);
+	if (nread) {
+		perror("Could not read MAM");
+		exit(1);
+	}
+
+	if (mam.tape_fmt_version != TGT_TAPE_VERSION) {
+		printf("Unknown media format version %x\n",
+		       mam.tape_fmt_version);
+		exit(1);
+	}
+
+	printf("Media     : %s\n", mam.barcode);
+	switch (mam.medium_type) {
+	case CART_UNSPECIFIED:
+		printf(" type     : Unspecified\n");
+		break;
+	case CART_DATA:
+		printf(" type     : Data\n");
+		break;
+	case CART_CLEAN:
+		printf(" type     : Cleaning\n");
+		break;
+	case CART_DIAGNOSTICS:
+		printf(" type     : Diagnostics\n");
+		break;
+	case CART_WORM:
+		printf(" type     : WORM\n");
+		break;
+	case CART_MICROCODE:
+		printf(" type     : Microcode\n");
+		break;
+	default:
+		printf(" type     : Unknown\n");
+	}
+	printf("Media serial number : %s, ", mam.medium_serial_number);
+
+	for (a = strlen((const char *)mam.medium_serial_number); a > 0; a--)
+		if (mam.medium_serial_number[a] == '_')
+			break;
+	if (a) {
+		a++;
+		p = &mam.medium_serial_number[a];
+		t = atoll((const char *)p);
+		printf("created %s", ctime(&t));
+	}
+	printf("\n");
+
+	print_current_header(&current_position);
+	while (current_position.blk_type != BLK_EOD) {
+		nread = skip_to_next_header(ofp, &current_position);
+		if (nread)
+			break;
+		print_current_header(&current_position);
+	}
+
+	return 0;
 }
 
 static int ssc_new(int op, char *path, char *barcode, char *capacity,
@@ -208,6 +345,8 @@ static int ssc_ops(int op, char *path, char *barcode, char *capacity,
 {
 	if (op == OP_NEW)
 		return ssc_new(op, path, barcode, capacity, media_type);
+	else if (op == OP_SHOW)
+		return ssc_show(path);
 	else {
 		eprintf("unknown the operation type\n");
 		usage(1);
