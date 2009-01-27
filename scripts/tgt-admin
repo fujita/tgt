@@ -165,6 +165,10 @@ sub add_targets {
 				print "Check your config file for errors.\n";
 				exit 1;
 			}
+		} elsif ($k eq "ignore-errors") {
+			if ($conf{$k} eq "yes") {
+				$ignore_errors = 1;
+			}
 		}
 	}
 
