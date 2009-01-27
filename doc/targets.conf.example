@@ -11,6 +11,11 @@ include /etc/tgt/temp/*.conf
 default-driver iscsi
 
 
+# Continue if tgtadm exits with non-zero code (equivalent of
+# --ignore-errors command line option)
+#ignore-errors yes
+
+
 # Sample target with one LUN only. Defaults to allow access for all initiators:
 
 <target iqn.2008-09.com.example:server.target1>
@@ -123,8 +128,8 @@ default-driver iscsi
     #path ...
     #mode_page 8:0:18:0x10:0:0xff....
     #mode_page 8:0:18:0x10:0:0xff....
-    #device-type
-    #allow-in-use	# if specified globally, can't be overwritten locally
+    #device-type ...
+    #allow-in-use yes	# if specified globally, can't be overwritten locally
 
     write-cache off
     scsi_sn multipath-10
