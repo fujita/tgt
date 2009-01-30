@@ -2,6 +2,7 @@ VERSION = 0.9.3
 EXTRAVERSION = $(if $(shell git-show-ref 2>/dev/null),-git-$(shell git-show-ref --head --abbrev|head -1|awk '{print $$1}'))
 
 mandir = /usr/share/man
+docdir = /usr/share/doc/tgt
 
 ifneq ($(IBMVIO),)
 CFLAGS += -DIBMVIO -DUSE_KERNEL
@@ -66,6 +67,9 @@ TGTD_OBJS += tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o \
 		bs_null.o bs_sg.o bs.o libcrc32c.o
 MANPAGES = ../doc/manpages/tgtadm.8 ../doc/manpages/tgt-admin.8 \
 		../doc/manpages/tgt-setup-lun.8
+DOCS = ../doc/README.fcoe ../doc/README.ibmvstgt ../doc/README.iscsi ../doc/README.iser \
+	    ../doc/README.lu_configuration ../doc/README.mmc ../doc/targets.conf.example \
+	    ../doc/tmf.txt ../doc/TODO
 
 TGTD_DEP = $(TGTD_OBJS:.o=.d)
 
@@ -96,9 +100,11 @@ install: $(PROGRAMS) $(SCRIPTS) install_doc
 	install -d -m 755 $(DESTDIR)/usr/sbin
 	install -m 755 $(PROGRAMS) $(SCRIPTS) $(DESTDIR)/usr/sbin
 
-install_doc: $(MANPAGES)
+install_doc: $(MANPAGES) $(DOCS)
 	install -d -m 755 $(DESTDIR)$(mandir)/man8
-	install -m 644 $^ $(DESTDIR)$(mandir)/man8
+	install -m 644 $(MANPAGES) $(DESTDIR)$(mandir)/man8
+	install -d -m 755 $(DESTDIR)$(docdir)
+	install -m 644 $(DOCS) $(docdir)
 
 .PHONY: clean
 clean:
