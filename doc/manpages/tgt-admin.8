@@ -1,10 +1,10 @@
 .IX Title "TGT-ADMIN 1"
-.TH TGT-ADMIN 8 "2008-07-21" "TGT Configuration Tool" "TGT Configuration Tool"
+.TH TGT-ADMIN 8 "2009-01-30" "TGT Configuration Tool" "TGT Configuration Tool"
 .SH "NAME"
 tgt-admin \- Linux SCSI Target Configuration Tool.
 .SH "SYNOPSIS"
 .IX Header "SYNOPSIS"
-\&\fBtgt-admin \-[OPTION]...\fR
+\&\fBtgt-admin -[OPTION]...\fR
 .SH "DESCRIPTION"
 .IX Header "DESCRIPTION"
 tgt-admin is a utility which allows a persistent configuration of targets and luns.
@@ -13,55 +13,95 @@ It uses tgtadm commands to create, delete and show targets.
 
 .SH "OPTIONS"
 .IX Header "OPTIONS"
-\&\fB\-e, \-\-execute\fR
-.PP
-read /etc/tgt/targets.conf and execute tgtadm commands.
+.IP "\fB-e, --execute\fP"
+Read /etc/tgt/targets.conf and execute tgtadm commands.
 .br
-if target already exists it will be deleted and a new instance will be created with the new parameters instead.
+If the target already exists, it won't be processed. See --update.
+.IP "\fB--delete <value>\fP"
+Delete all or selected targets.
+.br
+The target will be deleted only if it's not used (no initiator is connected to it).
+.IP
+If you want to delete targets which are in use, you have to add "--force" flag.
+.IP
+Example usage:
+      --delete ALL            - delete all targets
+      --delete tid=4          - delete target 4 (target with tid 4)
+      --delete iqn.2008-08.com.example:some.target - delete this target
+.IP
+.IP "\fB--offline <value>\fP"
+Put all or selected targets in offline state.
+.IP
+Example usage:
+      --offline ALL           - offline all targets
+      --offline tid=4         - offline target 4 (target with tid 4)
+      --offline iqn.2008-08.com.example:some.target - offline this target
+.IP
+.IP "\fB--ready <value>\fP"
+Put all or selected targets in ready state.
+.IP
+Example usage:
+      --ready ALL             - ready all targets
+      --ready tid=4           - ready target 4 (target with tid 4)
+      --ready iqn.2008-08.com.example:some.target - ready this target
+.IP
+.IP "\fB--update <value>\fP"
+Update all or selected targets.
+.br
+The target will be updated only if it's not used (no initiator is connected to it).
+.IP
+If you want to update targets which are in use, you have to add "--force" flag.
+.IP
+Example usage:
+      --update ALL             - ready all targets
+      --update tid=4           - ready target 4 (target with tid 4)
+      --update iqn.2008-08.com.example:some.target - update this target
+.IP
+
+.IP "\fB-s, --show\fP"
+Show all the targets.
+.IP
+.IP "\fB-c, --conf <conf file>\fP"
+Specify an alternative configuration file instead of \fB/etc/tgt/target.conf\fR, which is the default.
+.IP
+.IP "\fB--ignore-errors\fP"
+Continue even if tgtadm exits with non-zero code.
+.IP
+.IP "\fB-f, --force\fP"
+Force some operations even if the target is in use.
+.IP
+.IP "\fB-p, --pretend\fP"
+Only print tgtadm options which would be used; don't execute any actions.
+.br
+Assumes -v.
+.IP
+.IP "\fB--dump\t\fR"
+Dump current tgtd configuration. Note: does not include detailed parameters, like write caching.
+.IP
+.IP "\fB-v, --verbose\fP"
+Increase verbosity (show tgtadm commands used).
 .PP
-\&\fB\-d, \-\-delete\fR
-.PP
-delete all the targets
-.PP
-\&\fB\-s, \-\-show\fR
-.PP
-show all the targets
-.PP
-\&\fB\-f, \-\-force\fR
-.PP
-don't exit on tgtadm errors
-.PP
-\&\fB\-p, \-\-pretend\fR
-.PP
-only print tgtadm options
-.PP
-\&\fB\-v, \-\-verbose\fR
-.PP
-increase verbosity (no effect in "pretend" mode)
-.PP
-\&\fB\-c, \-\-conf <conf_file>\fR
-.PP
-specify an alternative configuration file instead of \fB/etc/tgt/target.conf\fR, which is the default.
-.PP
-\&\fB\-h, \-\-help\fR
-.PP
-display a list of available options and exits
+.IP "\fB-h, --help\fP"
+Display a list of available options and exit.
 
 .SH CONFIGURATION FILE SYNTAX
-The defualt configuration file is: \fB/etc/tgt/target.conf\fR. It defines all the targets and their properties.
+The defualt configuration file is \fB/etc/tgt/target.conf\fR. It defines all the targets and their properties.
 .br
 The configuration file is in XML format and uses tags.
-Configuration file contains several target blocks, where each block contains target's proerties such as storage devices,
+.br
+Configuration file contains several target blocks, where each block contains target's properties such as storage devices,
+.br
 initator ACL and authorization information. You can include other config files using:
 .br
 \fBinclude /etc/tgt/xen/*.conf\fR.
 .PP
+.br
 There are 2 types of storage devices:
 .PP
 \&\fBbacking-store\fR - defines a virtual device on the target.
 .PP
-\&\fBdirect-store\fR  - defines a direct mapped device with the same properties as the physical device (such as VENDOR_ID
-, SERIAL_NUM, etc.)
+\&\fBdirect-store\fR  - defines a direct mapped device with the same properties as the physical device (such as VENDOR_ID,
+SERIAL_NUM, etc.)
 .PP
 \&\fBinitiator-address\fR - allows connections only from the specify IP address. defaults to ALL if no
 "initiator-address" is specified
@@ -70,7 +110,9 @@ There are 2 types of storage devices:
 .PP
 \&\fBoutgoinguser\fR - define iscsi outgoing authentication setting. if no "outgoinguser" is specified, it is not used.
 .PP
-example for a configuration file:
+
+Example configuration file:
+
 .br
 <target iqn.2007-04.com.example:san.monitoring>
    backing-store /dev/san/monitoring
@@ -80,11 +122,12 @@ example for a configuration file:
 
    # defaults to ALL if no "initiator-address" is specified
    initiator-address 192.168.1.2
+.br
 </target>
 
 <target iqn.2007-02.com.example:san.xen1>
    backing-store /dev/san/xen1-disk1 # LUN1
-   direct-store /dev/san/xen1-disk2 # LUN2
+   direct-store /dev/san/xen1-disk2  # LUN2
 
    initiator-address 192.168.1.2     # Allowed IP
    initiator-address 192.168.5.6     # Allowed IP
@@ -93,26 +136,33 @@ example for a configuration file:
    incominguser user2 secretpass23
 
    outgoinguser userA secretpassA
+.br
 </target>
 
 <target iqn.2007-02.com.example:san.xen2>
    backing-store /dev/san/xen2
+.br
 </target>
 
 <target iqn.2007-06.com.example:san.vmware1>
    backing-store /dev/san/vmware1
+.br
 </target>
 
 .SH FILES
 .PD 0
 .TP
 .I /etc/tgt/target.conf
-Configuration file for
-.BR tgt-admin .
+Configuration file for tgt-admin.
+.br
+.TP
+.I /usr/share/doc/tgt/targets.conf.example
+Example configuration file for tgt-admin.
+.br
 
 .SH SEE ALSO
 .BR tgtadm (8)
 
 .SH "REPORTING BUGS"
 .IX Header "REPORTING BUGS"
-Report bugs to <stgt-devel@lists.berlios.de>
+Report bugs to <stgt@vger.kernel.org>
