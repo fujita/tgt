@@ -62,6 +62,7 @@ int conn_init(struct iscsi_connection *conn)
 
 	INIT_LIST_HEAD(&conn->clist);
 	INIT_LIST_HEAD(&conn->tx_clist);
+	INIT_LIST_HEAD(&conn->task_list);
 
 	return 0;
 }
@@ -164,6 +165,12 @@ void conn_close(struct iscsi_connection *conn)
 	}
 	conn->tx_task = NULL;
 
+	/* cleaning up commands waiting for SCSI_DATA_OUT */
+	while (!list_empty(&conn->task_list)) {
+		task = list_entry(conn->task_list.prev, struct iscsi_task,
+				  c_siblings);
+		iscsi_free_task(task);
+	}
 done:
 	conn_put(conn);
 }

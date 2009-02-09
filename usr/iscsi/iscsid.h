@@ -109,6 +109,9 @@ struct iscsi_task {
 	/* linked to conn->tx_clist or session->cmd_pending_list */
 	struct list_head c_list;
 
+	/* linked to conn->tx_clist or conn->task_list */
+	struct list_head c_siblings;
+
 	unsigned long flags;
 
 	int result;
@@ -172,6 +175,8 @@ struct iscsi_connection {
 	struct iscsi_task *tx_task;
 
 	struct list_head tx_clist;
+
+	struct list_head task_list;
 
 	unsigned char rx_digest[4];
 	unsigned char tx_digest[4];

@@ -1044,7 +1044,7 @@ static struct iscsi_task *iscsi_alloc_task(struct iscsi_connection *conn,
 	task->conn = conn;
 	INIT_LIST_HEAD(&task->c_hlist);
 	INIT_LIST_HEAD(&task->c_list);
-
+	list_add(&task->c_siblings, &conn->task_list);
 	conn_get(conn);
 	return task;
 }
@@ -1052,6 +1052,8 @@ static struct iscsi_task *iscsi_alloc_task(struct iscsi_connection *conn,
 void iscsi_free_task(struct iscsi_task *task)
 {
 	struct iscsi_connection *conn = task->conn;
+
+	list_del(&task->c_siblings);
 
 	conn->tp->free_data_buf(conn, scsi_get_in_buffer(&task->scmd));
 	conn->tp->free_data_buf(conn, scsi_get_out_buffer(&task->scmd));
