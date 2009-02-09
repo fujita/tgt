@@ -128,7 +128,16 @@ void conn_close(struct iscsi_connection *conn)
 			task, task->tag, op);
 		switch (op) {
 		case ISCSI_OP_SCSI_CMD:
-			iscsi_free_cmd_task(task);
+			/*
+			 * We can't call iscsi_free_cmd_task for a
+			 * command waiting for SCSI_DATA_OUT. There
+			 * would be a better way to see
+			 * task->scmd.c_target though.
+			 */
+			if (task->scmd.c_target)
+				iscsi_free_cmd_task(task);
+			else
+				iscsi_free_task(task);
 			break;
 		case ISCSI_OP_NOOP_OUT:
 		case ISCSI_OP_LOGOUT:
