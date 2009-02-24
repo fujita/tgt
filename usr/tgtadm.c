@@ -721,7 +721,11 @@ int main(int argc, char **argv)
 	if (path)
 		shprintf(total, params, rest, "%spath=%s",
 			 rest == BUFSIZE ? "" : ",", path);
-	if (bstype)
+
+	if (req->device_type == TYPE_TAPE)
+		shprintf(total, params, rest, "%sbstype=%s",
+			 rest == BUFSIZE ? "" : ",", "ssc");
+	else if (bstype)
 		shprintf(total, params, rest, "%sbstype=%s",
 			 rest == BUFSIZE ? "" : ",", bstype);
 	if (targetname)
