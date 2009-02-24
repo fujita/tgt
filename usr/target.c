@@ -462,9 +462,6 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 
 	bst = target->bst;
 	if (backing) {
-		char c[] = "ssc";
-		if (dev_type == TYPE_TAPE)
-			bstype = c;
 		if (bstype) {
 			bst = get_backingstore_template(bstype);
 			if (!bst) {
