@@ -50,7 +50,7 @@ TGTD_OBJS += $(addprefix fcoe/,\
 TGTD_OBJS += bs_rdwr.o
 endif
 
-INCLUDES += -I. -I../include -I$(KERNELSRC)/include
+INCLUDES += -I.
 
 CFLAGS += -D_GNU_SOURCE
 CFLAGS += $(INCLUDES)
