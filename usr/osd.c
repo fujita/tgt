@@ -20,36 +20,18 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  */
-#include <errno.h>
 #include <inttypes.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "list.h"
-#include "util.h"
 #include "tgtd.h"
-#include "tgtadm_error.h"
-#include "target.h"
-#include "driver.h"
 #include "scsi.h"
 #include "spc.h"
 #include "tgtadm_error.h"
 
 static int osd_varlen_cdb(int host_no, struct scsi_cmd *cmd)
 {
-	if (cmd->scb[7] != 200 - 8) {
-		eprintf("request size %d wrong, should be 200\n",
-			cmd->scb[7] + 8);
-		sense_data_build(cmd, ILLEGAL_REQUEST, ASC_LUN_NOT_SUPPORTED);
-		scsi_set_in_resid_by_actual(cmd, 0);
-		scsi_set_out_resid_by_actual(cmd, 0);
-		return SAM_STAT_CHECK_CONDITION;
-	}
-
 	cmd->scsi_cmd_done = target_cmd_io_done;
-
-/* 	return SAM_STAT_GOOD; */
 	return cmd->dev->bst->bs_cmd_submit(cmd);
 }
 
