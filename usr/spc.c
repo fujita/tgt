@@ -133,8 +133,8 @@ static void update_vpd_83(struct scsi_lu *lu, void *id)
 	struct vpd *vpd_pg = lu->attrs.lu_vpd[3];
 	uint8_t	*data = vpd_pg->data;
 
-	data[0] = (PIV_ISCSI << 4) | INQ_CODE_ASCII;
-	data[1] = PIV_VALID | ASS_TGT_PORT | DESG_VENDOR;
+	data[0] = INQ_CODE_ASCII;
+	data[1] = DESG_T10;
 	data[3] = SCSI_ID_LEN;
 
 	strncpy((char *)data + 4, id, SCSI_ID_LEN);
@@ -1029,7 +1029,7 @@ int spc_lu_init(struct scsi_lu *lu)
 	snprintf(lu->attrs.product_rev, sizeof(lu->attrs.product_rev),
 		 "%s", "0001");
 	snprintf(lu->attrs.scsi_id, sizeof(lu->attrs.scsi_id),
-		 "deadbeaf%d:%" PRIu64, tgt->tid, lu->lun);
+		 "IET     %04x%04" PRIx64, tgt->tid, lu->lun);
 	snprintf(lu->attrs.scsi_sn, sizeof(lu->attrs.scsi_sn),
 		 "beaf%d%" PRIu64, tgt->tid, lu->lun);
 
