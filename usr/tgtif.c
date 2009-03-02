@@ -34,7 +34,7 @@
 #include <sys/sysmacros.h>
 #include <linux/types.h>
 #ifndef aligned_u64
-#define aligned_u64 unsigned long long __attribute__((aligned(8)))
+#define aligned_u64 uint64_t __attribute__((aligned(8)))
 #endif
 #include <scsi/scsi_tgt_if.h>
 

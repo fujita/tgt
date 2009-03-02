@@ -248,7 +248,7 @@ int fcoe_rcv(struct fcdev *fdev)
 	hlen = fc->fcoe_hlen;
 	if (hlen != sizeof(struct fcoe_hdr)) {
 		eprintf("Wrong fcoe header size. Got %u, but should "
-			"be %u. Make sure you are using a initiator that "
+			"be %zu. Make sure you are using a initiator that "
 			"is using the current header format\n",
 			hlen, sizeof(struct fcoe_hdr));
 		stats->ErrorFrames++;
