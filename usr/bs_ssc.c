@@ -98,7 +98,7 @@ static int resp_rewind(struct scsi_lu *lu)
 
 	fd = lu->fd;
 
-	eprintf("*** Backing store fd: %s %d %d ***\n", lu->path, lu->fd, fd);
+	dprintf("*** Backing store fd: %s %d %d ***\n", lu->path, lu->fd, fd);
 
 	rd = ssc_read_blkhdr(fd, h, 0);
 	if (rd) {
@@ -121,7 +121,7 @@ static int append_blk(struct scsi_cmd *cmd, uint8_t *data,
 	fd = cmd->dev->fd;
 	*curr = ssc->c_blk;
 
-	eprintf("B4 update     : prev/curr/next"
+	dprintf("B4 update     : prev/curr/next"
 		" <%" PRId64 "/%" PRId64 "/%" PRId64 "> type: %d,"
 		" num: %" PRIx64 ", ondisk sz: %d, about to write %d\n",
 		curr->prev, curr->curr, curr->next,
@@ -142,19 +142,15 @@ static int append_blk(struct scsi_cmd *cmd, uint8_t *data,
 
 	memcpy(&ssc->c_blk, eod, sizeof(*eod));
 
-	eprintf("After update  : prev/curr/next"
-		" <%" PRId64 "/%" PRId64 "/%" PRId64 "> type: %d,"
-		" num: %" PRIx64 ", ondisk sz: %d\n",
-			curr->prev, curr->curr, curr->next,
-			curr->blk_type, curr->blk_num,
-			curr->ondisk_sz);
+	dprintf("After update  : prev/curr/next <%" PRId64 "/%" PRId64
+		"/%" PRId64 "> type: %d, num: %" PRIx64 ", ondisk sz: %d\n",
+		curr->prev, curr->curr, curr->next, curr->blk_type,
+		curr->blk_num, curr->ondisk_sz);
 
-	eprintf("EOD blk header: prev/curr/next"
-		" <%" PRId64 "/%" PRId64 "/%" PRId64 "> type: %d,"
-		" num: %" PRIx64 ", ondisk sz: %d\n",
-			eod->prev, eod->curr, eod->next,
-			eod->blk_type, eod->blk_num,
-			eod->ondisk_sz);
+	dprintf("EOD blk header: prev/curr/next <%" PRId64 "/%" PRId64
+		"/%" PRId64 "> type: %d, num: %" PRIx64 ", ondisk sz: %d\n",
+		eod->prev, eod->curr, eod->next, eod->blk_type, eod->blk_num,
+		eod->ondisk_sz);
 
 	/* Rewrite previous header with updated positioning info */
 	ret = ssc_write_blkhdr(fd, curr, curr->curr);
@@ -250,8 +246,7 @@ static int space_filemark(struct scsi_cmd *cmd, int32_t count)
 	struct blk_header_info *h = &ssc->c_blk;
 	int result;
 
-	eprintf("*** space %d filemarks, %llu\n", count,
-		(unsigned long long)h->curr);
+	dprintf("*** space %d filemarks, %" PRIu64 "\n", count, h->curr);
 
 	if (count > 0)
 		result = space_filemark_forward(cmd, count);
@@ -260,7 +255,7 @@ static int space_filemark(struct scsi_cmd *cmd, int32_t count)
 	else
 		result = SAM_STAT_GOOD;
 
-	eprintf("%llu\n", (unsigned long long)h->curr);
+	dprintf("%" PRIu64 "\n", h->curr);
 
 	return result;
 }
@@ -270,8 +265,7 @@ static int space_blocks(struct scsi_cmd *cmd, int32_t count)
 	struct ssc_info *ssc = dtype_priv(cmd->dev);
 	struct blk_header_info *h = &ssc->c_blk;
 
-	eprintf("*** space %d blocks, %llu\n", count,
-		(unsigned long long)h->curr);
+	dprintf("*** space %d blocks, %" PRIu64 "\n", count, h->curr);
 
 	while (count != 0) {
 		if (count > 0) {
@@ -302,7 +296,7 @@ static int space_blocks(struct scsi_cmd *cmd, int32_t count)
 			count++;
 		}
 	}
-	eprintf("%llu\n", (unsigned long long)h->curr);
+	dprintf("%" PRIu64 "\n", h->curr);
 	return SAM_STAT_GOOD;
 }
 
@@ -446,7 +440,7 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 
 	switch (cmd->scb[0]) {
 	case REZERO_UNIT:
-		eprintf("**** Rewind ****\n");
+		dprintf("**** Rewind ****\n");
 		if (resp_rewind(cmd->dev)) {
 			sense_data_build(cmd,
 				MEDIUM_ERROR, ASC_SEQUENTIAL_POSITION_ERR);
@@ -456,7 +450,7 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 
 	case WRITE_FILEMARKS:
 		ret = get_unaligned_be24(&cmd->scb[2]);
-		eprintf("*** Write %d filemark%s ***\n", ret,
+		dprintf("*** Write %d filemark%s ***\n", ret,
 			((ret > 1) || (ret < 0)) ? "s" : "");
 
 		for (i = 0; i < ret; i++)
@@ -480,14 +474,16 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 		count = get_unaligned_be24(&cmd->scb[2]);
 		buf = scsi_get_in_buffer(cmd);
 
-		eprintf("*** READ_6: length %d, count %d, fixed block %s, %llu, %d\n", length, count, (fixed) ? "Yes" : "No", (unsigned long long)h->curr, sti);
+		dprintf("*** READ_6: length %d, count %d, fixed block %s,"
+			" %" PRIu64 " %d\n", length, count,
+			(fixed) ? "Yes" : "No", h->curr, sti);
 		if (fixed)
 			result = resp_fixed_read(cmd, buf, length, &ret);
 		else
 			result = resp_var_read(cmd, buf, length, &ret);
 
-		eprintf("Executed READ_6, Read %d bytes, %llu\n", ret,
-			(unsigned long long)h->curr);
+		eprintf("Executed READ_6, Read %d bytes, %" PRIu64 "\n",
+			ret, h->curr);
 		break;
 
 	case WRITE_6:
@@ -556,9 +552,9 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 		uint8_t *data = scsi_get_in_buffer(cmd);
 		int len = scsi_get_in_length(cmd);
 
-		eprintf("Size of in_buffer = %d\n", len);
-		eprintf("Sizeof(buf): %d\n", (int)sizeof(buf));
-		eprintf("service action: 0x%02x\n", service_action);
+		dprintf("Size of in_buffer = %d\n", len);
+		dprintf("Sizeof(buf): %Zd\n", sizeof(buf));
+		dprintf("service action: 0x%02x\n", service_action);
 
 		if (service_action == 0) {	/* Short form - block ID */
 			memset(data, 0, 20);
@@ -608,13 +604,12 @@ static int bs_ssc_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 
 	ssc = dtype_priv(lu);
 
-	eprintf("### Enter ###\n");
 	*fd = backed_file_open(path, O_RDWR | O_LARGEFILE, size);
 	if (*fd < 0) {
 		eprintf("Could not open %s %m\n", path);
 		return *fd;
 	}
-	eprintf("*** Backing store fd: %d ***\n", *fd);
+	eprintf("Backing store %s, %d\n", path, *fd);
 
 	if (*size < SSC_BLK_HDR_SIZE + sizeof(struct MAM)) {
 		eprintf("backing file too small - not correct media format\n");
@@ -657,7 +652,7 @@ static int bs_ssc_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 		break;
 	}
 
-	eprintf("Media size: %d, media type: %s\n", h->blk_sz, cart);
+	dprintf("Media size: %d, media type: %s\n", h->blk_sz, cart);
 	return 0;
 }
 
