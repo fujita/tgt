@@ -182,8 +182,7 @@ static int ipc_mgmt_connect(int *fd)
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_LOCAL;
-	memcpy((char *) &addr.sun_path + 1, TGT_IPC_NAMESPACE,
-	       strlen(TGT_IPC_NAMESPACE));
+	strncpy(addr.sun_path, TGT_IPC_NAMESPACE, sizeof(addr.sun_path));
 
 	err = connect(*fd, (struct sockaddr *) &addr, sizeof(addr));
 	if (err < 0)
