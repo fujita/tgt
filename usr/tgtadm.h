@@ -1,7 +1,7 @@
 #ifndef TGTADM_H
 #define TGTADM_H
 
-#define TGT_IPC_NAMESPACE	"TGT_IPC_ABSTRACT_NAMESPACE"
+#define TGT_IPC_NAMESPACE	"/tmp/.TGT_IPC_ABSTRACT_NAMESPACE"
 #define TGT_LLD_NAME_LEN	64
 
 #include "tgtadm_error.h"
