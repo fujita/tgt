@@ -560,6 +560,7 @@ int ipc_init(void)
 		return -1;
 	}
 
+	unlink(TGT_IPC_NAMESPACE);
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_LOCAL;
 	strncpy(addr.sun_path, TGT_IPC_NAMESPACE, sizeof(addr.sun_path));
