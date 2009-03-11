@@ -767,7 +767,6 @@ static void text_scan_text(struct iscsi_connection *conn)
 				blen--;
 			}
 
-			slen = sizeof(ss);
 			getnameinfo((struct sockaddr *) &ss, slen, p, blen,
 				    NULL, 0, NI_NUMERICHOST);
 
