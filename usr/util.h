@@ -119,13 +119,14 @@ extern unsigned long pagesize, pageshift;
 
 extern long int syscall(long int sysno, ...);
 
-static inline int __sync_file_range(int fd, __off64_t offset, __off64_t bytes,
-				    unsigned int flags)
+static inline int __sync_file_range(int fd, __off64_t offset, __off64_t bytes)
 {
 	int ret;
+	unsigned int flags = SYNC_FILE_RANGE_WAIT_BEFORE | SYNC_FILE_RANGE_WRITE
+		| SYNC_FILE_RANGE_WAIT_AFTER;
 
 	ret = syscall(__NR_sync_file_range, fd, offset, bytes, flags);
-	if (ret == -EPERM)
+	if (ret)
 		ret = fsync(fd);
 	return ret;
 }

@@ -57,10 +57,7 @@ static void bs_mmap_request(struct scsi_cmd *cmd)
 		key = ILLEGAL_REQUEST;
 		asc = ASC_INVALID_FIELD_IN_CDB;
 	} else {
-		unsigned int flags =
-			SYNC_FILE_RANGE_WAIT_BEFORE| SYNC_FILE_RANGE_WRITE;
-
-		ret = __sync_file_range(cmd->dev->fd, cmd->offset, length, flags);
+		ret = __sync_file_range(cmd->dev->fd, cmd->offset, length);
 		if (ret) {
 			result = SAM_STAT_CHECK_CONDITION;
 			key = MEDIUM_ERROR;

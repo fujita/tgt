@@ -49,9 +49,8 @@ static void bs_sync_sync_range(struct scsi_cmd *cmd, uint32_t length,
 			       int *result, uint8_t *key, uint16_t *asc)
 {
 	int ret;
-	unsigned int flags = SYNC_FILE_RANGE_WAIT_BEFORE| SYNC_FILE_RANGE_WRITE;
 
-	ret = __sync_file_range(cmd->dev->fd, cmd->offset, length, flags);
+	ret = __sync_file_range(cmd->dev->fd, cmd->offset, length);
 	if (ret)
 		set_medium_error(result, key, asc);
 }
