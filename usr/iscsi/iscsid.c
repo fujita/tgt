@@ -487,10 +487,12 @@ static void login_start(struct iscsi_connection *conn)
 
 		memcpy(conn->session_param, target->session_param,
 		       sizeof(conn->session_param));
-		conn->exp_cmd_sn = be32_to_cpu(req->cmdsn);
-		dprintf("exp_cmd_sn: %d,%d\n", conn->exp_cmd_sn, req->cmdsn);
-		conn->max_cmd_sn = conn->exp_cmd_sn;
 	}
+
+	conn->exp_cmd_sn = be32_to_cpu(req->cmdsn);
+	conn->max_cmd_sn = conn->exp_cmd_sn + 1;
+	dprintf("exp_cmd_sn: %d,%d\n", conn->exp_cmd_sn, req->cmdsn);
+
 	text_key_add(conn, "TargetPortalGroupTag", "1");
 }
 
