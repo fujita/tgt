@@ -160,7 +160,7 @@ void text_key_add(struct iscsi_connection *conn, char *key, char *value)
 	if (!conn->rsp.datasize)
 		conn->rsp.data = conn->rsp_buffer;
 
-	if (conn->tx_size + len > INCOMING_BUFSIZE) {
+	if (conn->rsp.datasize + len > INCOMING_BUFSIZE) {
 		log_warning("Dropping key (%s=%s)", key, value);
 		return;
 	}
