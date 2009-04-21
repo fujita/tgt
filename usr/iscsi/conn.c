@@ -166,9 +166,13 @@ void conn_close(struct iscsi_connection *conn)
 	conn->tx_task = NULL;
 
 	/* cleaning up commands waiting for SCSI_DATA_OUT */
-	while (!list_empty(&conn->task_list)) {
-		task = list_entry(conn->task_list.prev, struct iscsi_task,
-				  c_siblings);
+	list_for_each_entry_safe(task, tmp, &conn->task_list, c_siblings) {
+		/*
+		 * This task is in SCSI. We need to wait for I/O
+		 * completion.
+		 */
+		if (task_in_scsi(task))
+			continue;
 		iscsi_free_task(task);
 	}
 done:

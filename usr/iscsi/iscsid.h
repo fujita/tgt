@@ -244,11 +244,15 @@ struct iscsi_target {
 
 enum task_flags {
 	TASK_pending,
+	TASK_in_scsi,
 };
 
 #define set_task_pending(t)	((t)->flags |= (1 << TASK_pending))
 #define clear_task_pending(t)	((t)->flags &= ~(1 << TASK_pending))
 #define task_pending(t)		((t)->flags & (1 << TASK_pending))
+
+#define set_task_in_scsi(t)     ((t)->flags |= (1 << TASK_in_scsi))
+#define task_in_scsi(t)		((t)->flags & (1 << TASK_in_scsi))
 
 extern int lld_index;
 extern struct list_head iscsi_targets_list;
