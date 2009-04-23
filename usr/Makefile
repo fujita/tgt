@@ -1,4 +1,4 @@
-VERSION = 0.9.5
+VERSION = 0.9.6
 EXTRAVERSION = $(if $(shell git-show-ref 2>/dev/null),-git-$(shell git-show-ref --head --abbrev|head -1|awk '{print $$1}'))
 
 mandir = /usr/share/man
