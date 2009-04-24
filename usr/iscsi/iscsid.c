@@ -156,14 +156,21 @@ void text_key_add(struct iscsi_connection *conn, char *key, char *value)
 	int valuelen = strlen(value);
 	int len = keylen + valuelen + 2;
 	char *buffer;
+	int max_len;
+
+	if (conn->state == STATE_FULL)
+		max_len = conn->session_param[ISCSI_PARAM_MAX_XMIT_DLENGTH].val;
+	else
+		max_len = INCOMING_BUFSIZE;
 
 	if (!conn->rsp.datasize)
 		conn->rsp.data = conn->rsp_buffer;
 
-	if (conn->rsp.datasize + len > INCOMING_BUFSIZE) {
-		log_warning("Dropping key (%s=%s)", key, value);
-		return;
-	}
+	if (conn->rsp.datasize + len > max_len)
+		goto drop;
+
+	if (conn->rsp.datasize + len > INCOMING_BUFSIZE)
+		goto drop;
 
 	buffer = conn->rsp_buffer;
 	buffer += conn->rsp.datasize;
@@ -173,6 +180,10 @@ void text_key_add(struct iscsi_connection *conn, char *key, char *value)
 	buffer += keylen;
 	*buffer++ = '=';
 	strcpy(buffer, value);
+	return;
+drop:
+	log_warning("Dropping key (%s=%s)", key, value);
+	return;
 }
 
 static void text_key_add_reject(struct iscsi_connection *conn, char *key)
