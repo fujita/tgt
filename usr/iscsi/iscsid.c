@@ -166,13 +166,19 @@ void text_key_add(struct iscsi_connection *conn, char *key, char *value)
 	if (!conn->rsp.datasize)
 		conn->rsp.data = conn->rsp_buffer;
 
+	buffer = conn->rsp_buffer;
+
 	if (conn->rsp.datasize + len > max_len)
 		goto drop;
 
-	if (conn->rsp.datasize + len > INCOMING_BUFSIZE)
-		goto drop;
+	if (conn->rsp.datasize + len > INCOMING_BUFSIZE) {
+		buffer = realloc(buffer, conn->rsp.datasize + len);
+		if (buffer)
+			conn->rsp_buffer = buffer;
+		else
+			goto drop;
+	}
 
-	buffer = conn->rsp_buffer;
 	buffer += conn->rsp.datasize;
 	conn->rsp.datasize += len;
 
@@ -327,7 +333,13 @@ static void text_scan_login(struct iscsi_connection *conn)
 			}
 
 			err = param_check_val(session_keys, idx, &val);
-			err = param_set_val(session_keys, conn->session_param, idx, &val);
+			if (idx == ISCSI_PARAM_MAX_XMIT_DLENGTH &&
+			    conn->session_type == SESSION_DISCOVERY)
+				conn->session_param[idx].val = val;
+			else
+				err = param_set_val(session_keys,
+						    conn->session_param,
+						    idx, &val);
 
 			switch (conn->session_param[idx].state) {
 			case KEY_STATE_START:
