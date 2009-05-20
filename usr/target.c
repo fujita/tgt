@@ -1138,7 +1138,7 @@ int account_lookup(int tid, int type, char *user, int ulen, char *password, int 
 		return -ENOENT;
 
 	if (type == ACCOUNT_TYPE_INCOMING) {
-		for (i = 0; target->account.nr_inaccount; i++) {
+		for (i = 0; i < target->account.nr_inaccount; i++) {
 			ac = __account_lookup_id(target->account.in_aids[i]);
 			if (ac) {
 				if (!strcmp(ac->user, user))
