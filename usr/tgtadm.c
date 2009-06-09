@@ -407,7 +407,7 @@ static int verify_mode_params(int argc, char **argv, char *allowed)
 
 	while ((ch = getopt_long(argc, argv, short_options,
 				 long_options, &longindex)) >= 0) {
-		if (!strchr(allowed, ch)) {
+		if (!strchr(allowed, ch) && !strchr("d", ch)) {
 			ret = ch;
 			break;
 		}
