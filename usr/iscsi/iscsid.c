@@ -1162,6 +1162,7 @@ static int iscsi_target_cmd_queue(struct iscsi_task *task)
 	uint32_t data_len;
 	uint8_t *ahs;
 	int ahslen;
+	int err;
 	enum data_direction dir = scsi_get_data_dir(scmd);
 
 	scmd->cmd_itn_id = conn->session->tsih;
@@ -1238,7 +1239,11 @@ static int iscsi_target_cmd_queue(struct iscsi_task *task)
 	scmd->tag = req->itt;
 	set_task_in_scsi(task);
 
-	return target_cmd_queue(conn->session->target->tid, scmd);
+	err = target_cmd_queue(conn->session->target->tid, scmd);
+	if (err)
+		clear_task_in_scsi(task);
+
+	return err;
 }
 
 int iscsi_scsi_cmd_execute(struct iscsi_task *task)
