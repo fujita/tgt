@@ -1061,5 +1061,8 @@ void spc_lu_exit(struct scsi_lu *lu)
 		if (lu_vpd[i])
 			free(lu_vpd[i]);
 
+	for (i = 0; i < ARRAY_SIZE(lu->mode_pgs); i++)
+		if (lu->mode_pgs[i])
+			free(lu->mode_pgs[i]);
 }
 
