@@ -63,7 +63,7 @@ static int ipc_fd;
 static void set_show_results(struct tgtadm_rsp *rsp, int *err)
 {
 	if (*err < 0)
-		rsp->err = *err;
+		rsp->err = -*err;
 	else {
 		rsp->err = 0;
 		rsp->len = *err + sizeof(*rsp);
