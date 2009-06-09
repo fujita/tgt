@@ -1,3 +1,6 @@
+#ifndef __DRIVER_H__
+#define __DRIVER_H__
+
 struct tgt_driver {
 	const char *name;
 	int use_kernel;
@@ -25,3 +28,4 @@ extern struct tgt_driver *tgt_drivers[];
 extern int get_driver_index(char *name);
 extern int register_driver(struct tgt_driver *drv);
 
+#endif /* __DRIVER_H__ */
