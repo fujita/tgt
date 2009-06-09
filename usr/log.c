@@ -17,6 +17,7 @@
  * 02110-1301 USA
  */
 #include <ctype.h>
+#include <fcntl.h>
 #include <string.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -27,6 +28,7 @@
 #include <errno.h>
 #include <sys/shm.h>
 #include <sys/ipc.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
@@ -340,6 +342,7 @@ int log_init(char *program_name, int size, int daemon, int debug)
 	if (daemon) {
 		struct sigaction sa_old;
 		struct sigaction sa_new;
+		int fd;
 
 		openlog(log_name, 0, LOG_DAEMON);
 		setlogmask (LOG_UPTO (LOG_DEBUG));
@@ -358,6 +361,23 @@ int log_init(char *program_name, int size, int daemon, int debug)
 			syslog(LOG_WARNING,
 			       "Target daemon logger with pid=%d started!\n", pid);
 			return 0;
+		}
+
+		fd = open("/dev/null", O_RDWR);
+		if (fd < 0) {
+			syslog(LOG_ERR, "failed to open /dev/null: %s\n",
+			       strerror(errno));
+			exit(1);
+		}
+
+		dup2(fd, 0);
+		dup2(fd, 1);
+		dup2(fd, 2);
+		setsid();
+		if (chdir("/") < 0) {
+			syslog(LOG_ERR, "failed to chdir to '/': %s\n",
+			       strerror(errno));
+			exit(1);
 		}
 
 		/* flush on daemon's crash */

@@ -349,19 +349,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	ep_fd = epoll_create(4096);
-	if (ep_fd < 0) {
-		fprintf(stderr, "can't create epoll fd, %m\n");
-		exit(1);
-	}
-
-	nr_lld = lld_init(&use_kernel, argv[optind]);
-	if (!nr_lld) {
-		fprintf(stderr, "No available low level driver!\n");
-		exit(1);
-	}
-
-	err = ipc_init();
+	err = log_init(program_name, LOG_SPACE_SIZE, is_daemon, is_debug);
 	if (err)
 		exit(1);
 
@@ -376,7 +364,19 @@ int main(int argc, char **argv)
 	if (err)
 		exit(1);
 
-	err = log_init(program_name, LOG_SPACE_SIZE, is_daemon, is_debug);
+	ep_fd = epoll_create(4096);
+	if (ep_fd < 0) {
+		fprintf(stderr, "can't create epoll fd, %m\n");
+		exit(1);
+	}
+
+	nr_lld = lld_init(&use_kernel, argv[optind]);
+	if (!nr_lld) {
+		fprintf(stderr, "No available low level driver!\n");
+		exit(1);
+	}
+
+	err = ipc_init();
 	if (err)
 		exit(1);
 
