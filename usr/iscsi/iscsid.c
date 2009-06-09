@@ -1037,6 +1037,8 @@ static int iscsi_r2t_build(struct iscsi_task *task)
 	rsp->itt = task->req.itt;
 	rsp->r2tsn = cpu_to_be32(task->exp_r2tsn++);
 	rsp->data_offset = cpu_to_be32(task->offset);
+	/* return next statsn for this conn w/o advancing it */
+	rsp->statsn = cpu_to_be32(conn->stat_sn);
 	rsp->ttt = (unsigned long) task;
 	length = min(task->r2t_count, conn->data_inout_max_length);
 	rsp->data_length = cpu_to_be32(length);
