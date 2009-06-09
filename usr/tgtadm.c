@@ -60,31 +60,43 @@ do {									\
 static char program_name[] = "tgtadm";
 static int debug;
 
-static char *tgtadm_emsg[] = {
-	"",
-	"unknown error",
-	"out of memory",
-	"can't find the driver",
-	"can't find the target", /* 5 */
+static const char * tgtadm_strerror(int err)
+{
+	static const struct {
+		enum tgtadm_errno err;
+		char *desc;
+	} errors[] = {
+		{ TGTADM_SUCCESS, "success" },
+		{ TGTADM_UNKNOWN_ERR, "unknown error" },
+		{ TGTADM_NOMEM, "out of memory" },
+		{ TGTADM_NO_DRIVER, "can't find the driver" },
+		{ TGTADM_NO_TARGET, "can't find the target" },
+		{ TGTADM_NO_LUN, "can't find the logical unit" },
+		{ TGTADM_NO_SESSION, "can't find the session" },
+		{ TGTADM_NO_CONNECTION, "can't find the connection" },
+		{ TGTADM_TARGET_EXIST, "this target already exists" },
+		{ TGTADM_LUN_EXIST, "this logical unit number already exists" },
+		{ TGTADM_ACL_EXIST, "this access control rule already exists" },
+		{ TGTADM_USER_EXIST, "this account already exists" },
+		{ TGTADM_NO_USER, "can't find the account" },
+		{ TGTADM_TOO_MANY_USER, "too many accounts" },
+		{ TGTADM_INVALID_REQUEST, "invalid request" },
+		{ TGTADM_OUTACCOUNT_EXIST,
+		  "this target already has an outgoing account" },
+		{ TGTADM_TARGET_ACTIVE, "this target is still active" },
+		{ TGTADM_LUN_ACTIVE, "this logical unit is still active" },
+		{ TGTADM_UNSUPPORTED_OPERATION,
+		  "this operation isn't supported" },
+		{ TGTADM_UNKNOWN_PARAM, "unknown parameter" }
+	};
+	int i;
 
-	"can't find the logical unit",
-	"can't find the session",
-	"can't find the connection",
-	"this target already exists",
-	"this logical unit number already exists",  /* 10 */
+	for (i = 0; i < ARRAY_SIZE(errors); ++i)
+		if (errors[i].err == err)
+			return errors[i].desc;
 
-	"this access control rule already exists",
-	"this account already exists",
-	"can't find the account",
-	"Too many accounts",
-	"invalid request", /* 15 */
-
-	"this target already has an outgoing account",
-	"this target unit is still active",
-	"this logical unit is still active",
-	"this operation isn't supported",
-	"unknown parameter", /* 20 */
-};
+	return "(unknown tgtadm_errno)";
+}
 
 struct option const long_options[] = {
 	{"debug", no_argument, NULL, 'd'},
@@ -216,7 +228,7 @@ retry:
 	}
 
 	if (rsp.err != TGTADM_SUCCESS) {
-		eprintf("%s\n", tgtadm_emsg[rsp.err]);
+		eprintf("%s\n",	tgtadm_strerror(rsp.err));
 		return EINVAL;
 	}
 
