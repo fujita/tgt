@@ -528,13 +528,6 @@ static void login_finish(struct iscsi_connection *conn)
 	switch (conn->session_type) {
 	case SESSION_NORMAL:
 		/*
-		 * update based on negotiations (but ep_login_complete
-		 * could override)
-		 */
-		conn->data_inout_max_length =
-			conn->session_param[ISCSI_PARAM_MAX_XMIT_DLENGTH].val;
-
-		/*
 		 * Allocate transport resources for this connection.
 		 */
 		ret = conn->tp->ep_login_complete(conn);
@@ -977,7 +970,7 @@ static int iscsi_data_rsp_build(struct iscsi_task *task)
 {
 	struct iscsi_connection *conn = task->conn;
 	struct iscsi_data_rsp *rsp = (struct iscsi_data_rsp *) &conn->rsp.bhs;
-	int datalen;
+	int datalen, maxdatalen;
 	int result = scsi_get_result(&task->scmd);
 
 	memset(rsp, 0, sizeof(*rsp));
@@ -991,10 +984,15 @@ static int iscsi_data_rsp_build(struct iscsi_task *task)
 	datalen = min_t(uint32_t, scsi_get_in_length(&task->scmd), task->len);
 	datalen -= task->offset;
 
-	dprintf("%d %d %d %d %x\n", datalen, scsi_get_in_length(&task->scmd),
-		task->len, conn->data_inout_max_length, rsp->itt);
+	maxdatalen = conn->tp->rdma ?
+		conn->session_param[ISCSI_PARAM_MAX_BURST].val :
+		conn->session_param[ISCSI_PARAM_MAX_XMIT_DLENGTH].val;
 
-	if (datalen <= conn->data_inout_max_length) {
+	dprintf("%d %d %d %" PRIu32 "%x\n", datalen,
+		scsi_get_in_length(&task->scmd), task->len, maxdatalen,
+		rsp->itt);
+
+	if (datalen <= maxdatalen) {
 		rsp->flags = ISCSI_FLAG_CMD_FINAL;
 
 		/* collapse status into final packet if successful */
@@ -1007,7 +1005,7 @@ static int iscsi_data_rsp_build(struct iscsi_task *task)
 			calc_residual((struct iscsi_cmd_rsp *) rsp, task);
 		}
 	} else
-		datalen = conn->data_inout_max_length;
+		datalen = maxdatalen;
 
 	rsp->exp_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn);
 	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn + MAX_QUEUE_CMD);
@@ -1026,7 +1024,7 @@ static int iscsi_r2t_build(struct iscsi_task *task)
 {
 	struct iscsi_connection *conn = task->conn;
 	struct iscsi_r2t_rsp *rsp = (struct iscsi_r2t_rsp *) &conn->rsp.bhs;
-	int length;
+	uint32_t length;
 
 	memset(rsp, 0, sizeof(*rsp));
 
@@ -1040,7 +1038,8 @@ static int iscsi_r2t_build(struct iscsi_task *task)
 	/* return next statsn for this conn w/o advancing it */
 	rsp->statsn = cpu_to_be32(conn->stat_sn);
 	rsp->ttt = (unsigned long) task;
-	length = min(task->r2t_count, conn->data_inout_max_length);
+	length = min_t(uint32_t, task->r2t_count,
+		       conn->session_param[ISCSI_PARAM_MAX_BURST].val);
 	rsp->data_length = cpu_to_be32(length);
 
 	return 0;

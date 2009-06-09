@@ -58,8 +58,6 @@ int conn_init(struct iscsi_connection *conn)
 	conn->refcount = 1;
 	conn->state = STATE_FREE;
 	param_set_defaults(conn->session_param, session_keys);
-	conn->data_inout_max_length =
-		conn->session_param[ISCSI_PARAM_MAX_XMIT_DLENGTH].val;
 
 	INIT_LIST_HEAD(&conn->clist);
 	INIT_LIST_HEAD(&conn->tx_clist);

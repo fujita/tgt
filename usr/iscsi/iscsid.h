@@ -146,7 +146,6 @@ struct iscsi_connection {
 
 	int tid;
 	struct param session_param[ISCSI_PARAM_MAX];
-	int data_inout_max_length;
 
 	char *initiator;
 	uint8_t isid[6];

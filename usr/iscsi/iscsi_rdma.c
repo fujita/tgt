@@ -241,7 +241,7 @@ static int waiting_rdma_slot;
  * per connection, but many tasks might be in progress on the connection.
  * Internal flow control stops tasks when there are no slots.
  *
- * RDMA size tradeoffs:
+ * RDMA size tradeoffs (MaxBurstLength):
  *    big RDMA operations are more efficient
  *    small RDMA operations better for fairness with many clients
  *    small RDMA operations allow better pipelining
@@ -249,8 +249,6 @@ static int waiting_rdma_slot;
  *        entire buffer to transport in one go
  */
 #define RDMA_PER_CONN 20
-#define RDMA_TRANSFER_SIZE (512 * 1024)
-
 
 #define MAX_POLL_WC 8
 
@@ -1244,17 +1242,9 @@ static int iscsi_rdma_login_complete(struct iscsi_connection *conn)
 	ci->rsize = hdrsz + trdsl;
 	ci->max_outst_pdu = outst_pdu;
 	ret = iser_init_comm(ci);
-	if (ret) {
+	if (ret)
 		eprintf("iser_init_comm failed\n");
-		goto out;
-	}
 
-	/*
-	 * How much data to grab in an RDMA operation, read or write.
-	 */
-	conn->data_inout_max_length = RDMA_TRANSFER_SIZE;
-
-out:
 	return ret;
 }
 
