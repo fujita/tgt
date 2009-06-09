@@ -27,6 +27,7 @@
 #include "iscsid.h"
 #include "tgtd.h"
 #include "util.h"
+#include "tgtadm_error.h"
 
 void conn_add_to_session(struct iscsi_connection *conn, struct iscsi_session *session)
 {
@@ -213,27 +214,30 @@ int conn_take_fd(struct iscsi_connection *conn)
 	return 0;
 }
 
+/* called by tgtadm */
 int conn_close_force(uint32_t tid, uint64_t sid, uint32_t cid)
 {
 	struct iscsi_target* target = NULL;
 	struct iscsi_session *session;
 	struct iscsi_connection *conn;
+	int sess_found = 0;
 
 	target = target_find_by_id(tid);
 	if (!target)
-		return 0;
+		return TGTADM_NO_TARGET;
 
 	list_for_each_entry(session, &target->sessions_list, slist) {
 		if (session->tsih == sid) {
+			sess_found = 1;
 			list_for_each_entry(conn, &session->conn_list, clist) {
 				if (conn->cid == cid) {
 					eprintf("close %" PRIx64 " %u\n", sid, cid);
 					conn_close(conn);
-					goto out;
+					return TGTADM_SUCCESS;
 				}
 			}
 		}
 	}
-out:
-	return 0;
+
+	return sess_found ? TGTADM_NO_CONNECTION : TGTADM_NO_SESSION;
 }
