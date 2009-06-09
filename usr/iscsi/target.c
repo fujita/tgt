@@ -330,7 +330,7 @@ static int iscsi_session_param_update(struct iscsi_target* target, int idx, char
 int iscsi_target_update(int mode, int op, int tid, uint64_t sid, uint64_t lun,
 			uint32_t cid, char *name)
 {
-	int idx, err = -EINVAL;
+	int idx, err = TGTADM_INVALID_REQUEST;
 	char *str;
 	struct iscsi_target* target;
 
@@ -341,15 +341,18 @@ int iscsi_target_update(int mode, int op, int tid, uint64_t sid, uint64_t lun,
 	case MODE_TARGET:
 		target = target_find_by_id(tid);
 		if (!target)
-			return -ENOENT;
+			return TGTADM_NO_TARGET;
 
 		str = name + strlen(name) + 1;
 
 		dprintf("%s:%s\n", name, str);
 
 		idx = param_index_by_name(name, session_keys);
-		if (idx >= 0)
+		if (idx >= 0) {
 			err = iscsi_session_param_update(target, idx, str);
+			if (err < 0)
+				err = TGTADM_INVALID_REQUEST;
+		}
 		break;
 	case MODE_CONNECTION:
 		if (op == OP_DELETE)
@@ -400,7 +403,7 @@ int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid, uint64_t lu
 	if (mode != MODE_SYSTEM) {
 	    target = target_find_by_id(tid);
 	    if (!target)
-		    return 0;
+		    return -TGTADM_NO_TARGET;
 	}
 
 	switch (mode) {
