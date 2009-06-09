@@ -359,6 +359,9 @@ static int tgt_mgmt(struct mgmt_task *mtask)
 							mtask->buf, len);
 
 			set_show_results(rsp, &err);
+		} else {
+			rsp->err = err;
+			rsp->len = sizeof(*rsp);
 		}
 		break;
 	}
