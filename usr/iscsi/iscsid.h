@@ -252,6 +252,7 @@ enum task_flags {
 #define task_pending(t)		((t)->flags & (1 << TASK_pending))
 
 #define set_task_in_scsi(t)     ((t)->flags |= (1 << TASK_in_scsi))
+#define clear_task_in_scsi(t)	((t)->flags &= ~(1 << TASK_in_scsi))
 #define task_in_scsi(t)		((t)->flags & (1 << TASK_in_scsi))
 
 extern int lld_index;
