@@ -439,6 +439,11 @@ int main(int argc, char **argv)
 	user = password = NULL;
 
 	buf = valloc(bufsz);
+	if (!buf) {
+		eprintf("%s\n",	tgtadm_strerror(TGTADM_NOMEM));
+		return ENOMEM;
+	}
+
 	memset(buf, 0, bufsz);
 	req = (struct tgtadm_req *) buf;
 
