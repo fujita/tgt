@@ -290,10 +290,10 @@ static int ssc_new(int op, char *path, char *barcode, char *capacity,
 	memcpy(mi.medium_manufacturer, "Foo     ", 8);
 	memcpy(mi.application_vendor, "Bar     ", 8);
 
-	if (!strncmp("clean", media_type, 5)) {
+	if (!strncasecmp("clean", media_type, 5)) {
 		mi.medium_type = CART_CLEAN;
 		mi.medium_type_information = 20; /* Max cleaning loads */
-	} else if (!strncmp("WORM", media_type, 4))
+	} else if (!strncasecmp("WORM", media_type, 4))
 		mi.medium_type = CART_WORM;
 	else
 		mi.medium_type = CART_DATA;
