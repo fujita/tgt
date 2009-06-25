@@ -343,9 +343,21 @@ static int ssc_new(int op, char *path, char *barcode, char *capacity,
 static int ssc_ops(int op, char *path, char *barcode, char *capacity,
 		   char *media_type)
 {
-	if (op == OP_NEW)
+	if (op == OP_NEW) {
+		if (!media_type) {
+			eprintf("Missing media type: WORM, CLEAN or DATA\n");
+			usage(1);
+		}
+		if (!barcode) {
+			eprintf("Missing the barcode param\n");
+			usage(1);
+		}
+		if (!capacity) {
+			eprintf("Missing the capacity param\n");
+			usage(1);
+		}
 		return ssc_new(op, path, barcode, capacity, media_type);
-	else if (op == OP_SHOW)
+	} else if (op == OP_SHOW)
 		return ssc_show(path);
 	else {
 		eprintf("unknown the operation type\n");
