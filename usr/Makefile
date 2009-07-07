@@ -104,7 +104,7 @@ install_doc: $(MANPAGES) $(DOCS)
 	install -d -m 755 $(DESTDIR)$(mandir)/man8
 	install -m 644 $(MANPAGES) $(DESTDIR)$(mandir)/man8
 	install -d -m 755 $(DESTDIR)$(docdir)
-	install -m 644 $(DOCS) $(docdir)
+	install -m 644 $(DOCS) $(DESTDIR)$(docdir)
 
 .PHONY: clean
 clean:
