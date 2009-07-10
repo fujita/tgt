@@ -430,7 +430,9 @@ int main(int argc, char **argv)
 	struct tgtadm_req *req;
 
 	op = tid = mode = -1;
-	total = cid = hostno = sid = lun = 0;
+	total = cid = hostno = sid = 0;
+	lun = UINT64_MAX;
+
 	rc = 0;
 	dev_type = TYPE_DISK;
 	ac_dir = ACCOUNT_TYPE_INCOMING;
@@ -678,7 +680,7 @@ int main(int argc, char **argv)
 			eprintf("'tid' option is necessary\n");
 			exit(EINVAL);
 		}
-		if (!lun) {
+		if (lun == UINT64_MAX) {
 			eprintf("'lun' option is necessary\n");
 			exit(EINVAL);
 		}
