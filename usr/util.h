@@ -2,6 +2,7 @@
 #define __UTIL_H__
 
 #include <byteswap.h>
+#include <fcntl.h>
 #include <syscall.h>
 #include <unistd.h>
 #include <errno.h>
@@ -93,42 +94,20 @@ do {									\
 
 extern unsigned long pagesize, pageshift;
 
-
-/*
- * the latest glibc have a proper sync_file_range definition but
- * most of the distributions aren't shipped with it yet.
-*/
-
-#ifndef __NR_sync_file_range
-#if defined(__i386)
-#define __NR_sync_file_range	314
-#elif defined(__x86_64__)
-#define __NR_sync_file_range	277
-#elif defined(__ia64__)
-#define __NR_sync_file_range	1300
-#elif defined(__powerpc64__) || defined(__PPC__)
-#define __NR_sync_file_range	308
-#endif
-#endif
-
-#ifndef SYNC_FILE_RANGE_WAIT_BEFORE
-#define SYNC_FILE_RANGE_WAIT_BEFORE	1
-#define SYNC_FILE_RANGE_WRITE		2
-#define SYNC_FILE_RANGE_WAIT_AFTER	4
-#endif
-
-extern long int syscall(long int sysno, ...);
-
+#ifdef SYNC_FILE_RANGE_WAIT_BEFORE
 static inline int __sync_file_range(int fd, __off64_t offset, __off64_t bytes)
 {
 	int ret;
 	unsigned int flags = SYNC_FILE_RANGE_WAIT_BEFORE | SYNC_FILE_RANGE_WRITE
 		| SYNC_FILE_RANGE_WAIT_AFTER;
 
-	ret = syscall(__NR_sync_file_range, fd, offset, bytes, flags);
+	ret = sync_file_range(fd, offset, bytes, flags);
 	if (ret)
 		ret = fsync(fd);
 	return ret;
 }
+#else
+#define __sync_file_range(fd, offset, bytes) fsync(fd)
+#endif
 
 #endif
