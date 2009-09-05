@@ -1005,8 +1005,10 @@ static int abort_task_set(struct mgmt_req *mreq, struct target* target,
 	return count;
 }
 
-void target_mgmt_request(int tid, uint64_t itn_id, uint64_t req_id,
-			 int function, uint8_t *lun_buf, uint64_t tag, int host_no)
+enum mgmt_req_result target_mgmt_request(int tid, uint64_t itn_id,
+					 uint64_t req_id, int function,
+					 uint8_t *lun_buf, uint64_t tag,
+					 int host_no)
 {
 	struct target *target;
 	struct mgmt_req *mreq;
@@ -1019,12 +1021,15 @@ void target_mgmt_request(int tid, uint64_t itn_id, uint64_t req_id,
 	target = target_lookup(tid);
 	if (!target) {
 		eprintf("invalid tid %d\n", tid);
-		return;
+		return MGMT_REQ_FAILED;
 	}
 
 	mreq = zalloc(sizeof(*mreq));
-	if (!mreq)
-		return;
+	if (!mreq) {
+		eprintf("failed to allocate mgmt_req\n");
+		return MGMT_REQ_FAILED;
+	}
+
 	mreq->mid = req_id;
 	mreq->itn_id = itn_id;
 	mreq->function = function;
@@ -1096,6 +1101,13 @@ void target_mgmt_request(int tid, uint64_t itn_id, uint64_t req_id,
 		tgt_drivers[target->lid]->mgmt_end_notify(mreq);
 		free(mreq);
 	}
+
+	if (err)
+		return err;
+	else if (send)
+		return MGMT_REQ_DONE;
+
+	return MGMT_REQ_QUEUED;
 }
 
 struct account_entry {

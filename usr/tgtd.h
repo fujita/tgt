@@ -169,6 +169,12 @@ struct mgmt_req {
 	uint64_t itn_id;
 };
 
+enum mgmt_req_result {
+	MGMT_REQ_FAILED = -1,
+	MGMT_REQ_DONE,
+	MGMT_REQ_QUEUED,
+};
+
 #ifdef USE_KERNEL
 extern int kreq_init(void);
 #else
@@ -224,9 +230,11 @@ extern int tgt_event_modify(int fd, int events);
 extern int target_cmd_queue(int tid, struct scsi_cmd *cmd);
 extern void target_cmd_done(struct scsi_cmd *cmd);
 struct scsi_cmd *target_cmd_lookup(int tid, uint64_t itn_id, uint64_t tag);
-extern void target_mgmt_request(int tid, uint64_t itn_id, uint64_t req_id,
-				int function, uint8_t *lun, uint64_t tag,
-				int host_no);
+
+extern enum mgmt_req_result target_mgmt_request(int tid, uint64_t itn_id,
+						uint64_t req_id, int function,
+						uint8_t *lun, uint64_t tag,
+						int host_no);
 
 extern void target_cmd_io_done(struct scsi_cmd *cmd, int result);
 extern int ua_sense_del(struct scsi_cmd *cmd, int del);

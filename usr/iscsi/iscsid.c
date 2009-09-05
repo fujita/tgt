@@ -1332,9 +1332,23 @@ static int iscsi_tm_execute(struct iscsi_task *task)
 
 	if (err)
 		task->result = err;
-	else
-		target_mgmt_request(conn->session->target->tid, conn->session->tsih,
-				    (unsigned long) task, fn, req->lun, req->itt, 0);
+	else {
+		int ret;
+		ret = target_mgmt_request(conn->session->target->tid,
+					  conn->session->tsih,
+					  (unsigned long)task, fn, req->lun,
+					  req->itt, 0);
+		set_task_in_scsi(task);
+		switch (ret) {
+		case MGMT_REQ_QUEUED:
+			break;
+		case MGMT_REQ_FAILED:
+		case MGMT_REQ_DONE:
+			clear_task_in_scsi(task);
+			break;
+		}
+	}
+
 	return err;
 }
 
