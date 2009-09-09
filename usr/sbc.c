@@ -128,9 +128,6 @@ static int sbc_read_capacity(int host_no, struct scsi_cmd *cmd)
 	unsigned char key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_LUN_NOT_SUPPORTED;
 
-	if (device_reserved(cmd))
-		return SAM_STAT_RESERVATION_CONFLICT;
-
 	if (!(scb[8] & 0x1) & (scb[2] | scb[3] | scb[4] | scb[5])) {
 		asc = ASC_INVALID_FIELD_IN_CDB;
 		goto sense;
@@ -164,9 +161,6 @@ static int sbc_service_action(int host_no, struct scsi_cmd *cmd)
 {
 	uint32_t *data;
 	uint64_t size;
-
-	if (device_reserved(cmd))
-		return SAM_STAT_RESERVATION_CONFLICT;
 
 	if (cmd->scb[1] != SAI_READ_CAPACITY_16)
 		goto sense;
