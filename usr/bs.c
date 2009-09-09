@@ -98,7 +98,7 @@ retest:
 		dprintf("found %p\n", cmd);
 
 		list_del(&cmd->bs_list);
-		list_add(&cmd->bs_list, &info->ack_list);
+		list_add_tail(&cmd->bs_list, &info->ack_list);
 	}
 
 	pthread_mutex_unlock(&info->finished_lock);
@@ -214,7 +214,7 @@ static void *bs_thread_worker_fn(void *arg)
 
 		if (sig_fd < 0) {
 			pthread_mutex_lock(&info->finished_lock);
-			list_add(&cmd->bs_list, &info->finished_list);
+			list_add_tail(&cmd->bs_list, &info->finished_list);
 			pthread_mutex_unlock(&info->finished_lock);
 
 			pthread_cond_signal(&info->finished_cond);
@@ -402,7 +402,7 @@ int bs_thread_cmd_submit(struct scsi_cmd *cmd)
 
 	pthread_mutex_lock(&info->pending_lock);
 
-	list_add(&cmd->bs_list, &info->pending_list);
+	list_add_tail(&cmd->bs_list, &info->pending_list);
 
 	pthread_mutex_unlock(&info->pending_lock);
 
