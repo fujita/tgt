@@ -2,12 +2,13 @@
 #define __UTIL_H__
 
 #include <byteswap.h>
+#include <endian.h>
+#include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <syscall.h>
 #include <unistd.h>
-#include <errno.h>
-#include <endian.h>
-#include <sys/syscall.h>
+
 #include "be_byteshift.h"
 
 #define roundup(x, y) ((((x) + ((y) - 1)) / (y)) * (y))
@@ -114,6 +115,33 @@ static inline int __sync_file_range(int fd, __off64_t offset, __off64_t bytes)
 }
 #else
 #define __sync_file_range(fd, offset, bytes) fsync(fd)
+#endif
+
+#if defined(__NR_signalfd)
+static inline int __signalfd(int fd, const sigset_t *mask, int flags)
+{
+	int fd2, ret;
+
+	fd2 = syscall(__NR_signalfd, fd, mask, _NSIG / 8);
+	if (fd2 < 0)
+		return fd2;
+
+	ret = fcntl(fd2, F_GETFL);
+	if (ret < 0) {
+		close(fd2);
+		return -1;
+	}
+
+	ret = fcntl(fd2, F_SETFL, ret | O_NONBLOCK);
+	if (ret < 0) {
+		close(fd2);
+		return -1;
+	}
+
+	return fd2;
+}
+#else
+#define __signalfd() (-1)
 #endif
 
 #endif

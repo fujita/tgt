@@ -23,7 +23,15 @@
 #include <string.h>
 #include <inttypes.h>
 #include <pthread.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <syscall.h>
+#include <sys/types.h>
 #include <sys/epoll.h>
+#include <linux/types.h>
+#include <linux/signalfd.h>
 
 #include "list.h"
 #include "tgtd.h"
@@ -32,6 +40,10 @@
 #include "bs_thread.h"
 
 static LIST_HEAD(bst_list);
+
+static int sig_fd = -1;
+static LIST_HEAD(sig_finished_list);
+static pthread_mutex_t sig_finished_lock;
 
 int register_backingstore_template(struct backingstore_template *bst)
 {
@@ -140,10 +152,39 @@ rewrite:
 	}
 }
 
+void bs_sig_request_done(int fd, int events, void *data)
+{
+	int ret;
+	struct scsi_cmd *cmd;
+	struct signalfd_siginfo siginfo[16];
+	LIST_HEAD(list);
+
+	ret = read(fd, (char *)siginfo, sizeof(siginfo));
+	if (ret <= 0) {
+		return;
+	}
+
+	pthread_mutex_lock(&sig_finished_lock);
+	list_splice_init(&sig_finished_list, &list);
+	pthread_mutex_unlock(&sig_finished_lock);
+
+	while (!list_empty(&list)) {
+		cmd = list_first_entry(&list, struct scsi_cmd, bs_list);
+
+		list_del(&cmd->bs_list);
+
+		cmd->scsi_cmd_done(cmd, scsi_get_result(cmd));
+	}
+}
+
 static void *bs_thread_worker_fn(void *arg)
 {
 	struct bs_thread_info *info = arg;
 	struct scsi_cmd *cmd;
+	sigset_t set;
+
+	sigfillset(&set);
+	sigprocmask(SIG_BLOCK, &set, NULL);
 
 	pthread_mutex_lock(&info->startup_lock);
 	dprintf("started this thread\n");
@@ -171,20 +212,57 @@ static void *bs_thread_worker_fn(void *arg)
 
 		info->request_fn(cmd);
 
-		pthread_mutex_lock(&info->finished_lock);
-		list_add(&cmd->bs_list, &info->finished_list);
-		pthread_mutex_unlock(&info->finished_lock);
+		if (sig_fd < 0) {
+			pthread_mutex_lock(&info->finished_lock);
+			list_add(&cmd->bs_list, &info->finished_list);
+			pthread_mutex_unlock(&info->finished_lock);
 
-		pthread_cond_signal(&info->finished_cond);
+			pthread_cond_signal(&info->finished_cond);
+		} else {
+			pthread_mutex_lock(&sig_finished_lock);
+			list_add_tail(&cmd->bs_list, &sig_finished_list);
+			pthread_mutex_unlock(&sig_finished_lock);
+
+			kill(getpid(), SIGUSR2);
+		}
 	}
 
 	pthread_exit(NULL);
+}
+
+static void bs_init(void)
+{
+	static int done = 0;
+	sigset_t mask;
+	int ret;
+
+	if (done)
+		return;
+	done++;
+
+	sigemptyset(&mask);
+	sigaddset(&mask, SIGUSR2);
+	sigprocmask(SIG_BLOCK, &mask, NULL);
+
+	sig_fd = __signalfd(-1, &mask, 0);
+	if (sig_fd < 0)
+		return;
+
+	ret = tgt_event_add(sig_fd, EPOLLIN, bs_sig_request_done, NULL);
+	if (ret < 0) {
+		close (sig_fd);
+		sig_fd = -1;
+	}
+
+	pthread_mutex_init(&sig_finished_lock, NULL);
 }
 
 int bs_thread_open(struct bs_thread_info *info, request_func_t *rfn,
 		   int nr_threads)
 {
 	int i, ret;
+
+	bs_init();
 
 	info->request_fn = rfn;
 
@@ -211,10 +289,13 @@ int bs_thread_open(struct bs_thread_info *info, request_func_t *rfn,
 		goto close_command_fd;
 	}
 
-	ret = tgt_event_add(info->done_fd[0], EPOLLIN, bs_thread_request_done, info);
-	if (ret) {
-		eprintf("failed to add epoll event\n");
-		goto close_done_fd;
+	if (sig_fd < 0) {
+		ret = tgt_event_add(info->done_fd[0], EPOLLIN, bs_thread_request_done,
+				    info);
+		if (ret) {
+			eprintf("failed to add epoll event\n");
+			goto close_done_fd;
+		}
 	}
 
 	ret = pthread_create(&info->ack_thread, NULL, bs_thread_ack_fn, info);
@@ -263,7 +344,9 @@ destroy_threads:
 		eprintf("stopped the worker thread %d\n", i - 1);
 	}
 event_del:
-	tgt_event_del(info->done_fd[0]);
+	if (sig_fd < 0)
+		tgt_event_del(info->done_fd[0]);
+
 close_done_fd:
 	close(info->done_fd[0]);
 	close(info->done_fd[1]);
@@ -300,7 +383,8 @@ void bs_thread_close(struct bs_thread_info *info)
 	pthread_mutex_destroy(&info->pending_lock);
 	pthread_mutex_destroy(&info->startup_lock);
 
-	tgt_event_del(info->done_fd[0]);
+	if (sig_fd < 0)
+		tgt_event_del(info->done_fd[0]);
 
 	close(info->done_fd[0]);
 	close(info->done_fd[1]);
