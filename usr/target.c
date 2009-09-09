@@ -1601,7 +1601,8 @@ int tgt_target_show_all(char *buf, int rest)
 				 _TAB3 "Size: %s\n"
 				 _TAB3 "Online: %s\n"
 				 _TAB3 "Removable media: %s\n"
-				 _TAB3 "Backing store: %s\n",
+				 _TAB3 "Backing store type: %s\n"
+				 _TAB3 "Backing store path: %s\n",
 				 lu->lun,
   				 print_type(lu->attrs.device_type),
 				 lu->attrs.scsi_id,
@@ -1609,7 +1610,10 @@ int tgt_target_show_all(char *buf, int rest)
 				 print_disksize(lu->size),
 				 lu->attrs.online ? "Yes" : "No",
 				 lu->attrs.removable ? "Yes" : "No",
-				 lu->path ? : "No backing store");
+				 lu->bst ?
+					(lu->bst->bs_name ? : "Unknown") :
+					"None",
+				 lu->path ? : "None");
 
 		if (!strcmp(tgt_drivers[target->lid]->name, "iscsi")) {
 			int i, aid;

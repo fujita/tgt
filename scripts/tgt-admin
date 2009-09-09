@@ -791,8 +791,8 @@ sub show_target_info {
 		}
 	# Returns backing store
 	} elsif ($task eq "backing_stores") {
-		if ($tgtadm_output{$existing_target} =~ m/\s+Backing store: (?!No backing store)(.+)/ ) {
-			my @backing_stores = $tgtadm_output{$existing_target} =~ m{\s+Backing store: (?!No backing store\n)(.+)}g;
+		if ($tgtadm_output{$existing_target} =~ m/\s+Backing store path: (?!None)(.+)/ ) {
+			my @backing_stores = $tgtadm_output{$existing_target} =~ m{\s+Backing store path: (?!None\n)(.+)}g;
 			return @backing_stores;
 		}
 		return;
