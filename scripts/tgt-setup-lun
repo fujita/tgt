@@ -21,20 +21,30 @@
 
 usage()
 {
-	name=$(basename $0)
-	echo "usage: $name -d dev -n target_name [initiator_IP1 initiator_IP2 ...] ";
-	echo "example: $name -d /dev/sdb1 -n noni 192.168.10.63";
+	name=$(basename $0);
+	echo "usage:";
+	echo -e "\t$name -n tgt_name -d dev -b bs_name -t transport [initiator_IP1 initiator_IP2 ...]";
+	echo "defaults:";
+	echo -e "\tbacking store: rdwr";
+	echo -e "\ttransport: iscsi";
+	echo -e "\tinitiator: ALL";
+	echo "examples:";
+	echo -e "\t$name -n tgt-1 -d /dev/sdb1 192.168.1.2";
+	echo -e "\t$name -n tgt-2 -d /tmp/null -b null -t iser";
+	echo -e "\t$name -n tgt-3 -d ~/disk3.bin -b rdwr 192.168.1.2 192.168.1.3";
 }
 
 verify_params()
 {
-	if ! [ "$dev" ]; then
+	if ! [ "$dev" -o "$bs_type" == "null" ]; then
 		echo "Error: a device is mandatory";
 		exit 1;
+	else
+		return;
 	fi
 
 	# Make sure that the device exists
-	if ! [ -b $dev -o -f $dev ]; then
+	if ! [ -b $dev -o -f $dev -o -c $dev ]; then
 		echo "Error: $dev is not a device";
 		exit 1;
 	fi
@@ -43,11 +53,16 @@ verify_params()
 		echo "Error: target name is mandatory";
 		exit 1;
 	fi
+
+	if ! [ "$lld_name" ]; then
+		echo "Error: lld name empty";
+		exit 1;
+	fi
 }
 
 find_vacant_tgt_id()
 {
-	id_list=$(tgtadm --lld iscsi --op show --mode target | grep Target | cut -d" " -f2 | sed s/://)
+	id_list=$(tgtadm --lld $lld_name --op show --mode target | grep Target | cut -d" " -f2 | sed s/://)
 
 	next_vacant_id=1
 
@@ -69,7 +84,7 @@ find_vacant_lun()
 	next_vacant_lun=0
 	tmp_file=/tmp/target_list.txt
 
-	tgtadm --lld iscsi --op show --mode target > $tmp_file
+	tgtadm --lld $lld_name --op show --mode target > $tmp_file
 
 	while read line; do
 		# Check if we finished going over this target
@@ -105,12 +120,12 @@ find_vacant_lun()
 
 err_exit()
 {
-	echo "Deleting the new target"
-	tgtadm --lld iscsi --op delete --mode target --tid $tid
+	echo "Deleting new target, tid=$tid"
+	tgtadm --lld $lld_name --op delete --mode target --tid $tid
 	res=$?
 
 	if [ $res -ne 0 ]; then
-		echo "Error: could not delete a target"
+		echo "Error: failed to delete target, tid=$tid"
 	fi
 
 	exit 1
@@ -118,7 +133,7 @@ err_exit()
 
 check_if_tgt_exists()
 {
-	tgt_list=$(tgtadm --lld iscsi --op show --mode target | grep Target | cut -d" " -f3)
+	tgt_list=$(tgtadm --lld $lld_name --op show --mode target | grep Target | cut -d" " -f3)
 
 	for curr_tgt in $tgt_list; do
 		if [ $tgt_name = $curr_tgt ]; then
@@ -134,13 +149,19 @@ if [ $# -eq 0 ]; then
 	exit 1
 fi
 
-while getopts "d:n:h" opt
+lld_name="iscsi"
+
+while getopts "d:n:b:t:h:" opt
 do
 	case ${opt} in
 	d)
 		dev=$OPTARG;;
 	n)
 		tgt_name=$OPTARG;;
+	b)
+		bs_type=$OPTARG;;
+	t)
+		lld_name=$OPTARG;;
 	h*)
 		usage
 		exit 1
@@ -155,45 +176,55 @@ verify_params
 
 # Check if tgtd is running (we should have 2 daemons)
 tgtd_count=`pidof tgtd | wc -w`
-if [ $tgtd_count -ne 2 ]; then
+if [ $tgtd_count -lt 1 ]; then
 	echo "tgtd is not running"
 	echo "Exiting..."
 	exit 1
 fi
+
+echo "Using transport: $lld_name"
 
 tgt_name="iqn.2001-04.com.$(hostname -s)-$tgt_name"
 
 # Make sure that a target with the same name doesn't exist
 check_if_tgt_exists
 if [ $? -eq 1 ]; then
-	echo "Error: a target named $tgt_name already exists"
-	echo "Please select a different target name"
-	exit 1
-fi
+	echo "Error: target named $tgt_name already exists"
+	read -p "Add a new lun to the existing target? (yes/NO): " add_lun
+	if [ $add_lun != "yes" ]; then
+		exit 1
+	fi
+	tid=$(tgtadm --lld $lld_name --op show --mode target | grep $tgt_name | cut -d" " -f2)
+	tid=${tid%:}
+else
+	find_vacant_tgt_id
+	tid=$?
 
-find_vacant_tgt_id
-tid=$?
+	# Create the new target
+	echo "Creating new target (name=$tgt_name, tid=$tid)"
+	tgtadm --lld $lld_name --op new --mode target --tid $tid -T $tgt_name
+	res=$?
 
-# Create the new target
-echo "Creating the new target ($tgt_name)"
-tgtadm --lld iscsi --op new --mode target --tid $tid -T $tgt_name
-res=$?
-
-if [ $res -ne 0 ]; then
-	echo "Error: could not create a target"
-	exit 1
+	if [ $res -ne 0 ]; then
+		echo "Error: failed to create target (name=$tgt_name, tid=$tid)"
+		exit 1
+	fi
 fi
 
 find_vacant_lun $tid
 lun=$?
 
 # Add a logical unit to the target
-echo "Adding a logical unit ($dev) to the target"
-tgtadm --lld iscsi --op new --mode logicalunit --tid $tid --lun $lun -b $dev
+echo "Adding a logical unit ($dev) to target, tid=$tid"
+if [ $bs_type ]; then
+	echo "Setting backing store type: $bs_type"
+	bs_opt="-E $bs_type"
+fi
+tgtadm --lld $lld_name --op new --mode logicalunit --tid $tid --lun $lun -b $dev $bs_opt
 res=$?
 
 if [ $res -ne 0 ]; then
-	echo "Error: could not add a logical unit to the target"
+	echo "Error: failed to add a logical unit ($dev) to target, tid=$tid"
 	err_exit
 fi
 
@@ -202,22 +233,21 @@ if test "$initiators" ; then
 	# Allow access only for specific initiators
 	echo "Accepting connections only from $initiators"
 	for initiator in $initiators; do
-		tgtadm --lld iscsi --op bind --mode target --tid $tid -I $initiator
+		tgtadm --lld $lld_name --op bind --mode target --tid $tid -I $initiator
 		res=$?
 
 		if [ $res -ne 0 ]; then
-			echo "Error: could not assign an initiator to the target"
-			err_exit
+			echo "Error: could not assign initiator $initiator to the target"
 		fi
 	done
 else
 	# Allow access for everyone
-	echo "Accepting connections from every initiator"
-	tgtadm --lld iscsi --op bind --mode target --tid $tid -I ALL
+	echo "Accepting connections from all initiators"
+	tgtadm --lld $lld_name --op bind --mode target --tid $tid -I ALL
 	res=$?
 
 	if [ $res -ne 0 ]; then
-		echo "Error: could not assign initiators to the target"
+		echo "Error: failed to set access for all initiators"
 		err_exit
 	fi
 fi
