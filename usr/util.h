@@ -95,7 +95,8 @@ do {									\
 
 extern unsigned long pagesize, pageshift;
 
-#if defined(__NR_sync_file_range) || defined(__NR_sync_file_range2)
+#if defined (SYNC_FILE_RANGE_WAIT_BEFORE) && \
+	(defined(__NR_sync_file_range) || defined(__NR_sync_file_range2))
 static inline int __sync_file_range(int fd, __off64_t offset, __off64_t bytes)
 {
 	int ret;
