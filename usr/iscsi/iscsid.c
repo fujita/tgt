@@ -173,9 +173,10 @@ void text_key_add(struct iscsi_connection *conn, char *key, char *value)
 
 	if (conn->rsp.datasize + len > INCOMING_BUFSIZE) {
 		buffer = realloc(buffer, conn->rsp.datasize + len);
-		if (buffer)
+		if (buffer) {
 			conn->rsp_buffer = buffer;
-		else
+			conn->rsp.data = conn->rsp_buffer;
+		} else
 			goto drop;
 	}
 
