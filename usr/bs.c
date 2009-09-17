@@ -31,7 +31,6 @@
 #include <sys/types.h>
 #include <sys/epoll.h>
 #include <linux/types.h>
-#include <linux/signalfd.h>
 
 #include "list.h"
 #include "tgtd.h"

@@ -4,6 +4,10 @@ EXTRAVERSION = $(if $(shell git show-ref 2>/dev/null),-git-$(shell git show-ref 
 mandir = /usr/share/man
 docdir = /usr/share/doc/tgt
 
+ifneq ($(shell test -e /usr/include/linux/signalfd.h && echo 1),)
+CFLAGS += -DUSE_SIGNALFD
+endif
+
 ifneq ($(IBMVIO),)
 CFLAGS += -DIBMVIO -DUSE_KERNEL
 TGTD_OBJS += $(addprefix ibmvio/, ibmvio.o)

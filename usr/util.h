@@ -8,6 +8,7 @@
 #include <signal.h>
 #include <syscall.h>
 #include <unistd.h>
+#include <linux/types.h>
 
 #include "be_byteshift.h"
 
@@ -117,7 +118,9 @@ static inline int __sync_file_range(int fd, __off64_t offset, __off64_t bytes)
 #define __sync_file_range(fd, offset, bytes) fsync(fd)
 #endif
 
-#if defined(__NR_signalfd)
+#if defined(__NR_signalfd) && defined(USE_SIGNALFD)
+#include <linux/signalfd.h>
+
 static inline int __signalfd(int fd, const sigset_t *mask, int flags)
 {
 	int fd2, ret;
@@ -141,7 +144,9 @@ static inline int __signalfd(int fd, const sigset_t *mask, int flags)
 	return fd2;
 }
 #else
-#define __signalfd() (-1)
+#define __signalfd(fd, mask, flags) (-1)
+struct signalfd_siginfo {
+};
 #endif
 
 #endif
