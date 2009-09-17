@@ -165,10 +165,15 @@ struct iscsi_connection {
 	void *req_buffer;
 	struct iscsi_pdu rsp;
 	void *rsp_buffer;
+	int rsp_buffer_size;
 	unsigned char *rx_buffer;
 	unsigned char *tx_buffer;
 	int rx_size;
 	int tx_size;
+
+	uint32_t ttt;
+	int text_datasize;
+	void *text_rsp_buffer;
 
 	struct iscsi_task *rx_task;
 	struct iscsi_task *tx_task;

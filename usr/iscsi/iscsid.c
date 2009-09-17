@@ -161,21 +161,23 @@ void text_key_add(struct iscsi_connection *conn, char *key, char *value)
 	if (conn->state == STATE_FULL)
 		max_len = conn->session_param[ISCSI_PARAM_MAX_XMIT_DLENGTH].val;
 	else
-		max_len = INCOMING_BUFSIZE;
+		max_len = conn->rsp_buffer_size;
 
 	if (!conn->rsp.datasize)
 		conn->rsp.data = conn->rsp_buffer;
 
 	buffer = conn->rsp_buffer;
 
-	if (conn->rsp.datasize + len > max_len)
+	if (conn->rsp.datasize + len > max_len &&
+	    (conn->req.bhs.opcode & ISCSI_OPCODE_MASK) != ISCSI_OP_TEXT)
 		goto drop;
 
-	if (conn->rsp.datasize + len > INCOMING_BUFSIZE) {
+	if (conn->rsp.datasize + len > conn->rsp_buffer_size) {
 		buffer = realloc(buffer, conn->rsp.datasize + len);
 		if (buffer) {
 			conn->rsp_buffer = buffer;
 			conn->rsp.data = conn->rsp_buffer;
+			conn->rsp_buffer_size = conn->rsp.datasize + len;
 		} else
 			goto drop;
 	}
@@ -806,25 +808,44 @@ static void cmnd_exec_text(struct iscsi_connection *conn)
 {
 	struct iscsi_text *req = (struct iscsi_text *)&conn->req.bhs;
 	struct iscsi_text_rsp *rsp = (struct iscsi_text_rsp *)&conn->rsp.bhs;
+	int max_len = conn->session_param[ISCSI_PARAM_MAX_XMIT_DLENGTH].val;
 
 	memset(rsp, 0, BHS_SIZE);
 
-	if (be32_to_cpu(req->ttt) != 0xffffffff) {
-		/* reject */;
-	}
 	rsp->opcode = ISCSI_OP_TEXT_RSP;
 	rsp->itt = req->itt;
-	/* rsp->ttt = rsp->ttt; */
-	rsp->ttt = 0xffffffff;
 	conn->exp_cmd_sn = be32_to_cpu(req->cmdsn);
 	if (!(req->opcode & ISCSI_OP_IMMEDIATE))
 		conn->exp_cmd_sn++;
 
-	dprintf("Text request: %d\n", conn->state);
-	text_scan_text(conn);
+	if (be32_to_cpu(req->ttt) == ISCSI_RESERVED_TAG) {
+		conn->text_datasize = 0;
 
-	if (req->flags & ISCSI_FLAG_CMD_FINAL)
+		text_scan_text(conn);
+
+		conn->text_rsp_buffer = conn->rsp_buffer;
+		conn->text_datasize = conn->rsp.datasize;
+
+		if (conn->text_datasize > max_len) {
+			conn->ttt++;
+			if (conn->ttt == ISCSI_RESERVED_TAG)
+				conn->ttt++;
+		} else
+			conn->ttt = ISCSI_RESERVED_TAG;
+	} else if (!conn->text_datasize || conn->ttt != be32_to_cpu(req->ttt)) {
+		/* reject */
+		return;
+	}
+
+	if (conn->text_datasize <= max_len)
 		rsp->flags = ISCSI_FLAG_CMD_FINAL;
+
+	conn->rsp.datasize = min(max_len, conn->text_datasize);
+	conn->rsp.data = conn->text_rsp_buffer;
+	conn->text_rsp_buffer += conn->rsp.datasize;
+	conn->text_datasize -= conn->rsp.datasize;
+
+	rsp->ttt = cpu_to_be32(conn->ttt);
 
 	rsp->statsn = cpu_to_be32(conn->stat_sn++);
 	rsp->exp_cmdsn = cpu_to_be32(conn->exp_cmd_sn);

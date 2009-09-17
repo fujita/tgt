@@ -54,6 +54,7 @@ int conn_init(struct iscsi_connection *conn)
 		free(conn->req_buffer);
 		return -ENOMEM;
 	}
+	conn->rsp_buffer_size = INCOMING_BUFSIZE;
 
 	conn->refcount = 1;
 	conn->state = STATE_FREE;
