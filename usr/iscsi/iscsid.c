@@ -593,6 +593,26 @@ static int cmnd_exec_auth(struct iscsi_connection *conn)
         return res;
 }
 
+static void cmnd_reject(struct iscsi_connection *conn, uint8_t reason)
+{
+	struct iscsi_reject *rsp = (struct iscsi_reject *)&conn->rsp.bhs;
+
+	memset(rsp, 0, BHS_SIZE);
+
+	rsp->opcode = ISCSI_OP_REJECT;
+	rsp->reason = reason;
+	rsp->ffffffff = ISCSI_RESERVED_TAG;
+	rsp->flags = ISCSI_FLAG_CMD_FINAL;
+
+	rsp->statsn = cpu_to_be32(conn->stat_sn++);
+	rsp->exp_cmdsn = cpu_to_be32(conn->exp_cmd_sn);
+	rsp->max_cmdsn = cpu_to_be32(conn->max_cmd_sn);
+
+	conn->rsp.data = conn->rsp_buffer;
+	conn->rsp.datasize = BHS_SIZE;
+	memcpy(conn->rsp.data, &conn->req.bhs, BHS_SIZE);
+}
+
 static void cmnd_exec_login(struct iscsi_connection *conn)
 {
 	struct iscsi_login *req = (struct iscsi_login *)&conn->req.bhs;
@@ -602,7 +622,8 @@ static void cmnd_exec_login(struct iscsi_connection *conn)
 	memset(rsp, 0, BHS_SIZE);
 	if ((req->opcode & ISCSI_OPCODE_MASK) != ISCSI_OP_LOGIN ||
 	    !(req->opcode & ISCSI_OP_IMMEDIATE)) {
-		/* reject */
+		cmnd_reject(conn, ISCSI_REASON_PROTOCOL_ERROR);
+		return;
 	}
 
 	rsp->opcode = ISCSI_OP_LOGIN_RSP;
@@ -844,7 +865,7 @@ static void cmnd_exec_text(struct iscsi_connection *conn)
 		} else
 			conn->ttt = ISCSI_RESERVED_TAG;
 	} else if (!conn->text_datasize || conn->ttt != be32_to_cpu(req->ttt)) {
-		/* reject */
+		cmnd_reject(conn, ISCSI_REASON_INVALID_PDU_FIELD);
 		return;
 	}
 
@@ -902,7 +923,7 @@ static int cmnd_execute(struct iscsi_connection *conn)
 		hton24(conn->rsp.bhs.dlength, conn->rsp.datasize);
 		break;
 	default:
-		/* reject */
+		cmnd_reject(conn, ISCSI_REASON_CMD_NOT_SUPPORTED);
 		res = 1;
 		break;
 	}
