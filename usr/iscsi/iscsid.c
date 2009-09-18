@@ -773,6 +773,7 @@ static void text_scan_text(struct iscsi_connection *conn)
 			struct sockaddr_storage ss;
 			socklen_t slen, blen;
 			char *p, buf[NI_MAXHOST + 128];
+			int ret;
 
 			if (value[0] == 0)
 				continue;
@@ -781,15 +782,25 @@ static void text_scan_text(struct iscsi_connection *conn)
 			blen = sizeof(buf);
 
 			slen = sizeof(ss);
-			conn->tp->ep_getsockname(conn, (struct sockaddr *) &ss,
-						 &slen);
+			ret = conn->tp->ep_getsockname(conn,
+						       (struct sockaddr *)&ss,
+						       &slen);
+			if (ret) {
+				eprintf("getsockname failed\n");
+				continue;
+			}
+
 			if (ss.ss_family == AF_INET6) {
 				*p++ = '[';
 				blen--;
 			}
 
-			getnameinfo((struct sockaddr *) &ss, slen, p, blen,
-				    NULL, 0, NI_NUMERICHOST);
+			ret = getnameinfo((struct sockaddr *)&ss, slen, p, blen,
+					  NULL, 0, NI_NUMERICHOST);
+			if (ret) {
+				eprintf("getnameinfo failed, %m\n");
+				continue;
+			}
 
 			p = buf + strlen(buf);
 
