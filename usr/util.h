@@ -119,6 +119,13 @@ static inline int __sync_file_range(int fd, __off64_t offset, __off64_t bytes)
 #endif
 
 #if defined(__NR_signalfd) && defined(USE_SIGNALFD)
+
+/*
+ * workaround for broken linux/signalfd.h including
+ * usr/include/linux/fcntl.h
+ */
+#define _LINUX_FCNTL_H
+
 #include <linux/signalfd.h>
 
 static inline int __signalfd(int fd, const sigset_t *mask, int flags)
