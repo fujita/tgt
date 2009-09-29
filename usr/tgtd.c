@@ -39,7 +39,7 @@
 #include "work.h"
 #include "util.h"
 
-unsigned long pagesize, pageshift, pagemask;
+unsigned long pagesize, pageshift;
 
 int system_active = 1;
 static int ep_fd;
