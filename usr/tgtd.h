@@ -277,6 +277,8 @@ extern int dtd_load_unload(int tid, uint64_t lun, int load, char *file);
 extern int register_backingstore_template(struct backingstore_template *bst);
 extern struct backingstore_template *get_backingstore_template(const char *name);
 
+extern int setup_param(char *name, int (*parser)(char *));
+
 struct event_data {
 	union {
 		event_handler_t handler;

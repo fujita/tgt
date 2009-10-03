@@ -307,6 +307,44 @@ static void lld_exit(void)
 	}
 }
 
+struct tgt_param {
+	int (*parse_func)(char *);
+	char *name;
+};
+
+static struct tgt_param params[64];
+
+int setup_param(char *name, int (*parser)(char *))
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(params); i++)
+		if (!params[i].name)
+			break;
+
+	if (i < ARRAY_SIZE(params)) {
+		params[i].name = name;
+		params[i].parse_func = parser;
+
+		return 0;
+	} else
+		return -1;
+}
+
+static int parse_params(char *name, char *p)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(params) && params[i].name; i++) {
+		if (!strcmp(name, params[i].name))
+			return params[i].parse_func(p);
+	}
+
+	fprintf(stderr, "'%s' is an unknown option\n", name);
+
+	return -1;
+}
+
 int main(int argc, char **argv)
 {
 	struct sigaction sa_old;
@@ -314,6 +352,7 @@ int main(int argc, char **argv)
 	int err, ch, longindex, nr_lld = 0;
 	int is_daemon = 1, is_debug = 0;
 	int use_kernel = 0;
+	int ret;
 
 	/* do not allow ctrl-c for now... */
 	sa_new.sa_handler = signal_catch;
@@ -327,6 +366,8 @@ int main(int argc, char **argv)
 	for (pageshift = 0;; pageshift++)
 		if (1UL << pageshift == pagesize)
 			break;
+
+	opterr = 0;
 
 	while ((ch = getopt_long(argc, argv, short_options, long_options,
 				 &longindex)) >= 0) {
@@ -344,7 +385,13 @@ int main(int argc, char **argv)
 			usage(0);
 			break;
 		default:
-			usage(1);
+			if (strncmp(argv[optind - 1], "--", 2))
+				usage(1);
+
+			ret = parse_params(argv[optind - 1] + 2, argv[optind]);
+			if (ret)
+				usage(1);
+
 			break;
 		}
 	}
