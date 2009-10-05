@@ -2,7 +2,7 @@
 #
 # This tools parses /etc/tgt/targets.conf file and configures tgt
 #
-# You can find more info on http://wpkg.org/TGT-admin and download the 
+# You can find more info on http://wpkg.org/TGT-admin and download the
 # source code by pointing wget to http://wpkg.org/tgt-admin
 #
 # Author:  Tomasz Chmielewski

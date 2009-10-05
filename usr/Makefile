@@ -1,9 +1,3 @@
-VERSION = 0.9.9
-EXTRAVERSION = $(if $(shell git show-ref 2>/dev/null),-git-$(shell git show-ref --head --abbrev|head -1|awk '{print $$1}'))
-
-mandir = /usr/share/man
-docdir = /usr/share/doc/tgt
-
 ifneq ($(shell test -e /usr/include/linux/signalfd.h && echo 1),)
 CFLAGS += -DUSE_SIGNALFD
 endif
@@ -64,16 +58,10 @@ CFLAGS += -DTGT_VERSION=\"$(VERSION)$(EXTRAVERSION)\"
 LIBS += -lpthread
 
 PROGRAMS += tgtd tgtadm tgtimg
-SCRIPTS += ../scripts/tgt-setup-lun ../scripts/tgt-admin
 TGTD_OBJS += tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o \
 		parser.o spc.o sbc.o mmc.o osd.o scc.o smc.o \
 		ssc.o bs_ssc.o libssc.o \
 		bs_null.o bs_sg.o bs.o libcrc32c.o
-MANPAGES = ../doc/manpages/tgtadm.8 ../doc/manpages/tgt-admin.8 \
-		../doc/manpages/tgt-setup-lun.8
-DOCS = ../doc/README.fcoe ../doc/README.ibmvstgt ../doc/README.iscsi ../doc/README.iser \
-	    ../doc/README.lu_configuration ../doc/README.mmc ../doc/targets.conf.example \
-	    ../doc/tmf.txt ../doc/TODO
 
 TGTD_DEP = $(TGTD_OBJS:.o=.d)
 
@@ -100,15 +88,9 @@ tgtimg: tgtimg.o libssc.o libcrc32c.o
 	@$(CC) -MM $(CFLAGS) -MF $*.d -MT $*.o $*.c
 
 .PHONY: install
-install: $(PROGRAMS) $(SCRIPTS) install_doc
+install: $(PROGRAMS)
 	install -d -m 755 $(DESTDIR)/usr/sbin
-	install -m 755 $(PROGRAMS) $(SCRIPTS) $(DESTDIR)/usr/sbin
-
-install_doc: $(MANPAGES) $(DOCS)
-	install -d -m 755 $(DESTDIR)$(mandir)/man8
-	install -m 644 $(MANPAGES) $(DESTDIR)$(mandir)/man8
-	install -d -m 755 $(DESTDIR)$(docdir)
-	install -m 644 $(DOCS) $(DESTDIR)$(docdir)
+	install -m 755 $(PROGRAMS) $(DESTDIR)/usr/sbin
 
 .PHONY: clean
 clean:
