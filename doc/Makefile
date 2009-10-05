@@ -1,5 +1,5 @@
-mandir = /usr/share/man
-docdir = /usr/share/doc/tgt
+mandir ?= $(PREFIX)/share/man
+docdir ?= $(PREFIX)/share/doc/tgt
 
 MANPAGES = manpages/tgtadm.8 manpages/tgt-admin.8 \
 		manpages/tgt-setup-lun.8

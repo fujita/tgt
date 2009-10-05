@@ -1,3 +1,5 @@
+sbindir ?= $(PREFIX)/sbin
+
 ifneq ($(shell test -e /usr/include/linux/signalfd.h && echo 1),)
 CFLAGS += -DUSE_SIGNALFD
 endif
@@ -89,8 +91,8 @@ tgtimg: tgtimg.o libssc.o libcrc32c.o
 
 .PHONY: install
 install: $(PROGRAMS)
-	install -d -m 755 $(DESTDIR)/usr/sbin
-	install -m 755 $(PROGRAMS) $(DESTDIR)/usr/sbin
+	install -d -m 755 $(DESTDIR)$(sbindir)
+	install -m 755 $(PROGRAMS) $(DESTDIR)$(sbindir)
 
 .PHONY: clean
 clean:
