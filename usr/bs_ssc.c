@@ -347,7 +347,7 @@ static int resp_var_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length,
 
 	ret = skip_next_header(cmd->dev);
 	if (ret) {
-		sense_data_build(cmd, MEDIUM_ERROR, ASC_READ_ERROR);
+		sense_data_build(cmd, MEDIUM_ERROR, ASC_MEDIUM_FORMAT_CORRUPT);
 		result = SAM_STAT_CHECK_CONDITION;
 	}
 out:
