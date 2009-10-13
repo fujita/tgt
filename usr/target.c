@@ -237,7 +237,7 @@ int it_nexus_create(int tid, uint64_t itn_id, int host_no, char *info)
 	struct scsi_lu *lu;
 	struct it_nexus_lu_info *itn_lu;
 
-	dprintf("%d %" PRIu64 "%d\n", tid, itn_id, host_no);
+	dprintf("%d %" PRIu64 " %d\n", tid, itn_id, host_no);
 	/* for reserve/release code */
 	if (!itn_id)
 		return -EINVAL;
