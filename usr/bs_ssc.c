@@ -40,6 +40,10 @@
 #include "ssc.h"
 #include "libssc.h"
 
+#define SENSE_FILEMARK	0x80
+#define SENSE_EOM	0x40
+#define SENSE_ILI	0X20
+
 static void ssc_sense_data_build(struct scsi_cmd *cmd, uint8_t key,
 				 uint16_t asc, uint8_t *info, int info_len)
 {
@@ -107,6 +111,12 @@ static int resp_rewind(struct scsi_lu *lu)
 	}
 
 	return skip_next_header(lu);
+}
+
+static unsigned long current_size(struct scsi_cmd *cmd)
+{
+	struct ssc_info *ssc = dtype_priv(cmd->dev);
+	return ssc->c_blk.curr;
 }
 
 static int append_blk(struct scsi_cmd *cmd, uint8_t *data,
@@ -183,8 +193,6 @@ static int append_blk(struct scsi_cmd *cmd, uint8_t *data,
 
 	return SAM_STAT_GOOD;
 }
-
-#define SENSE_FILEMARK 0x80
 
 static int space_filemark_reverse(struct scsi_cmd *cmd, int32_t count)
 {
@@ -514,6 +522,14 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 			" ssc->blk_sz: %d\n",
 			count, length, ret, (fixed) ? "Yes" : "No",
 			block_length);
+
+		/* Check for end of media */
+		if (current_size(cmd) > ssc->mam.max_capacity) {
+			sense_data_build(cmd, NO_SENSE|SENSE_EOM,
+						NO_ADDITIONAL_SENSE);
+			result = SAM_STAT_CHECK_CONDITION;
+			break;
+		}
 
 		if (ret != length) {
 			sense_data_build(cmd, MEDIUM_ERROR, ASC_WRITE_ERROR);
