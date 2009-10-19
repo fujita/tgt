@@ -42,6 +42,9 @@
 
 #define MAX_QUEUE_CMD	128
 
+int iscsi_listen_port = ISCSI_LISTEN_PORT;
+char *iscsi_portal_addr;
+
 enum {
 	IOSTATE_FREE,
 
@@ -828,7 +831,7 @@ static void text_scan_text(struct iscsi_connection *conn)
 			if (ss.ss_family == AF_INET6)
 				 *p++ = ']';
 
-			sprintf(p, ":%d,1", ISCSI_LISTEN_PORT);
+			sprintf(p, ":%d,1", iscsi_listen_port);
 			target_list_build(conn, buf,
 					  strcmp(value, "All") ? value : NULL);
 		} else
@@ -2253,7 +2256,41 @@ static struct tgt_driver iscsi = {
 	.default_bst		= "rdwr",
 };
 
+static int iscsi_param_parser(char *p)
+{
+	while (*p) {
+		if (!strncmp(p, "portal", 6)) {
+			char *addr, *q;
+			int len;
+
+			addr = p + 7;
+
+			q = strchr(addr, ':');
+			if (q)
+				iscsi_listen_port = atoi(q + 1);
+			else
+				q = strchr(addr, ',');
+
+			if (q)
+				len = q - addr;
+			else
+				len = strlen(addr);
+
+			iscsi_portal_addr = zalloc(len + 1);
+			memcpy(iscsi_portal_addr, addr, len);
+		}
+
+		p += strcspn(p, ",");
+		if (*p == ',')
+			++p;
+	}
+
+	return 0;
+}
+
 __attribute__((constructor)) static void iscsi_driver_constructor(void)
 {
 	register_driver(&iscsi);
+
+	setup_param("iscsi", iscsi_param_parser);
 }

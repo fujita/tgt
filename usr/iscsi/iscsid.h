@@ -251,6 +251,9 @@ enum task_flags {
 	TASK_in_scsi,
 };
 
+extern int iscsi_listen_port;
+extern char *iscsi_portal_addr;
+
 #define set_task_pending(t)	((t)->flags |= (1 << TASK_pending))
 #define clear_task_pending(t)	((t)->flags &= ~(1 << TASK_pending))
 #define task_pending(t)		((t)->flags & (1 << TASK_pending))

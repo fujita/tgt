@@ -176,13 +176,13 @@ static int iscsi_tcp_init(void)
 	int ret, fd, opt, nr_sock = 0;
 
 	memset(servname, 0, sizeof(servname));
-	snprintf(servname, sizeof(servname), "%d", ISCSI_LISTEN_PORT);
+	snprintf(servname, sizeof(servname), "%d", iscsi_listen_port);
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
 
-	ret = getaddrinfo(NULL, servname, &hints, &res0);
+	ret = getaddrinfo(iscsi_portal_addr, servname, &hints, &res0);
 	if (ret) {
 		eprintf("unable to get address info, %m\n");
 		return -errno;

@@ -1146,7 +1146,7 @@ static int iscsi_rdma_init(void)
 {
 	int ret;
 	struct sockaddr_in sock_addr;
-	short int port = ISCSI_LISTEN_PORT;
+	short int port = iscsi_listen_port;
 
 	rdma_evt_channel = rdma_create_event_channel();
 
