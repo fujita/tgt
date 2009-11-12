@@ -392,6 +392,7 @@ sub add_backing_direct {
 	if (-e $backing_store && ! -d $backing_store && $can_alloc == 1) {
 		my @exec_commands;
 		my $device_type;
+		my $bs_type;
 		my %luns;
 		my @added_luns;
 		# Find out LUNs which are "reserved" in the config file
@@ -427,6 +428,10 @@ sub add_backing_direct {
 						}
 						if ($store_option eq "device-type") {
 							$device_type = $result;
+							$params_added{$store_option} = 1;
+						}
+						if ($store_option eq "bs-type") {
+							$bs_type = $result;
 							$params_added{$store_option} = 1;
 						}
 						if ($store_option eq "mode_page") {
@@ -514,6 +519,11 @@ sub add_backing_direct {
 				check_if_hash_array($$target_options_ref{"device-type"}, "device-type");
 				$device_type = $$target_options_ref{"device-type"};
 			}
+			# bs-type
+			if ($params_added{"bs-type"} ne 1) {
+				check_if_hash_array($$target_options_ref{"bs-type"}, "bs-type");
+				$bs_type = $$target_options_ref{"bs-type"};
+			}
 			# lun
 			if (length $$target_options_ref{"lun"}) {
 				check_if_hash_array($$target_options_ref{"lun"}, "lun");
@@ -526,7 +536,8 @@ sub add_backing_direct {
 		}
 		# Execute commands for a given LUN
 		if (length $device_type) { $device_type = "--device-type $device_type" };
-		execute("tgtadm --lld $driver --op new --mode logicalunit --tid $next_tid --lun $lun -b $backing_store $device_type");
+		if (length $bs_type) { $bs_type = "--bstype $bs_type" };
+		execute("tgtadm --lld $driver --op new --mode logicalunit --tid $next_tid --lun $lun -b $backing_store $device_type $bs_type");
 		foreach my $exec_command (@exec_commands) {
 			if (length $exec_command) { execute($exec_command) }
 		}
