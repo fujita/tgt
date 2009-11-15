@@ -90,7 +90,15 @@ struct service_action {
 struct device_type_operations {
 	int (*cmd_perform)(int host_no, struct scsi_cmd *cmd);
 	struct service_action *service_actions;
+	uint8_t pr_conflict_bits;
 };
+
+#define PR_SPECIAL	(1U << 5)
+#define PR_WE_FA	(1U << 4)
+#define PR_EA_FA	(1U << 3)
+#define PR_RR_FR	(1U << 2)
+#define PR_WE_FN	(1U << 1)
+#define PR_EA_FN	(1U << 0)
 
 struct device_type_template {
 	unsigned char type;
@@ -126,6 +134,16 @@ struct mode_pg {
 	uint8_t mode_data[0];	/* Rest of mode page info */
 };
 
+struct registration {
+	uint64_t key;
+	uint64_t nexus_id;
+	long ctime;
+	struct list_head registration_siblings;
+
+	uint8_t pr_scope;
+	uint8_t pr_type;
+};
+
 struct scsi_lu {
 	int fd;
 	uint64_t addr; /* persistent mapped address */
@@ -151,6 +169,10 @@ struct scsi_lu {
 	struct mode_pg *mode_pgs[0x3f];
 
 	struct lu_phy_attr attrs;
+
+	struct list_head registration_list;
+	uint32_t prgeneration;
+	struct registration *pr_holder;
 
 	/* A pointer for each modules private use.
 	 * Currently used by ssc, smc and mmc modules.

@@ -720,7 +720,7 @@ struct service_action maint_in_service_actions[] = {
 	{0, NULL}
 };
 
-struct service_action *
+static struct service_action *
 find_service_action(struct service_action *service_action, uint32_t action)
 {
 	while (service_action->cmd_perform) {
@@ -731,16 +731,20 @@ find_service_action(struct service_action *service_action, uint32_t action)
 	return NULL;
 }
 
-/**
- * This functions emulates the various commands using the 0xa3 cdb opcode
+/*
+ * This is useful for the various commands using the SERVICE ACTION
+ * format.
  */
-int spc_maint_in(int host_no, struct scsi_cmd *cmd)
+int spc_service_action(int host_no, struct scsi_cmd *cmd)
 {
 	uint8_t action;
-	struct service_action *service_action;
+	unsigned char op = cmd->scb[0];
+	struct service_action *service_action, *actions;
 
 	action = cmd->scb[1] & 0x1f;
-	service_action = find_service_action(maint_in_service_actions, action);
+	actions = cmd->dev->dev_type_template.ops[op].service_actions;
+
+	service_action = find_service_action(actions, action);
 
 	if (!service_action) {
 		scsi_set_in_resid_by_actual(cmd, 0);
@@ -750,6 +754,676 @@ int spc_maint_in(int host_no, struct scsi_cmd *cmd)
 	}
 
 	return service_action->cmd_perform(host_no, cmd);
+}
+
+static int is_pr_holder(struct scsi_lu *lu, struct registration *reg)
+{
+	if (lu->pr_holder->pr_type == PR_TYPE_WRITE_EXCLUSIVE_ALLREG ||
+	    lu->pr_holder->pr_type == PR_TYPE_EXCLUSIVE_ACCESS_ALLREG)
+		return 1;
+
+	if (lu->pr_holder == reg)
+		return 1;
+
+	return 0;
+}
+
+static int spc_pr_read_keys(int host_no, struct scsi_cmd *cmd)
+{
+	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
+	uint8_t key = ILLEGAL_REQUEST;
+	struct registration *reg;
+	uint16_t len;
+	uint32_t keys;
+	uint8_t *buf;
+	int off;
+
+	len = get_unaligned_be16(cmd->scb + 7);
+	if (len < 8)
+		goto sense;
+
+	if (scsi_get_in_length(cmd) < len)
+		goto sense;
+
+	buf = scsi_get_in_buffer(cmd);
+	memset(buf, 0, len);
+
+	len &= ~(8 - 1);
+	keys = 0;
+	off = 8;
+
+	put_unaligned_be32(cmd->dev->prgeneration, &buf[0]);
+
+	list_for_each_entry(reg, &cmd->dev->registration_list,
+			    registration_siblings) {
+
+		if (!len)
+			continue;
+		put_unaligned_be64(reg->key, &buf[off]);
+
+		len -= 8;
+		off += 8;
+		keys++;
+	}
+
+	put_unaligned_be32(keys * 8, &buf[4]);
+
+	scsi_set_in_resid_by_actual(cmd, keys * 8 + 8);
+
+	return SAM_STAT_GOOD;
+sense:
+	scsi_set_in_resid_by_actual(cmd, 0);
+	sense_data_build(cmd, key, asc);
+	return SAM_STAT_CHECK_CONDITION;
+}
+
+static int spc_pr_read_reservation(int host_no, struct scsi_cmd *cmd)
+{
+	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
+	uint8_t key = ILLEGAL_REQUEST;
+	struct registration *reg;
+	uint16_t len;
+	uint8_t *buf;
+	uint64_t res_key;
+
+	reg = cmd->dev->pr_holder;
+
+	if (reg)
+		len = 24;
+	else
+		len = 8;
+
+	if (get_unaligned_be16(cmd->scb + 7) < len)
+		goto sense;
+
+	if (scsi_get_in_length(cmd) < len)
+		goto sense;
+
+	buf = scsi_get_in_buffer(cmd);
+	memset(buf, 0, len);
+
+	put_unaligned_be32(cmd->dev->prgeneration, &buf[0]);
+
+	if (reg) {
+		put_unaligned_be32(16, &buf[4]);
+
+		if (reg->pr_type == PR_TYPE_WRITE_EXCLUSIVE_ALLREG ||
+		    reg->pr_type == PR_TYPE_EXCLUSIVE_ACCESS_ALLREG)
+			res_key = 0;
+		else
+			res_key = reg->key;
+
+		put_unaligned_be32(res_key, &buf[8]);
+		buf[21] = ((reg->pr_scope << 4) & 0xf0) | (reg->pr_type & 0x0f);
+	} else
+		put_unaligned_be32(0, &buf[4]);
+
+	scsi_set_in_resid_by_actual(cmd, len);
+
+	return SAM_STAT_GOOD;
+sense:
+	scsi_set_in_resid_by_actual(cmd, 0);
+	sense_data_build(cmd, key, asc);
+	return SAM_STAT_CHECK_CONDITION;
+}
+
+static int spc_pr_report_capabilities(int host_no, struct scsi_cmd *cmd)
+{
+	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
+	uint8_t key = ILLEGAL_REQUEST;
+	uint8_t *buf;
+	uint16_t len;
+
+	len = get_unaligned_be16(cmd->scb + 7);
+	if (len < 8)
+		goto sense;
+
+	if (scsi_get_in_length(cmd) < len)
+		goto sense;
+
+	buf = scsi_get_in_buffer(cmd);
+
+	len = 8;
+
+	memset(buf, 0, len);
+
+	put_unaligned_be16(len, &buf[0]);
+
+	/* we don't set any capability for now */
+
+	/* Persistent Reservation Type Mask format */
+	buf[4] |= 0x80; /* PR_TYPE_EXCLUSIVE_ACCESS_ALLREG */
+	buf[4] |= 0x40; /* PR_TYPE_EXCLUSIVE_ACCESS_REGONLY */
+	buf[4] |= 0x20; /* PR_TYPE_WRITE_EXCLUSIVE_REGONLY */
+	buf[4] |= 0x08; /* PR_TYPE_EXCLUSIVE_ACCESS */
+	buf[4] |= 0x02; /* PR_TYPE_WRITE_EXCLUSIVE */
+	buf[5] |= 0x01; /* PR_TYPE_EXCLUSIVE_ACCESS_ALLREG */
+
+	return SAM_STAT_GOOD;
+sense:
+	scsi_set_in_resid_by_actual(cmd, 0);
+	sense_data_build(cmd, key, asc);
+	return SAM_STAT_CHECK_CONDITION;
+}
+
+struct service_action persistent_reserve_in_actions[] = {
+	{PR_IN_READ_KEYS, spc_pr_read_keys},
+	{PR_IN_READ_RESERVATION, spc_pr_read_reservation},
+	{PR_IN_REPORT_CAPABILITIES, spc_pr_report_capabilities},
+	{0, NULL},
+};
+
+static struct registration *lookup_registration_by_nexus(struct scsi_lu *lu,
+							 struct it_nexus *itn)
+{
+	struct registration *reg;
+
+	list_for_each_entry(reg, &lu->registration_list, registration_siblings) {
+		if (reg->nexus_id == itn->itn_id &&
+		    reg->ctime == itn->ctime)
+			return reg;
+	}
+
+	return NULL;
+}
+
+static void __unregister(struct scsi_lu *lu, struct registration *reg)
+{
+	list_del(&reg->registration_siblings);
+	free(reg);
+}
+
+static int check_pr_out_basic_parameter(struct scsi_cmd *cmd)
+{
+	uint8_t spec_i_pt, all_tg_pt, aptpl;
+	uint8_t *buf;
+	uint16_t len = 24;
+
+	if (get_unaligned_be16(cmd->scb + 7) < len)
+		return 1;
+
+	if (scsi_get_out_length(cmd) < len)
+		return 1;
+
+	buf = scsi_get_out_buffer(cmd);
+
+	spec_i_pt = buf[20] & (1U << 3);
+	all_tg_pt = buf[20] & (1U << 2);
+	aptpl = buf[20] & (1U << 0);
+
+	if (spec_i_pt | all_tg_pt | aptpl) {
+		/*
+		 * for now, we say that we don't support these bits
+		 * via REPORT CAPABILITIES.
+		 */
+		return 1;
+	}
+
+	return 0;
+}
+
+static int spc_pr_register(int host_no, struct scsi_cmd *cmd)
+{
+	uint8_t force, key = ILLEGAL_REQUEST;
+	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
+	uint64_t res_key, sa_res_key;
+	int ret;
+	uint8_t *buf;
+	struct registration *reg;
+
+	force = ((cmd->scb[1] & 0x1f) == PR_OUT_REGISTER_AND_IGNORE_EXISTING_KEY);
+
+	ret = check_pr_out_basic_parameter(cmd);
+	if (ret)
+		goto sense;
+
+	buf = scsi_get_out_buffer(cmd);
+
+	res_key = get_unaligned_be64(buf);
+	sa_res_key = get_unaligned_be64(buf + 8);
+
+	reg = lookup_registration_by_nexus(cmd->dev, cmd->it_nexus);
+	if (reg) {
+		if (force || reg->key == res_key) {
+			if (sa_res_key)
+				reg->key = sa_res_key;
+			else
+				__unregister(cmd->dev, reg);
+		} else
+			return SAM_STAT_RESERVATION_CONFLICT;
+	} else {
+		if (force || !res_key) {
+			if (sa_res_key) {
+				reg = zalloc(sizeof(*reg));
+				if (!reg) {
+					key = ILLEGAL_REQUEST;
+					asc = ASC_INSUFFICENT_REGISTRATION_RESOURCES;
+					goto sense;
+				}
+
+				reg->key = sa_res_key;
+				reg->nexus_id = cmd->cmd_itn_id;
+				reg->ctime = cmd->it_nexus->ctime;
+				list_add_tail(&reg->registration_siblings,
+					      &cmd->dev->registration_list);
+			} else
+				; /* do nothing */
+		} else
+			return SAM_STAT_RESERVATION_CONFLICT;
+	}
+
+	cmd->dev->prgeneration++;
+
+	return SAM_STAT_GOOD;
+sense:
+	scsi_set_in_resid_by_actual(cmd, 0);
+	sense_data_build(cmd, key, asc);
+	return SAM_STAT_CHECK_CONDITION;
+}
+
+static int spc_pr_reserve(int host_no, struct scsi_cmd *cmd)
+{
+	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
+	uint8_t key = ILLEGAL_REQUEST;
+	uint8_t pr_scope, pr_type;
+	uint8_t *buf;
+	uint64_t res_key, sa_res_key;
+	int ret;
+	struct registration *reg, *holder;
+
+	ret = check_pr_out_basic_parameter(cmd);
+	if (ret)
+		goto sense;
+
+	pr_scope = (cmd->scb[2] & 0xf0) >> 4;
+	pr_type = cmd->scb[2] & 0x0f;
+
+	buf = scsi_get_out_buffer(cmd);
+
+	res_key = get_unaligned_be64(buf);
+	sa_res_key = get_unaligned_be64(buf + 8);
+
+	switch (pr_type) {
+	case PR_TYPE_WRITE_EXCLUSIVE:
+	case PR_TYPE_EXCLUSIVE_ACCESS:
+	case PR_TYPE_WRITE_EXCLUSIVE_REGONLY:
+	case PR_TYPE_EXCLUSIVE_ACCESS_REGONLY:
+	case PR_TYPE_WRITE_EXCLUSIVE_ALLREG:
+	case PR_TYPE_EXCLUSIVE_ACCESS_ALLREG:
+		break;
+	default:
+		goto sense;
+	}
+
+	if (pr_scope != PR_LU_SCOPE)
+		goto sense;
+
+	reg = lookup_registration_by_nexus(cmd->dev, cmd->it_nexus);
+	if (!reg)
+		return SAM_STAT_RESERVATION_CONFLICT;
+
+	holder = cmd->dev->pr_holder;
+	if (holder) {
+		if (!is_pr_holder(cmd->dev, reg))
+			return SAM_STAT_RESERVATION_CONFLICT;
+
+		if (holder->pr_type != pr_type ||
+		    holder->pr_scope != pr_scope)
+			return SAM_STAT_RESERVATION_CONFLICT;
+
+		return SAM_STAT_GOOD;
+	}
+
+	reg->pr_scope = pr_scope;
+	reg->pr_type = pr_type;
+	cmd->dev->pr_holder = reg;
+
+	return SAM_STAT_GOOD;
+sense:
+	scsi_set_in_resid_by_actual(cmd, 0);
+	sense_data_build(cmd, key, asc);
+	return SAM_STAT_CHECK_CONDITION;
+}
+
+static int spc_pr_release(int host_no, struct scsi_cmd *cmd)
+{
+	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
+	uint8_t key = ILLEGAL_REQUEST;
+	uint8_t pr_scope, pr_type;
+	uint8_t *buf;
+	uint64_t res_key, sa_res_key;
+	int ret;
+	struct registration *reg, *holder, *sibling;
+
+	ret = check_pr_out_basic_parameter(cmd);
+	if (ret)
+		goto sense;
+
+	pr_scope = (cmd->scb[2] & 0xf0) >> 4;
+	pr_type = cmd->scb[2] & 0x0f;
+
+	buf = scsi_get_out_buffer(cmd);
+
+	res_key = get_unaligned_be64(buf);
+	sa_res_key = get_unaligned_be64(buf + 8);
+
+	reg = lookup_registration_by_nexus(cmd->dev, cmd->it_nexus);
+	if (!reg)
+		return SAM_STAT_RESERVATION_CONFLICT;
+
+	holder = cmd->dev->pr_holder;
+	if (!holder)
+		return SAM_STAT_GOOD;
+
+	if (!is_pr_holder(cmd->dev, reg))
+		return SAM_STAT_GOOD;
+
+	if (res_key != reg->key)
+		return SAM_STAT_RESERVATION_CONFLICT;
+
+	if (reg->pr_scope != pr_scope || reg->pr_type != pr_type) {
+		asc = ASC_INVALID_RELEASE_OF_PERSISTENT_RESERVATION;
+		goto sense;
+	}
+
+	cmd->dev->pr_holder = NULL;
+	reg->pr_scope = 0;
+	reg->pr_type = 0;
+
+	switch (pr_type) {
+	case PR_TYPE_WRITE_EXCLUSIVE_REGONLY:
+	case PR_TYPE_EXCLUSIVE_ACCESS_REGONLY:
+	case PR_TYPE_WRITE_EXCLUSIVE_ALLREG:
+	case PR_TYPE_EXCLUSIVE_ACCESS_ALLREG:
+		return SAM_STAT_GOOD;
+	default:
+		;
+	}
+
+	list_for_each_entry(sibling, &cmd->dev->registration_list,
+			    registration_siblings) {
+		/* we don't send myself */
+		if (sibling == reg)
+			continue;
+
+		ua_sense_add_other_it_nexus(sibling->nexus_id,
+					    cmd->dev, ASC_RESERVATIONS_RELEASED);
+	}
+
+	return SAM_STAT_GOOD;
+sense:
+	scsi_set_in_resid_by_actual(cmd, 0);
+	sense_data_build(cmd, key, asc);
+	return SAM_STAT_CHECK_CONDITION;
+}
+
+static int spc_pr_clear(int host_no, struct scsi_cmd *cmd)
+{
+	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
+	uint8_t key = ILLEGAL_REQUEST;
+	uint8_t *buf;
+	uint64_t res_key, sa_res_key;
+	int ret;
+	struct registration *reg, *holder, *sibling, *n;
+
+	ret = check_pr_out_basic_parameter(cmd);
+	if (ret)
+		goto sense;
+
+	buf = scsi_get_out_buffer(cmd);
+
+	res_key = get_unaligned_be64(buf);
+	sa_res_key = get_unaligned_be64(buf + 8);
+
+	reg = lookup_registration_by_nexus(cmd->dev, cmd->it_nexus);
+	if (!reg)
+		return SAM_STAT_RESERVATION_CONFLICT;
+
+	if (reg->key != res_key)
+		return SAM_STAT_RESERVATION_CONFLICT;
+
+	holder = cmd->dev->pr_holder;
+	if (holder) {
+		holder->pr_scope = 0;
+		holder->pr_type = 0;
+		cmd->dev->pr_holder = NULL;
+	}
+
+	list_for_each_entry_safe(sibling, n, &cmd->dev->registration_list,
+				 registration_siblings) {
+		/* we don't send myself */
+		if (sibling != reg)
+			ua_sense_add_other_it_nexus(sibling->nexus_id,
+						    cmd->dev,
+						    ASC_RESERVATIONS_PREEMPTED);
+		list_del(&sibling->registration_siblings);
+		free(sibling);
+	}
+
+	return SAM_STAT_GOOD;
+sense:
+	scsi_set_in_resid_by_actual(cmd, 0);
+	sense_data_build(cmd, key, asc);
+	return SAM_STAT_CHECK_CONDITION;
+}
+
+static int spc_pr_preempt(int host_no, struct scsi_cmd *cmd)
+{
+	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
+	uint8_t key = ILLEGAL_REQUEST;
+	int ret, abort;
+	uint64_t res_key, sa_res_key;
+	uint8_t pr_scope, pr_type;
+	uint8_t *buf;
+	struct registration *reg, *sibling, *n;
+
+	ret = check_pr_out_basic_parameter(cmd);
+	if (ret)
+		goto sense;
+
+	abort = ((cmd->scb[1] & 0x1f) == PR_OUT_PREEMPT_AND_ABORT);
+
+	pr_scope = (cmd->scb[2] & 0xf0) >> 4;
+	pr_type = cmd->scb[2] & 0x0f;
+
+	buf = scsi_get_out_buffer(cmd);
+
+	res_key = get_unaligned_be64(buf);
+	sa_res_key = get_unaligned_be64(buf + 8);
+
+	reg = lookup_registration_by_nexus(cmd->dev, cmd->it_nexus);
+	if (!reg)
+		return SAM_STAT_RESERVATION_CONFLICT;
+
+	if (reg->key != res_key)
+		return SAM_STAT_RESERVATION_CONFLICT;
+
+remove_registration:
+	if (!cmd->dev->pr_holder) {
+		list_for_each_entry_safe(sibling, n, &cmd->dev->registration_list,
+					 registration_siblings) {
+
+			if (sibling->key == sa_res_key) {
+				__unregister(cmd->dev, sibling);
+				break;
+			}
+		}
+
+		return SAM_STAT_GOOD;
+	}
+
+	if (cmd->dev->pr_holder->pr_type == PR_TYPE_WRITE_EXCLUSIVE_ALLREG ||
+	    cmd->dev->pr_holder->pr_type == PR_TYPE_EXCLUSIVE_ACCESS_ALLREG) {
+
+		if (sa_res_key)
+			goto remove_registration;
+
+		list_for_each_entry_safe(sibling, n, &cmd->dev->registration_list,
+					 registration_siblings) {
+
+			if (sibling == reg)
+				continue;
+
+			__unregister(cmd->dev, sibling);
+		}
+
+		cmd->dev->pr_holder = reg;
+		reg->pr_type = pr_type;
+		reg->pr_scope = pr_scope;
+
+		return SAM_STAT_GOOD;
+	}
+
+	if (cmd->dev->pr_holder->key == sa_res_key) {
+		cmd->dev->pr_holder = reg;
+		reg->pr_type = pr_type;
+		reg->pr_scope = pr_scope;
+
+		goto remove_registration;
+	}
+
+	if (sa_res_key)
+		goto remove_registration;
+
+	else
+		goto sense;
+
+	return SAM_STAT_GOOD;
+sense:
+	scsi_set_in_resid_by_actual(cmd, 0);
+	sense_data_build(cmd, key, asc);
+	return SAM_STAT_CHECK_CONDITION;
+}
+
+static int spc_pr_register_and_move(int host_no, struct scsi_cmd *cmd)
+{
+	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
+	uint8_t key = ILLEGAL_REQUEST;
+	char *buf;
+	uint8_t pr_scope, pr_type;
+	uint8_t unreg;
+	uint64_t res_key, sa_res_key;
+	uint32_t addlen, idlen;
+	struct registration *reg, *dst;
+	uint16_t len = 24;
+	int (*id)(int, uint64_t, char *, int);
+	char tpid[300]; /* large enough? */
+
+	pr_scope = (cmd->scb[2] & 0xf0) >> 4;
+	pr_type = cmd->scb[2] & 0x0f;
+
+	if (get_unaligned_be16(cmd->scb + 7) < len)
+		goto sense;
+
+	if (scsi_get_out_length(cmd) < len)
+		goto sense;
+
+	buf = scsi_get_out_buffer(cmd);
+
+	if (buf[17] & 0x01)
+		goto sense;
+
+	unreg = buf[17] & 0x02;
+
+	res_key = get_unaligned_be64(buf);
+	sa_res_key = get_unaligned_be64(buf + 8);
+
+	addlen = get_unaligned_be32(buf + 24);
+
+	reg = lookup_registration_by_nexus(cmd->dev, cmd->it_nexus);
+	if (!reg) {
+		if (cmd->dev->pr_holder)
+			return SAM_STAT_RESERVATION_CONFLICT;
+		else
+			goto sense;
+	}
+
+	if (!is_pr_holder(cmd->dev, reg))
+		return SAM_STAT_GOOD;
+
+	if (reg->key != res_key)
+		return SAM_STAT_RESERVATION_CONFLICT;
+
+	if (!sa_res_key)
+		return SAM_STAT_RESERVATION_CONFLICT;
+
+	list_for_each_entry(dst, &cmd->dev->registration_list,
+			    registration_siblings)
+		if (dst->key == sa_res_key)
+			goto found;
+
+	/* we can't find the destination */
+	goto sense;
+found:
+	id = tgt_drivers[cmd->c_target->lid]->transportid;
+	if (id) {
+		memset(tpid, 0, sizeof(tpid));
+		idlen = id(cmd->dev->tgt->tid, dst->nexus_id, tpid, sizeof(tpid));
+		if (addlen) {
+			if (strncmp(tpid, buf + 28, strlen(tpid)))
+				goto sense;
+		}
+	}
+
+	cmd->dev->pr_holder = dst;
+
+	if (unreg)
+		__unregister(cmd->dev, reg);
+
+	return SAM_STAT_GOOD;
+sense:
+	scsi_set_in_resid_by_actual(cmd, 0);
+	sense_data_build(cmd, key, asc);
+	return SAM_STAT_CHECK_CONDITION;
+}
+
+struct service_action persistent_reserve_out_actions[] = {
+	{PR_OUT_REGISTER, spc_pr_register},
+	{PR_OUT_RESERVE, spc_pr_reserve},
+	{PR_OUT_RELEASE, spc_pr_release},
+	{PR_OUT_CLEAR, spc_pr_clear},
+	{PR_OUT_PREEMPT, spc_pr_preempt},
+/* 	{PR_OUT_PREEMPT_AND_ABORT, spc_pr_preempt}, */
+	{PR_OUT_REGISTER_AND_IGNORE_EXISTING_KEY, spc_pr_register},
+	{PR_OUT_REGISTER_AND_MOVE, spc_pr_register_and_move},
+	{0, NULL},
+};
+
+int spc_access_check(struct scsi_cmd *cmd)
+{
+	unsigned char op = cmd->scb[0];
+	uint8_t bits;
+	uint8_t pr_type;
+	struct registration *reg;
+	int conflict = 0;
+
+	if (!cmd->dev->pr_holder)
+		return 0;
+
+	reg = lookup_registration_by_nexus(cmd->dev, cmd->it_nexus);
+
+	if (reg && is_pr_holder(cmd->dev, reg))
+		return 0;
+
+	pr_type = cmd->dev->pr_holder->pr_type;
+	bits = cmd->dev->dev_type_template.ops[op].pr_conflict_bits;
+
+	if (pr_type == PR_TYPE_WRITE_EXCLUSIVE ||
+	    pr_type == PR_TYPE_EXCLUSIVE_ACCESS)
+		conflict = bits & (PR_WE_FA|PR_EA_FA);
+	else {
+		if (reg)
+			conflict = bits & PR_RR_FR;
+		else {
+			if (pr_type == PR_TYPE_WRITE_EXCLUSIVE_REGONLY ||
+			    pr_type == PR_TYPE_WRITE_EXCLUSIVE_ALLREG)
+				conflict = bits & PR_WE_FN;
+			else
+				conflict = bits & PR_EA_FN;
+		}
+	}
+
+	return conflict;
 }
 
 int spc_request_sense(int host_no, struct scsi_cmd *cmd)
@@ -1065,4 +1739,3 @@ void spc_lu_exit(struct scsi_lu *lu)
 		if (lu->mode_pgs[i])
 			free(lu->mode_pgs[i]);
 }
-

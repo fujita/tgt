@@ -1,8 +1,10 @@
 #ifndef __SPC_H
 #define __SPC_H
 
-extern struct service_action maint_in_service_actions[];
-extern int spc_maint_in(int host_no, struct scsi_cmd *cmd);
+extern struct service_action maint_in_service_actions[],
+	persistent_reserve_in_actions[], persistent_reserve_out_actions[];
+
+extern int spc_service_action(int host_no, struct scsi_cmd *cmd);
 extern int spc_inquiry(int host_no, struct scsi_cmd *cmd);
 extern int spc_report_luns(int host_no, struct scsi_cmd *cmd);
 extern int spc_start_stop(int host_no, struct scsi_cmd *cmd);
@@ -27,4 +29,5 @@ extern struct vpd *alloc_vpd(uint16_t size);
 extern int spc_lu_online(struct scsi_lu *lu);
 extern int spc_lu_offline(struct scsi_lu *lu);
 
+extern int spc_access_check(struct scsi_cmd *cmd);
 #endif

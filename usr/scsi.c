@@ -227,6 +227,9 @@ int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd)
 			return SAM_STAT_CHECK_CONDITION;
 	}
 
+	if (spc_access_check(cmd))
+		return SAM_STAT_RESERVATION_CONFLICT;
+
 	return cmd->dev->dev_type_template.ops[op].cmd_perform(host_no, cmd);
 }
 

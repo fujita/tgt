@@ -43,6 +43,7 @@ struct target {
 
 struct it_nexus {
 	uint64_t itn_id;
+	long ctime;
 
 	struct list_head cmd_hash_list[1 << HASH_ORDER];
 

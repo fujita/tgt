@@ -21,6 +21,8 @@ struct tgt_driver {
 	int (*cmd_end_notify)(uint64_t nid, int result, struct scsi_cmd *);
 	int (*mgmt_end_notify)(struct mgmt_req *);
 
+	int (*transportid)(int, uint64_t, char *, int);
+
 	const char *default_bst;
 };
 

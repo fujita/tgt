@@ -52,7 +52,7 @@ struct iscsi_session *session_find_name(int tid, const char *iname, uint8_t *isi
 	return NULL;
 }
 
-static struct iscsi_session *session_lookup_by_tsih(uint16_t tsih)
+struct iscsi_session *session_lookup_by_tsih(uint16_t tsih)
 {
 	struct iscsi_session *session;
 	list_for_each_entry(session, &sessions_list, hlist) {

@@ -310,7 +310,7 @@ static struct device_type_template ssc_template = {
 		{spc_report_luns,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_maint_in, maint_in_service_actions,},
+		{spc_service_action, maint_in_service_actions,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},

@@ -2241,6 +2241,44 @@ out:
 	return ret;
 }
 
+static int iscsi_transportid(int tid, uint64_t itn_id, char *buf, int size)
+{
+	struct iscsi_session *session;
+	char *p;
+	uint16_t len;
+
+	session = session_lookup_by_tsih(itn_id);
+	if (!session)
+		return 0;
+
+	len = 4;
+	len += strlen(session->initiator) + 1;
+	len += 5; /* separator */
+	len += 7; /* isid + '\0' */
+
+	len = ALIGN(len, 4);
+
+	if (len > size)
+		return len;
+
+	memset(buf, 0, size);
+
+	buf[0] = 0x05;
+	buf[0] |= 0x40;
+
+	put_unaligned_be16(len - 4, buf + 2);
+
+	sprintf(buf + 4, session->initiator);
+
+	p = buf + (4 + strlen(session->initiator) + 1);
+
+	p += sprintf(p, ",i,0x");
+
+	memcpy(p, session->isid, sizeof(session->isid));
+
+	return len;
+}
+
 static struct tgt_driver iscsi = {
 	.name			= "iscsi",
 	.use_kernel		= 0,
@@ -2253,6 +2291,7 @@ static struct tgt_driver iscsi = {
 	.show			= iscsi_target_show,
 	.cmd_end_notify		= iscsi_scsi_cmd_done,
 	.mgmt_end_notify	= iscsi_tm_done,
+	.transportid		= iscsi_transportid,
 	.default_bst		= "rdwr",
 };
 

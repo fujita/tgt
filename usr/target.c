@@ -25,8 +25,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 
 #include "list.h"
 #include "util.h"
@@ -36,6 +38,7 @@
 #include "scsi.h"
 #include "tgtadm.h"
 #include "parser.h"
+#include "spc.h"
 
 static LIST_HEAD(device_type_list);
 
@@ -236,6 +239,7 @@ int it_nexus_create(int tid, uint64_t itn_id, int host_no, char *info)
 	struct it_nexus *itn;
 	struct scsi_lu *lu;
 	struct it_nexus_lu_info *itn_lu;
+	struct timeval tv;
 
 	dprintf("%d %" PRIu64 " %d\n", tid, itn_id, host_no);
 	/* for reserve/release code */
@@ -257,6 +261,8 @@ int it_nexus_create(int tid, uint64_t itn_id, int host_no, char *info)
 	itn->nexus_target = target;
 	itn->info = info;
 	INIT_LIST_HEAD(&itn->it_nexus_lu_info_list);
+	gettimeofday(&tv, NULL);
+	itn->ctime = tv.tv_sec;
 
 	list_for_each_entry(lu, &target->device_list, device_siblings) {
 		itn_lu = zalloc(sizeof(*itn_lu));
@@ -490,6 +496,9 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	lu->tgt = target;
 	lu->lun = lun;
 	tgt_cmd_queue_init(&lu->cmd_queue);
+	INIT_LIST_HEAD(&lu->registration_list);
+	lu->prgeneration = 0;
+	lu->pr_holder = NULL;
 
  	if (lu->dev_type_template.lu_init) {
 		ret = lu->dev_type_template.lu_init(lu);
@@ -567,6 +576,7 @@ int tgt_device_destroy(int tid, uint64_t lun, int force)
 	struct scsi_lu *lu;
 	struct it_nexus *itn;
 	struct it_nexus_lu_info *itn_lu, *next;
+	struct registration *reg, *reg_next;
 	int ret;
 
 	dprintf("%u %" PRIu64 "\n", tid, lun);
@@ -606,6 +616,12 @@ int tgt_device_destroy(int tid, uint64_t lun, int force)
 	}
 
 	list_del(&lu->device_siblings);
+
+	list_for_each_entry_safe(reg, reg_next, &lu->registration_list,
+				 registration_siblings) {
+		free(reg);
+	}
+
 	free(lu);
 
 	list_for_each_entry(itn, &target->it_nexus_list, nexus_siblings) {
