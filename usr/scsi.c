@@ -204,6 +204,19 @@ int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd)
 		return SAM_STAT_CHECK_CONDITION;
 	}
 
+	if (cmd->dev->lun != cmd->dev_id) {
+		switch (op) {
+		case INQUIRY:
+			break;
+		case REQUEST_SENSE:
+			sense_data_build(cmd, ILLEGAL_REQUEST, ASC_LUN_NOT_SUPPORTED);
+			return SAM_STAT_GOOD;
+		default:
+			sense_data_build(cmd, ILLEGAL_REQUEST, ASC_LUN_NOT_SUPPORTED);
+			return SAM_STAT_CHECK_CONDITION;
+		}
+	}
+
 	/* check out Unit Attention condition */
 	switch (op) {
 	case INQUIRY:
