@@ -259,6 +259,17 @@ static int smc_initialize_element_status(int host_no, struct scsi_cmd *cmd)
 		return SAM_STAT_GOOD;
 }
 
+static int nr_slots(struct smc_info *smc)
+{
+	int count = 0;
+	struct slot *s;
+
+	list_for_each_entry(s, &smc->slots, slot_siblings)
+		count++;
+
+	return count;
+}
+
 /**
  * smc_read_element_status  -  READ ELEMENT STATUS op code
  *
@@ -304,7 +315,8 @@ static int smc_read_element_status(int host_no, struct scsi_cmd *cmd)
 		}
 	}
 
-	data = zalloc(alloc_len);
+	/* we allocate possible maximum data length */
+	data = zalloc(8 + elementSize * nr_slots(smc));
 	if (!data) {
 		dprintf("Can't allocate enough memory for cmd\n");
 		key = HARDWARE_ERROR;
