@@ -294,6 +294,7 @@ int it_nexus_destroy(int tid, uint64_t itn_id)
 {
 	int i;
 	struct it_nexus *itn;
+	struct scsi_lu *lu;
 
 	dprintf("%d %" PRIu64 "\n", tid, itn_id);
 
@@ -304,6 +305,9 @@ int it_nexus_destroy(int tid, uint64_t itn_id)
 	for (i = 0; i < ARRAY_SIZE(itn->cmd_hash_list); i++)
 		if (!list_empty(&itn->cmd_hash_list[i]))
 			return -EBUSY;
+
+	list_for_each_entry(lu, &itn->nexus_target->device_list, device_siblings)
+		device_release(tid, itn_id, lu->lun, 0);
 
 	it_nexus_del_lu_info(itn);
 
