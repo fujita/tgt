@@ -2,9 +2,6 @@
 #
 # This tools parses /etc/tgt/targets.conf file and configures tgt
 #
-# You can find more info on http://wpkg.org/TGT-admin and download the
-# source code by pointing wget to http://wpkg.org/tgt-admin
-#
 # Author:  Tomasz Chmielewski
 # License: GPLv2
 #
@@ -346,6 +343,10 @@ sub add_params {
 	    $param eq "path" || $param eq "mode_page") {
 		return("tgtadm --lld $driver --op update --mode logicalunit --tid $next_tid --lun=$lun --params $param=\"$param_value\"");
 	}
+	if ($param eq "params") {
+		return("tgtadm --lld $driver --op update --mode logicalunit --tid $next_tid --lun=$lun --params \"$param_value\"");
+
+	}
 }
 
 # Find next available LUN
@@ -378,7 +379,6 @@ sub find_next_lun {
 sub add_backing_direct {
 	my $backing_store = $_[0];
 	my $target_options_ref = $_[1];
-	my $lun;
 	my $data_key_ref = $_[2];
 	my $direct_store = $_[3];
 	my $driver = $$target_options_ref{"driver"};
@@ -408,15 +408,24 @@ sub add_backing_direct {
 		if (ref $value eq "HASH") {
 			my %params_added;
 			my @mode_page;
+			my @params;
 			foreach my $store (keys %$value) {
+				# lun
+				if (length $$target_options_ref{"lun"}) {
+					check_if_hash_array($$target_options_ref{"lun"}, "lun");
+					$lun = $$target_options_ref{"lun"};
+				}
+
 				if (ref $$value{$store} eq "HASH" && $store eq $backing_store) {
 					foreach my $store_option (keys %{$$value{$store}}) {
 						my $result = $$value{$store}{$store_option};
 						check_value($result);
-						if ($store_option ne "mode_page") { check_if_hash_array($result,$store_option) }
+						if ($store_option ne "mode_page" && $store_option ne "params")
+							{ check_if_hash_array($result,$store_option) }
 						# write-cache can be set globally per target and overridden per lun,
 						# so we treat it differently
-						if ($store_option ne "mode_page" && $store_option ne "write-cache") {
+						if ($store_option ne "mode_page" && $store_option ne "write-cache"
+							&& $store_option ne "params") {
 							my $exec_command = add_params($store_option, $result, $lun, $driver);
 							push(@exec_commands, $exec_command);
 							$params_added{$store_option} = 1;
@@ -435,9 +444,22 @@ sub add_backing_direct {
 							$params_added{$store_option} = 1;
 						}
 						if ($store_option eq "mode_page") {
+							unless (ref($result) eq 'ARRAY') {
+								$result = [ $result ];
+							}
 							@mode_page = @$result;
 							foreach my $mode_page (@mode_page) {
-								my $exec_command = add_params("mode_page", $mode_page, $lun, $driver);
+								my $exec_command = add_params($store_option, $mode_page, $lun, $driver);
+								push(@exec_commands, $exec_command);
+							}
+						}
+						if ($store_option eq "params") {
+							unless (ref($result) eq 'ARRAY') {
+								$result = [ $result ];
+							}
+							@params = @$result;
+							foreach my $param (@params) {
+								my $exec_command = add_params($store_option, $param, $lun, $driver);
 								push(@exec_commands, $exec_command);
 							}
 						}
@@ -514,6 +536,16 @@ sub add_backing_direct {
 					push(@exec_commands, $exec_command);
 				}
 			}
+			# params
+			unless (ref($$target_options_ref{params}) eq 'ARRAY') {
+				$$target_options_ref{params} = [ $$target_options_ref{params} ];
+			}
+			foreach my $param (@{$$target_options_ref{"params"}}) {
+				if (length $param) {
+					my $exec_command = add_params("params", $param, $lun, $driver);
+					push(@exec_commands, $exec_command);
+				}
+			}
 			# device-type
 			if ($params_added{"device-type"} ne 1) {
 				check_if_hash_array($$target_options_ref{"device-type"}, "device-type");
@@ -524,11 +556,6 @@ sub add_backing_direct {
 				check_if_hash_array($$target_options_ref{"bs-type"}, "bs-type");
 				$bs_type = $$target_options_ref{"bs-type"};
 			}
-			# lun
-			if (length $$target_options_ref{"lun"}) {
-				check_if_hash_array($$target_options_ref{"lun"}, "lun");
-				$lun = $$target_options_ref{"lun"};
-			}
 		} else {
 			print "If you got here, this means your config file is not supported.\n";
 			print "Please report it to stgt mailing list and attach your config files.\n";
@@ -538,8 +565,20 @@ sub add_backing_direct {
 		if (length $device_type) { $device_type = "--device-type $device_type" };
 		if (length $bs_type) { $bs_type = "--bstype $bs_type" };
 		execute("tgtadm --lld $driver --op new --mode logicalunit --tid $next_tid --lun $lun -b $backing_store $device_type $bs_type");
+
+		# Commands should be executed in order
+		my @execute_last;
 		foreach my $exec_command (@exec_commands) {
-			if (length $exec_command) { execute($exec_command) }
+			if (length $exec_command) {
+				if ($exec_command =~ m/params mode_page/) {
+					execute($exec_command);
+				} else {
+					push(@execute_last, $exec_command);
+				}
+			}
+		}
+		foreach my $exec_command (@execute_last) {
+			execute($exec_command);
 		}
 		$lun += 1;
 		return $lun;
