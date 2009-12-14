@@ -4,8 +4,7 @@ docdir ?= $(PREFIX)/share/doc/tgt
 MANPAGES = manpages/tgtadm.8 manpages/tgt-admin.8 \
 		manpages/tgt-setup-lun.8
 DOCS = README.fcoe README.ibmvstgt README.iscsi README.iser \
-	    README.lu_configuration README.mmc targets.conf.example \
-	    tmf.txt TODO
+	    README.lu_configuration README.mmc tmf.txt
 
 .PHONY:all
 all:
