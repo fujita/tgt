@@ -872,8 +872,10 @@ static void cmnd_exec_text(struct iscsi_connection *conn)
 		return;
 	}
 
-	if (conn->text_datasize <= max_len)
+	if (conn->text_datasize <= max_len) {
 		rsp->flags = ISCSI_FLAG_CMD_FINAL;
+		conn->ttt = ISCSI_RESERVED_TAG;
+	}
 
 	conn->rsp.datasize = min(max_len, conn->text_datasize);
 	conn->rsp.data = conn->text_rsp_buffer;
