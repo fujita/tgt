@@ -1,6 +1,6 @@
 sysconfdir ?= /etc
 
-EXAMPLES = targets.conf.example
+EXAMPLES = targets.conf.example targets.conf.vtl.L700 targets.conf.vtl.MSL2024
 
 .PHONY: all
 all:
@@ -12,7 +12,9 @@ install:
 		install -m 644 targets.conf $(DESTDIR)$(sysconfdir)/tgt ; \
 	fi
 	install -d -m 755 $(DESTDIR)$(sysconfdir)/tgt/examples
-	install -m 644 examples/$(EXAMPLES) $(DESTDIR)$(sysconfdir)/tgt/examples
+	for f in $(EXAMPLES) ; do \
+		install -m 644 examples/$$f $(DESTDIR)$(sysconfdir)/tgt/examples ;\
+	done
 
 .PHONY: clean
 clean:
