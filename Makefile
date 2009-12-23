@@ -1,4 +1,4 @@
-VERSION ?= 0.9.11
+VERSION ?= 1.0.0
 
 # Define a common prefix where binaries and docs install
 PREFIX ?= /usr
