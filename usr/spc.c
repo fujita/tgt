@@ -37,7 +37,6 @@
 #include "spc.h"
 
 #define PRODUCT_REV	"0"
-#define BLK_SHIFT	9
 
 /*
  * Protocol Identifier Values
