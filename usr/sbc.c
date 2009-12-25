@@ -243,8 +243,6 @@ static int sbc_lu_init(struct scsi_lu *lu)
 	add_mode_page(lu, "0:0:0");
 	/* Disconnect page */
 	add_mode_page(lu, "2:0:14:0x80:0x80:0:0xa:0:0:0:0:0:0:0:0:0:0");
-	/* Format page */
-	add_mode_page(lu, "3:0:22:0:0:0:0:0:0:0:0:1:0:2:0:0:0:0:0:0:0:0:13:0:0");
 	/* GEO page */
 	add_mode_page(lu, "4:0:22:0:0:0:0x40:0:0:0:0:0:"
 		      "0:0:0:0:0:0:0:0:0:0x3a:0x98:0:0");
