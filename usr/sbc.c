@@ -128,7 +128,7 @@ static int sbc_read_capacity(int host_no, struct scsi_cmd *cmd)
 	unsigned char key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_LUN_NOT_SUPPORTED;
 
-	if (!(scb[8] & 0x1) & (scb[2] | scb[3] | scb[4] | scb[5])) {
+	if (!(scb[8] & 0x1) && (scb[2] | scb[3] | scb[4] | scb[5])) {
 		asc = ASC_INVALID_FIELD_IN_CDB;
 		goto sense;
 	}
