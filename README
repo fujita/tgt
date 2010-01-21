@@ -42,8 +42,11 @@ The code is under the GNU General Public License version 2.
 
 Preparation
 -------------
-Target drivers have their own ways to build, configure, etc. So find
-an appropriate documentation in the doc directory.
+Target drivers have their own ways to build, configure, etc. Please
+find an appropriate documentation in the doc directory. You might find
+other useful information on tgt's site:
+
+http://stgt.sourceforge.net/
 
 
 Developer Notes
