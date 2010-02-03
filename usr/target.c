@@ -1449,7 +1449,7 @@ int tgt_bind_host_to_target(int tid, int host_no)
 
 	list_add(&bhost->bhost_siblings, &bound_host_list);
 
-	dprintf("bound the scsi host %d to the target %d\n", host_no, host_no);
+	dprintf("bound the scsi host %d to the target %d\n", host_no, tid);
 
 	return 0;
 }
