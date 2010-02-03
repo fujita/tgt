@@ -573,7 +573,7 @@ int main(int argc, char **argv)
 			break;
 		case OP_BIND:
 		case OP_UNBIND:
-			rc = verify_mode_params(argc, argv, "LmotIB");
+			rc = verify_mode_params(argc, argv, "LmotIBH");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
