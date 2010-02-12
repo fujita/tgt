@@ -91,6 +91,7 @@ static int oom_adjust(void)
 	err = write(fd, "-17\n", 4);
 	if (err < 0) {
 		fprintf(stderr, "can't adjust oom-killer's pardon %s, %m\n", path);
+		close(fd);
 		return errno;
 	}
 	close(fd);
@@ -113,6 +114,7 @@ static int nr_file_adjust(void)
 	ret = read(fd, buf, sizeof(buf));
 	if (ret < 0) {
 		fprintf(stderr, "can't read %s, %m\n", path);
+		close(fd);
 		return errno;
 	}
 	close(fd);
