@@ -122,7 +122,7 @@ static void update_vpd_80(struct scsi_lu *lu, void *sn)
 
 		p = data + vpd_pg->size - 1;
 		q = sn + tmp - 1;
-		for (; tmp > 0; tmp--, q)
+		for (; tmp > 0; tmp--)
 			*(p--) = *(q--);
 	}
 }
