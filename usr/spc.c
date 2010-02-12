@@ -111,7 +111,7 @@
 
 static void update_vpd_80(struct scsi_lu *lu, void *sn)
 {
-	struct vpd *vpd_pg = lu->attrs.lu_vpd[0];
+	struct vpd *vpd_pg = lu->attrs.lu_vpd[PCODE_OFFSET(0x80)];
 	char *data = (char *)vpd_pg->data;
 
 	memset(data, 0x20, vpd_pg->size);
@@ -129,7 +129,7 @@ static void update_vpd_80(struct scsi_lu *lu, void *sn)
 
 static void update_vpd_83(struct scsi_lu *lu, void *id)
 {
-	struct vpd *vpd_pg = lu->attrs.lu_vpd[3];
+	struct vpd *vpd_pg = lu->attrs.lu_vpd[PCODE_OFFSET(0x83)];
 	uint8_t	*data = vpd_pg->data;
 
 	data[0] = INQ_CODE_ASCII;
