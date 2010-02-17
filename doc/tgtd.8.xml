@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE refentry PUBLIC "-//Samba-Team//DTD DocBook V4.2-Based Variant V1.0//EN" "http://www.samba.org/samba/DTD/samba-doc">
+<refentry id="tgtd.8">
+
+<refmeta>
+	<refentrytitle>tgtd</refentrytitle>
+	<manvolnum>8</manvolnum>
+</refmeta>
+
+
+<refnamediv>
+	<refname>tgtd</refname>
+	<refpurpose>The SCSI Target Daemon</refpurpose>
+</refnamediv>
+
+<refsynopsisdiv>
+	<cmdsynopsis>
+		<command>tgtd</command>
+	</cmdsynopsis>
+	
+	<cmdsynopsis>
+		<command>tgtd</command>
+		<arg choice="opt">-d --debug &lt;INTEGER&gt;</arg>
+		<arg choice="opt">-f --foregound</arg>
+		<arg choice="opt">-h --help</arg>
+		<arg choice="opt">--iscsi &lt;...&gt;</arg>
+	</cmdsynopsis>
+	
+</refsynopsisdiv>
+
+  <refsect1><title>DESCRIPTION</title>
+    <para>
+      Tgtd is a SCSI Target daemon. It can be used to provide iSCSI target
+      service to a network.
+    </para>
+  </refsect1>
+
+
+  <refsect1>
+    <title>OPTIONS</title>
+
+    <variablelist>
+      <varlistentry><term>-d --debug &lt;INTEGER&gt;</term>
+        <listitem>
+          <para>
+            Set to non-zero value to activate additional debugging messages to
+	    be logged.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry><term>-f --foreground</term>
+        <listitem>
+          <para>
+            Run the daemon in the foreground.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry><term>-h --help</term>
+        <listitem>
+          <para>
+            Print help text to the screen.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry><term>--iscsi &lt;...&gt;</term>
+        <listitem>
+          <para>
+	    ISCSI specific options.
+            See the ISCSI section below for options specific to this frontend.
+          </para>
+        </listitem>
+      </varlistentry>
+    </variablelist>
+  </refsect1>
+
+
+  <refsect1><title>ISCSI options</title>
+    <para>
+      These parameters apply only to the iSCSI frontend.
+    </para>
+
+    <refsect2><title>portal=&lt;ip-address[:port]&gt;</title>
+      <para>
+	This option is used to bind tgtd to a specific ip-address/portal and/or
+	port. By default tgtd will bind to port 3260 on the wildcard address.
+      </para>
+      <para>
+      Example: to bind tgtd to a specific address and port
+      <screen format="linespecific">
+	tgtd --iscsi portal=192.0.2.1:3260
+      </screen>
+      </para>
+    </refsect2>
+  </refsect1>
+
+
+  <refsect1><title>SEE ALSO</title>
+    <para>
+      tgtadm(8), tgt-admin(8), tgt-setup-lun(8).
+      <ulink url="http://stgt.sourceforge.net/"/>
+    </para>
+  </refsect1>
+
+  <refsect1><title>COPYRIGHT/LICENSE</title>
+<literallayout>
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or (at
+your option) any later version.
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, see http://www.gnu.org/licenses/.
+</literallayout>
+  </refsect1>
+</refentry>

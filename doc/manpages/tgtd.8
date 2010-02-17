@@ -1,0 +1,81 @@
+.\"     Title: tgtd
+.\"    Author: 
+.\" Generator: DocBook XSL Stylesheets v1.73.2 <http://docbook.sf.net/>
+.\"      Date: 02/17/2010
+.\"    Manual: 
+.\"    Source: 
+.\"
+.TH "TGTD" "8" "02/17/2010" "" ""
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.SH "NAME"
+tgtd - The SCSI Target Daemon
+.SH "SYNOPSIS"
+.HP 5
+\fBtgtd\fR
+.HP 5
+\fBtgtd\fR [\-d\ \-\-debug\ <INTEGER>] [\-f\ \-\-foregound] [\-h\ \-\-help] [\-\-iscsi\ <\.\.\.>]
+.SH "DESCRIPTION"
+.PP
+Tgtd is a SCSI Target daemon\. It can be used to provide iSCSI target service to a network\.
+.SH "OPTIONS"
+.PP
+\-d \-\-debug <INTEGER>
+.RS 4
+Set to non\-zero value to activate additional debugging messages to be logged\.
+.RE
+.PP
+\-f \-\-foreground
+.RS 4
+Run the daemon in the foreground\.
+.RE
+.PP
+\-h \-\-help
+.RS 4
+Print help text to the screen\.
+.RE
+.PP
+\-\-iscsi <\.\.\.>
+.RS 4
+ISCSI specific options\. See the ISCSI section below for options specific to this frontend\.
+.RE
+.SH "ISCSI OPTIONS"
+.PP
+These parameters apply only to the iSCSI frontend\.
+.SS "portal=<ip\-address[:port]>"
+.PP
+This option is used to bind tgtd to a specific ip\-address/portal and/or port\. By default tgtd will bind to port 3260 on the wildcard address\.
+.PP
+Example: to bind tgtd to a specific address and port
+.sp
+.RS 4
+.nf
+	tgtd \-\-iscsi portal=192\.0\.2\.1:3260
+      
+.fi
+.RE
+.sp
+.SH "SEE ALSO"
+.PP
+tgtadm(8), tgt\-admin(8), tgt\-setup\-lun(8)\.
+\fI\%http://stgt.sourceforge.net/\fR
+.SH "COPYRIGHT/LICENSE"
+.sp
+.RS 4
+.nf
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or (at
+your option) any later version\.
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE\.  See the GNU
+General Public License for more details\.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, see http://www\.gnu\.org/licenses/\.
+.fi
+.RE
