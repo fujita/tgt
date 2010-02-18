@@ -1,0 +1,36 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1"><title>tgtadm</title><meta name="generator" content="DocBook XSL Stylesheets V1.73.2"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="refentry" lang="en"><a name="tgtadm.8"></a><div class="titlepage"></div><div class="refnamediv"><h2>Name</h2><p>tgtadm &#8212; Linux SCSI Target Administration Utility</p></div><div class="refsynopsisdiv"><h2>Synopsis</h2><div class="cmdsynopsis"><p><code class="command">tgtadm --lld [driver] --op [operation] --mode [mode] [OPTION]...</code> </p></div></div><div class="refsect1" lang="en"><a name="id2475948"></a><h2>DESCRIPTION</h2><p>
+      tgtadm is used to monitor and modify everything about Linux SCSI target
+      software: targets, volumes, etc.
+    </p></div><div class="refsect1" lang="en"><a name="id2475959"></a><h2>OPTIONS</h2><div class="variablelist"><dl><dt><span class="term"><code class="option">--lld [driver] --op new --mode target --tid=[id] --targetname [name]</code></span></dt><dd><p>
+	    add a new target with [id] and [name].
+          </p></dd><dt><span class="term"><code class="option">--lld [driver] --op delete --mode target --tid=[id]</code></span></dt><dd><p>
+	    delete specific target with [id]. The target must have no active I_T nexus.
+          </p></dd><dt><span class="term"><code class="option">--lld [driver] --op show --mode target</code></span></dt><dd><p>
+	    show all the targets.
+          </p></dd><dt><span class="term"><code class="option">--lld [driver] --op show --mode target --tid=[id]</code></span></dt><dd><p>
+	    show target parameters of a target with [id].
+          </p></dd><dt><span class="term"><code class="option">--lld [driver] --op new --mode=logicalunit --tid=[id] --lun=[lun] --backing-store [path]</code></span></dt><dd><p>
+	    add a new logical unit with [lun] to specific target with [id]. The
+	    logical unit is offered to the initiators. [path] must be block device
+	    files (including LVM and RAID devices) or regular files. lun0 is
+	    reserved for a special device automatically created.
+          </p></dd><dt><span class="term"><code class="option">--lld [driver] --op delete --mode=logicalunit --tid=[id] --lun=[lun]</code></span></dt><dd><p>
+	    delete specific logical unit with [lun] that the target with [id] has.
+          </p></dd><dt><span class="term"><code class="option">--lld [driver] --op bind --mode=target --tid=[id] --initiator-address=[address]</code></span></dt><dd><p>
+	    add the address to the access lists of the target with [id]. Initiators
+	    with the address can access to the target. 'ALL' is a special address
+	    to allow all initiators to access to a target.
+          </p></dd><dt><span class="term"><code class="option">--lld [driver] --op unbind --mode=target --tid=[id] --initiator-address=[address]</code></span></dt><dd><p>
+	    delete the address from the access lists of the target with [id].
+          </p></dd><dt><span class="term"><code class="option">--lld [driver] --op update --mode=target --tid=[id] --name=[parameter] --value=[value]</code></span></dt><dd><p>
+	    change the value of [parameter] of the target with [id] to [value].
+          </p></dd><dt><span class="term"><code class="option">--version</code></span></dt><dd><p>
+	    display version and exit.
+          </p></dd><dt><span class="term"><code class="option">--help</code></span></dt><dd><p>
+	    display a list of available options and exits.
+          </p></dd></dl></div></div><div class="refsect1" lang="en"><a name="id2476142"></a><h2>SEE ALSO</h2><p>
+      tgtd(8), tgt-admin(8), tgt-setup-lun(8).
+      <a class="ulink" href="http://stgt.sourceforge.net/" target="_top">http://stgt.sourceforge.net/</a>
+    </p></div><div class="refsect1" lang="en"><a name="id2476157"></a><h2>REPORTING BUGS</h2><p>
+      Report bugs to &lt;stgt@vger.kernel.org&gt;
+    </p></div></div></body></html>
