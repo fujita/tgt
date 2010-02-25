@@ -42,6 +42,8 @@
 
 static LIST_HEAD(device_type_list);
 
+static struct target global_target;
+
 int device_type_register(struct device_type_template *t)
 {
 	list_add_tail(&t->device_type_siblings, &device_type_list);
@@ -1223,7 +1225,10 @@ int account_lookup(int tid, int type, char *user, int ulen, char *password, int 
 	struct target *target;
 	struct account_entry *ac;
 
-	target = target_lookup(tid);
+	if (tid == GLOBAL_TID)
+		target = &global_target;
+	else
+		target = target_lookup(tid);
 	if (!target)
 		return -ENOENT;
 
@@ -1330,7 +1335,10 @@ int account_ctl(int tid, int type, char *user, int bind)
 	struct account_entry *ac;
 	int i, err = 0;
 
-	target = target_lookup(tid);
+	if (tid == GLOBAL_TID)
+		target = &global_target;
+	else
+		target = target_lookup(tid);
 	if (!target)
 		return TGTADM_NO_TARGET;
 
@@ -1381,6 +1389,9 @@ void account_del(char *user)
 		account_ctl(target->tid, ACCOUNT_TYPE_OUTGOING, ac->user, 0);
 	}
 
+	account_ctl(GLOBAL_TID, ACCOUNT_TYPE_INCOMING, ac->user, 0);
+	account_ctl(GLOBAL_TID, ACCOUNT_TYPE_OUTGOING, ac->user, 0);
+
 	list_del(&ac->account_siblings);
 	free(ac->user);
 	free(ac->password);
@@ -1391,7 +1402,10 @@ int account_available(int tid, int dir)
 {
 	struct target *target;
 
-	target = target_lookup(tid);
+	if (tid == GLOBAL_TID)
+		target = &global_target;
+	else
+		target = target_lookup(tid);
 	if (!target)
 		return 0;
 
@@ -1927,6 +1941,23 @@ int system_show(int mode, char *buf, int rest)
 	shprintf(total, buf, rest, _TAB1 "State: %s\n",
 		 system_state_name(sys_state));
 
+	if (global_target.account.nr_inaccount) {
+		int i, aid;
+		shprintf(total, buf, rest,
+			 "Account information:\n");
+		for (i = 0; i < global_target.account.nr_inaccount; i++) {
+			aid = global_target.account.in_aids[i];
+			shprintf(total, buf, rest, _TAB1 "%s\n",
+				 __account_lookup_id(aid)->user);
+		}
+		if (global_target.account.out_aid) {
+			aid = global_target.account.out_aid;
+			shprintf(total, buf, rest,
+				 _TAB1 "%s (outgoing)\n",
+				 __account_lookup_id(aid)->user);
+		}
+	}
+
 	return total;
 overflow:
 	return max;
@@ -1940,4 +1971,17 @@ int is_system_available(void)
 int is_system_inactive(void)
 {
 	return list_empty(&target_list);
+}
+
+__attribute__((constructor)) static void target_constructor(void)
+{
+	static int global_target_aids[DEFAULT_NR_ACCOUNT];
+
+	memset(global_target_aids, 0, sizeof(global_target_aids));
+	global_target.account.in_aids = global_target_aids;
+	global_target.account.max_inaccount = DEFAULT_NR_ACCOUNT;
+
+	global_target.tid = GLOBAL_TID;
+
+	INIT_LIST_HEAD(&global_target.acl_list);
 }

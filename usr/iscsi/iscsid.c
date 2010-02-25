@@ -38,6 +38,7 @@
 #include "util.h"
 #include "driver.h"
 #include "scsi.h"
+#include "tgtadm.h"
 #include "crc32c.h"
 
 #define MAX_QUEUE_CMD	128
@@ -473,6 +474,9 @@ static void login_start(struct iscsi_connection *conn)
 			return;
 		}
 	}
+
+	if (conn->session_type == SESSION_DISCOVERY)
+		conn->tid = GLOBAL_TID;
 
 	if (conn->session_type == SESSION_NORMAL) {
 		if (!target_name) {

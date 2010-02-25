@@ -682,10 +682,8 @@ int main(int argc, char **argv)
 				eprintf("'user' option is necessary\n");
 				exit(EINVAL);
 			}
-			if (tid <= 0) {
-				eprintf("'tid' option is necessary\n");
-				exit(EINVAL);
-			}
+			if (tid == -1)
+				tid = GLOBAL_TID;
 			break;
 		case OP_UNBIND:
 			rc = verify_mode_params(argc, argv, "LmouC");
@@ -698,10 +696,8 @@ int main(int argc, char **argv)
 				eprintf("'user' option is necessary\n");
 				exit(EINVAL);
 			}
-			if (tid <= 0) {
-				eprintf("'tid' option is necessary\n");
-				exit(EINVAL);
-			}
+			if (tid == -1)
+				tid = GLOBAL_TID;
 			break;
 		default:
 			eprintf("option %d not supported in account mode\n", op);
