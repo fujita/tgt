@@ -50,12 +50,13 @@ static LIST_HEAD(tgt_sched_events_list);
 static struct option const long_options[] =
 {
 	{"foreground", no_argument, 0, 'f'},
+	{"control-port", required_argument, 0, 'C'},
 	{"debug", required_argument, 0, 'd'},
 	{"help", no_argument, 0, 'h'},
 	{0, 0, 0, 0},
 };
 
-static char *short_options = "fd:h";
+static char *short_options = "fC:d:h";
 
 static void usage(int status)
 {
@@ -66,12 +67,16 @@ static void usage(int status)
 		printf("\
 Target framework daemon, version %s\n\
   -f, --foreground        make the program run in the foreground\n\
+  -C, --control-port NNNN use port NNNN for the mgmt channel\n\
   -d, --debug debuglevel  print debugging information\n\
   -h, --help              display this help and exit\n\
 ", TGT_VERSION);
 	}
 	exit(status);
 }
+
+/* Default TGT mgmt port */
+short int control_port = 0;
 
 static void signal_catch(int signo) {
 }
@@ -376,6 +381,9 @@ int main(int argc, char **argv)
 		switch (ch) {
 		case 'f':
 			is_daemon = 0;
+			break;
+		case 'C':
+			control_port = atoi(optarg);
 			break;
 		case 'd':
 			is_debug = atoi(optarg);

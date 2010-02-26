@@ -1,19 +1,26 @@
-<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1"><title>tgtd</title><meta name="generator" content="DocBook XSL Stylesheets V1.73.2"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="refentry" lang="en"><a name="tgtd.8"></a><div class="titlepage"></div><div class="refnamediv"><h2>Name</h2><p>tgtd &#8212; The SCSI Target Daemon</p></div><div class="refsynopsisdiv"><h2>Synopsis</h2><div class="cmdsynopsis"><p><code class="command">tgtd</code> </p></div><div class="cmdsynopsis"><p><code class="command">tgtd</code>  [-d --debug &lt;INTEGER&gt;] [-f --foregound] [-h --help] [--iscsi &lt;...&gt;]</p></div></div><div class="refsect1" lang="en"><a name="id2475936"></a><h2>DESCRIPTION</h2><p>
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1"><title>tgtd</title><meta name="generator" content="DocBook XSL Stylesheets V1.73.2"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="refentry" lang="en"><a name="tgtd.8"></a><div class="titlepage"></div><div class="refnamediv"><h2>Name</h2><p>tgtd &#8212; The SCSI Target Daemon</p></div><div class="refsynopsisdiv"><h2>Synopsis</h2><div class="cmdsynopsis"><p><code class="command">tgtd</code> </p></div><div class="cmdsynopsis"><p><code class="command">tgtd</code>  [-C --control-port &lt;INTEGER&gt;] [-d --debug &lt;INTEGER&gt;] [-f --foregound] [-h --help] [--iscsi &lt;...&gt;]</p></div></div><div class="refsect1" lang="en"><a name="id2475959"></a><h2>DESCRIPTION</h2><p>
       Tgtd is a SCSI Target daemon. It can be used to provide iSCSI target
       service to a network.
-    </p></div><div class="refsect1" lang="en"><a name="id2475947"></a><h2>OPTIONS</h2><div class="variablelist"><dl><dt><span class="term">-d --debug &lt;INTEGER&gt;</span></dt><dd><p>
+    </p></div><div class="refsect1" lang="en"><a name="id2475970"></a><h2>OPTIONS</h2><div class="variablelist"><dl><dt><span class="term">-d --debug &lt;INTEGER&gt;</span></dt><dd><p>
             Set to non-zero value to activate additional debugging messages to
 	    be logged.
           </p></dd><dt><span class="term">-f --foreground</span></dt><dd><p>
             Run the daemon in the foreground.
           </p></dd><dt><span class="term">-h --help</span></dt><dd><p>
             Print help text to the screen.
+          </p></dd><dt><span class="term">-C --control-port &lt;INTEGER&gt;</span></dt><dd><p>
+	    This comamnd is used to specify the control port to use for
+	    this instance of tgtd. This allows to run multiple instances of
+	    TGTD on a host.
+          </p><p>
+	    TGTADM has a matching argument to control which instance to connect
+	    to.
           </p></dd><dt><span class="term">--iscsi &lt;...&gt;</span></dt><dd><p>
 	    ISCSI specific options.
             See the ISCSI section below for options specific to this frontend.
-          </p></dd></dl></div></div><div class="refsect1" lang="en"><a name="id2476014"></a><h2>ISCSI options</h2><p>
+          </p></dd></dl></div></div><div class="refsect1" lang="en"><a name="id2476058"></a><h2>ISCSI options</h2><p>
       These parameters apply only to the iSCSI frontend.
-    </p><div class="refsect2" lang="en"><a name="id2476024"></a><h3>portal=&lt;ip-address[:port]&gt;</h3><p>
+    </p><div class="refsect2" lang="en"><a name="id2476067"></a><h3>portal=&lt;ip-address[:port]&gt;</h3><p>
 	This option is used to bind tgtd to a specific ip-address/portal and/or
 	port. By default tgtd will bind to port 3260 on the wildcard address.
       </p><p>
@@ -21,10 +28,10 @@
       </p><pre class="screen">
 	tgtd --iscsi portal=192.0.2.1:3260
       </pre><p>
-      </p></div></div><div class="refsect1" lang="en"><a name="id2476048"></a><h2>SEE ALSO</h2><p>
+      </p></div></div><div class="refsect1" lang="en"><a name="id2476091"></a><h2>SEE ALSO</h2><p>
       tgtadm(8), tgt-admin(8), tgt-setup-lun(8).
       <a class="ulink" href="http://stgt.sourceforge.net/" target="_top">http://stgt.sourceforge.net/</a>
-    </p></div><div class="refsect1" lang="en"><a name="id2476062"></a><h2>COPYRIGHT/LICENSE</h2><div class="literallayout"><p><br>
+    </p></div><div class="refsect1" lang="en"><a name="id2476105"></a><h2>COPYRIGHT/LICENSE</h2><div class="literallayout"><p><br>
 This program is free software; you can redistribute it and/or modify<br>
 it under the terms of the GNU General Public License as published by<br>
 the Free Software Foundation; either version 2 of the License, or (at<br>

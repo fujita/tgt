@@ -122,10 +122,11 @@ struct option const long_options[] = {
 	{"bus", required_argument, NULL, 'B'},
 	{"device-type", required_argument, NULL, 'Y'},
 	{"outgoing", no_argument, NULL, 'O'},
+	{"control-port", required_argument, NULL, 'C'},
 	{NULL, 0, NULL, 0},
 };
 
-static char *short_options = "dhL:o:m:t:s:c:l:n:v:b:E:T:I:u:p:H:P:B:Y:O";
+static char *short_options = "dhL:o:m:t:s:c:l:n:v:b:E:T:I:u:p:H:P:B:Y:O:C:";
 
 static void usage(int status)
 {
@@ -174,6 +175,7 @@ Linux SCSI Target Framework Administration Utility, version %s\n\
   --lld [driver] --mode account --op unbind --tid=[id] --user=[name]\n\
                         delete the specific account having [name] from specific\n\
                         target.\n\
+  --control-port NNNN   use control port NNNN\n\
   --help                display this help and exit\n\
 \n\
 Report bugs to <stgt@vger.kernel.org>.\n", TGT_VERSION);
@@ -181,10 +183,14 @@ Report bugs to <stgt@vger.kernel.org>.\n", TGT_VERSION);
 	exit(status == 0 ? 0 : EINVAL);
 }
 
+/* default port to use for the mgmt channel */
+static short int control_port = 0;
+
 static int ipc_mgmt_connect(int *fd)
 {
 	int err;
 	struct sockaddr_un addr;
+	char path[256];
 
 	*fd = socket(AF_LOCAL, SOCK_STREAM, 0);
 	if (*fd < 0) {
@@ -194,7 +200,8 @@ static int ipc_mgmt_connect(int *fd)
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_LOCAL;
-	strncpy(addr.sun_path, TGT_IPC_NAMESPACE, sizeof(addr.sun_path));
+	sprintf(path, "%s.%d", TGT_IPC_NAMESPACE, control_port);
+	strncpy(addr.sun_path, path, sizeof(addr.sun_path));
 
 	err = connect(*fd, (struct sockaddr *) &addr, sizeof(addr));
 	if (err < 0)
@@ -518,6 +525,9 @@ int main(int argc, char **argv)
 		case 'O':
 			ac_dir = ACCOUNT_TYPE_OUTGOING;
 			break;
+		case 'C':
+			control_port = strtol(optarg, NULL, 10);
+			break;
 		case 'd':
 			debug = 1;
 			break;
@@ -551,7 +561,7 @@ int main(int argc, char **argv)
 		}
 		switch (op) {
 		case OP_NEW:
-			rc = verify_mode_params(argc, argv, "LmotT");
+			rc = verify_mode_params(argc, argv, "LmotTC");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
@@ -564,7 +574,7 @@ int main(int argc, char **argv)
 			break;
 		case OP_DELETE:
 		case OP_SHOW:
-			rc = verify_mode_params(argc, argv, "Lmot");
+			rc = verify_mode_params(argc, argv, "LmotC");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
@@ -573,7 +583,7 @@ int main(int argc, char **argv)
 			break;
 		case OP_BIND:
 		case OP_UNBIND:
-			rc = verify_mode_params(argc, argv, "LmotIBH");
+			rc = verify_mode_params(argc, argv, "LmotIBHC");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
@@ -587,7 +597,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		case OP_UPDATE:
-			rc = verify_mode_params(argc, argv, "Lmotnv");
+			rc = verify_mode_params(argc, argv, "LmotnvC");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
@@ -609,7 +619,7 @@ int main(int argc, char **argv)
 	if (mode == MODE_ACCOUNT) {
 		switch (op) {
 		case OP_NEW:
-			rc = verify_mode_params(argc, argv, "Lmoup");
+			rc = verify_mode_params(argc, argv, "LmoupC");
 			if (rc) {
 				eprintf("logicalunit mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
@@ -621,7 +631,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		case OP_SHOW:
-			rc = verify_mode_params(argc, argv, "Lmo");
+			rc = verify_mode_params(argc, argv, "LmoC");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
@@ -629,7 +639,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		case OP_DELETE:
-			rc = verify_mode_params(argc, argv, "Lmou");
+			rc = verify_mode_params(argc, argv, "LmouC");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
@@ -637,7 +647,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		case OP_BIND:
-			rc = verify_mode_params(argc, argv, "LmotuO");
+			rc = verify_mode_params(argc, argv, "LmotuOC");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
@@ -653,7 +663,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		case OP_UNBIND:
-			rc = verify_mode_params(argc, argv, "Lmou");
+			rc = verify_mode_params(argc, argv, "LmouC");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
@@ -686,7 +696,7 @@ int main(int argc, char **argv)
 		}
 		switch (op) {
 		case OP_NEW:
-			rc = verify_mode_params(argc, argv, "LmotlbEY");
+			rc = verify_mode_params(argc, argv, "LmotlbEYC");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
@@ -699,7 +709,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		case OP_DELETE:
-			rc = verify_mode_params(argc, argv, "Lmotl");
+			rc = verify_mode_params(argc, argv, "LmotlC");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
@@ -707,7 +717,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		case OP_UPDATE:
-			rc = verify_mode_params(argc, argv, "LmotlP");
+			rc = verify_mode_params(argc, argv, "LmotlPC");
 			if (rc) {
 				eprintf("option '-%c' not supported in "
 					"logicalunit mode\n", rc);

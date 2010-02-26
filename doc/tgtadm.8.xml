@@ -14,7 +14,7 @@
 
 <refsynopsisdiv>
 	<cmdsynopsis>
-		<command>tgtadm --lld [driver] --op [operation] --mode [mode] [OPTION]...</command>
+		<command>tgtadm [--control-port NNNN] --lld [driver] --op [operation] --mode [mode] [OPTION]...</command>
 	</cmdsynopsis>
 	
 </refsynopsisdiv>
@@ -31,6 +31,16 @@
     <title>OPTIONS</title>
 
     <variablelist>
+      <varlistentry><term><option>--control-port NNNN</option></term>
+        <listitem>
+          <para>
+	    It is possible to run multiple concurrent instances of tgtd
+	    on a host. This argument is used to control which instance
+	    the tgtadm command will operate on.
+          </para>
+        </listitem>
+      </varlistentry>
+
       <varlistentry><term><option>--lld [driver] --op new --mode target --tid=[id] --targetname [name]</option></term>
         <listitem>
           <para>

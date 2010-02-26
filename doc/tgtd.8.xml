@@ -19,6 +19,7 @@
 	
 	<cmdsynopsis>
 		<command>tgtd</command>
+		<arg choice="opt">-C --control-port &lt;INTEGER&gt;</arg>
 		<arg choice="opt">-d --debug &lt;INTEGER&gt;</arg>
 		<arg choice="opt">-f --foregound</arg>
 		<arg choice="opt">-h --help</arg>
@@ -60,6 +61,20 @@
         <listitem>
           <para>
             Print help text to the screen.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry><term>-C --control-port &lt;INTEGER&gt;</term>
+        <listitem>
+          <para>
+	    This comamnd is used to specify the control port to use for
+	    this instance of tgtd. This allows to run multiple instances of
+	    TGTD on a host.
+          </para>
+          <para>
+	    TGTADM has a matching argument to control which instance to connect
+	    to.
           </para>
         </listitem>
       </varlistentry>

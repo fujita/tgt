@@ -1,11 +1,11 @@
 .\"     Title: tgtd
 .\"    Author: 
 .\" Generator: DocBook XSL Stylesheets v1.73.2 <http://docbook.sf.net/>
-.\"      Date: 02/18/2010
+.\"      Date: 02/26/2010
 .\"    Manual: 
 .\"    Source: 
 .\"
-.TH "TGTD" "8" "02/18/2010" "" ""
+.TH "TGTD" "8" "02/26/2010" "" ""
 .\" disable hyphenation
 .nh
 .\" disable justification (adjust text to left margin only)
@@ -16,7 +16,7 @@ tgtd - The SCSI Target Daemon
 .HP 5
 \fBtgtd\fR
 .HP 5
-\fBtgtd\fR [\-d\ \-\-debug\ <INTEGER>] [\-f\ \-\-foregound] [\-h\ \-\-help] [\-\-iscsi\ <\.\.\.>]
+\fBtgtd\fR [\-C\ \-\-control\-port\ <INTEGER>] [\-d\ \-\-debug\ <INTEGER>] [\-f\ \-\-foregound] [\-h\ \-\-help] [\-\-iscsi\ <\.\.\.>]
 .SH "DESCRIPTION"
 .PP
 Tgtd is a SCSI Target daemon\. It can be used to provide iSCSI target service to a network\.
@@ -35,6 +35,13 @@ Run the daemon in the foreground\.
 \-h \-\-help
 .RS 4
 Print help text to the screen\.
+.RE
+.PP
+\-C \-\-control\-port <INTEGER>
+.RS 4
+This comamnd is used to specify the control port to use for this instance of tgtd\. This allows to run multiple instances of TGTD on a host\.
+.sp
+TGTADM has a matching argument to control which instance to connect to\.
 .RE
 .PP
 \-\-iscsi <\.\.\.>

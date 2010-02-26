@@ -1,11 +1,11 @@
 .\"     Title: tgtadm
 .\"    Author: 
 .\" Generator: DocBook XSL Stylesheets v1.73.2 <http://docbook.sf.net/>
-.\"      Date: 02/18/2010
+.\"      Date: 02/26/2010
 .\"    Manual: 
 .\"    Source: 
 .\"
-.TH "TGTADM" "8" "02/18/2010" "" ""
+.TH "TGTADM" "8" "02/26/2010" "" ""
 .\" disable hyphenation
 .nh
 .\" disable justification (adjust text to left margin only)
@@ -13,12 +13,17 @@
 .SH "NAME"
 tgtadm - Linux SCSI Target Administration Utility
 .SH "SYNOPSIS"
-.HP 65
-\fBtgtadm \-\-lld [driver] \-\-op [operation] \-\-mode [mode] [OPTION]\.\.\.\fR
+.HP 87
+\fBtgtadm [\-\-control\-port NNNN] \-\-lld [driver] \-\-op [operation] \-\-mode [mode] [OPTION]\.\.\.\fR
 .SH "DESCRIPTION"
 .PP
 tgtadm is used to monitor and modify everything about Linux SCSI target software: targets, volumes, etc\.
 .SH "OPTIONS"
+.PP
+\fB\-\-control\-port NNNN\fR
+.RS 4
+It is possible to run multiple concurrent instances of tgtd on a host\. This argument is used to control which instance the tgtadm command will operate on\.
+.RE
 .PP
 \fB\-\-lld [driver] \-\-op new \-\-mode target \-\-tid=[id] \-\-targetname [name]\fR
 .RS 4
