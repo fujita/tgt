@@ -1,0 +1,93 @@
+.\"     Title: tgtimg
+.\"    Author:
+.\" Generator: DocBook XSL Stylesheets v1.73.2 <http://docbook.sf.net/>
+.\"      Date: 03/04/2010
+.\"    Manual:
+.\"    Source:
+.\"
+.TH "TGTIMG" "8" "03/04/2010" "" ""
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.SH "NAME"
+tgtimg - Linux SCSI Target Framework Image File Utility
+.SH "SYNOPSIS"
+.HP 35
+\fBtgtimg \-\-op new \-\-device\-type tape \fR\fB\-\-barcode <code> \-\-size <size> \-\-type <type> \-\-file <path>\fR
+.HP 50
+\fBtgtimg \-\-op show \-\-device\-type tape \-\-file=<path>\fR
+.HP 14
+\fBtgtimg \-\-help\fR
+.SH "DESCRIPTION"
+.PP
+tgtimg is a utility to create and manage the image files used by the stgt tape emulation\.
+.PP
+This command is used to initialize tape image files with the additional metadata, such as barcode, list of blocks, total size, etc that the tape emulation of TGTD needs\.
+.PP
+You must use this command to initialize a file so that TGTD will\e recognize it as a tape image\.
+.SH "OPTIONS"
+.PP
+\fB\-h, \-\-help\fR
+.RS 4
+Show a help screen and exit\.
+.RE
+.PP
+\fB\-o, \-\-op {new|show}\fR
+.RS 4
+Operation\. Is either new to create a new image file or show to show the content of an existing image file\.
+.RE
+.PP
+\fB\-Y, \-\-device\-type <type>\fR
+.RS 4
+This specifies the type of image file\. The only valid type is tape\.
+.RE
+.PP
+\fB\-b, \-\-barcode <barcode>\fR
+.RS 4
+When creating a new image, this argument specifies the barcode to use with this image file\. Backup application software often uses barcodes to identify specific tapes\. When emulating a VTL, make sure that all tape images use unique barcodes\.
+.RE
+.PP
+\fB\-s, \-\-size <size>\fR
+.RS 4
+When creating a new image, this specifies the size in megabytes for the virtual tape image\.
+.RE
+.PP
+\fB\-t, \-\-type {data|clean|worm}\fR
+.RS 4
+When creating a new image, this specifies the type of media to emulate, normal data, cleaning image, or worm\.
+.sp
+Data is a normal tape to read/write to and probably what you want to use\.
+.RE
+.PP
+\fB\-f, \-\-file <path>\fR
+.RS 4
+The filename of the image file\.
+.RE
+.SH "EXAMPLES"
+.PP
+To create a new image
+.sp
+.RS 4
+.nf
+	tgtimg \-\-op new \-\-device\-type tape \-\-barcode 12345 \-\-size 100 \-\-type data \-\-file /data/tape001\.img
+      
+.fi
+.RE
+.PP
+To view the content of an existing image
+.sp
+.RS 4
+.nf
+	tgtimg \-\-op show \-\-device\-type tape \-\-file /data/tape001\.img
+      
+.fi
+.RE
+.sp
+.SH "SEE ALSO"
+.PP
+tgtd(8), tgtadm(8), tgt\-admin(8), tgt\-setup\-lun(8)\.
+\fI\%http://stgt.sourceforge.net/\fR
+.SH "REPORTING BUGS"
+.PP
+Report bugs to <stgt@vger\.kernel\.org>

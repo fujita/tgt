@@ -1,0 +1,49 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1"><title>tgtimg</title><meta name="generator" content="DocBook XSL Stylesheets V1.73.2"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="refentry" lang="en"><a name="tgtimg.8"></a><div class="titlepage"></div><div class="refnamediv"><h2>Name</h2><p>tgtimg &#8212; Linux SCSI Target Framework Image File Utility</p></div><div class="refsynopsisdiv"><h2>Synopsis</h2><div class="cmdsynopsis"><p><code class="command">tgtimg --op new --device-type tape </code> <br><code class="command">--barcode &lt;code&gt; --size &lt;size&gt; --type &lt;type&gt; --file &lt;path&gt;</code> </p></div><div class="cmdsynopsis"><p><code class="command">tgtimg --op show --device-type tape --file=&lt;path&gt;</code> </p></div><div class="cmdsynopsis"><p><code class="command">tgtimg --help</code> </p></div></div><div class="refsect1" lang="en"><a name="id2475961"></a><h2>DESCRIPTION</h2><p>
+      tgtimg is a utility to create and manage the image files used by the
+      stgt tape emulation.
+    </p><p>
+      This command is used to initialize tape image files with the additional
+      metadata, such as barcode, list of blocks, total size, etc that
+      the tape emulation of TGTD needs.
+    </p><p>
+      You must use this command to initialize a file so that TGTD will\
+      recognize it as a tape image.
+    </p></div><div class="refsect1" lang="en"><a name="id2475984"></a><h2>OPTIONS</h2><div class="variablelist"><dl><dt><span class="term"><code class="option">-h, --help</code></span></dt><dd><p>
+	    Show a help screen and exit.
+          </p></dd><dt><span class="term"><code class="option">-o, --op {new|show}</code></span></dt><dd><p>
+	    Operation. Is either new to create a new image file or show to
+	    show the content of an existing image file.
+          </p></dd><dt><span class="term"><code class="option">-Y, --device-type &lt;type&gt;</code></span></dt><dd><p>
+	    This specifies the type of image file. The only valid type is tape.
+          </p></dd><dt><span class="term"><code class="option">-b, --barcode &lt;barcode&gt;</code></span></dt><dd><p>
+	    When creating a new image, this argument specifies the barcode
+	    to use with this image file. Backup application software often
+	    uses barcodes to identify specific tapes. When emulating a VTL,
+	    make sure that all tape images use unique barcodes.
+          </p></dd><dt><span class="term"><code class="option">-s, --size &lt;size&gt;</code></span></dt><dd><p>
+	    When creating a new image, this specifies the size in megabytes
+	    for the virtual tape image.
+          </p></dd><dt><span class="term"><code class="option">-t, --type {data|clean|worm}</code></span></dt><dd><p>
+	    When creating a new image, this specifies the type of media to
+	    emulate, normal data, cleaning image, or worm.
+          </p><p>
+	    Data is a normal tape to read/write to and probably what you
+	    want to use.
+          </p></dd><dt><span class="term"><code class="option">-f, --file &lt;path&gt;</code></span></dt><dd><p>
+	    The filename of the image file.
+          </p></dd></dl></div></div><div class="refsect1" lang="en"><a name="id2476108"></a><h2>EXAMPLES</h2><p>
+      To create a new image
+      </p><pre class="screen">
+	tgtimg --op new --device-type tape --barcode 12345 --size 100 --type data --file /data/tape001.img
+      </pre><p>
+    </p><p>
+      To view the content of an existing image
+      </p><pre class="screen">
+	tgtimg --op show --device-type tape --file /data/tape001.img
+      </pre><p>
+    </p></div><div class="refsect1" lang="en"><a name="id2476136"></a><h2>SEE ALSO</h2><p>
+      tgtd(8), tgtadm(8), tgt-admin(8), tgt-setup-lun(8).
+      <a class="ulink" href="http://stgt.sourceforge.net/" target="_top">http://stgt.sourceforge.net/</a>
+    </p></div><div class="refsect1" lang="en"><a name="id2476151"></a><h2>REPORTING BUGS</h2><p>
+      Report bugs to &lt;stgt@vger.kernel.org&gt;
+    </p></div></div></body></html>
