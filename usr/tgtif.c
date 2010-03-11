@@ -370,6 +370,8 @@ static int tgt_miscdev_init(char *path, int *fd)
 		goto out;
 	}
 
+	fclose(fp);
+
 	return 0;
 out:
 	fclose(fp);
