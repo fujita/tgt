@@ -53,7 +53,7 @@ INCLUDES += -I.
 
 CFLAGS += -D_GNU_SOURCE
 CFLAGS += $(INCLUDES)
-CFLAGS += -g -O2 -Wall -Wstrict-prototypes -fPIC
+CFLAGS += -g -O2 -Wall -Wstrict-prototypes -fno-strict-aliasing -fPIC
 CFLAGS += -DTGT_VERSION=\"$(VERSION)$(EXTRAVERSION)\"
 
 LIBS += -lpthread
