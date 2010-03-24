@@ -316,7 +316,7 @@ static int isns_attr_query(char *name)
 	tlv = (struct isns_tlv *) hdr->pdu;
 
 	if (name)
-		snprintf(mgmt->name, sizeof(mgmt->name), name);
+		snprintf(mgmt->name, sizeof(mgmt->name), "%s", name);
 	else {
 		mgmt->name[0] = '\0';
 		target = list_first_entry(&iscsi_targets_list,
@@ -690,7 +690,7 @@ found:
 				ini = malloc(sizeof(*ini));
 				if (!ini)
 					goto free_qry_mgmt;
-				snprintf(ini->name, sizeof(ini->name), name);
+				snprintf(ini->name, sizeof(ini->name), "%s", name);
 				list_add(&ini->ilist, &target->isns_list);
 			} else
 				name = NULL;
