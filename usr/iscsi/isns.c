@@ -1027,6 +1027,7 @@ int isns_update(char *params)
 		case Opt_port:
 			if (match_int(&args[0], &isns_port))
 				ret = TGTADM_INVALID_REQUEST;
+			break;
 		case Opt_ac:
 			match_strncpy(tmp, &args[0], sizeof(tmp));
 			use_isns_ac = !strcmp(tmp, "On");
