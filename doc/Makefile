@@ -22,6 +22,8 @@ install: $(MANPAGES) $(DOCS)
 	install -m 644 $(MANPAGES) $(DESTDIR)$(mandir)/man8
 	install -d -m 755 $(DESTDIR)$(docdir)
 	install -m 644 $(DOCS) $(DESTDIR)$(docdir)
+	install -d -m 755 $(DESTDIR)$(docdir)/html
+	install -m 644 $(XMLHTML) $(DESTDIR)$(docdir)/html
 
 .PHONY: clean
 clean:
