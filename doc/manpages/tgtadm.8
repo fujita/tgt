@@ -1,11 +1,11 @@
 .\"     Title: tgtadm
 .\"    Author: 
 .\" Generator: DocBook XSL Stylesheets v1.73.2 <http://docbook.sf.net/>
-.\"      Date: 03/04/2010
+.\"      Date: 03/31/2010
 .\"    Manual: 
 .\"    Source: 
 .\"
-.TH "TGTADM" "8" "03/04/2010" "" ""
+.TH "TGTADM" "8" "03/31/2010" "" ""
 .\" disable hyphenation
 .nh
 .\" disable justification (adjust text to left margin only)
@@ -78,6 +78,63 @@ display version and exit\.
 \fB\-\-help\fR
 .RS 4
 display a list of available options and exits\.
+.RE
+.SH "ISNS"
+.PP
+iSNS configuration for a target is by using the tgtadm command\.
+.PP
+\fBiSNSServerIP\fR
+.RS 4
+This specifies the IP address of the iSNS server\. TGTD only supprots one iSNS server\.
+.sp
+.RS 4
+.nf
+Example:
+
+tgtadm \-\-op update \-\-mode sys \-\-name iSNSServerIP \-v 192\.168\.11\.133
+	
+.fi
+.RE
+.RE
+.PP
+\fBiSNS\fR
+.RS 4
+This setting enables(on)/disables(off) iSNS\.
+.sp
+.RS 4
+.nf
+Example activating iSNS once configured:
+
+tgtadm \-\-op update \-\-mode sys \-\-name iSNS \-v On
+	
+.fi
+.RE
+.RE
+.PP
+\fBiSNSServerPort\fR
+.RS 4
+This setting specifies the port to use for iSNS\.
+.sp
+.RS 4
+.nf
+Example:
+
+tgtadm \-\-op update \-\-mode sys \-\-name iSNSServerPort \-v 3205
+	
+.fi
+.RE
+.RE
+.PP
+\fBiSNSAccessControl\fR
+.RS 4
+Enable/disable access control for iSNS\.
+.sp
+.RS 4
+.nf
+tgtadm \-\-op update \-\-mode sys \-\-name iSNSAccessControl \-v Off
+	
+.fi
+.RE
 .RE
 .SH "SEE ALSO"
 .PP

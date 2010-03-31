@@ -137,6 +137,69 @@
     </variablelist>
   </refsect1>
 
+  <refsect1><title>iSNS</title>
+    <para>
+      iSNS configuration for a target is by using the tgtadm command.
+    </para>
+    <variablelist>
+
+      <varlistentry><term><option>iSNSServerIP</option></term>
+        <listitem>
+          <para>
+	    This specifies the IP address of the iSNS server. TGTD only
+	    supprots one iSNS server.
+          </para>
+        </listitem>
+	<screen format="linespecific">
+Example:
+
+tgtadm --op update --mode sys --name iSNSServerIP -v 192.168.11.133
+	</screen>
+      </varlistentry>
+
+      <varlistentry><term><option>iSNS</option></term>
+        <listitem>
+          <para>
+	    This setting enables(on)/disables(off) iSNS.
+          </para>
+        </listitem>
+	<screen format="linespecific">
+Example activating iSNS once configured:
+
+tgtadm --op update --mode sys --name iSNS -v On
+	</screen>
+      </varlistentry>
+
+      <varlistentry><term><option>iSNSServerPort</option></term>
+        <listitem>
+          <para>
+	    This setting specifies the port to use for iSNS.
+          </para>
+        </listitem>
+	<screen format="linespecific">
+Example:
+
+tgtadm --op update --mode sys --name iSNSServerPort -v 3205
+	</screen>
+      </varlistentry>
+
+      <varlistentry><term><option>iSNSAccessControl</option></term>
+        <listitem>
+          <para>
+	    Enable/disable access control for iSNS.
+          </para>
+        </listitem>
+	<screen format="linespecific">
+tgtadm --op update --mode sys --name iSNSAccessControl -v Off
+	</screen>
+      </varlistentry>
+
+    </variablelist>
+
+
+  </refsect1>
+
+
   <refsect1><title>SEE ALSO</title>
     <para>
       tgtd(8), tgt-admin(8), tgtimg(8), tgt-setup-lun(8).
