@@ -141,8 +141,8 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
 
 Here are some examples:
 
-host:~/tgt# ./usr/tgtadm --lld iscsi --op bind --mode target --tid 1 -I 192.168.2.29
-host:~/tgt# ./usr/tgtadm --lld iscsi --op bind --mode target --tid 1 -I 192.168.11.0/24
+host:~/tgt# ./usr/tgtadm --lld iscsi --op bind --mode target --tid 1 -I 192.0.2.229
+host:~/tgt# ./usr/tgtadm --lld iscsi --op bind --mode target --tid 1 -I 198.51.100.0/24
 host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target
 Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
     System information:
@@ -164,8 +164,8 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
             Backing store: /dev/hdc1
     Account information:
     ACL information:
-        192.168.2.29
-        192.168.11.0/24
+        192.0.2.229
+        198.51.100.0/24
 
 
 You can add lots of logical units:
@@ -368,7 +368,7 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
         I_T nexus: 2
             Initiator: iqn.1987-05.com.cisco:01.4438aca09387
             Connection: 0
-                IP Address: 192.168.11.5
+                IP Address: 192.0.2.115
     LUN information:
         LUN: 0
             Type: controller
@@ -387,7 +387,7 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
         ALL
 
 
-One initiator (192.168.11.5) logs in now. Let's try again:
+One initiator (192.0.2.113) logs in now. Let's try again:
 
 host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target
 Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
@@ -398,11 +398,11 @@ Target 1: iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
         I_T nexus: 2
             Initiator: iqn.1987-05.com.cisco:01.4438aca09387
             Connection: 0
-                IP Address: 192.168.11.5
+                IP Address: 192.0.2.115
         I_T nexus: 3
             Initiator: iqn.1991-05.com.microsoft:kernel
             Connection: 1
-                IP Address: 192.168.11.133
+                IP Address: 192.0.2.113
     LUN information:
         LUN: 0
             Type: controller
@@ -464,14 +464,14 @@ iSNS:
     iSNSServerPort=3205
     iSNSAccessControl=Off
 
-host:~/tgt# ./usr/tgtadm --op update --mode sys --name iSNSServerIP -v 192.168.11.133
+host:~/tgt# ./usr/tgtadm --op update --mode sys --name iSNSServerIP -v 192.0.2.113
 
 host:~/tgt# ./usr/tgtadm --op update --mode sys --name iSNS -v On
 
 host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode sys
 iSNS:
     iSNS=On
-    iSNSServerIP=192.168.11.133
+    iSNSServerIP=192.0.2.113
     iSNSServerPort=3205
     iSNSAccessControl=Off
 
