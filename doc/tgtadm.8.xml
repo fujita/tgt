@@ -14,7 +14,21 @@
 
 <refsynopsisdiv>
 	<cmdsynopsis>
-		<command>tgtadm [--control-port NNNN] --lld [driver] --op [operation] --mode [mode] [OPTION]...</command>
+		<command>tgtadm [OPTIONS]...</command>
+		<arg choice="opt">-C --control-port &lt;port&gt;</arg>
+		<arg choice="opt">--lld &lt;driver&gt;</arg>
+		<arg choice="opt">--op &lt;operation&gt;</arg>
+		<arg choice="opt">--mode &lt;mode&gt;</arg>
+		<arg choice="opt">--tid &lt;tid&gt;</arg>
+		<arg choice="opt">-T --targetname &lt;targetname&gt;</arg>
+		<arg choice="opt">-Y --device-type &lt;type&gt;</arg>
+		<arg choice="opt">--lun &lt;lun&gt;</arg>
+		<arg choice="opt">--backing-store &lt;path&gt;</arg>
+		<arg choice="opt">--initiator-address &lt;address&gt;</arg>
+		<arg choice="opt">--name &lt;parameter&gt;</arg>
+		<arg choice="opt">--value &lt;value&gt;</arg>
+		<arg choice="opt">--params &lt;param=value[,param=value...]&gt;</arg>
+		<arg choice="opt">--help</arg>
 	</cmdsynopsis>
 	
 </refsynopsisdiv>
@@ -31,7 +45,7 @@
     <title>OPTIONS</title>
 
     <variablelist>
-      <varlistentry><term><option>--control-port NNNN</option></term>
+      <varlistentry><term><option>-C, --control-port=&lt;port&gt;</option></term>
         <listitem>
           <para>
 	    It is possible to run multiple concurrent instances of tgtd
@@ -41,10 +55,27 @@
         </listitem>
       </varlistentry>
 
+      <varlistentry><term><option>-Y, --device-type=&lt;type&gt;</option></term>
+        <listitem>
+          <para>
+	    When creating a LUN, this parameter specifies the type of device
+	    to create. Default is disk.
+          </para>
+        </listitem>
+      </varlistentry>
+      <screen format="linespecific">
+Possible device-types are:
+    disk    : emulate a disk device
+    tape    : emulate a tape reader
+    ssc     : same as tape
+    cd      : emulate a DVD drive
+    changer : emulate a media changer device
+      </screen>
+
       <varlistentry><term><option>--lld [driver] --op new --mode target --tid=[id] --targetname [name]</option></term>
         <listitem>
           <para>
-	    add a new target with [id] and [name].
+	    Add a new target with [id] and [name].
           </para>
         </listitem>
       </varlistentry>
@@ -52,7 +83,7 @@
       <varlistentry><term><option>--lld [driver] --op delete --mode target --tid=[id]</option></term>
         <listitem>
           <para>
-	    delete specific target with [id]. The target must have no active I_T nexus.
+	    Delete specific target with [id]. The target must have no active I_T nexus.
           </para>
         </listitem>
       </varlistentry>
@@ -60,7 +91,7 @@
       <varlistentry><term><option>--lld [driver] --op show --mode target</option></term>
         <listitem>
           <para>
-	    show all the targets.
+	    Show all the targets.
           </para>
         </listitem>
       </varlistentry>
@@ -68,7 +99,7 @@
       <varlistentry><term><option>--lld [driver] --op show --mode target --tid=[id]</option></term>
         <listitem>
           <para>
-	    show target parameters of a target with [id].
+	    Show target parameters of a target with [id].
           </para>
         </listitem>
       </varlistentry>
@@ -76,7 +107,7 @@
       <varlistentry><term><option>--lld [driver] --op new --mode=logicalunit --tid=[id] --lun=[lun] --backing-store [path]</option></term>
         <listitem>
           <para>
-	    add a new logical unit with [lun] to specific target with [id]. The
+	    Add a new logical unit with [lun] to specific target with [id]. The
 	    logical unit is offered to the initiators. [path] must be block device
 	    files (including LVM and RAID devices) or regular files. lun0 is
 	    reserved for a special device automatically created.
@@ -87,7 +118,7 @@
       <varlistentry><term><option>--lld [driver] --op delete --mode=logicalunit --tid=[id] --lun=[lun]</option></term>
         <listitem>
           <para>
-	    delete specific logical unit with [lun] that the target with [id] has.
+	    Delete specific logical unit with [lun] that the target with [id] has.
           </para>
         </listitem>
       </varlistentry>
@@ -95,7 +126,7 @@
       <varlistentry><term><option>--lld [driver] --op bind --mode=target --tid=[id] --initiator-address=[address]</option></term>
         <listitem>
           <para>
-	    add the address to the access lists of the target with [id]. Initiators
+	    Add the address to the access lists of the target with [id]. Initiators
 	    with the address can access to the target. 'ALL' is a special address
 	    to allow all initiators to access to a target.
           </para>
@@ -105,7 +136,7 @@
       <varlistentry><term><option>--lld [driver] --op unbind --mode=target --tid=[id] --initiator-address=[address]</option></term>
         <listitem>
           <para>
-	    delete the address from the access lists of the target with [id].
+	    Delete the address from the access lists of the target with [id].
           </para>
         </listitem>
       </varlistentry>
@@ -113,15 +144,15 @@
       <varlistentry><term><option>--lld [driver] --op update --mode=target --tid=[id] --name=[parameter] --value=[value]</option></term>
         <listitem>
           <para>
-	    change the value of [parameter] of the target with [id] to [value].
+	    Change the value of [parameter] of the target with [id] to [value].
           </para>
         </listitem>
       </varlistentry>
 
-      <varlistentry><term><option>--version</option></term>
+      <varlistentry><term><option>--lld [driver] --op update --mode=target --tid=[id] --params parameter=value[,...]</option></term>
         <listitem>
           <para>
-	    display version and exit.
+	    Sets/changes the value of one or more parameters.
           </para>
         </listitem>
       </varlistentry>
@@ -129,7 +160,7 @@
       <varlistentry><term><option>--help</option></term>
         <listitem>
           <para>
-	    display a list of available options and exits.
+	    Display a list of available options and exits.
           </para>
         </listitem>
       </varlistentry>
@@ -137,7 +168,265 @@
     </variablelist>
   </refsect1>
 
-  <refsect1><title>iSNS</title>
+  <refsect1><title>LUN PARAMETERS</title>
+    <para>
+      These parameters are only applicable for "--mode logicalunit".
+    </para>
+    <variablelist>
+
+      <varlistentry><term><option>vendor_id=&lt;string&gt;</option></term>
+        <listitem>
+          <para>
+	    This parameter sets the Vendor Identification string that a LUN
+	    will report in INQURY data.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry><term><option>product_id=&lt;string&gt;</option></term>
+        <listitem>
+          <para>
+	    This parameter sets the Product Identification string that a LUN
+	    will report in INQURY data.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry><term><option>product_rev=&lt;string&gt;</option></term>
+        <listitem>
+          <para>
+	    This parameter sets the Product Revision string that a LUN
+	    will report in INQURY data.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <screen format="linespecific">
+Example:
+
+tgtadm --lld iscsi --mode logicalunit --op update \
+       --tid &lt;TID&gt; --lun &lt;LUN&gt; \
+       --params vendor_id=TGTD,product_id=VirtualHD,product_rev=0103
+      </screen>
+
+
+      <varlistentry><term><option>removable=&lt;0|1&gt;</option></term>
+        <listitem>
+          <para>
+	    This can be used to override/change the default setting for
+	    the removable flag. Disk devices default to non-removable while
+	    DVD and TAPE devices default to removable.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry><term><option>sense_format=&lt;0|1&gt;</option></term>
+        <listitem>
+          <para>
+	    This flag controls the format of sense data that the device will
+	    return. 0 = Clasic sense format, 1 = Support descriptor format.
+           </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry><term><option>online=&lt;0|1&gt;</option></term>
+        <listitem>
+          <para>
+	    This controls whether a device is online or not.
+          </para>
+          <para>
+	    Devices default to be online when created but can be brought offline
+	    using this parameter. Behaviour of offline devices depend on device
+	    type. An MMC/DVD device that is offline will report that there is
+	    no disk in the unit but the actual MMC/DVD unit itself can still
+	    be communicated with. All other device types will fail all I/O
+	    with a sense code of Not Ready.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <screen format="linespecific">
+Example:
+
+tgtadm --lld iscsi --mode logicalunit --op update \
+       --tid 1 --lun 1 \
+       --params removable=1,sense_format=1,online=1
+      </screen>
+
+      <varlistentry><term><option>mode_page=&lt;byte-string&gt;</option></term>
+        <listitem>
+          <para>
+	    This parameter is used to set specific mode pages for the device
+	    and the mode page contents. Most devices default to reasonable
+	    default mode pages automatically when the LUN is created, but this
+	    allows special settings.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <screen format="linespecific">
+Examples:
+
+Create mode page '2', subpage 0 and 14 bytes of data.
+This is Disconnect-Reconnect mode page.
+
+tgtadm --mode logicalunit --op update --tid 1 --lun 2 \
+         --params mode_page=2:0:14:0x80:0x80:0:0xa:0:0:0:0:0:0:0:0:0:0
+
+
+Create mode page '10', subpage 0 and 10 bytes of data.
+This is Control Extension mode page.
+
+tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 \
+         --params mode_page=10:0:10:2:0:0:0:0:0:0:0:2:0
+
+
+Create mode page '0x1c', subpage 0 and 10 bytes of data.
+This is Informational Exceptions Control mode page.
+
+tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 \
+         --params mode_page=0x1c:0:10:8:0:0:0:0:0:0:0:0:0
+      </screen>
+
+
+    </variablelist>
+  </refsect1>
+
+
+  <refsect1><title>SMC SPECIFIC LUN PARAMETERS</title>
+    <para>
+      These parameters are only applicable for luns that are of type "changer"
+      i.e. the media changer device for a DVD Jukebox or a Virtual Tape Library.
+    </para>
+    <variablelist>
+
+      <varlistentry><term><option>element_type=&lt;1|2|3|4&gt;</option></term>
+        <listitem>
+          <para>
+	    This controls which type of element a certain slot in the 
+	    jukebox/vtl is.
+          </para>
+	  <screen format="linespecific">
+Slot types:
+ 1 -> Medium Transport (picker arm)
+ 2 -> Storage Element
+ 3 -> Import/Export Element
+ 4 -> Data Transfer device (CD drive, tape drive, MO drive etc)
+	  </screen>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry><term><option>address=&lt;1-65535&gt;</option></term>
+        <listitem>
+          <para>
+	    This is used to create/operate on a single slot.
+	    Address specifies the slot on which to perform the operation.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry><term><option>start_address=&lt;1-65535&gt;,quantity=&lt;1--65535&gt;</option></term>
+        <listitem>
+          <para>
+	    This is used to create/operate on an entire range of slots at once.
+	    Start_address specifies the first address to operate on and
+	    quantity specifies the number of consequtive slots.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry><term><option>sides=&lt;1|2&gt;</option></term>
+        <listitem>
+          <para>
+	    When creating storage elements, i.e. "element_type=2", this
+	    parameter specifies if the media has 1 or two sides to hold data.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry><term><option>barcode=&lt;string&gt;</option></term>
+        <listitem>
+          <para>
+	    This is used to assign a barcode to an element.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry><term><option>media_home=&lt;string&gt;</option></term>
+        <listitem>
+          <para>
+	    This parameter specifies a directory where all virtual media
+	    for the dvd/tape device elements are stored.
+          </para>
+          <para>
+	    To assign a media image file to a storage element slot,
+	    you assign "barcode" to be the name of the image file in
+	    the "media_home" directory.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <screen format="linespecific">
+Example: How to create a DVD jukebox with eight disk trays and
+two empty DVD-R disks.
+
+
+# Create a target
+tgtadm --lld iscsi --mode target --op new --tid 1 -T iqn.2007-03:virtual-dvd:`hostname`
+
+# Create a DVD drive and give it a nice name
+# The dvd starts out without a backing store file, i.e. no disk loaded
+tgtadm --op new --mode logicalunit --tid 1 --lun 1 -Y cd
+tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 1 --params vendor_id=STGT_DVD,product_id=DVD101,product_rev=0010,scsi_sn=STGTDVD01,removable=1
+
+# We need a backend store file for the media changer
+if [ ! -f $HOME/smc ]; then
+	dd if=/dev/zero of=$HOME/smc bs=1k count=1
+fi
+
+# Create the SMC device and give it a nice name
+tgtadm --lld iscsi --mode logicalunit --op new --tid 1 --lun 2 -b $HOME/smc --device-type=changer
+tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params vendor_id=STK,product_id=L700,product_rev=0010,scsi_sn=XYZZY_0,removable=1
+
+# Add a Data Transfer devices (1 drive)
+tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params element_type=4,start_address=1,quantity=1
+
+# Specify that the DVD above (LUN 1) is the data transfer device we created
+tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params element_type=4,address=1,tid=1,lun=1
+
+# Medium Transport Elements (robot arm / picker)
+tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params element_type=1,start_address=16,quantity=1
+
+# define path to virtual media
+VTL=${HOME}/vtl
+mkdir -p ${VTL}
+tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params media_home=${VTL}
+
+# Storage Elements - 8 starting at addr 1024
+tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params element_type=2,start_address=1024,quantity=8
+
+# Add 'media' to slots 1 and 2 and leave the other 6 slots empty
+# slot 1
+# Create/"touch" empty writeable virtual DVD-R media
+touch ${VTL}/DISK_001
+tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params element_type=2,address=1024,barcode=DISK_001,sides=1
+
+# slot 2
+touch ${VTL}/DISK_002
+tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params element_type=2,address=1025,barcode=DISK_002,sides=1
+
+# Allow ALL initiators to connect to this target
+tgtadm --lld iscsi --mode target --op bind --tid 1 -I ALL
+
+# Show all our good work.
+tgtadm --lld iscsi --mode target --op show
+      </screen>
+
+    </variablelist>
+  </refsect1>
+
+
+  <refsect1><title>iSNS PARAMETERS</title>
     <para>
       iSNS configuration for a target is by using the tgtadm command.
     </para>
@@ -150,12 +439,12 @@
 	    supprots one iSNS server.
           </para>
         </listitem>
-	<screen format="linespecific">
+      </varlistentry>
+      <screen format="linespecific">
 Example:
 
 tgtadm --op update --mode sys --name iSNSServerIP -v 192.168.11.133
-	</screen>
-      </varlistentry>
+      </screen>
 
       <varlistentry><term><option>iSNS</option></term>
         <listitem>
@@ -163,12 +452,12 @@ tgtadm --op update --mode sys --name iSNSServerIP -v 192.168.11.133
 	    This setting enables(on)/disables(off) iSNS.
           </para>
         </listitem>
-	<screen format="linespecific">
-Example activating iSNS once configured:
+      </varlistentry>
+      <screen format="linespecific">
+Example:
 
 tgtadm --op update --mode sys --name iSNS -v On
-	</screen>
-      </varlistentry>
+      </screen>
 
       <varlistentry><term><option>iSNSServerPort</option></term>
         <listitem>
@@ -176,12 +465,12 @@ tgtadm --op update --mode sys --name iSNS -v On
 	    This setting specifies the port to use for iSNS.
           </para>
         </listitem>
-	<screen format="linespecific">
+      </varlistentry>
+      <screen format="linespecific">
 Example:
 
 tgtadm --op update --mode sys --name iSNSServerPort -v 3205
-	</screen>
-      </varlistentry>
+      </screen>
 
       <varlistentry><term><option>iSNSAccessControl</option></term>
         <listitem>
@@ -189,10 +478,12 @@ tgtadm --op update --mode sys --name iSNSServerPort -v 3205
 	    Enable/disable access control for iSNS.
           </para>
         </listitem>
-	<screen format="linespecific">
-tgtadm --op update --mode sys --name iSNSAccessControl -v Off
-	</screen>
       </varlistentry>
+      <screen format="linespecific">
+Example:
+
+tgtadm --op update --mode sys --name iSNSAccessControl -v Off
+      </screen>
 
     </variablelist>
 
