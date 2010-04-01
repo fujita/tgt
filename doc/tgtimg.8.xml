@@ -14,11 +14,13 @@
 
 <refsynopsisdiv>
 	<cmdsynopsis>
-		<command>tgtimg --op new --device-type tape </command>
-		<command>--barcode &lt;code&gt; --size &lt;size&gt; --type &lt;type&gt; --file &lt;path&gt;</command>
-	</cmdsynopsis>
-	<cmdsynopsis>
-		<command>tgtimg --op show --device-type tape --file=&lt;path&gt;</command>
+		<command>tgtimg</command>
+		<arg chouce="opt">-o --op &lt;operation&gt;</arg>
+		<arg choice="opt">-Y --device-type &lt;device-type&gt;</arg>
+		<arg choice="opt">-b --barcode &lt;barcode&gt;</arg>
+		<arg choice="opt">-s --size &lt;size&gt;</arg>
+		<arg choice="opt">-t --type &lt;media-type&gt;</arg>
+		<arg choice="opt">-f --file &lt;path&gt;</arg>
 	</cmdsynopsis>
 	<cmdsynopsis>
 		<command>tgtimg --help</command>
@@ -28,17 +30,13 @@
 
   <refsect1><title>DESCRIPTION</title>
     <para>
-      tgtimg is a utility to create and manage the image files used by the 
-      stgt tape emulation.
+      Tgtimg is a utility to create and manage the image files used by the 
+      TGTD device emulation.
     </para>
     <para>
-      This command is used to initialize tape image files with the additional
+      This command is used to initialize device image files with the additional
       metadata, such as barcode, list of blocks, total size, etc that
-      the tape emulation of TGTD needs.
-    </para>
-    <para>
-      You must use this command to initialize a file so that TGTD will\
-      recognize it as a tape image.
+      the TGTD emulation needs.
     </para>
   </refsect1>
 
@@ -67,10 +65,37 @@
       <varlistentry><term><option>-Y, --device-type &lt;type&gt;</option></term>
         <listitem>
           <para>
-	    This specifies the type of image file. The only valid type is tape.
+	    This specifies the type of image file.
           </para>
         </listitem>
       </varlistentry>
+      <screen format="linespecific">
+Supported device types are :
+    tape : to create media for a tape device
+    cd   : to create media for a dvd device
+      </screen>
+
+      <varlistentry><term><option>-t, --type &lt;media-type&gt;</option></term>
+        <listitem>
+          <para>
+	    When creating a new image, this specifies the type of media to
+	    emulate, normal data, cleaning image, or worm.
+          </para>
+          <para>
+	    Data is a normal tape to read/write to and probably what you 
+	    want to use.
+          </para>
+        </listitem>
+      </varlistentry>
+      <screen format="linespecific">
+Supported media types for tape devices are :
+    data  : create a normal data tape
+    clean : create a cleaning tape
+    worm  : create a worm
+
+Supported media types for cd devices are :
+    dvd+r : create a blank writeable DVD+R disk
+      </screen>
 
       <varlistentry><term><option>-b, --barcode &lt;barcode&gt;</option></term>
         <listitem>
@@ -92,19 +117,6 @@
         </listitem>
       </varlistentry>
 
-      <varlistentry><term><option>-t, --type {data|clean|worm}</option></term>
-        <listitem>
-          <para>
-	    When creating a new image, this specifies the type of media to
-	    emulate, normal data, cleaning image, or worm.
-          </para>
-          <para>
-	    Data is a normal tape to read/write to and probably what you 
-	    want to use.
-          </para>
-        </listitem>
-      </varlistentry>
-
       <varlistentry><term><option>-f, --file &lt;path&gt;</option></term>
         <listitem>
           <para>
@@ -118,18 +130,26 @@
 
   <refsect1><title>EXAMPLES</title>
     <para>
-      To create a new image
-      <screen format="linespecific">
-	tgtimg --op new --device-type tape --barcode 12345 --size 100 --type data --file /data/tape001.img
-      </screen>
+      To create a new tape image
     </para>
+    <screen format="linespecific">
+      tgtimg --op new --device-type tape --barcode 12345 --size 100 --type data --file /data/tape001.img
+    </screen>
 
     <para>
       To view the content of an existing image
-      <screen format="linespecific">
-	tgtimg --op show --device-type tape --file /data/tape001.img
-      </screen>
     </para>
+    <screen format="linespecific">
+      tgtimg --op show --device-type tape --file /data/tape001.img
+    </screen>
+
+    <para>
+      To create a new blank DVD+R image
+    </para>
+    <screen format="linespecific">
+      tgtimg --op new --device-type cd --type dvd+r --file /data/dvd001.iso
+    </screen>
+
   </refsect1>
 
 

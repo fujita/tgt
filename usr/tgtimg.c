@@ -82,15 +82,17 @@ static void usage(int status)
 Linux SCSI Target Framework Image File Utility, version %s\n\
 \n\
   --op new --device-type tape --barcode=[code] --size=[size] --type=[type] --file=[path]\n\
-                         create a new tape image file.\n\
-                         [code] is a string of chars.\n\
-                         [size] is media size (in megabytes).\n\
-                         [type] is media type (data, clean or WORM)\n\
-                         [path] is a newly created file\n\
+			create a new tape image file.\n\
+			[code] is a string of chars.\n\
+			[size] is media size(in megabytes).\n\
+			[type] is media type \n\
+				(data, clean or WORM) for tape devices\n\
+				(dvd+r) for cd devices\n\
+			[path] is a newly created file\n\
   --op show --device-type tape --file=[path]\n\
-                         dump the tape image file contents.\n\
-                         [path] is the tape image file\n\
-  --help                 display this help and exit\n\
+			dump the tape image file contents.\n\
+			[path] is the tape image file\n\
+  --help                display this help and exit\n\
 \n\
 Report bugs to <stgt@vger.kernel.org>.\n", TGT_VERSION);
 	}
@@ -101,6 +103,8 @@ static int str_to_device_type(char *str)
 {
 	if (!strcmp(str, "tape"))
 		return TYPE_TAPE;
+	else if (!strcmp(str, "cd"))
+		return TYPE_MMC;
 	else {
 		eprintf("unknown target type: %s\n", str);
 		exit(EINVAL);
@@ -303,7 +307,7 @@ static int ssc_new(int op, char *path, char *barcode, char *capacity,
 	sprintf((char *)mi.barcode, "%-31s", barcode);
 	sprintf((char *)current_media, "%s", barcode);
 
-	syslog(LOG_DAEMON|LOG_INFO, "%s being created", path);
+	syslog(LOG_DAEMON|LOG_INFO, "TAPE %s being created", path);
 
 	fd = creat(path, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
 	if (fd < 0) {
@@ -348,6 +352,13 @@ static int ssc_ops(int op, char *path, char *barcode, char *capacity,
 			eprintf("Missing media type: WORM, CLEAN or DATA\n");
 			usage(1);
 		}
+		if (strncasecmp("data", media_type, 4)
+		&& strncasecmp("clean", media_type, 5)
+		&& strncasecmp("worm", media_type, 4)) {
+			eprintf("Media type must be WORM, CLEAN or DATA"
+				       " for tape devices\n");
+			usage(1);
+		}
 		if (!barcode) {
 			eprintf("Missing the barcode param\n");
 			usage(1);
@@ -360,6 +371,49 @@ static int ssc_ops(int op, char *path, char *barcode, char *capacity,
 	} else if (op == OP_SHOW)
 		return ssc_show(path);
 	else {
+		eprintf("unknown the operation type\n");
+		usage(1);
+	}
+
+	return 0;
+}
+
+static int mmc_new(int op, char *path, char *media_type)
+{
+	int fd;
+
+	if (!strncasecmp("dvd+r", media_type, 5)) {
+		fd = creat(path, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
+		if (fd < 0) {
+			perror("Failed creating file");
+			exit(2);
+		}
+		close(fd);
+
+		printf("Created blank DVD+R image file : %s\n", path);
+		syslog(LOG_DAEMON|LOG_INFO, "DVD+R %s being created", path);
+	} else {
+		eprintf("unknown media type when creating cd\n");
+		usage(1);
+	}
+
+	return 0;
+}
+
+
+static int mmc_ops(int op, char *path, char *media_type)
+{
+	if (op == OP_NEW) {
+		if (!media_type) {
+			eprintf("Missing media type: DVD+R\n");
+			usage(1);
+		}
+		if (strncasecmp("dvd+r", media_type, 5)) {
+			eprintf("Media type must be DVD+R for cd devices\n");
+			usage(1);
+		}
+		return mmc_new(op, path, media_type);
+	} else {
 		eprintf("unknown the operation type\n");
 		usage(1);
 	}
@@ -422,9 +476,14 @@ int main(int argc, char **argv)
 		usage(1);
 	}
 
-	if (dev_type == TYPE_TAPE)
+	switch (dev_type) {
+	case TYPE_TAPE:
 		ssc_ops(op, path, barcode, media_capacity, media_type);
-	else {
+		break;
+	case TYPE_MMC:
+		mmc_ops(op, path, media_type);
+		break;
+	default:
 		eprintf("unsupported the device type operation\n");
 		usage(1);
 	}
