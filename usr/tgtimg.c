@@ -88,6 +88,7 @@ Linux SCSI Target Framework Image File Utility, version %s\n\
 			[type] is media type \n\
 				(data, clean or WORM) for tape devices\n\
 				(dvd+r) for cd devices\n\
+				(disk) for disk devices\n\
 			[path] is a newly created file\n\
   --op show --device-type tape --file=[path]\n\
 			dump the tape image file contents.\n\
@@ -105,6 +106,8 @@ static int str_to_device_type(char *str)
 		return TYPE_TAPE;
 	else if (!strcmp(str, "cd"))
 		return TYPE_MMC;
+	else if (!strcmp(str, "disk"))
+		return TYPE_DISK;
 	else {
 		eprintf("unknown target type: %s\n", str);
 		exit(EINVAL);
@@ -421,6 +424,71 @@ static int mmc_ops(int op, char *path, char *media_type)
 	return 0;
 }
 
+static int sbc_new(int op, char *path, char *capacity, char *media_type)
+{
+	int fd;
+
+	if (!strncasecmp("disk", media_type, 4)) {
+		uint32_t pos, size;
+		char *buf;
+
+		sscanf(capacity, "%d", &size);
+		if (size == 0) {
+			printf("Capacity must be > 0\n");
+			exit(3);
+		}
+
+		buf = malloc(1024*1024);
+		if (buf == NULL) {
+			printf("Failed to malloc buffer\n");
+			exit(4);
+		}
+		fd = creat(path, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
+		if (fd < 0) {
+			perror("Failed creating file");
+			exit(2);
+		}
+
+		for (pos = 0; pos < size; pos++)
+			pwrite(fd, buf, 1024*1024, pos*1024*1024LL);
+
+		free(buf);
+		close(fd);
+
+		printf("Created blank DISK image file : %s\n", path);
+		syslog(LOG_DAEMON|LOG_INFO, "DISK %s being created", path);
+	} else {
+		eprintf("unknown media type when creating disk\n");
+		usage(1);
+	}
+
+	return 0;
+}
+
+static int sbc_ops(int op, char *path, char *capacity, char *media_type)
+{
+	if (op == OP_NEW) {
+		if (!media_type) {
+			eprintf("Missing media type: DISK\n");
+			usage(1);
+		}
+		if (strncasecmp("disk", media_type, 4)) {
+			eprintf("Media type must be DISK for disk devices\n");
+			usage(1);
+		}
+		if (!capacity) {
+			eprintf("Missing the capacity param\n");
+			usage(1);
+		}
+		return sbc_new(op, path, capacity, media_type);
+	} else {
+		eprintf("unknown the operation type\n");
+		usage(1);
+	}
+
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	int ch, longindex;
@@ -482,6 +550,9 @@ int main(int argc, char **argv)
 		break;
 	case TYPE_MMC:
 		mmc_ops(op, path, media_type);
+		break;
+	case TYPE_DISK:
+		sbc_ops(op, path, media_capacity, media_type);
 		break;
 	default:
 		eprintf("unsupported the device type operation\n");

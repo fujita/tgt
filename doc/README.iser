@@ -189,7 +189,8 @@ Configure the running target with one or more devices, using the tgtadm
 program you just built (also as root).  Full information is in
 doc/README.iscsi.  Here is a quick-start guide:
 
-	dd if=/dev/zero bs=1k count=1 seek=1048575 of=/tmp/tid1lun1
+	./tgtimg --op new --device-type disk --type disk --size 1024 \
+		 --file /tmp/tid1lun1
 	./tgtadm --lld iscsi --mode target \
 		 --op new --tid 1 --targetname $(hostname)
 	./tgtadm --lld iscsi --mode target \

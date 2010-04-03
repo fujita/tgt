@@ -71,30 +71,31 @@
       </varlistentry>
       <screen format="linespecific">
 Supported device types are :
-    tape : to create media for a tape device
     cd   : to create media for a dvd device
+    disk : to create media for a disk device
+    tape : to create media for a tape device
       </screen>
 
       <varlistentry><term><option>-t, --type &lt;media-type&gt;</option></term>
         <listitem>
           <para>
 	    When creating a new image, this specifies the type of media to
-	    emulate, normal data, cleaning image, or worm.
-          </para>
-          <para>
-	    Data is a normal tape to read/write to and probably what you 
-	    want to use.
+	    emulate. The available mediatypes depend on the type of the
+	    device.
           </para>
         </listitem>
       </varlistentry>
       <screen format="linespecific">
+Supported media types for cd devices are :
+    dvd+r : create a blank writeable DVD+R disk
+
+Supported media types for disk devices are :
+    disk  : create an empty disk
+
 Supported media types for tape devices are :
     data  : create a normal data tape
     clean : create a cleaning tape
     worm  : create a worm
-
-Supported media types for cd devices are :
-    dvd+r : create a blank writeable DVD+R disk
       </screen>
 
       <varlistentry><term><option>-b, --barcode &lt;barcode&gt;</option></term>
@@ -129,6 +130,13 @@ Supported media types for cd devices are :
   </refsect1>
 
   <refsect1><title>EXAMPLES</title>
+    <para>
+      To create a new 100MByte disk
+    </para>
+    <screen format="linespecific">
+      tgtimg --op new --device-type disk --type disk --size 100 --file /data/hd001.raw
+    </screen>
+
     <para>
       To create a new tape image
     </para>

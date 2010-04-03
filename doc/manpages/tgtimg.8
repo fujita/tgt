@@ -1,11 +1,11 @@
 .\"     Title: tgtimg
 .\"    Author: 
 .\" Generator: DocBook XSL Stylesheets v1.73.2 <http://docbook.sf.net/>
-.\"      Date: 04/02/2010
+.\"      Date: 04/04/2010
 .\"    Manual: 
 .\"    Source: 
 .\"
-.TH "TGTIMG" "8" "04/02/2010" "" ""
+.TH "TGTIMG" "8" "04/04/2010" "" ""
 .\" disable hyphenation
 .nh
 .\" disable justification (adjust text to left margin only)
@@ -42,28 +42,30 @@ This specifies the type of image file\.
 .RS 4
 .nf
 Supported device types are :
-    tape : to create media for a tape device
     cd   : to create media for a dvd device
+    disk : to create media for a disk device
+    tape : to create media for a tape device
       
 .fi
 .RE
 .PP
 \fB\-t, \-\-type <media\-type>\fR
 .RS 4
-When creating a new image, this specifies the type of media to emulate, normal data, cleaning image, or worm\.
-.sp
-Data is a normal tape to read/write to and probably what you want to use\.
+When creating a new image, this specifies the type of media to emulate\. The available mediatypes depend on the type of the device\.
 .RE
 .sp
 .RS 4
 .nf
+Supported media types for cd devices are :
+    dvd+r : create a blank writeable DVD+R disk
+
+Supported media types for disk devices are :
+    disk  : create an empty disk
+
 Supported media types for tape devices are :
     data  : create a normal data tape
     clean : create a cleaning tape
     worm  : create a worm
-
-Supported media types for cd devices are :
-    dvd+r : create a blank writeable DVD+R disk
       
 .fi
 .RE
@@ -83,6 +85,15 @@ When creating a new image, this specifies the size in megabytes for the virtual 
 The filename of the image file\.
 .RE
 .SH "EXAMPLES"
+.PP
+To create a new 100MByte disk
+.sp
+.RS 4
+.nf
+      tgtimg \-\-op new \-\-device\-type disk \-\-type disk \-\-size 100 \-\-file /data/hd001\.raw
+    
+.fi
+.RE
 .PP
 To create a new tape image
 .sp
