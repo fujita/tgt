@@ -63,7 +63,7 @@ tgtadm --lld iscsi --mode target --op new --tid 1 -T iqn.2007-03:virtual-dvd:`ho
 
 # Create an empty file that will represent a writeable DVD+R disk
 rm -rf /tmp/empty-disk.iso
-touch /tmp/empty-disk.iso
+tgtimg --op new --device-type cd --type dvd+r --file /tmp/empty-disk.iso
 
 # Create LUN - CD/ROM
 tgtadm --lld iscsi --mode logicalunit --op new --tid 1 --lun 1 -b /tmp/empty-disk.iso --device-type=cd
@@ -93,7 +93,7 @@ tgtadm --tid 1 --lun 1 --op update --mode logicalunit --name online --value No
 # In this example we just swap it to another blank DVD+R disk.
 #
 rm -rf /tmp/empty-disk2.iso
-touch /tmp/empty-disk2.iso
+tgtimg --op new --device-type cd --type dvd+r --file /tmp/empty-disk2.iso
 tgtadm --tid 1 --lun 1 --op update --mode logicalunit --name path --value /tmp/empty-disk2.iso
 
 # note: when we updated the device to a new bakend storage file the device
@@ -148,11 +148,11 @@ tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params eleme
 
 # Add 'media' to slots 1 and 2 and leave the other 6 slots empty
 # slot 1
-touch ${VTL}/DISK_001
+tgtimg --op new --device-type cd --type dvd+r --file ${VTL}/DISK_001
 tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params element_type=2,address=1024,barcode=DISK_001,sides=1
 
 # slot 2
-touch ${VTL}/DISK_002
+tgtimg --op new --device-type cd --type dvd+r --file ${VTL}/DISK_002
 tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params element_type=2,address=1025,barcode=DISK_002,sides=1
 
 # Allow ALL initiators to connect to this target

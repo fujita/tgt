@@ -407,12 +407,12 @@ tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params eleme
 
 # Add 'media' to slots 1 and 2 and leave the other 6 slots empty
 # slot 1
-# Create/"touch" empty writeable virtual DVD-R media
-touch ${VTL}/DISK_001
+# Create empty writeable virtual DVD-R media
+tgtimg --op new --device-type cd --type dvd+r --file ${VTL}/DISK_001
 tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params element_type=2,address=1024,barcode=DISK_001,sides=1
 
 # slot 2
-touch ${VTL}/DISK_002
+tgtimg --op new --device-type cd --type dvd+r --file ${VTL}/DISK_002
 tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params element_type=2,address=1025,barcode=DISK_002,sides=1
 
 # Allow ALL initiators to connect to this target

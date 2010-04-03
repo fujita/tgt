@@ -152,12 +152,12 @@ tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params eleme
 
 # Add 'media' to slots 1 and 2 and leave the other 6 slots empty
 # slot 1
-# Create/"touch" empty writeable virtual DVD-R media
-touch ${VTL}/DISK_001
+# Create empty writeable virtual DVD-R media
+tgtimg --op new --device-type cd --type dvd+r --file ${VTL}/DISK_001
 tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params element_type=2,address=1024,barcode=DISK_001,sides=1
 
 # slot 2
-touch ${VTL}/DISK_002
+tgtimg --op new --device-type cd --type dvd+r --file ${VTL}/DISK_002
 tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params element_type=2,address=1025,barcode=DISK_002,sides=1
 
 # Allow ALL initiators to connect to this target
@@ -193,7 +193,7 @@ Slot types:
 	    To assign a media image file to a storage element slot,
 	    you assign "barcode" to be the name of the image file in
 	    the "media_home" directory.
-          </p></dd></dl></div></div><div class="refsect1" lang="en"><a name="id2476743"></a><h2>iSNS PARAMETERS</h2><p>
+          </p></dd></dl></div></div><div class="refsect1" lang="en"><a name="id2476744"></a><h2>iSNS PARAMETERS</h2><p>
       iSNS configuration for a target is by using the tgtadm command.
     </p><div class="variablelist"><pre class="screen">
 Example:
@@ -220,9 +220,9 @@ tgtadm --op update --mode sys --name iSNSAccessControl -v Off
 	    This setting specifies the port to use for iSNS.
           </p></dd><dt><span class="term"><code class="option">iSNSAccessControl</code></span></dt><dd><p>
 	    Enable/disable access control for iSNS.
-          </p></dd></dl></div></div><div class="refsect1" lang="en"><a name="id2476842"></a><h2>SEE ALSO</h2><p>
+          </p></dd></dl></div></div><div class="refsect1" lang="en"><a name="id2476843"></a><h2>SEE ALSO</h2><p>
       tgtd(8), tgt-admin(8), tgtimg(8), tgt-setup-lun(8).
       <a class="ulink" href="http://stgt.sourceforge.net/" target="_top">http://stgt.sourceforge.net/</a>
-    </p></div><div class="refsect1" lang="en"><a name="id2476856"></a><h2>REPORTING BUGS</h2><p>
+    </p></div><div class="refsect1" lang="en"><a name="id2476858"></a><h2>REPORTING BUGS</h2><p>
       Report bugs to &lt;stgt@vger.kernel.org&gt;
     </p></div></div></body></html>
