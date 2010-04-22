@@ -1,5 +1,8 @@
 VERSION ?= 1.0.3
 
+CHECK_CC = cgcc
+CHECK_CC_FLAGS = '$(CHECK_CC) -Wbitwise -Wno-return-void -no-compile $(ARCH)'
+
 # Define a common prefix where binaries and docs install
 PREFIX ?= /usr
 
@@ -62,3 +65,18 @@ install: install-programs install-doc install-conf install-scripts
 
 .PHONY: clean
 clean: clean-programs clean-doc clean-conf clean-scripts
+
+.PHONY:check
+check: ARCH=$(shell sh script/checkarch.sh)
+check:
+	CC=$(CHECK_CC_FLAGS) $(MAKE) all
+
+.PHONY:check32
+check32: override ARCH=-m32
+check32:
+	CC=$(CHECK_CC_FLAGS) $(MAKE) all
+
+.PHONY:check64
+check64: override ARCH=-m64
+check64:
+	CC=$(CHECK_CC_FLAGS) $(MAKE) all
