@@ -2317,8 +2317,14 @@ static int iscsi_param_parser(char *p)
 			else
 				len = strlen(addr);
 
-			iscsi_portal_addr = zalloc(len + 1);
-			memcpy(iscsi_portal_addr, addr, len);
+			if (iscsi_portal_addr) {
+				free(iscsi_portal_addr);
+				iscsi_portal_addr = NULL;
+			}
+			if (len) {
+				iscsi_portal_addr = zalloc(len + 1);
+				memcpy(iscsi_portal_addr, addr, len);
+			}
 		}
 
 		p += strcspn(p, ",");

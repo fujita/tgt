@@ -100,11 +100,17 @@
       <para>
 	This option is used to bind tgtd to a specific ip-address/portal and/or
 	port. By default tgtd will bind to port 3260 on the wildcard address.
+	The ip-address part (before the ":") can be missing to designate the
+	wildcard address with a none-default port.
       </para>
       <para>
       Example: to bind tgtd to a specific address and port
       <screen format="linespecific">
 	tgtd --iscsi portal=192.0.2.1:3260
+      </screen>
+      Example: to bind tgtd to any address but a none-default port
+      <screen format="linespecific">
+	tgtd --iscsi portal=:3251
       </screen>
       </para>
     </refsect2>
