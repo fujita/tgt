@@ -89,6 +89,7 @@ my %tgtadm_output_tid;
 my %tgtadm_output_name;
 my @largest_tid;
 my $next_tid;
+my %existing_accounts;
 
 # Look up which targets are configured
 sub process_targets {
@@ -116,6 +117,21 @@ sub process_targets {
 	my @tids = values %tgtadm_output_tid;
 	@largest_tid = sort { $a <=> $b } @tids;
 	$next_tid = $largest_tid[$#largest_tid];
+}
+
+sub process_accounts {
+	# We need to run as root
+	if ( $> ) {
+		die("You must be root to run this program.\n");
+	}
+
+	my @show_account = `tgtadm --op show --mode account`;
+	# Here, we create a hash of accounts
+	foreach my $show_account_line (@show_account) {
+		if ( $show_account_line =~ m/^\s+(.*?)$/ ) {
+			$existing_accounts{$1} = 1;
+		}
+	}
 }
 
 # Parse config file(s)
@@ -638,8 +654,12 @@ sub process_options {
 		foreach my $incominguser (@value_arr) {
 			my @userpass = split(/ /, $incominguser);
 			check_value($userpass[1]);
-			execute("tgtadm --lld $driver --mode account --op delete --user=$userpass[0]");
-			execute("tgtadm --lld $driver --mode account --op new --user=$userpass[0] --password=$userpass[1]");
+			# Only delete or create account if it doesn't already exist
+			if (! exists $existing_accounts{$userpass[0]} ) {
+				execute("tgtadm --lld $driver --mode account --op delete --user=$userpass[0]");
+				execute("tgtadm --lld $driver --mode account --op new --user=$userpass[0] --password=$userpass[1]");
+				$existing_accounts{$userpass[0]} = 1;
+			}
 			execute("tgtadm --lld $driver --mode account --op bind --tid=$next_tid --user=$userpass[0]");
 		}
 	}
@@ -652,8 +672,12 @@ sub process_options {
 		}
 		my @userpass = split(/ /, @$value[0]);
 		check_value($userpass[1]);
-		execute("tgtadm --lld $driver --mode account --op delete --user=$userpass[0]");
-		execute("tgtadm --lld $driver --mode account --op new --user=$userpass[0] --password=$userpass[1]");
+		# Only delete or create account if it doesn't already exist
+		if (! exists $existing_accounts{$userpass[0]} ) {
+			execute("tgtadm --lld $driver --mode account --op delete --user=$userpass[0]");
+			execute("tgtadm --lld $driver --mode account --op new --user=$userpass[0] --password=$userpass[1]");
+			$existing_accounts{$userpass[0]} = 1;
+		}
 		execute("tgtadm --lld $driver --mode account --op bind --tid=$next_tid --user=$userpass[0] --outgoing");
 	}
 
@@ -1205,12 +1229,14 @@ sub execute {
 
 if ($execute == 1) {
 	process_targets;
+	process_accounts;
 	parse_configs;
 	add_targets;
 	remove_targets;
 } elsif ($delete ne 0) {
 	delete_targets;
 } elsif ($update ne 0) {
+	process_accounts;
 	update_targets;
 } elsif ($dump == 1) {
 	dump_config;
