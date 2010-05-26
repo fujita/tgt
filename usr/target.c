@@ -480,7 +480,8 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 				goto out;
 			}
 		}
-	}
+	} else
+		bst = get_backingstore_template("null");
 
 	t = device_type_lookup(dev_type);
 	if (!t) {
