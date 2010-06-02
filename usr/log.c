@@ -43,7 +43,7 @@
 
 static struct logarea *la;
 static char *log_name;
-static int is_debug;
+int is_debug = 0;
 static pid_t pid;
 
 static int logarea_init (int size)
@@ -297,9 +297,6 @@ void log_error(const char *fmt, ...)
 
 void log_debug(const char *fmt, ...)
 {
-	if (!is_debug)
-		return;
-
 	va_list ap;
 	va_start(ap, fmt);
 	dolog(LOG_DEBUG, fmt, ap);

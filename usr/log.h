@@ -28,6 +28,9 @@
 
 #include <sys/sem.h>
 
+#define likely(x)       __builtin_expect(!!(x), 1)
+#define unlikely(x)     __builtin_expect(!!(x), 0)
+
 union semun {
 	int val;
 	struct semid_ds *buf;
@@ -76,7 +79,8 @@ do {									\
 
 #define dprintf(fmt, args...)						\
 do {									\
-	log_debug("%s(%d) " fmt, __FUNCTION__, __LINE__, ##args);	\
+	if (unlikely(is_debug))						\
+		log_debug("%s(%d) " fmt, __FUNCTION__, __LINE__, ##args); \
 } while (0)
 
 #endif	/* LOG_H */
