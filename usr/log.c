@@ -362,7 +362,9 @@ int log_init(char *program_name, int size, int daemon, int debug)
 			return 1;
 		} else if (pid) {
 			syslog(LOG_WARNING,
-			       "Target daemon logger with pid=%d started!\n", pid);
+			       "tgtd daemon started, pid:%d\n", getpid());
+			syslog(LOG_WARNING,
+			       "tgtd logger started, pid:%d debug:%d\n", pid, is_debug);
 			return 0;
 		}
 
@@ -391,6 +393,8 @@ void log_close(void)
 		la->active = 0;
 		waitpid(pid, NULL, 0);
 
+		log_warning("tgtd logger stopped, pid:%d\n", pid);
+		log_flush();
 		closelog();
 		free_logarea();
 	}
