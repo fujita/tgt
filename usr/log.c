@@ -29,6 +29,7 @@
 #include <sys/ipc.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/prctl.h>
 
 #include "log.h"
 
@@ -327,6 +328,14 @@ static void log_flush(void)
 	}
 }
 
+static void log_sigsegv(void)
+{
+	log_error("tgtd logger exits abnormally, pid:%d\n", getpid());
+	log_flush();
+	closelog();
+	free_logarea();
+}
+
 int log_init(char *program_name, int size, int daemon, int debug)
 {
 	is_debug = debug;
@@ -358,10 +367,12 @@ int log_init(char *program_name, int size, int daemon, int debug)
 		}
 
 		/* flush on daemon's crash */
-		sa_new.sa_handler = (void*)log_flush;
+		sa_new.sa_handler = (void*)log_sigsegv;
 		sigemptyset(&sa_new.sa_mask);
 		sa_new.sa_flags = 0;
 		sigaction(SIGSEGV, &sa_new, &sa_old );
+
+		prctl(PR_SET_PDEATHSIG, SIGSEGV);
 
 		while (la->active) {
 			log_flush();
