@@ -224,8 +224,6 @@ static int waiting_rdma_slot;
 #define uint64_from_ptr(p) (uint64_t)(uintptr_t)(p)
 #define ptr_from_int64(p) (void *)(unsigned long)(p)
 
-#define ISCSI_LISTEN_PORT 3260
-
 /*
  * Crazy hard-coded linux iser settings need 128 * 8 slots + slop, plus
  * room for our rdmas and send requests.
