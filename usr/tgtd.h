@@ -302,6 +302,8 @@ extern struct backingstore_template *get_backingstore_template(const char *name)
 
 extern int setup_param(char *name, int (*parser)(char *));
 
+extern int bs_init(void);
+
 struct event_data {
 	union {
 		event_handler_t handler;

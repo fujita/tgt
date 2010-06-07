@@ -445,6 +445,8 @@ int main(int argc, char **argv)
 		}
 	}
 
+	bs_init();
+
 	event_loop();
 
 	lld_exit();
