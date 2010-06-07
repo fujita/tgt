@@ -118,7 +118,6 @@ struct device_type_template {
 struct backingstore_template {
 	const char *bs_name;
 	int bs_datasize;
-	int bs_passthrough;
 	int (*bs_open)(struct scsi_lu *dev, char *path, int *fd, uint64_t *size);
 	void (*bs_close)(struct scsi_lu *dev);
 	int (*bs_init)(struct scsi_lu *dev);

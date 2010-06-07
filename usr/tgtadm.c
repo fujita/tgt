@@ -358,7 +358,7 @@ static int str_to_device_type(char *str)
 	else if (!strcmp(str, "ssc"))
 		return TYPE_TAPE;
 	else if (!strcmp(str, "pt"))
-		return TYPE_SPT;
+		return TYPE_PT;
 	else {
 		eprintf("unknown target type: %s\n", str);
 		exit(EINVAL);

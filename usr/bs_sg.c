@@ -287,7 +287,6 @@ static int bs_sg_lu_init(struct scsi_lu *lu)
 static struct backingstore_template sg_bst = {
 	.bs_name		= "sg",
 	.bs_datasize		= 0,
-	.bs_passthrough		= 1,
 	.bs_init		= bs_sg_init,
 	.bs_open		= bs_sg_open,
 	.bs_close		= bs_sg_close,
@@ -296,7 +295,7 @@ static struct backingstore_template sg_bst = {
 };
 
 static struct device_type_template sg_template = {
-	.type			= 0,
+	.type			= TYPE_PT,
 	.lu_init		= bs_sg_lu_init,
 	.lu_config		= spc_lu_config,
 	.lu_online		= spc_lu_online,

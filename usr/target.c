@@ -48,27 +48,11 @@ int device_type_register(struct device_type_template *t)
 	return 0;
 }
 
-static struct device_type_template *device_type_passthrough(void)
+static struct device_type_template *device_type_lookup(int type)
 {
 	struct device_type_template *t;
 
 	list_for_each_entry(t, &device_type_list, device_type_siblings) {
-		if (t->cmd_passthrough != NULL)
-			return t;
-	}
-	return NULL;
-}
-
-static struct device_type_template *device_type_lookup(int type, int passthrough)
-{
-	struct device_type_template *t;
-
-	if (passthrough)
-		return device_type_passthrough();
-
-	list_for_each_entry(t, &device_type_list, device_type_siblings) {
-		if (t->cmd_passthrough != NULL)
-			continue;
 		if (t->type == type)
 			return t;
 	}
@@ -447,7 +431,7 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 		      int backing)
 {
 	char *p, *path = NULL, *bstype = NULL;
-	int ret = 0, passthrough = 0;
+	int ret = 0;
 	struct target *target;
 	struct scsi_lu *lu, *pos;
 	struct device_type_template *t;
@@ -497,12 +481,11 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 				ret = TGTADM_INVALID_REQUEST;
 				goto out;
 			}
-			passthrough = bst->bs_passthrough;
 		}
 	} else
 		bst = get_backingstore_template("null");
 
-	t = device_type_lookup(dev_type, passthrough);
+	t = device_type_lookup(dev_type);
 	if (!t) {
 		eprintf("Unknown device type %d\n", dev_type);
 		ret = TGTADM_INVALID_REQUEST;

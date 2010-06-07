@@ -134,7 +134,7 @@
 #define TYPE_OSD	    0x11
 #define TYPE_NO_LUN         0x7f
 
-#define TYPE_SPT	    0xff
+#define TYPE_PT	            0xff
 
 #define	MSG_SIMPLE_TAG	0x20
 #define	MSG_HEAD_TAG	0x21
