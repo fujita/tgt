@@ -92,16 +92,12 @@ static int bs_sg_rw(int host_no, struct scsi_cmd *cmd)
 	uint16_t asc = ASC_LUN_NOT_SUPPORTED;
 
 	cmd->scsi_cmd_done = target_cmd_io_done;
-
-	cmd->offset = (scsi_rw_offset(cmd->scb) << BS_SG_SHIFT);
 	ret = cmd->dev->bst->bs_cmd_submit(cmd);
 	if (ret) {
 		key = HARDWARE_ERROR;
 		asc = ASC_INTERNAL_TGT_FAILURE;
-	} else {
-		set_cmd_mmapio(cmd);
+	} else
 		return SAM_STAT_GOOD;
-	}
 
 	cmd->offset = 0;
 	scsi_set_in_resid_by_actual(cmd, 0);
@@ -228,10 +224,7 @@ static int bs_sg_init(struct scsi_lu *lu)
 	 * (if available) for the underlying device type.
 	 */
 	lu->cmd_perform = &target_cmd_perform_passthrough;
-	if (!(lu->cmd_perform)) {
-		eprintf("Unable to locate lu->cmd_perform() for bs_sg\n");
-		return -1;
-	}
+
 	/*
 	 * Setup struct scsi_lu->cmd_done() passthrough pointer using
 	 * usr/target.c:__cmd_done_passthrough().
