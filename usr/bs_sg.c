@@ -38,9 +38,12 @@
 #include "util.h"
 #include "tgtd.h"
 #include "scsi.h"
+#include "spc.h"
+#include "tgtadm_error.h"
 
 #define BS_SG_RESVD_SZ  (512 * 1024)
 #define BS_SG_TIMEOUT	2000
+#define BS_SG_SHIFT	9
 
 static int graceful_read(int fd, void *p_read, int to_read)
 {
@@ -80,6 +83,32 @@ static int graceful_write(int fd, void *p_write, int to_write)
 		}
 	}
 	return 0;
+}
+
+static int bs_sg_rw(int host_no, struct scsi_cmd *cmd)
+{
+	int ret;
+	unsigned char key = ILLEGAL_REQUEST;
+	uint16_t asc = ASC_LUN_NOT_SUPPORTED;
+
+	cmd->scsi_cmd_done = target_cmd_io_done;
+
+	cmd->offset = (scsi_rw_offset(cmd->scb) << BS_SG_SHIFT);
+	ret = cmd->dev->bst->bs_cmd_submit(cmd);
+	if (ret) {
+		key = HARDWARE_ERROR;
+		asc = ASC_INTERNAL_TGT_FAILURE;
+	} else {
+		set_cmd_mmapio(cmd);
+		return SAM_STAT_GOOD;
+	}
+
+	cmd->offset = 0;
+	scsi_set_in_resid_by_actual(cmd, 0);
+	scsi_set_out_resid_by_actual(cmd, 0);
+
+	sense_data_build(cmd, key, asc);
+	return SAM_STAT_CHECK_CONDITION;
 }
 
 static void set_cmd_failed(struct scsi_cmd *cmd)
@@ -192,6 +221,25 @@ static int init_sg_device(int fd)
 	return 0;
 }
 
+static int bs_sg_init(struct scsi_lu *lu)
+{
+	/*
+	 * Setup struct scsi_lu->cmd_perform() passthrough pointer
+	 * (if available) for the underlying device type.
+	 */
+	lu->cmd_perform = &target_cmd_perform_passthrough;
+	if (!(lu->cmd_perform)) {
+		eprintf("Unable to locate lu->cmd_perform() for bs_sg\n");
+		return -1;
+	}
+	/*
+	 * Setup struct scsi_lu->cmd_done() passthrough pointer using
+	 * usr/target.c:__cmd_done_passthrough().
+	 */
+	lu->cmd_done = &__cmd_done_passthrough;
+	return 0;
+}
+
 static int bs_sg_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 {
 	int sg_fd, err;
@@ -235,16 +283,37 @@ static int bs_sg_cmd_done(struct scsi_cmd *cmd)
 	return 0;
 }
 
+static int bs_sg_lu_init(struct scsi_lu *lu)
+{
+	if (spc_lu_init(lu))
+		return TGTADM_NOMEM;
+
+	return 0;
+}
+
 static struct backingstore_template sg_bst = {
 	.bs_name		= "sg",
 	.bs_datasize		= 0,
+	.bs_passthrough		= 1,
+	.bs_init		= bs_sg_init,
 	.bs_open		= bs_sg_open,
 	.bs_close		= bs_sg_close,
 	.bs_cmd_submit		= bs_sg_cmd_submit,
 	.bs_cmd_done		= bs_sg_cmd_done,
 };
 
+static struct device_type_template sg_template = {
+	.type			= 0,
+	.lu_init		= bs_sg_lu_init,
+	.lu_config		= spc_lu_config,
+	.lu_online		= spc_lu_online,
+	.lu_offline		= spc_lu_offline,
+	.lu_exit		= spc_lu_exit,
+	.cmd_passthrough	= bs_sg_rw,
+};
+
 __attribute__((constructor)) static void bs_sg_constructor(void)
 {
 	register_backingstore_template(&sg_bst);
+	device_type_register(&sg_template);
 }
