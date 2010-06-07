@@ -40,9 +40,10 @@
 
 static LIST_HEAD(bst_list);
 
+static LIST_HEAD(finished_list);
+static pthread_mutex_t finished_lock;
+
 static int sig_fd = -1;
-static LIST_HEAD(sig_finished_list);
-static pthread_mutex_t sig_finished_lock;
 
 static int command_fd[2];
 static int done_fd[2];
@@ -50,8 +51,6 @@ static pthread_t ack_thread;
 /* protected by pipe */
 static LIST_HEAD(ack_list);
 static pthread_cond_t finished_cond;
-static pthread_mutex_t finished_lock;
-static LIST_HEAD(finished_list);
 
 int register_backingstore_template(struct backingstore_template *bst)
 {
@@ -167,9 +166,9 @@ void bs_sig_request_done(int fd, int events, void *data)
 		return;
 	}
 
-	pthread_mutex_lock(&sig_finished_lock);
-	list_splice_init(&sig_finished_list, &list);
-	pthread_mutex_unlock(&sig_finished_lock);
+	pthread_mutex_lock(&finished_lock);
+	list_splice_init(&finished_list, &list);
+	pthread_mutex_unlock(&finished_lock);
 
 	while (!list_empty(&list)) {
 		cmd = list_first_entry(&list, struct scsi_cmd, bs_list);
@@ -213,19 +212,14 @@ static void *bs_thread_worker_fn(void *arg)
 
 		info->request_fn(cmd);
 
-		if (sig_fd < 0) {
-			pthread_mutex_lock(&finished_lock);
-			list_add_tail(&cmd->bs_list, &finished_list);
-			pthread_mutex_unlock(&finished_lock);
+		pthread_mutex_lock(&finished_lock);
+		list_add_tail(&cmd->bs_list, &finished_list);
+		pthread_mutex_unlock(&finished_lock);
 
+		if (sig_fd < 0)
 			pthread_cond_signal(&finished_cond);
-		} else {
-			pthread_mutex_lock(&sig_finished_lock);
-			list_add_tail(&cmd->bs_list, &sig_finished_list);
-			pthread_mutex_unlock(&sig_finished_lock);
-
+		else
 			kill(getpid(), SIGUSR2);
-		}
 	}
 
 	pthread_exit(NULL);
@@ -235,6 +229,8 @@ static int bs_init_signalfd(void)
 {
 	sigset_t mask;
 	int ret;
+
+	pthread_mutex_init(&finished_lock, NULL);
 
 	sigemptyset(&mask);
 	sigaddset(&mask, SIGUSR2);
@@ -251,8 +247,6 @@ static int bs_init_signalfd(void)
 
 		return 1;
 	}
-
-	pthread_mutex_init(&sig_finished_lock, NULL);
 
 	return 0;
 }
