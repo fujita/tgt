@@ -524,6 +524,9 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	lu->prgeneration = 0;
 	lu->pr_holder = NULL;
 
+	lu->cmd_perform = &target_cmd_perform;
+	lu->cmd_done = &__cmd_done;
+
  	if (lu->dev_type_template.lu_init) {
 		ret = lu->dev_type_template.lu_init(lu);
 		if (ret)
@@ -534,26 +537,6 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 		ret = lu->bst->bs_init(lu);
 		if (ret)
 			goto fail_lu_init;
-	}
-	/*
-	 * Check if struct scsi_lu->cmd_perform() has been filled in
-	 * by the SG_IO backstore for passthrough (SG_IO) in ->bs_init() call.
-	 * If the function pointer does not exist, use the default internal
-	 * target_cmd_perform() and __cmd_done() calls.
-	 */
-	if (!(lu->cmd_perform)) {
-		lu->cmd_perform = &target_cmd_perform;
-		lu->cmd_done = &__cmd_done;
-	} else if (!(lu->cmd_done)) {
-		eprintf("Unable to locate struct scsi_lu->cmd_done() with"
-				" valid ->cmd_perform()\n");
-		ret = TGTADM_INVALID_REQUEST;
-		goto fail_bs_init;
-	} else if (!(lu->dev_type_template.cmd_passthrough)) {
-		eprintf("Unable to locate ->cmd_passthrough() handler"
-				" for device type template\n");
-		ret = TGTADM_INVALID_REQUEST;
-		goto fail_bs_init;
 	}
 
 	if (backing && !path && !lu->attrs.removable) {
