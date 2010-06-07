@@ -108,6 +108,7 @@ struct device_type_template {
 	int (*lu_config)(struct scsi_lu *lu, char *args);
 	int (*lu_online)(struct scsi_lu *lu);
 	int (*lu_offline)(struct scsi_lu *lu);
+	int (*cmd_passthrough)(int, struct scsi_cmd *);
 
 	struct device_type_operations ops[256];
 
@@ -117,6 +118,7 @@ struct device_type_template {
 struct backingstore_template {
 	const char *bs_name;
 	int bs_datasize;
+	int bs_passthrough;
 	int (*bs_open)(struct scsi_lu *dev, char *path, int *fd, uint64_t *size);
 	void (*bs_close)(struct scsi_lu *dev);
 	int (*bs_init)(struct scsi_lu *dev);
@@ -178,6 +180,17 @@ struct scsi_lu {
 	 * Currently used by ssc, smc and mmc modules.
 	 */
 	void *xxc_p;
+	/*
+	 * Used internally for usr/target.c:target_cmd_perform() and with
+	 * passthrough CMD processing with
+	 * struct device_type_template->cmd_passthrough().
+	 */
+	int (*cmd_perform)(int, struct scsi_cmd *);
+	/*
+	 * Used internally for usr/target.c:__cmd_done() and with
+	 * passthrough CMD processing with __cmd_done_passthrough()
+	 */
+	void (*cmd_done)(struct target *, struct scsi_cmd *);
 };
 
 struct mgmt_req {
@@ -251,7 +264,10 @@ extern void tgt_remove_sched_event(struct event_data *evt);
 
 extern int tgt_event_modify(int fd, int events);
 extern int target_cmd_queue(int tid, struct scsi_cmd *cmd);
+extern int target_cmd_perform(int tid, struct scsi_cmd *cmd);
+extern int target_cmd_perform_passthrough(int tid, struct scsi_cmd *cmd);
 extern void target_cmd_done(struct scsi_cmd *cmd);
+extern void __cmd_done_passthrough(struct target *target, struct scsi_cmd *cmd);
 struct scsi_cmd *target_cmd_lookup(int tid, uint64_t itn_id, uint64_t tag);
 
 extern enum mgmt_req_result target_mgmt_request(int tid, uint64_t itn_id,

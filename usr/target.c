@@ -48,11 +48,27 @@ int device_type_register(struct device_type_template *t)
 	return 0;
 }
 
-static struct device_type_template *device_type_lookup(int type)
+static struct device_type_template *device_type_passthrough(void)
 {
 	struct device_type_template *t;
 
 	list_for_each_entry(t, &device_type_list, device_type_siblings) {
+		if (t->cmd_passthrough != NULL)
+			return t;
+	}
+	return NULL;
+}
+
+static struct device_type_template *device_type_lookup(int type, int passthrough)
+{
+	struct device_type_template *t;
+
+	if (passthrough)
+		return device_type_passthrough();
+
+	list_for_each_entry(t, &device_type_list, device_type_siblings) {
+		if (t->cmd_passthrough != NULL)
+			continue;
 		if (t->type == type)
 			return t;
 	}
@@ -425,11 +441,13 @@ static match_table_t device_tokens = {
 	{Opt_err, NULL},
 };
 
+static void __cmd_done(struct target *, struct scsi_cmd *);
+
 int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 		      int backing)
 {
 	char *p, *path = NULL, *bstype = NULL;
-	int ret = 0;
+	int ret = 0, passthrough = 0;
 	struct target *target;
 	struct scsi_lu *lu, *pos;
 	struct device_type_template *t;
@@ -479,11 +497,12 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 				ret = TGTADM_INVALID_REQUEST;
 				goto out;
 			}
+			passthrough = bst->bs_passthrough;
 		}
 	} else
 		bst = get_backingstore_template("null");
 
-	t = device_type_lookup(dev_type);
+	t = device_type_lookup(dev_type, passthrough);
 	if (!t) {
 		eprintf("Unknown device type %d\n", dev_type);
 		ret = TGTADM_INVALID_REQUEST;
@@ -515,6 +534,26 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 		ret = lu->bst->bs_init(lu);
 		if (ret)
 			goto fail_lu_init;
+	}
+	/*
+	 * Check if struct scsi_lu->cmd_perform() has been filled in
+	 * by the SG_IO backstore for passthrough (SG_IO) in ->bs_init() call.
+	 * If the function pointer does not exist, use the default internal
+	 * target_cmd_perform() and __cmd_done() calls.
+	 */
+	if (!(lu->cmd_perform)) {
+		lu->cmd_perform = &target_cmd_perform;
+		lu->cmd_done = &__cmd_done;
+	} else if (!(lu->cmd_done)) {
+		eprintf("Unable to locate struct scsi_lu->cmd_done() with"
+				" valid ->cmd_perform()\n");
+		ret = TGTADM_INVALID_REQUEST;
+		goto fail_bs_init;
+	} else if (!(lu->dev_type_template.cmd_passthrough)) {
+		eprintf("Unable to locate ->cmd_passthrough() handler"
+				" for device type template\n");
+		ret = TGTADM_INVALID_REQUEST;
+		goto fail_bs_init;
 	}
 
 	if (backing && !path && !lu->attrs.removable) {
@@ -829,9 +868,7 @@ static struct it_nexus_lu_info *it_nexus_lu_info_lookup(struct it_nexus *itn,
 int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 {
 	struct target *target;
-	struct tgt_cmd_queue *q;
 	struct it_nexus *itn;
-	int result, enabled = 0;
 	uint64_t dev_id, itn_id = cmd->cmd_itn_id;
 
 	itn = it_nexus_lookup(tid, itn_id);
@@ -858,16 +895,28 @@ int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 	/* service delivery or target failure */
 	if (target->target_state != SCSI_TARGET_READY)
 		return -EBUSY;
+	/*
+	 * Call struct scsi_lu->cmd_perform() that will either be setup for
+	 * internal or passthrough CDB processing using 2 functions below.
+	 */
+	return cmd->dev->cmd_perform(tid, cmd);
+}
 
-	cmd_hlist_insert(itn, cmd);
+/*
+ * Used by all non bs_sg backstores for internal STGT port emulation
+ */
+int target_cmd_perform(int tid, struct scsi_cmd *cmd)
+{
+	struct tgt_cmd_queue *q = &cmd->dev->cmd_queue;
+	int result, enabled = 0;
 
-	q = &cmd->dev->cmd_queue;
+	cmd_hlist_insert(cmd->it_nexus, cmd);
 
 	enabled = cmd_enabled(q, cmd);
-	dprintf("%p %x %" PRIx64 " %d\n", cmd, cmd->scb[0], dev_id, enabled);
+	dprintf("%p %x %" PRIx64 " %d\n", cmd, cmd->scb[0], cmd->dev_id, enabled);
 
 	if (enabled) {
-		result = scsi_cmd_perform(itn->host_no, cmd);
+		result = scsi_cmd_perform(cmd->it_nexus->host_no, cmd);
 
 		cmd_post_perform(q, cmd);
 
@@ -887,6 +936,30 @@ int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 
 		list_add_tail(&cmd->qlist, &q->queue);
 	}
+
+	return 0;
+}
+
+/*
+ * Used by bs_sg for CDB passthrough to STGT LUNs
+ */
+int target_cmd_perform_passthrough(int tid, struct scsi_cmd *cmd)
+{
+	int result;
+
+	dprintf("%p %x %" PRIx64 " PT \n", cmd, cmd->scb[0], cmd->dev_id);
+
+	result = cmd->dev->dev_type_template.cmd_passthrough(tid, cmd);
+
+	dprintf("%" PRIx64 " %x %p %p %" PRIu64 " %u %u %d %d\n",
+		cmd->tag, cmd->scb[0], scsi_get_out_buffer(cmd),
+		scsi_get_in_buffer(cmd), cmd->offset,
+		scsi_get_out_length(cmd), scsi_get_in_length(cmd),
+		result, cmd_async(cmd));
+
+	set_cmd_processed(cmd);
+	if (!cmd_async(cmd))
+		target_cmd_io_done(cmd, result);
 
 	return 0;
 }
@@ -925,6 +998,10 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 	}
 }
 
+/*
+ * Used by struct scsi_lu->cmd_done() for normal internal completion
+ * (non passthrough)
+ */
 static void __cmd_done(struct target *target, struct scsi_cmd *cmd)
 {
 	struct tgt_cmd_queue *q;
@@ -948,6 +1025,20 @@ static void __cmd_done(struct target *target, struct scsi_cmd *cmd)
 	}
 
 	post_cmd_done(q);
+}
+
+/*
+ * Used by struct scsi_lu->cmd_done() for bs_sg (passthrough) completion
+ */
+void __cmd_done_passthrough(struct target *target, struct scsi_cmd *cmd)
+{
+	int err;
+
+	err = target->bst->bs_cmd_done(cmd);
+
+	dprintf("%d %p %p %u %u %d\n", cmd_mmapio(cmd), scsi_get_out_buffer(cmd),
+		scsi_get_in_buffer(cmd), scsi_get_out_length(cmd),
+		scsi_get_in_length(cmd), err);
 }
 
 struct scsi_cmd *target_cmd_lookup(int tid, uint64_t itn_id, uint64_t tag)
@@ -974,7 +1065,7 @@ void target_cmd_done(struct scsi_cmd *cmd)
 		free(mreq);
 	}
 
-	__cmd_done(cmd->c_target, cmd);
+	cmd->dev->cmd_done(cmd->c_target, cmd);
 }
 
 static int abort_cmd(struct target* target, struct mgmt_req *mreq,
@@ -993,7 +1084,7 @@ static int abort_cmd(struct target* target, struct mgmt_req *mreq,
 		cmd->mreq = mreq;
 		err = -EBUSY;
 	} else {
-		__cmd_done(target, cmd);
+		cmd->dev->cmd_done(target, cmd);
 		target_cmd_io_done(cmd, TASK_ABORTED);
 	}
 	return err;
