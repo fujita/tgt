@@ -332,6 +332,8 @@ struct event_data {
 	struct list_head e_list;
 };
 
+extern int sig_fd;
+
 int do_tgt_event_add(int efd, struct list_head *list, int fd, int events,
 		     event_handler_t handler, void *data);
 void do_tgt_event_del(int efd, struct list_head *list, int fd);
