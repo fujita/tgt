@@ -154,7 +154,7 @@ rewrite:
 	}
 }
 
-void bs_sig_request_done(int fd, int events, void *data)
+static void bs_sig_request_done(int fd, int events, void *data)
 {
 	int ret;
 	struct scsi_cmd *cmd;
