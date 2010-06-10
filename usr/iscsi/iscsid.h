@@ -244,6 +244,13 @@ struct iscsi_target {
 	int nr_sessions;
 
 	struct list_head isns_list;
+
+	int efd;
+	pthread_mutex_t event_lock;
+	struct list_head events_list;
+
+	struct bs_finish bsfin;
+	int stop_pthread;
 };
 
 enum task_flags {
@@ -309,6 +316,8 @@ extern int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid,
 			     uint64_t lun, char *buf, int rest);
 int iscsi_target_update(int mode, int op, int tid, uint64_t sid, uint64_t lun,
 			uint32_t cid, char *name);
+
+int iscsi_pthread_per_target(void);
 
 /* param.c */
 int param_index_by_name(char *name, struct iscsi_key *keys);

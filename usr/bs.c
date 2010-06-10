@@ -34,14 +34,14 @@
 
 #include "list.h"
 #include "tgtd.h"
+#include "target.h"
 #include "tgtadm_error.h"
 #include "util.h"
 #include "bs_thread.h"
 
 static LIST_HEAD(bst_list);
 
-static LIST_HEAD(finished_list);
-static pthread_mutex_t finished_lock;
+struct bs_finish bs_finish, *bsf = &bs_finish;
 
 int sig_fd = -1;
 
@@ -87,15 +87,15 @@ retry:
 		goto out;
 	}
 
-	pthread_mutex_lock(&finished_lock);
+	pthread_mutex_lock(&bsf->finished_lock);
 retest:
-	if (list_empty(&finished_list)) {
-		pthread_cond_wait(&finished_cond, &finished_lock);
+	if (list_empty(&bsf->finished_list)) {
+		pthread_cond_wait(&finished_cond, &bsf->finished_lock);
 		goto retest;
 	}
 
-	while (!list_empty(&finished_list)) {
-		cmd = list_first_entry(&finished_list,
+	while (!list_empty(&bsf->finished_list)) {
+		cmd = list_first_entry(&bsf->finished_list,
 				 struct scsi_cmd, bs_list);
 
 		dprintf("found %p\n", cmd);
@@ -104,7 +104,7 @@ retest:
 		list_add_tail(&cmd->bs_list, &ack_list);
 	}
 
-	pthread_mutex_unlock(&finished_lock);
+	pthread_mutex_unlock(&bsf->finished_lock);
 
 	nr = 1;
 rewrite:
@@ -154,9 +154,10 @@ rewrite:
 	}
 }
 
-static void bs_sig_request_done(int fd, int events, void *data)
+void bs_sig_request_done(int fd, int events, void *data)
 {
 	int ret;
+	struct bs_finish *b = data;
 	struct scsi_cmd *cmd;
 	struct signalfd_siginfo siginfo[16];
 	LIST_HEAD(list);
@@ -166,9 +167,9 @@ static void bs_sig_request_done(int fd, int events, void *data)
 		return;
 	}
 
-	pthread_mutex_lock(&finished_lock);
-	list_splice_init(&finished_list, &list);
-	pthread_mutex_unlock(&finished_lock);
+	pthread_mutex_lock(&b->finished_lock);
+	list_splice_init(&b->finished_list, &list);
+	pthread_mutex_unlock(&b->finished_lock);
 
 	while (!list_empty(&list)) {
 		cmd = list_first_entry(&list, struct scsi_cmd, bs_list);
@@ -184,6 +185,7 @@ static void *bs_thread_worker_fn(void *arg)
 	struct bs_thread_info *info = arg;
 	struct scsi_cmd *cmd;
 	sigset_t set;
+	struct bs_finish *tbsf;
 
 	sigfillset(&set);
 	sigprocmask(SIG_BLOCK, &set, NULL);
@@ -207,16 +209,24 @@ static void *bs_thread_worker_fn(void *arg)
 		cmd = list_first_entry(&info->pending_list,
 				       struct scsi_cmd, bs_list);
 
+
+		if (cmd->c_target->bsf)
+			tbsf = cmd->c_target->bsf;
+		else
+			tbsf = bsf;
+
 		list_del(&cmd->bs_list);
 		pthread_mutex_unlock(&info->pending_lock);
 
 		info->request_fn(cmd);
 
-		pthread_mutex_lock(&finished_lock);
-		list_add_tail(&cmd->bs_list, &finished_list);
-		pthread_mutex_unlock(&finished_lock);
+		pthread_mutex_lock(&tbsf->finished_lock);
+		list_add_tail(&cmd->bs_list, &tbsf->finished_list);
+		pthread_mutex_unlock(&tbsf->finished_lock);
 
-		if (sig_fd < 0)
+		if (cmd->c_target->bsf)
+			pthread_kill(cmd->c_target->bsf->thread, SIGUSR2);
+		else if (sig_fd < 0)
 			pthread_cond_signal(&finished_cond);
 		else
 			kill(getpid(), SIGUSR2);
@@ -225,12 +235,10 @@ static void *bs_thread_worker_fn(void *arg)
 	pthread_exit(NULL);
 }
 
-static int bs_init_signalfd(void)
+static int bs_init_signalfd(struct bs_finish *b)
 {
 	sigset_t mask;
 	int ret;
-
-	pthread_mutex_init(&finished_lock, NULL);
 
 	sigemptyset(&mask);
 	sigaddset(&mask, SIGUSR2);
@@ -240,7 +248,7 @@ static int bs_init_signalfd(void)
 	if (sig_fd < 0)
 		return 1;
 
-	ret = tgt_event_add(sig_fd, EPOLLIN, bs_sig_request_done, NULL);
+	ret = tgt_event_add(sig_fd, EPOLLIN, bs_sig_request_done, b);
 	if (ret < 0) {
 		close (sig_fd);
 		sig_fd = -1;
@@ -256,7 +264,6 @@ static int bs_init_notify_thread(void)
 	int ret;
 
 	pthread_cond_init(&finished_cond, NULL);
-	pthread_mutex_init(&finished_lock, NULL);
 
 	ret = pipe(command_fd);
 	if (ret) {
@@ -298,7 +305,6 @@ close_command_fd:
 	close(command_fd[1]);
 destroy_cond_mutex:
 	pthread_cond_destroy(&finished_cond);
-	pthread_mutex_destroy(&finished_lock);
 
 	return 1;
 }
@@ -307,7 +313,10 @@ int bs_init(void)
 {
 	int ret;
 
-	ret = bs_init_signalfd();
+	pthread_mutex_init(&bsf->finished_lock, NULL);
+	INIT_LIST_HEAD(&bsf->finished_list);
+
+	ret = bs_init_signalfd(bsf);
 	if (!ret) {
 		eprintf("use signalfd notification\n");
 		return 0;

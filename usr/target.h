@@ -39,6 +39,8 @@ struct target {
 	struct list_head acl_list;
 
 	struct tgt_account account;
+
+	struct bs_finish *bsf;
 };
 
 struct it_nexus {
