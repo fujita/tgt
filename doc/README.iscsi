@@ -446,6 +446,13 @@ IFMarkInt=Reject
 MaxConnections=1
 
 
+Performance tips
+-------------
+If you need multiple logical units, you had better create multiple
+targets including one logical unit instead of creating one target
+including multiple logical units.
+
+
 Shutdown
 -------------
 host:~/tgt# killall -9 tgtd
