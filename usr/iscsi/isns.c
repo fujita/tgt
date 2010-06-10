@@ -604,6 +604,7 @@ static char *print_scn_pdu(struct isns_hdr *hdr)
 	struct isns_tlv *tlv = (struct isns_tlv *) hdr->pdu;
 	uint16_t function, length, flags, transaction, sequence;
 	char *name = NULL;
+	static char iscsi_name[224];
 
 	get_hdr_param(hdr, function, length, flags, transaction, sequence);
 
@@ -613,8 +614,10 @@ static char *print_scn_pdu(struct isns_hdr *hdr)
 		switch (ntohl(tlv->tag)) {
 		case ISNS_ATTR_ISCSI_NAME:
 			eprintf("scn name: %u, %s\n", vlen, (char *) tlv->value);
-			if (!name)
-				name = (char *) tlv->value;
+			if (!name) {
+				snprintf(iscsi_name, sizeof(iscsi_name), (char *)tlv->value);
+				name = iscsi_name;
+			}
 			break;
 		case ISNS_ATTR_TIMESTAMP:
 /* 			log_error("%u : %u : %" PRIx64, ntohl(tlv->tag), vlen, */
