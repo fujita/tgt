@@ -252,6 +252,69 @@ void tgt_remove_sched_event(struct event_data *evt)
 	}
 }
 
+struct ext_prog_info {
+	void (*callback)(void *data, int result);
+	void *data;
+};
+
+static void run_ext_callback(int fd, int events, void *data)
+{
+	int ret, result;
+	struct ext_prog_info *ex = data;
+
+	ret = read(fd, &result, sizeof(result));
+	if (ret != sizeof(result)) {
+		result = -EINVAL;
+		eprintf("failed to get the result.");
+	}
+
+	if (ex->callback)
+		ex->callback(ex->data, result);
+
+	tgt_event_del(fd);
+	close(fd);
+	free(data);
+}
+
+int run_ext_program(const char *cmd,
+		    void (*callback)(void *data, int result), void *data)
+{
+	pid_t pid;
+	int fds[2], ret;
+	struct ext_prog_info *ex;
+
+	ex = zalloc(sizeof(*ex));
+	if (!ex)
+		return -ENOMEM;
+
+	ret = pipe(fds);
+	if (ret < 0) {
+		free(ex);
+		return ret;
+	}
+
+	eprintf("%d %d\n", fds[0], fds[1]);
+
+	ex->callback = callback;
+	ex->data = data;
+
+	tgt_event_add(fds[0], EPOLLIN, run_ext_callback, ex);
+
+	pid = fork();
+	if (pid < 0)
+		return pid;
+
+	if (!pid) {
+		ret = system(cmd);
+		write(fds[1], &ret, sizeof(ret));
+		return 0;
+	}
+
+	close(fds[1]);
+
+	return 0;
+}
+
 static int tgt_exec_scheduled(void)
 {
 	struct list_head *last_sched;
