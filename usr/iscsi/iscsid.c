@@ -489,7 +489,19 @@ static void login_start(struct iscsi_connection *conn)
 			conn->state = STATE_EXIT;
 			return;
 		}
+
 		conn->tid = target->tid;
+
+		if (target_redirected(target, conn)) {
+			char buf[NI_MAXHOST + NI_MAXSERV + 4];
+			snprintf(buf, sizeof(buf), "%s:%s", target->redirect_info.addr,
+				 target->redirect_info.port);
+			text_key_add(conn, "TargetAddress", buf);
+			rsp->status_class = ISCSI_STATUS_CLS_REDIRECT;
+			rsp->status_detail = target->redirect_info.reason;
+			conn->state = STATE_EXIT;
+			return;
+		}
 
 		if (tgt_get_target_state(target->tid) != SCSI_TARGET_READY) {
 			rsp->status_class = ISCSI_STATUS_CLS_TARGET_ERR;

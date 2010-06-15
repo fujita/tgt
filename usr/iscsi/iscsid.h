@@ -21,6 +21,7 @@
 
 #include <stdint.h>
 #include <inttypes.h>
+#include <netdb.h>
 
 #include "transport.h"
 #include "list.h"
@@ -243,6 +244,12 @@ struct iscsi_target {
 	int max_nr_sessions;
 	int nr_sessions;
 
+	struct redirect_info {
+		char addr[NI_MAXHOST + 1];
+		char port[NI_MAXSERV + 1];
+		uint8_t reason;
+	} redirect_info;
+
 	struct list_head isns_list;
 
 	int efd;
@@ -316,6 +323,7 @@ extern int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid,
 			     uint64_t lun, char *buf, int rest);
 int iscsi_target_update(int mode, int op, int tid, uint64_t sid, uint64_t lun,
 			uint32_t cid, char *name);
+int target_redirected(struct iscsi_target *target, struct iscsi_connection *conn);
 
 int iscsi_pthread_per_target(void);
 

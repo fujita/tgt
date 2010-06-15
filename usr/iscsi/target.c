@@ -192,6 +192,57 @@ int ip_acl(int tid, struct iscsi_connection *conn)
 	return -EPERM;
 }
 
+int target_redirected(struct iscsi_target *target, struct iscsi_connection *conn)
+{
+	struct sockaddr_storage from;
+	struct addrinfo hints, *res;
+	socklen_t len;
+	int ret;
+	char *p, *q, *str;
+
+	if (!strlen(target->redirect_info.addr))
+		return 0;
+
+	if (target->redirect_info.reason != ISCSI_LOGIN_STATUS_TGT_MOVED_TEMP &&
+	    target->redirect_info.reason != ISCSI_LOGIN_STATUS_TGT_MOVED_PERM)
+		return 0;
+
+	len = sizeof(from);
+	ret = conn->tp->ep_getpeername(conn, (struct sockaddr *)&from, &len);
+	if (ret < 0)
+		return 0;
+
+	p = strdup(target->redirect_info.addr);
+	if (!p)
+		return 0;
+	str = p;
+
+	if (*p == '[') {
+		p++;
+		if (!(q = strchr(p, ']'))) {
+			free(str);
+			return 0;
+		}
+		*(q++) = '\0';
+	}
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_NUMERICHOST;
+
+	ret = getaddrinfo(p, NULL, &hints, &res);
+	if (ret < 0) {
+		free(str);
+		return 0;
+	}
+
+	ret = address_match(res->ai_addr, (struct sockaddr *)&from);
+	freeaddrinfo(res);
+	free(str);
+
+	return !ret;
+}
+
 void target_list_build(struct iscsi_connection *conn, char *addr, char *name)
 {
 	struct iscsi_target *target;
@@ -416,6 +467,29 @@ int iscsi_target_update(int mode, int op, int tid, uint64_t sid, uint64_t lun,
 
 		dprintf("%s:%s\n", name, str);
 
+		if (!strncmp(name, "RedirectAddress", 15)) {
+			snprintf(target->redirect_info.addr,
+				 sizeof(target->redirect_info.addr), "%s", str);
+			err = TGTADM_SUCCESS;
+			break;
+		} else if (!strncmp(name, "RedirectPort", 12)) {
+			snprintf(target->redirect_info.port,
+				 sizeof(target->redirect_info.port), "%s", str);
+			err = TGTADM_SUCCESS;
+			break;
+		} else if (!strncmp(name, "RedirectReason", 14)) {
+			if (!strncmp(str, "Temporary", 9)) {
+				target->redirect_info.reason =
+					ISCSI_LOGIN_STATUS_TGT_MOVED_TEMP;
+				err = TGTADM_SUCCESS;
+			} else if (!strncmp(str, "Permanent", 9)) {
+				target->redirect_info.reason =
+					ISCSI_LOGIN_STATUS_TGT_MOVED_PERM;
+				err = TGTADM_SUCCESS;
+			} else
+				break;
+		}
+
 		idx = param_index_by_name(name, session_keys);
 		if (idx >= 0) {
 			err = iscsi_session_param_update(target, idx, str);
@@ -463,6 +537,37 @@ static int iscsi_target_show_session(struct iscsi_target* target, uint64_t sid,
 	return total;
 }
 
+#define __buffer_check(buf, total, len, rest)	\
+({						\
+	buf += len;				\
+	total += len;				\
+	rest -= len;				\
+	if (!rest)				\
+		return total;			\
+})
+
+static int show_redirect_info(struct iscsi_target* target, char *buf, int rest)
+{
+	int len, total = 0;
+
+	len = snprintf(buf, rest, "RedirectAddress=%s\n", target->redirect_info.addr);
+	__buffer_check(buf, total, len, rest);
+	len = snprintf(buf, rest, "RedirectPort=%s\n", target->redirect_info.port);
+	__buffer_check(buf, total, len, rest);
+	if (target->redirect_info.reason == ISCSI_LOGIN_STATUS_TGT_MOVED_TEMP) {
+		len = snprintf(buf, rest, "RedirectReason=Temporary\n");
+		__buffer_check(buf, total, len, rest);
+	} else if (target->redirect_info.reason == ISCSI_LOGIN_STATUS_TGT_MOVED_PERM) {
+		len = snprintf(buf, rest, "RedirectReason=Permanent\n");
+		__buffer_check(buf, total, len, rest);
+	} else {
+		len = snprintf(buf, rest, "RedirectReason=Unknown\n");
+		__buffer_check(buf, total, len, rest);
+	}
+
+	return total;
+}
+
 int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid, uint64_t lun,
 		      char *buf, int rest)
 {
@@ -480,7 +585,10 @@ int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid, uint64_t lu
 		total = isns_show(buf, rest);
 		break;
 	case MODE_TARGET:
-		len = show_iscsi_param(buf, target->session_param, rest);
+		if (strlen(target->redirect_info.addr))
+			len = show_redirect_info(target, buf, rest);
+		else
+			len = show_iscsi_param(buf, target->session_param, rest);
 		total += len;
 		break;
 	case MODE_SESSION:
