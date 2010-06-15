@@ -131,10 +131,13 @@ static int logarea_init (int size)
 
 static void free_logarea (void)
 {
+	if (!la)
+		return;
 	semctl(la->semid, 0, IPC_RMID, la->semarg);
 	shmdt(la->buff);
 	shmdt(la->start);
 	shmdt(la);
+	la = NULL;
 }
 
 #if LOGDBG
@@ -307,6 +310,9 @@ void log_debug(const char *fmt, ...)
 static void log_flush(void)
 {
 	struct sembuf ops;
+
+	if (!la)
+		return;
 
 	while (!la->empty) {
 		ops.sem_num = 0;
