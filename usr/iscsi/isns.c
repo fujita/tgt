@@ -611,6 +611,9 @@ static char *print_scn_pdu(struct isns_hdr *hdr)
 	while (length) {
 		uint32_t vlen = ntohl(tlv->length);
 
+		if (vlen + sizeof(*tlv) > length)
+			vlen = length - sizeof(*tlv);
+
 		switch (ntohl(tlv->tag)) {
 		case ISNS_ATTR_ISCSI_NAME:
 			eprintf("scn name: %u, %s\n", vlen, (char *) tlv->value);
@@ -678,10 +681,16 @@ found:
 
 	/* skip status */
 	tlv = (struct isns_tlv *) ((char *) hdr->pdu + 4);
+
+	if (length < 4)
+		goto free_qry_mgmt;
 	length -= 4;
 
 	while (length) {
 		uint32_t vlen = ntohl(tlv->length);
+
+		if (vlen + sizeof(*tlv) > length)
+			vlen = length - sizeof(*tlv);
 
 		switch (ntohl(tlv->tag)) {
 		case ISNS_ATTR_ISCSI_NAME:
