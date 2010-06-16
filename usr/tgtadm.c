@@ -554,6 +554,28 @@ int main(int argc, char **argv)
 		exit(EINVAL);
 	}
 
+	if (mode == MODE_SYSTEM) {
+		switch (op) {
+		case OP_UPDATE:
+			rc = verify_mode_params(argc, argv, "monvC");
+			if (rc) {
+				eprintf("system mode: option '-%c' is not "
+					"allowed/supported\n", rc);
+				exit(EINVAL);
+			}
+			if ((!name || !value)) {
+				eprintf("update operation requires 'name'"
+					" and 'value' options\n");
+				exit(EINVAL);
+			}
+			break;
+		default:
+			eprintf("option %d not supported in system mode\n", op);
+			exit(EINVAL);
+			break;
+		}
+	}
+
 	if (mode == MODE_TARGET) {
 		if ((tid <= 0 && (op != OP_SHOW))) {
 			eprintf("'tid' option is necessary\n");

@@ -259,7 +259,17 @@ static int sys_mgmt(int lld_no, struct mgmt_task *mtask)
 
 	switch (req->op) {
 	case OP_UPDATE:
-		if (tgt_drivers[lld_no]->update)
+		if (!strncmp(mtask->buf, "debug=", 6)) {
+			if (!strncmp(mtask->buf+6, "on", 2)) {
+				is_debug = 1;
+				err = 0;
+			} else if (!strncmp(mtask->buf+6, "off", 3)) {
+				is_debug = 0;
+				err = 0;
+			}
+			if (!err)
+				eprintf("set debug to: %d\n", is_debug);
+		} else if (tgt_drivers[lld_no]->update)
 			err = tgt_drivers[lld_no]->update(req->mode, req->op,
 							  req->tid,
 							  req->sid, req->lun,
