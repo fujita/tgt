@@ -557,7 +557,7 @@ int main(int argc, char **argv)
 	if (mode == MODE_SYSTEM) {
 		switch (op) {
 		case OP_UPDATE:
-			rc = verify_mode_params(argc, argv, "monvC");
+			rc = verify_mode_params(argc, argv, "LmonvC");
 			if (rc) {
 				eprintf("system mode: option '-%c' is not "
 					"allowed/supported\n", rc);
@@ -568,6 +568,9 @@ int main(int argc, char **argv)
 					" and 'value' options\n");
 				exit(EINVAL);
 			}
+			break;
+		case OP_SHOW:
+		case OP_DELETE:
 			break;
 		default:
 			eprintf("option %d not supported in system mode\n", op);
