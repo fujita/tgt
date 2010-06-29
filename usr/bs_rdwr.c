@@ -130,7 +130,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 
 static int bs_rdwr_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 {
-	*fd = backed_file_open(path, O_RDWR| O_LARGEFILE, size);
+	*fd = backed_file_open(path, O_RDWR | O_LARGEFILE | lu->bsoflags, size);
 	if (*fd < 0)
 		return *fd;
 
@@ -170,6 +170,7 @@ static struct backingstore_template rdwr_bst = {
 	.bs_exit		= bs_rdwr_exit,
 	.bs_cmd_submit		= bs_thread_cmd_submit,
 	.bs_cmd_done		= bs_rdwr_cmd_done,
+	.bs_oflags_supported    = O_SYNC | O_DIRECT,
 };
 
 __attribute__((constructor)) static void bs_rdwr_constructor(void)

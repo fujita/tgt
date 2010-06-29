@@ -1581,6 +1581,7 @@ enum {
 	Opt_removable, Opt_online,
 	Opt_mode_page,
 	Opt_path,
+	Opt_bsoflags,
 	Opt_err,
 };
 
@@ -1595,6 +1596,7 @@ static match_table_t tokens = {
 	{Opt_online, "online=%s"},
 	{Opt_mode_page, "mode_page=%s"},
 	{Opt_path, "path=%s"},
+	{Opt_bsoflags, "bsoflags=%s"},
 	{Opt_err, NULL},
 };
 
@@ -1626,7 +1628,8 @@ int lu_config(struct scsi_lu *lu, char *params, match_fn_t *fn)
 
 	while ((p = strsep(&params, ",")) != NULL) {
 		substring_t args[MAX_OPT_ARGS];
-		int token;
+		int token, lu_bsoflags = 0;
+
 		if (!*p)
 			continue;
 		token = match_token(p, tokens, args);

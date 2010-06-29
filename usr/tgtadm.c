@@ -112,6 +112,7 @@ struct option const long_options[] = {
 	{"value", required_argument, NULL, 'v'},
 	{"backing-store", required_argument, NULL, 'b'},
 	{"bstype", required_argument, NULL, 'E'},
+	{"bsoflags", required_argument, NULL, 'f'},
 	{"targetname", required_argument, NULL, 'T'},
 	{"initiator-address", required_argument, NULL, 'I'},
 	{"user", required_argument, NULL, 'u'},
@@ -126,7 +127,7 @@ struct option const long_options[] = {
 	{NULL, 0, NULL, 0},
 };
 
-static char *short_options = "dhL:o:m:t:s:c:l:n:v:b:E:T:I:u:p:H:P:B:Y:O:C:";
+static char *short_options = "dhL:o:m:t:s:c:l:n:v:b:E:f:T:I:u:p:H:P:B:Y:O:C:";
 
 static void usage(int status)
 {
@@ -153,12 +154,15 @@ Linux SCSI Target Framework Administration Utility, version %s\n\
                         enable the target to accept the specific initiators.\n\
   --lld [driver] --mode target --op unbind --tid=[id] --initiator-address=[src]\n\
                         disable the specific permitted initiators.\n\
-  --lld [driver] --mode logicalunit --op new --tid=[id] --lun=[lun] --backing-store=[path] --bstype=[type]\n\
+  --lld [driver] --mode logicalunit --op new --tid=[id] --lun=[lun] \\\n\
+                        --backing-store=[path] --bstype=[type] --bsoflags=[options]\n\
                         add a new logical unit with [lun] to the specific\n\
                         target with [id]. The logical unit is offered\n\
                         to the initiators. [path] must be block device files\n\
                         (including LVM and RAID devices) or regular files.\n\
                         bstype option is optional.\n\
+                        bsoflags supported options are sync and direct\n\
+                        (sync:direct for both).\n\
   --lld [driver] --mode logicalunit --op delete --tid=[id] --lun=[lun]\n\
                         delete the specific logical unit with [lun] that\n\
                         the target with [id] has.\n\
@@ -431,6 +435,7 @@ int main(int argc, char **argv)
 	uint64_t sid, lun;
 	char *name, *value, *path, *targetname, *params, *address, *targetOps;
 	char *bstype;
+	char *bsoflags;
 	char *user, *password;
 	char *buf;
 	size_t bufsz = BUFSIZE + sizeof(struct tgtadm_req);
@@ -445,7 +450,7 @@ int main(int argc, char **argv)
 	ac_dir = ACCOUNT_TYPE_INCOMING;
 	rest = BUFSIZE;
 	name = value = path = targetname = address = targetOps = bstype = NULL;
-	user = password = NULL;
+	bsoflags = user = password = NULL;
 
 	buf = valloc(bufsz);
 	if (!buf) {
@@ -515,6 +520,9 @@ int main(int argc, char **argv)
 			break;
 		case 'H':
 			hostno = strtol(optarg, NULL, 10);
+			break;
+		case 'f':
+			bsoflags = optarg;
 			break;
 		case 'E':
 			bstype = optarg;
@@ -644,7 +652,7 @@ int main(int argc, char **argv)
 	if (mode == MODE_ACCOUNT) {
 		switch (op) {
 		case OP_NEW:
-			rc = verify_mode_params(argc, argv, "LmoupC");
+			rc = verify_mode_params(argc, argv, "LmoupfC");
 			if (rc) {
 				eprintf("logicalunit mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
@@ -717,7 +725,7 @@ int main(int argc, char **argv)
 		}
 		switch (op) {
 		case OP_NEW:
-			rc = verify_mode_params(argc, argv, "LmotlbEYC");
+			rc = verify_mode_params(argc, argv, "LmoftlbEYC");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
@@ -738,7 +746,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		case OP_UPDATE:
-			rc = verify_mode_params(argc, argv, "LmotlPC");
+			rc = verify_mode_params(argc, argv, "LmoftlPC");
 			if (rc) {
 				eprintf("option '-%c' not supported in "
 					"logicalunit mode\n", rc);
@@ -777,6 +785,9 @@ int main(int argc, char **argv)
 	else if (bstype)
 		shprintf(total, params, rest, "%sbstype=%s",
 			 rest == BUFSIZE ? "" : ",", bstype);
+	if (bsoflags)
+		shprintf(total, params, rest, "%sbsoflags=%s",
+			 rest == BUFSIZE ? "" : ",", bsoflags);
 	if (targetname)
 		shprintf(total, params, rest, "%stargetname=%s",
 			 rest == BUFSIZE ? "" : ",", targetname);

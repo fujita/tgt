@@ -136,3 +136,42 @@ int set_non_blocking(int fd)
 	}
 	return err;
 }
+
+int str_to_open_flags(char *buf)
+{
+	char *bsoflags_tok = NULL;
+	int open_flags = 0;
+
+	bsoflags_tok = strtok(buf, ":\0");
+	while (bsoflags_tok != NULL) {
+		while (*bsoflags_tok == ' ')
+			bsoflags_tok++;
+		if (!strncmp(bsoflags_tok, "sync", 4))
+			open_flags |= O_SYNC;
+		else if (!strncmp(bsoflags_tok, "direct", 6))
+			open_flags |= O_DIRECT;
+		else {
+			eprintf("bsoflag option %s not supported\n",
+				bsoflags_tok);
+			return -1;
+		}
+
+		bsoflags_tok = strtok(NULL, ":");
+	}
+
+	return open_flags;
+}
+
+char *open_flags_to_str(char *dest, int flags)
+{
+	*dest = '\0';
+
+	if (flags & O_SYNC)
+		strcat(dest, "sync");
+	if (flags & O_DIRECT) {
+		if (*dest)
+			strcat(dest, ":");
+		strcat(dest, "direct");
+	}
+	return dest;
+}

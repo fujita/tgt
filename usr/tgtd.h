@@ -124,6 +124,7 @@ struct backingstore_template {
 	void (*bs_exit)(struct scsi_lu *dev);
 	int (*bs_cmd_submit)(struct scsi_cmd *cmd);
 	int (*bs_cmd_done)(struct scsi_cmd *cmd);
+	int bs_oflags_supported;
 
 	struct list_head backingstore_siblings;
 };
@@ -151,6 +152,7 @@ struct scsi_lu {
 	uint64_t size;
 	uint64_t lun;
 	char *path;
+	int bsoflags;
 
 	/* the list of devices belonging to a target */
 	struct list_head device_siblings;

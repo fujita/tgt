@@ -418,12 +418,13 @@ __device_lookup(int tid, uint64_t lun, struct target **t)
 }
 
 enum {
-	Opt_path, Opt_bstype, Opt_err,
+	Opt_path, Opt_bstype, Opt_bsoflags, Opt_err,
 };
 
 static match_table_t device_tokens = {
 	{Opt_path, "path=%s"},
 	{Opt_bstype, "bstype=%s"},
+	{Opt_bsoflags, "bsoflags=%s"},
 	{Opt_err, NULL},
 };
 
@@ -432,8 +433,8 @@ static void __cmd_done(struct target *, struct scsi_cmd *);
 int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 		      int backing)
 {
-	char *p, *path = NULL, *bstype = NULL;
-	int ret = 0;
+	char *p, *path = NULL, *bstype = NULL, *bsoflags = NULL;
+	int ret = 0, lu_bsoflags;
 	struct target *target;
 	struct scsi_lu *lu, *pos;
 	struct device_type_template *t;
@@ -456,6 +457,8 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 		case Opt_bstype:
 			bstype = match_strdup(&args[0]);
 			break;
+		case Opt_bsoflags:
+			bsoflags = match_strdup(&args[0]);
 		default:
 			break;
 		}
@@ -487,6 +490,18 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	} else
 		bst = get_backingstore_template("null");
 
+	lu_bsoflags = str_to_open_flags(bsoflags);
+	if (lu_bsoflags == -1) {
+		ret = TGTADM_INVALID_REQUEST;
+		goto out;
+	}
+
+	if (lu_bsoflags && !(bst->bs_oflags_supported & lu_bsoflags)) {
+		eprintf("bsoflags not supported\n");
+		ret = TGTADM_INVALID_REQUEST;
+		goto out;
+	}
+
 	t = device_type_lookup(dev_type);
 	if (!t) {
 		eprintf("Unknown device type %d\n", dev_type);
@@ -504,6 +519,8 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	lu->bst = bst;
 	lu->tgt = target;
 	lu->lun = lun;
+	lu->bsoflags = lu_bsoflags;
+
 	tgt_cmd_queue_init(&lu->cmd_queue);
 	INIT_LIST_HEAD(&lu->registration_list);
 	lu->prgeneration = 0;
@@ -573,6 +590,8 @@ out:
 		free(bstype);
 	if (path)
 		free(path);
+	if (bsoflags)
+		free(bsoflags);
 	return ret;
 fail_bs_init:
 	if (lu->bst->bs_exit)
@@ -1654,10 +1673,10 @@ static char *print_type(int type)
 	return name;
 }
 
-
 int tgt_target_show_all(char *buf, int rest)
 {
 	int total = 0, max = rest;
+	char strflags[128];
 	struct target *target;
 	struct scsi_lu *lu;
 	struct acl_entry *acl;
@@ -1694,7 +1713,8 @@ int tgt_target_show_all(char *buf, int rest)
 				 _TAB3 "Online: %s\n"
 				 _TAB3 "Removable media: %s\n"
 				 _TAB3 "Backing store type: %s\n"
-				 _TAB3 "Backing store path: %s\n",
+				 _TAB3 "Backing store path: %s\n"
+				 _TAB3 "Backing store flags: %s\n",
 				 lu->lun,
   				 print_type(lu->attrs.device_type),
 				 lu->attrs.scsi_id,
@@ -1705,7 +1725,8 @@ int tgt_target_show_all(char *buf, int rest)
 				 lu->bst ?
 					(lu->bst->bs_name ? : "Unknown") :
 					"None",
-				 lu->path ? : "None");
+				 lu->path ? : "None",
+				 open_flags_to_str(strflags, lu->bsoflags));
 
 		if (!strcmp(tgt_drivers[target->lid]->name, "iscsi")) {
 			int i, aid;
