@@ -925,7 +925,7 @@ int isns_init(void)
 		eprintf("getaddrinfo error %s\n", isns_addr);
 		return -1;
 	}
-	memcpy(&ss, res->ai_addr, sizeof(ss));
+	memcpy(&ss, res->ai_addr, sizeof(*res->ai_addr));
 	freeaddrinfo(res);
 
 	rxbuf = calloc(2, BUFSIZE);
