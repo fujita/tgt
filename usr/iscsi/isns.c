@@ -460,6 +460,7 @@ static void free_all_acl(struct iscsi_target *target)
 	while (!list_empty(&target->isns_list)) {
 		ini = list_first_entry(&target->isns_list, typeof(*ini), ilist);
 		list_del(&ini->ilist);
+		free(ini);
 	}
 }
 
