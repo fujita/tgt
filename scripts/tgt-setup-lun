@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # LUN assignment script
 #
 # Copyright (C) 2007 Erez Zilber <erezz@voltaire.com>
@@ -16,8 +18,6 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
 # 02110-1301 USA
-
-#!/bin/bash
 
 usage()
 {
