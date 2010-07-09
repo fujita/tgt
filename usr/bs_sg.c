@@ -373,7 +373,7 @@ static int bs_sg_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 		cmd_complete = &bs_bsg_cmd_complete;
 		err = init_bsg_device(sg_fd);
 	} else {
-		cmd_complete = bs_sg_cmd_complete;
+		cmd_complete = &bs_sg_cmd_complete;
 		err = init_sg_device(sg_fd);
 	}
 	if (err) {
