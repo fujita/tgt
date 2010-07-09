@@ -490,6 +490,13 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	} else
 		bst = get_backingstore_template("null");
 
+	if ((!strncmp(bst->bs_name, "bsg", 3) ||
+	     !strncmp(bst->bs_name, "sg", 2)) &&
+	    dev_type != TYPE_PT) {
+		ret = TGTADM_INVALID_REQUEST;
+		goto out;
+	}
+
 	lu_bsoflags = str_to_open_flags(bsoflags);
 	if (lu_bsoflags == -1) {
 		ret = TGTADM_INVALID_REQUEST;
