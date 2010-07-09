@@ -91,6 +91,23 @@ my @largest_tid;
 my $next_tid;
 my %existing_accounts;
 
+# Look up if iSNS is already on
+sub check_isns {
+	# We need to run as root
+	if ( $> ) {
+		die("You must be root to run this program.\n");
+	}
+
+	my @show_sys = `tgtadm --op show --mode sys`;
+	foreach my $sys_line (@show_sys) {
+		if ($sys_line =~ m/iSNS=On/) {
+			return 1;
+		}
+	}
+	# iSNS is not enabled if we're here
+	return 0;
+}
+
 # Look up which targets are configured
 sub process_targets {
 	# We need to run as root
@@ -168,6 +185,7 @@ sub add_targets {
 	my $configured = $_[1];
 	my $connected = $_[2];
 	my $in_configfile = $_[3];
+	my $isns_enabled = check_isns;
 	foreach my $k (sort keys %conf) {
 
 		if ($k eq "default-driver") {
@@ -181,6 +199,22 @@ sub add_targets {
 		} elsif ($k eq "ignore-errors") {
 			if ($conf{$k} eq "yes") {
 				$ignore_errors = 1;
+			}
+		} elsif (($k eq "iSNSAccessControl") || ($k eq "iSNSServerIP") ||
+			($k eq "iSNSServerPort")) {
+			if ($isns_enabled eq 0) {
+				check_if_hash_array($conf{$k}, $k);
+				execute("tgtadm --op update --mode sys --name $k -v $conf{$k}");
+			}
+		}
+	}
+	foreach my $k (sort keys %conf) {
+		if ($k eq "iSNS") {
+			if ($isns_enabled eq 0) {
+				check_if_hash_array($conf{$k}, $k);
+				execute("tgtadm --op update --mode sys --name $k -v $conf{$k}");
+			} else {
+				execute("# iSNS already enabled");
 			}
 		}
 	}
@@ -303,8 +337,13 @@ sub check_if_hash_array {
 	my $check = $_[0];
 	my $definition = $_[1];
 	if (ref($check) eq 'ARRAY' || ref($check) eq "HASH") {
-		print "Multiple '$definition' definitions in '$option' not allowed!\n";
-		print "Check your config file for errors (target: $target).\n";
+		if ($option) {
+			print "Multiple '$definition' definitions in '$option' not allowed!\n";
+			print "Check your config file for errors (target: $target).\n";
+		} else {
+			print "Multiple '$definition' definitions not allowed!\n";
+			print "Check your config file for errors.\n";
+		}
 		exit 1;
 	}
 }

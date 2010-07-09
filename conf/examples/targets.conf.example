@@ -11,6 +11,13 @@ include /etc/tgt/temp/*.conf
 default-driver iscsi
 
 
+# Set iSNS parameters, if needed
+
+#iSNSServerIP 192.168.111.222
+#iSNSServerPort 3205
+#iSNSAccessControl On
+#iSNS On
+
 # Continue if tgtadm exits with non-zero code (equivalent of
 # --ignore-errors command line option)
 #ignore-errors yes
