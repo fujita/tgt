@@ -161,15 +161,16 @@ static int sbc_service_action(int host_no, struct scsi_cmd *cmd)
 {
 	uint32_t *data;
 	uint64_t size;
+	int len = 16;
 
 	if (cmd->scb[1] != SAI_READ_CAPACITY_16)
 		goto sense;
 
-	if (scsi_get_in_length(cmd) < 12)
+	if (scsi_get_in_length(cmd) < len)
 		goto overflow;
 
 	data = scsi_get_in_buffer(cmd);
-	memset(data, 0, 12);
+	memset(data, 0, len);
 
 	size = cmd->dev->size >> BLK_SHIFT;
 
@@ -177,7 +178,7 @@ static int sbc_service_action(int host_no, struct scsi_cmd *cmd)
 	data[2] = __cpu_to_be32(1UL << BLK_SHIFT);
 
 overflow:
-	scsi_set_in_resid_by_actual(cmd, 12);
+	scsi_set_in_resid_by_actual(cmd, len);
 	return SAM_STAT_GOOD;
 sense:
 	sense_data_build(cmd, ILLEGAL_REQUEST, ASC_INVALID_OP_CODE);
