@@ -1628,7 +1628,7 @@ int lu_config(struct scsi_lu *lu, char *params, match_fn_t *fn)
 
 	while ((p = strsep(&params, ",")) != NULL) {
 		substring_t args[MAX_OPT_ARGS];
-		int token, lu_bsoflags = 0;
+		int token;
 
 		if (!*p)
 			continue;
