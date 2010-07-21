@@ -43,7 +43,7 @@ static LIST_HEAD(bst_list);
 static LIST_HEAD(finished_list);
 static pthread_mutex_t finished_lock;
 
-int sig_fd = -1;
+static int sig_fd = -1;
 
 static int command_fd[2];
 static int done_fd[2];
