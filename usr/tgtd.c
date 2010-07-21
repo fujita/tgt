@@ -135,8 +135,7 @@ set_rlimit:
 	return 0;
 }
 
-int do_tgt_event_add(int efd, struct list_head *list, int fd, int events,
-		     event_handler_t handler, void *data)
+int tgt_event_add(int fd, int events, event_handler_t handler, void *data)
 {
 	struct epoll_event ev;
 	struct event_data *tev;
@@ -153,45 +152,39 @@ int do_tgt_event_add(int efd, struct list_head *list, int fd, int events,
 	memset(&ev, 0, sizeof(ev));
 	ev.events = events;
 	ev.data.ptr = tev;
-	err = epoll_ctl(efd, EPOLL_CTL_ADD, fd, &ev);
+	err = epoll_ctl(ep_fd, EPOLL_CTL_ADD, fd, &ev);
 	if (err) {
 		eprintf("Cannot add fd, %m\n");
 		free(tev);
 	} else
-		list_add(&tev->e_list, list);
+		list_add(&tev->e_list, &tgt_events_list);
 
 	return err;
 }
 
-int tgt_event_add(int fd, int events, event_handler_t handler, void *data)
-{
-	return do_tgt_event_add(ep_fd, &tgt_events_list, fd, events, handler,
-				data);
-}
-
-static struct event_data *tgt_event_lookup(struct list_head *list, int fd)
+static struct event_data *tgt_event_lookup(int fd)
 {
 	struct event_data *tev;
 
-	list_for_each_entry(tev, list, e_list) {
+	list_for_each_entry(tev, &tgt_events_list, e_list) {
 		if (tev->fd == fd)
 			return tev;
 	}
 	return NULL;
 }
 
-void do_tgt_event_del(int efd, struct list_head *list, int fd)
+void tgt_event_del(int fd)
 {
 	struct event_data *tev;
 	int ret;
 
-	tev = tgt_event_lookup(list, fd);
+	tev = tgt_event_lookup(fd);
 	if (!tev) {
 		eprintf("Cannot find event %d\n", fd);
 		return;
 	}
 
-	ret = epoll_ctl(efd, EPOLL_CTL_DEL, fd, NULL);
+	ret = epoll_ctl(ep_fd, EPOLL_CTL_DEL, fd, NULL);
 	if (ret < 0)
 		eprintf("fail to remove epoll event, %s\n", strerror(errno));
 
@@ -199,17 +192,12 @@ void do_tgt_event_del(int efd, struct list_head *list, int fd)
 	free(tev);
 }
 
-void tgt_event_del(int fd)
-{
-	do_tgt_event_del(ep_fd, &tgt_events_list, fd);
-}
-
-int do_tgt_event_modify(int efd, struct list_head *list, int fd, int events)
+int tgt_event_modify(int fd, int events)
 {
 	struct epoll_event ev;
 	struct event_data *tev;
 
-	tev = tgt_event_lookup(list, fd);
+	tev = tgt_event_lookup(fd);
 	if (!tev) {
 		eprintf("Cannot find event %d\n", fd);
 		return -EINVAL;
@@ -219,12 +207,7 @@ int do_tgt_event_modify(int efd, struct list_head *list, int fd, int events)
 	ev.events = events;
 	ev.data.ptr = tev;
 
-	return epoll_ctl(efd, EPOLL_CTL_MOD, fd, &ev);
-}
-
-int tgt_event_modify(int fd, int events)
-{
-	return do_tgt_event_modify(ep_fd, &tgt_events_list, fd, events);
+	return epoll_ctl(ep_fd, EPOLL_CTL_MOD, fd, &ev);
 }
 
 void tgt_init_sched_event(struct event_data *evt,

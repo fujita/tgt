@@ -334,11 +334,6 @@ struct event_data {
 	struct list_head e_list;
 };
 
-int do_tgt_event_add(int efd, struct list_head *list, int fd, int events,
-		     event_handler_t handler, void *data);
-void do_tgt_event_del(int efd, struct list_head *list, int fd);
-int do_tgt_event_modify(int efd, struct list_head *list, int fd, int events);
-
 int run_ext_program(const char *cmd,
 		    void (*callback)(void *data, int result), void *data);
 #endif
