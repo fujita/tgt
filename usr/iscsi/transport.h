@@ -4,8 +4,6 @@
 #include <sys/socket.h>
 #include "list.h"
 
-extern int iscsi_rdma_enabled;
-
 struct iscsi_connection;
 struct iscsi_task;
 
@@ -19,7 +17,6 @@ struct iscsi_transport {
 	int (*ep_init) (void);
 	void (*ep_exit) (void);
 	int (*ep_login_complete)(struct iscsi_connection *conn);
-	void (*ep_nexus_init)(struct iscsi_connection *conn);
 	struct iscsi_task *(*alloc_task)(struct iscsi_connection *conn,
 					 size_t ext_len);
 	void (*free_task)(struct iscsi_task *task);

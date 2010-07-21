@@ -25,7 +25,6 @@
 #include <unistd.h>
 #include <netdb.h>
 #include <sys/stat.h>
-#include <sys/epoll.h>
 #include <sys/un.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -33,12 +32,10 @@
 #include <netinet/tcp.h>
 #include <netinet/ip.h>
 #include <arpa/inet.h>
-#include <pthread.h>
 #include "iscsid.h"
 #include "tgtadm.h"
 #include "tgtd.h"
 #include "target.h"
-#include "util.h"
 
 LIST_HEAD(iscsi_targets_list);
 
@@ -306,61 +303,10 @@ void iscsi_target_destroy(int tid)
 	}
 
 	list_del(&target->tlist);
-
-	pthread_mutex_init(&target->event_lock, NULL);
-
-	if (target->bsfin.thread) {
-		target->stop_pthread = 1;
-		pthread_kill(target->bsfin.thread, SIGUSR2);
-
-		pthread_join(target->bsfin.thread, NULL);
-		pthread_mutex_destroy(&target->bsfin.finished_lock);
-	}
-
-	close(target->efd);
 	free(target);
 	isns_target_deregister(tgt_targetname(tid));
 
 	return;
-}
-
-static void *iscsi_thread_fn(void *arg)
-{
-	struct iscsi_target *t = arg;
-	struct epoll_event events[1024];
-	struct event_data *tev;
-	sigset_t mask;
-	int nevent, i;
-
-	sigemptyset(&mask);
-	sigaddset(&mask, SIGUSR2);
-	pthread_sigmask(SIG_BLOCK, &mask, NULL);
-
-	pthread_mutex_lock(&t->event_lock);
-
-	do_tgt_event_add(t->efd, &t->events_list, sig_fd, EPOLLIN,
-			 bs_sig_request_done, &t->bsfin);
-
-	pthread_mutex_unlock(&t->event_lock);
-
-retry:
-	nevent = epoll_wait(t->efd, events, ARRAY_SIZE(events), 1000);
-	if (nevent < 0) {
-		if (errno != EINTR) {
-			eprintf("%m\n");
-			exit(1);
-		}
-	} else if (nevent) {
-		for (i = 0; i < nevent; i++) {
-			tev = (struct event_data *) events[i].data.ptr;
-			tev->handler(tev->fd, events[i].events, tev->data);
-		}
-	}
-
-	if (!t->stop_pthread)
-		goto retry;
-
-	pthread_exit(NULL);
 }
 
 int iscsi_target_create(struct target *t)
@@ -393,15 +339,11 @@ int iscsi_target_create(struct target *t)
 		[ISCSI_PARAM_MAX_OUTST_PDU] =  {0, 0},  /* not in open-iscsi */
 	};
 
-	target = zalloc(sizeof(*target));
+	target = malloc(sizeof(*target));
 	if (!target)
 		return -ENOMEM;
 
-	target->efd = epoll_create(128);
-	if (target->efd < 0) {
-		free(target);
-		return -EINVAL;
-	}
+	memset(target, 0, sizeof(*target));
 
 	memcpy(target->session_param, default_tgt_session_param,
 	       sizeof(target->session_param));
@@ -409,21 +351,10 @@ int iscsi_target_create(struct target *t)
 	INIT_LIST_HEAD(&target->tlist);
 	INIT_LIST_HEAD(&target->sessions_list);
 	INIT_LIST_HEAD(&target->isns_list);
-	INIT_LIST_HEAD(&target->events_list);
 	target->tid = tid;
 	list_add_tail(&target->tlist, &iscsi_targets_list);
 
 	isns_target_register(tgt_targetname(tid));
-
-	if (iscsi_pthread_per_target()) {
-		pthread_create(&target->bsfin.thread, NULL, iscsi_thread_fn, target);
-
-		pthread_mutex_init(&target->bsfin.finished_lock, NULL);
-		INIT_LIST_HEAD(&target->bsfin.finished_list);
-		t->bsf = &target->bsfin;
-		eprintf("create thread %u\n", (unsigned)target->bsfin.thread);
-	}
-
 	return 0;
 }
 

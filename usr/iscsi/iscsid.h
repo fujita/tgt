@@ -251,13 +251,6 @@ struct iscsi_target {
 	} redirect_info;
 
 	struct list_head isns_list;
-
-	int efd;
-	pthread_mutex_t event_lock;
-	struct list_head events_list;
-
-	struct bs_finish bsfin;
-	int stop_pthread;
 };
 
 enum task_flags {
@@ -324,8 +317,6 @@ extern int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid,
 int iscsi_target_update(int mode, int op, int tid, uint64_t sid, uint64_t lun,
 			uint32_t cid, char *name);
 int target_redirected(struct iscsi_target *target, struct iscsi_connection *conn);
-
-int iscsi_pthread_per_target(void);
 
 /* param.c */
 int param_index_by_name(char *name, struct iscsi_key *keys);

@@ -336,14 +336,6 @@ struct event_data {
 
 extern int sig_fd;
 
-struct bs_finish {
-	struct list_head finished_list;
-	pthread_mutex_t finished_lock;
-	pthread_t thread;
-};
-
-void bs_sig_request_done(int fd, int events, void *data);
-
 int do_tgt_event_add(int efd, struct list_head *list, int fd, int events,
 		     event_handler_t handler, void *data);
 void do_tgt_event_del(int efd, struct list_head *list, int fd);

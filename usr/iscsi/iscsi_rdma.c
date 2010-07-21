@@ -1194,8 +1194,6 @@ static int iscsi_rdma_init(void)
 	INIT_LIST_HEAD(&iser_conn_list);
 	INIT_LIST_HEAD(&temp_conn);
 
-	iscsi_rdma_enabled = 1;
-
 	return ret;
 }
 
@@ -1246,11 +1244,6 @@ static int iscsi_rdma_login_complete(struct iscsi_connection *conn)
 		eprintf("iser_init_comm failed\n");
 
 	return ret;
-}
-
-static void iscsi_rdma_nexus_init(struct iscsi_connection *conn)
-{
-	conn->tp->ep_event_modify(conn, EPOLLIN);
 }
 
 /*
@@ -1732,7 +1725,6 @@ static struct iscsi_transport iscsi_iser = {
 	.data_padding		= 1,
 	.ep_init		= iscsi_rdma_init,
 	.ep_login_complete	= iscsi_rdma_login_complete,
-	.ep_nexus_init		= iscsi_rdma_nexus_init,
 	.alloc_task		= iscsi_iser_alloc_task,
 	.free_task		= iscsi_iser_free_task,
 	.ep_read		= iscsi_iser_read,

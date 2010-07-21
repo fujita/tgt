@@ -74,13 +74,6 @@ enum {
 	IOSTATE_TX_END,
 };
 
-int iscsi_rdma_enabled;
-
-int iscsi_pthread_per_target(void)
-{
-	return sig_fd >= 0 && !iscsi_rdma_enabled;
-}
-
 void conn_read_pdu(struct iscsi_connection *conn)
 {
 	conn->rx_iostate = IOSTATE_RX_BHS;
@@ -2247,7 +2240,7 @@ finish:
 		else {
 			conn->state = STATE_SCSI;
 			conn_read_pdu(conn);
-			conn->tp->ep_nexus_init(conn);
+			conn->tp->ep_event_modify(conn, EPOLLIN);
 		}
 		break;
 	case STATE_EXIT:

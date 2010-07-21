@@ -31,7 +31,6 @@
 #include <netinet/tcp.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
-#include <pthread.h>
 
 #include "iscsid.h"
 #include "tgtd.h"
@@ -44,7 +43,6 @@ static struct iscsi_transport iscsi_tcp;
 
 struct iscsi_tcp_connection {
 	int fd;
-	int pthread;
 
 	struct iscsi_connection iscsi_conn;
 };
@@ -155,7 +153,6 @@ out:
 static void iscsi_tcp_event_handler(int fd, int events, void *data)
 {
 	struct iscsi_connection *conn = (struct iscsi_connection *) data;
-	struct iscsi_tcp_connection *tcp_conn = TCP_CONN(conn);
 
 	if (events & EPOLLIN)
 		iscsi_rx_handler(conn);
@@ -168,19 +165,7 @@ static void iscsi_tcp_event_handler(int fd, int events, void *data)
 
 	if (conn->state == STATE_CLOSE) {
 		dprintf("connection closed %p\n", conn);
-		if (tcp_conn->pthread) {
-			struct iscsi_target *target = conn->session->target;
-
-			pthread_mutex_lock(&target->event_lock);
-			do_tgt_event_del(target->efd, &target->events_list,
-					 tcp_conn->fd);
-			pthread_mutex_unlock(&target->event_lock);
-			/* let the main thread handle this */
-			tcp_conn->pthread = 0;
-			tgt_event_modify(tcp_conn->fd, EPOLLIN|EPOLLOUT|EPOLLERR);
-		} else {
-			conn_close(conn);
-		}
+		conn_close(conn);
 	}
 }
 
@@ -278,29 +263,6 @@ static int iscsi_tcp_conn_login_complete(struct iscsi_connection *conn)
 	return 0;
 }
 
-static void iscsi_tcp_conn_nexus_init(struct iscsi_connection *conn)
-{
-	struct iscsi_tcp_connection *tcp_conn = TCP_CONN(conn);
-	struct iscsi_target *target = conn->session->target;
-
-	if (iscsi_pthread_per_target()) {
-		/* remove the conn from the main thread. */
-		conn->tp->ep_event_modify(conn, 0);
-
-		pthread_mutex_lock(&target->event_lock);
-
-		do_tgt_event_add(target->efd, &target->events_list,
-				 tcp_conn->fd, EPOLLIN,
-				 iscsi_tcp_event_handler, conn);
-
-		pthread_mutex_unlock(&target->event_lock);
-
-		tcp_conn->pthread = 1;
-	}
-
-	conn->tp->ep_event_modify(conn, EPOLLIN);
-}
-
 static size_t iscsi_tcp_read(struct iscsi_connection *conn, void *buf,
 			     size_t nbytes)
 {
@@ -374,18 +336,9 @@ static void iscsi_event_modify(struct iscsi_connection *conn, int events)
 	struct iscsi_tcp_connection *tcp_conn = TCP_CONN(conn);
 	int ret;
 
-	if (tcp_conn->pthread) {
-		struct iscsi_target *target = conn->session->target;
-
-		pthread_mutex_lock(&target->event_lock);
-		do_tgt_event_modify(target->efd, &target->events_list,
-				    tcp_conn->fd, events);
-		pthread_mutex_unlock(&target->event_lock);
-	} else {
-		ret = tgt_event_modify(tcp_conn->fd, events);
-		if (ret)
-			eprintf("tgt_event_modify failed\n");
-	}
+	ret = tgt_event_modify(tcp_conn->fd, events);
+	if (ret)
+		eprintf("tgt_event_modify failed\n");
 }
 
 static struct iscsi_task *iscsi_tcp_alloc_task(struct iscsi_connection *conn,
@@ -438,7 +391,6 @@ static struct iscsi_transport iscsi_tcp = {
 	.ep_init		= iscsi_tcp_init,
 	.ep_exit		= iscsi_tcp_exit,
 	.ep_login_complete	= iscsi_tcp_conn_login_complete,
-	.ep_nexus_init		= iscsi_tcp_conn_nexus_init,
 	.alloc_task		= iscsi_tcp_alloc_task,
 	.free_task		= iscsi_tcp_free_task,
 	.ep_read		= iscsi_tcp_read,
