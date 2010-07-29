@@ -752,6 +752,7 @@ static void isns_handle(int fd, int events, void *data)
 		break;
 	case ISNS_FUNC_DEV_DEREG_RSP:
 	case ISNS_FUNC_SCN_REG_RSP:
+	case ISNS_FUNC_SCN_DEREG_RSP:
 		break;
 	case ISNS_FUNC_SCN:
 		name = print_scn_pdu(hdr);
