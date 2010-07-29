@@ -107,9 +107,9 @@ static int isns_get_ip(int fd)
 	}
 
 	err = getnameinfo((struct sockaddr *) &lss, sizeof(lss),
-			  eid, sizeof(eid), NULL, 0, 0);
+			  eid, sizeof(eid), NULL, 0, NI_NUMERICHOST);
 	if (err) {
-		eprintf("getaddrinfo error %s!\n", gai_strerror(err));
+		eprintf("getnameinfo error %s!\n", gai_strerror(err));
 		return err;
 	}
 
