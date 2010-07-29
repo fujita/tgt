@@ -14,7 +14,7 @@
 
 <refsynopsisdiv>
 	<cmdsynopsis>
-		<command>tgtadm</command>
+		<command>tgt-admin</command>
 		<arg choice="opt">-e --execute</arg>
 		<arg choice="opt">--delete &lt;value&gt;</arg>
 		<arg choice="opt">--offline &lt;value&gt;</arg>
