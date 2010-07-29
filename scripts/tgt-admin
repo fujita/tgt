@@ -29,6 +29,7 @@ This tool configures tgt targets.
       --update <value>		update configuration for all or selected targets
 				(see "--update help" for more info)
   -s, --show			show all the targets
+  -C, --control-port <NNNN>	specify the control port to connect to
   -c, --conf <conf file>	specify an alternative configuration file
       --ignore-errors		continue even if tgtadm exits with non-zero code
   -f, --force			force some operations even if the target is in use
@@ -57,6 +58,8 @@ my $pretend = 0;
 my $dump = 0;
 my $verbose = 0;
 my $help = 0;
+my $control_port=0;
+Getopt::Long::Configure("no_ignore_case");
 my $result = GetOptions (
 	"e|execute"     => \$execute,
 	"delete=s"      => \$delete,
@@ -71,6 +74,7 @@ my $result = GetOptions (
 	"dump"          => \$dump,
 	"v|verbose"     => \$verbose,
 	"h|help"        => \$help,
+	"C|control-port=s"      => \$control_port,
 );
 
 if (($help == 1) || ($param eq undef)) {
@@ -79,7 +83,7 @@ if (($help == 1) || ($param eq undef)) {
 
 # Show all the targets and exit
 if ($show == 1) {
-	execute("tgtadm --op show --mode target");
+	execute("tgtadm -C $control_port --op show --mode target");
 	exit;
 }
 
@@ -98,7 +102,7 @@ sub check_isns {
 		die("You must be root to run this program.\n");
 	}
 
-	my @show_sys = `tgtadm --op show --mode sys`;
+	my @show_sys = `tgtadm -C $control_port --op show --mode sys`;
 	foreach my $sys_line (@show_sys) {
 		if ($sys_line =~ m/iSNS=On/) {
 			return 1;
@@ -115,7 +119,7 @@ sub process_targets {
 		die("You must be root to run this program.\n");
 	}
 
-	my @show_target = `tgtadm --op show --mode target`;
+	my @show_target = `tgtadm -C $control_port --op show --mode target`;
 	my $tid;
 	my $targetname;
 	# Here, we create hashes of target names (all target data) and target tids
@@ -142,7 +146,7 @@ sub process_accounts {
 		die("You must be root to run this program.\n");
 	}
 
-	my @show_account = `tgtadm --op show --mode account`;
+	my @show_account = `tgtadm -C $control_port --op show --mode account`;
 	# Here, we create a hash of accounts
 	foreach my $show_account_line (@show_account) {
 		if ( $show_account_line =~ m/^\s+(.*?)$/ ) {
@@ -204,7 +208,7 @@ sub add_targets {
 			($k eq "iSNSServerPort")) {
 			if ($isns_enabled eq 0) {
 				check_if_hash_array($conf{$k}, $k);
-				execute("tgtadm --op update --mode sys --name $k -v $conf{$k}");
+				execute("tgtadm -C $control_port --op update --mode sys --name $k -v $conf{$k}");
 			}
 		}
 	}
@@ -212,13 +216,20 @@ sub add_targets {
 		if ($k eq "iSNS") {
 			if ($isns_enabled eq 0) {
 				check_if_hash_array($conf{$k}, $k);
-				execute("tgtadm --op update --mode sys --name $k -v $conf{$k}");
+				execute("tgtadm -C $control_port --op update --mode sys --name $k -v $conf{$k}");
 			} else {
 				execute("# iSNS already enabled");
 			}
+		} elsif ($k eq "control-port") {
+			if ($control_port eq 0) {
+				$control_port = $conf{$k};
+			} else {
+				print "Multiple control-port definitions are not allowed!\n";
+				print "Check your config file for errors.\n";
+				exit 1;
+			}
 		}
 	}
-
 	# If $default_driver is empty, default to iscsi
 	if (not defined $default_driver) {
 		execute("# default-driver not defined, defaulting to iscsi.\n");
@@ -278,7 +289,7 @@ sub add_targets {
 					}
 					my $driver = $target_options{"driver"};
 					execute("# Adding target: $target");
-					execute("tgtadm --lld $driver --op new --mode target --tid $next_tid -T $target");
+					execute("tgtadm -C $control_port --lld $driver --op new --mode target --tid $next_tid -T $target");
 					foreach my $k3 (sort keys %{$conf{$k}{$k2}}) {
 						$option = $k3;
 						$value = $conf{$k}{$k2}{$k3};
@@ -292,7 +303,7 @@ sub add_targets {
 					}
 
 					if ($allowall == 1) {
-						execute("tgtadm --lld $driver --op bind --mode target --tid $next_tid -I ALL");
+						execute("tgtadm -C $control_port --lld $driver --op bind --mode target --tid $next_tid -I ALL");
 					}
 
 				} else {
@@ -385,7 +396,7 @@ sub add_params {
 
 	if ($param eq "write-cache") {
 		if ($param_value eq "off") {
-			return("tgtadm --lld $driver --op update --mode logicalunit --tid $next_tid --lun=$lun --params mode_page=8:0:18:0x10:0:0xff:0xff:0:0:0xff:0xff:0xff:0xff:0x80:0x14:0:0:0:0:0:0");
+			return("tgtadm -C $control_port --lld $driver --op update --mode logicalunit --tid $next_tid --lun=$lun --params mode_page=8:0:18:0x10:0:0xff:0xff:0:0:0xff:0xff:0xff:0xff:0x80:0x14:0:0:0:0:0:0");
 		} elsif ($param_value eq "on" || not length $param_value) {
 			return("# Write cache is enabled (default) for lun $lun.");
 		} else {
@@ -396,10 +407,10 @@ sub add_params {
 	if ($param eq "scsi_id" || $param eq "scsi_sn" || $param eq "vendor_id" || $param eq "product_id" ||
 	    $param eq "product_rev" || $param eq "sense_format" || $param eq "removable" || $param eq "online" ||
 	    $param eq "path" || $param eq "mode_page") {
-		return("tgtadm --lld $driver --op update --mode logicalunit --tid $next_tid --lun=$lun --params $param=\"$param_value\"");
+		return("tgtadm -C $control_port --lld $driver --op update --mode logicalunit --tid $next_tid --lun=$lun --params $param=\"$param_value\"");
 	}
 	if ($param eq "params") {
-		return("tgtadm --lld $driver --op update --mode logicalunit --tid $next_tid --lun=$lun --params \"$param_value\"");
+		return("tgtadm -C $control_port --lld $driver --op update --mode logicalunit --tid $next_tid --lun=$lun --params \"$param_value\"");
 
 	}
 }
@@ -619,7 +630,7 @@ sub add_backing_direct {
 		# Execute commands for a given LUN
 		if (length $device_type) { $device_type = "--device-type $device_type" };
 		if (length $bs_type) { $bs_type = "--bstype $bs_type" };
-		execute("tgtadm --lld $driver --op new --mode logicalunit --tid $next_tid --lun $lun -b $backing_store $device_type $bs_type");
+		execute("tgtadm -C $control_port --lld $driver --op new --mode logicalunit --tid $next_tid --lun $lun -b $backing_store $device_type $bs_type");
 
 		# Commands should be executed in order
 		my @execute_last;
@@ -695,11 +706,11 @@ sub process_options {
 			check_value($userpass[1]);
 			# Only delete or create account if it doesn't already exist
 			if (! exists $existing_accounts{$userpass[0]} ) {
-				execute("tgtadm --lld $driver --mode account --op delete --user=$userpass[0]");
-				execute("tgtadm --lld $driver --mode account --op new --user=$userpass[0] --password=$userpass[1]");
+				execute("tgtadm -C $control_port --lld $driver --mode account --op delete --user=$userpass[0]");
+				execute("tgtadm -C $control_port --lld $driver --mode account --op new --user=$userpass[0] --password=$userpass[1]");
 				$existing_accounts{$userpass[0]} = 1;
 			}
-			execute("tgtadm --lld $driver --mode account --op bind --tid=$next_tid --user=$userpass[0]");
+			execute("tgtadm -C $control_port --lld $driver --mode account --op bind --tid=$next_tid --user=$userpass[0]");
 		}
 	}
 
@@ -713,11 +724,11 @@ sub process_options {
 		check_value($userpass[1]);
 		# Only delete or create account if it doesn't already exist
 		if (! exists $existing_accounts{$userpass[0]} ) {
-			execute("tgtadm --lld $driver --mode account --op delete --user=$userpass[0]");
-			execute("tgtadm --lld $driver --mode account --op new --user=$userpass[0] --password=$userpass[1]");
+			execute("tgtadm -C $control_port --lld $driver --mode account --op delete --user=$userpass[0]");
+			execute("tgtadm -C $control_port --lld $driver --mode account --op new --user=$userpass[0] --password=$userpass[1]");
 			$existing_accounts{$userpass[0]} = 1;
 		}
-		execute("tgtadm --lld $driver --mode account --op bind --tid=$next_tid --user=$userpass[0] --outgoing");
+		execute("tgtadm -C $control_port --lld $driver --mode account --op bind --tid=$next_tid --user=$userpass[0] --outgoing");
 	}
 
 	if ($option eq "initiator-address") {
@@ -726,7 +737,7 @@ sub process_options {
 		my @value_arr = @$value;
 		foreach my $initiator_address (@value_arr) {
 			check_value($initiator_address);
-			execute("tgtadm --lld $driver --op bind --mode target --tid $next_tid -I $initiator_address");
+			execute("tgtadm -C $control_port --lld $driver --op bind --mode target --tid $next_tid -I $initiator_address");
 		}
 	}
 
@@ -755,7 +766,7 @@ sub process_options {
 			execute("# Warning: only one $option is allowed. Will only use the first one.");
 		}
 		check_value($option);
-		execute("tgtadm --lld $driver --mode target --op update --tid $next_tid --name $option --value $$value[0]");
+		execute("tgtadm -C $control_port --lld $driver --mode target --op update --tid $next_tid --name $option --value $$value[0]");
 	}
 
 }
@@ -872,15 +883,15 @@ EOF
 		# Run over all targets and offline/ready them
 		my @all_targets = keys %tgtadm_output_tid;
 		foreach my $existing_target (@all_targets) {
-			execute("tgtadm --op update --mode target --tid=$tgtadm_output_tid{$existing_target} -n state -v $var");
+			execute("tgtadm -C $control_port --op update --mode target --tid=$tgtadm_output_tid{$existing_target} -n state -v $var");
 		}
 	} elsif ($off_ready =~ m/tid=(.+)/) {
 		process_targets;
-		execute("tgtadm --op update --mode target --tid=$1 -n state -v $var");
+		execute("tgtadm -C $control_port --op update --mode target --tid=$1 -n state -v $var");
 	} else {
 		process_targets;
 		if (length $tgtadm_output_tid{$off_ready}) {
-			execute("tgtadm --op update --mode target --tid=$tgtadm_output_tid{$off_ready} --name=\"$off_ready\" -n state -v $var");
+			execute("tgtadm -C $control_port --op update --mode target --tid=$tgtadm_output_tid{$off_ready} --name=\"$off_ready\" -n state -v $var");
 		} else {
 			print "There is no target with name \"$off_ready\", can't $var it!\n";
 			exit 1;
@@ -976,16 +987,16 @@ sub main_delete {
 			# Remove ACLs first
 			my @acl_info = show_target_info($current_target, "acl_information");
 			foreach my $acl (@acl_info) {
-				execute("tgtadm --op unbind --mode target --tid $tgtadm_output_tid{$current_target} -I $acl");
+				execute("tgtadm -C $control_port --op unbind --mode target --tid $tgtadm_output_tid{$current_target} -I $acl");
 			}
 			# Now, remove all sessions / connections from that tid
 			my %sessions = show_target_info($current_target, "sessions");
 			foreach my $sid (keys %sessions) {
 				foreach my $cid ($sessions{$sid}) {
-					execute("tgtadm --op delete --mode conn --tid $tgtadm_output_tid{$current_target} --sid $sid --cid $cid");
+					execute("tgtadm -C $control_port --op delete --mode conn --tid $tgtadm_output_tid{$current_target} --sid $sid --cid $cid");
 				}
 			}
-			execute("tgtadm --mode target --op delete --tid=$tgtadm_output_tid{$current_target}");
+			execute("tgtadm -C $control_port --mode target --op delete --tid=$tgtadm_output_tid{$current_target}");
 		} else {
 			if ($update ne 0) {
 				$del_upd_text = "updated";
@@ -997,7 +1008,7 @@ sub main_delete {
 		}
 	} elsif (length $tgtadm_output_tid{$current_target}) {
 		execute("# Removing target: $current_target");
-		execute("tgtadm --mode target --op delete --tid=$tgtadm_output_tid{$current_target}");
+		execute("tgtadm -C $control_port --mode target --op delete --tid=$tgtadm_output_tid{$current_target}");
 	} else {
 		if (length $current_tid) {
 			execute("# Target with tid $current_tid does not exist!");
@@ -1267,9 +1278,9 @@ sub execute {
 }
 
 if ($execute == 1) {
+	parse_configs;
 	process_targets;
 	process_accounts;
-	parse_configs;
 	add_targets;
 	remove_targets;
 } elsif ($delete ne 0) {

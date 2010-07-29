@@ -20,6 +20,7 @@
 		<arg choice="opt">--offline &lt;value&gt;</arg>
 		<arg choice="opt">--ready &lt;value&gt;</arg>
 		<arg choice="opt">-s --show</arg>
+		<arg choice="opt">-C --control-port &lt;NNNN&gt;</arg>
 		<arg choice="opt">-c --conf &lt;file&gt;</arg>
 		<arg choice="opt">--ignore-errors</arg>
 		<arg choice="opt">-f --force</arg>
@@ -134,6 +135,16 @@ Example usage:
         <listitem>
           <para>
 	    Show all the targets.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry><term><option>-C, --control-port &lt;NNNN&gt;</option></term>
+        <listitem>
+          <para>
+	    It is possible to run multiple concurrent instances of
+	    tgtd on a host. This argument is used to control which
+	    instance the tgt-admin command will operate on.
           </para>
         </listitem>
       </varlistentry>
