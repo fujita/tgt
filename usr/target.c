@@ -1663,7 +1663,8 @@ static struct {
 	{TYPE_ENCLOSURE, "enclosure"},
 	{TYPE_RBC, "rbc"},
 	{TYPE_OSD, "osd"},
-	{TYPE_NO_LUN, "No LUN"}
+	{TYPE_NO_LUN, "No LUN"},
+	{TYPE_PT, "passthrough"}
 };
 
 static char *print_type(int type)
