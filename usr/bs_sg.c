@@ -47,7 +47,6 @@
 
 #define BS_SG_RESVD_SZ  (512 * 1024)
 #define BS_SG_TIMEOUT	2000
-#define BS_SG_SHIFT	9
 
 static int graceful_read(int fd, void *p_read, int to_read)
 {
