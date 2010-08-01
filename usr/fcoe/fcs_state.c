@@ -28,6 +28,8 @@
 #include "log.h"
 #include "util.h"
 
+#include "tgtd.h"
+
 #include "fc_types.h"
 #include "fc_frame.h"
 #include "fc_port.h"

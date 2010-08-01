@@ -37,6 +37,8 @@
 #include "sa_hash.h"
 #include "sa_timer.h"
 
+#include "tgtd.h"
+
 #include "fc_fcip.h"
 #include "fc_fc2.h"
 #include "fc_fs.h"

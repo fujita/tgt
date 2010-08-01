@@ -29,6 +29,8 @@
 #include "log.h"
 #include "util.h"
 
+#include "tgtd.h"
+
 #include "sa_state.h"
 
 /*

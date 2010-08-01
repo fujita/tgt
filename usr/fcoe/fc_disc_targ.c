@@ -39,6 +39,8 @@
 #include "sa_timer.h"
 #include "sa_event.h"
 
+#include "tgtd.h"
+
 #include "fc_encaps.h"
 #include "fc_fs.h"
 #include "fc_els.h"

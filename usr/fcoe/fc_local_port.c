@@ -39,6 +39,8 @@
 #include "sa_hash.h"
 #include "sa_state.h"
 
+#include "tgtd.h"
+
 #include "fc_fs.h"
 #include "fc_gs.h"
 #include "fc_ns.h"
