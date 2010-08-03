@@ -59,15 +59,12 @@ struct isns_initiator {
 	struct list_head ilist;
 };
 
-struct tgt_work timeout_work;
-
 static LIST_HEAD(qry_list);
 static uint16_t scn_listen_port;
 static int use_isns, use_isns_ac, isns_fd, scn_listen_fd, scn_fd;
 static struct isns_io isns_rx, scn_rx;
 static char *rxbuf;
 static uint16_t transaction;
-static uint32_t isns_timeout = 30; /* seconds */
 static char eid[ISCSI_NAME_LEN];
 static uint8_t ip[16]; /* IET supoprts only one portal */
 static struct sockaddr_storage ss;
@@ -904,14 +901,6 @@ out:
 	return err;
 }
 
-static void isns_timeout_fn(void *data)
-{
-	struct tgt_work *w = data;
-
-	isns_attr_query(NULL);
-	add_work(w, isns_timeout);
-}
-
 int isns_init(void)
 {
 	int err;
@@ -943,10 +932,6 @@ int isns_init(void)
 	scn_rx.offset = 0;
 
 	use_isns = 1;
-
-	timeout_work.func = isns_timeout_fn;
-	timeout_work.data = &timeout_work;
-	add_work(&timeout_work, isns_timeout);
 
 	return 0;
 }
