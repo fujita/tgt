@@ -895,6 +895,7 @@ int isns_init(void)
 	int err;
 	char port[8];
 	struct addrinfo hints, *res;
+	struct iscsi_target *target;
 
 	snprintf(port, sizeof(port), "%d", isns_port);
 	memset(&hints, 0, sizeof(hints));
@@ -921,6 +922,10 @@ int isns_init(void)
 	scn_rx.offset = 0;
 
 	use_isns = 1;
+
+	if (!num_targets)
+		list_for_each_entry(target, &iscsi_targets_list, tlist)
+			isns_target_register(tgt_targetname(target->tid));
 
 	return 0;
 }
