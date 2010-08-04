@@ -337,43 +337,6 @@ static int isns_attr_query(char *name)
 	return 0;
 }
 
-static int isns_deregister(void)
-{
-	int err;
-	uint16_t flags, length = 0;
-	char buf[4096], *name;
-	struct isns_hdr *hdr = (struct isns_hdr *) buf;
-	struct isns_tlv *tlv;
-	struct iscsi_target *target;
-
-	if (list_empty(&iscsi_targets_list))
-		return 0;
-
-	if (!isns_fd)
-		if (isns_connect() < 0)
-			return 0;
-
-	memset(buf, 0, sizeof(buf));
-	tlv = (struct isns_tlv *) hdr->pdu;
-
-	target = list_first_entry(&iscsi_targets_list,
-				  struct iscsi_target, tlist);
-	name = tgt_targetname(target->tid);
-
-	length += isns_tlv_set_string(&tlv, ISNS_ATTR_ISCSI_NAME, name);
-	length += isns_tlv_set(&tlv, 0, 0, 0);
-	length += isns_tlv_set_string(&tlv, ISNS_ATTR_ENTITY_IDENTIFIER, eid);
-
-	flags = ISNS_FLAG_CLIENT | ISNS_FLAG_LAST_PDU | ISNS_FLAG_FIRST_PDU;
-	isns_hdr_init(hdr, ISNS_FUNC_DEV_DEREG, length, flags,
-		      ++transaction, 0);
-
-	err = write(isns_fd, buf, length + sizeof(struct isns_hdr));
-	if (err < 0)
-		eprintf("%d %m\n", length);
-	return 0;
-}
-
 int isns_target_register(char *name)
 {
 	char buf[4096];
@@ -939,8 +902,6 @@ void isns_exit(void)
 
 	list_for_each_entry(target, &iscsi_targets_list, tlist)
 		isns_scn_deregister(tgt_targetname(target->tid));
-
-	isns_deregister();
 
 	if (isns_fd) {
 		tgt_event_del(isns_fd);
