@@ -901,7 +901,7 @@ void isns_exit(void)
 		return;
 
 	list_for_each_entry(target, &iscsi_targets_list, tlist)
-		isns_scn_deregister(tgt_targetname(target->tid));
+		isns_target_deregister(tgt_targetname(target->tid));
 
 	if (isns_fd) {
 		tgt_event_del(isns_fd);
@@ -916,6 +916,7 @@ void isns_exit(void)
 		close(scn_fd);
 	}
 
+	use_isns = isns_fd = scn_listen_fd = scn_fd = 0;
 	free(rxbuf);
 }
 
@@ -955,7 +956,7 @@ int isns_update(char *params)
 
 	while ((p = strsep(&params, ",")) != NULL) {
 		substring_t args[MAX_OPT_ARGS];
-		int token;
+		int token, isns;
 		char tmp[16];
 
 		if (!*p)
@@ -964,16 +965,21 @@ int isns_update(char *params)
 
 		switch (token) {
 		case Opt_isns:
-			/* FIXME */
-			if (use_isns) {
+			match_strncpy(tmp, &args[0], sizeof(tmp));
+			if (!strcmp(tmp, "On"))
+				isns = 1;
+			else if (!strcmp(tmp, "Off"))
+				isns = 0;
+			else {
 				ret = TGTADM_INVALID_REQUEST;
 				break;
 			}
-
-			match_strncpy(tmp, &args[0], sizeof(tmp));
-			use_isns = !strcmp(tmp, "On");
-			if (use_isns)
+			if (use_isns == isns)
+				break;
+			if (isns)
 				isns_init();
+			else
+				isns_exit();
 			break;
 		case Opt_ip:
 			match_strncpy(isns_addr, &args[0], sizeof(isns_addr));
