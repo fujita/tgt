@@ -240,15 +240,14 @@ static int isns_scn_deregister(char *name)
 #define set_scn_flag(x)
 #endif
 
-static int isns_scn_register(void)
+static int isns_scn_register(char *name)
 {
 	int err;
 	uint16_t flags, length = 0;
 	uint32_t scn_flags;
-	char buf[4096], *name;
+	char buf[4096];
 	struct isns_hdr *hdr = (struct isns_hdr *) buf;
 	struct isns_tlv *tlv;
-	struct iscsi_target *target;
 
 	if (list_empty(&iscsi_targets_list))
 		return 0;
@@ -259,10 +258,6 @@ static int isns_scn_register(void)
 
 	memset(buf, 0, sizeof(buf));
 	tlv = (struct isns_tlv *) hdr->pdu;
-
-	target = list_first_entry(&iscsi_targets_list,
-				  struct iscsi_target, tlist);
-	name = tgt_targetname(target->tid);
 
 	length += isns_tlv_set_string(&tlv, ISNS_ATTR_ISCSI_NAME, name);
 	length += isns_tlv_set_string(&tlv, ISNS_ATTR_ISCSI_NAME, name);
@@ -392,7 +387,6 @@ int isns_target_register(char *name)
 	uint32_t port = htonl(iscsi_listen_port);
 	uint32_t node = htonl(ISNS_NODE_TARGET);
 	uint32_t type = htonl(2);
-	struct iscsi_target *target;
 	int err, initial = list_length_is_one(&iscsi_targets_list);
 
 	if (!use_isns)
@@ -405,10 +399,7 @@ int isns_target_register(char *name)
 	memset(buf, 0, sizeof(buf));
 	tlv = (struct isns_tlv *) hdr->pdu;
 
-        target = list_first_entry(&iscsi_targets_list,
-				  struct iscsi_target, tlist);
-        length += isns_tlv_set_string(&tlv, ISNS_ATTR_ISCSI_NAME,
-				      tgt_targetname(target->tid));
+	length += isns_tlv_set_string(&tlv, ISNS_ATTR_ISCSI_NAME, name);
 	length += isns_tlv_set_string(&tlv, ISNS_ATTR_ENTITY_IDENTIFIER, eid);
 
 	length += isns_tlv_set(&tlv, 0, 0, 0);
@@ -443,7 +434,7 @@ int isns_target_register(char *name)
 		eprintf("%d %m\n", length);
 
 	if (scn_listen_port)
-		isns_scn_register();
+		isns_scn_register(name);
 
 	isns_attr_query(name);
 
