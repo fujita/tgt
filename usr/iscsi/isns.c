@@ -71,6 +71,7 @@ static struct sockaddr_storage ss;
 
 static char isns_addr[NI_MAXHOST];
 static int isns_port = ISNS_PORT;
+static int num_targets = 0;
 
 int isns_scn_access(int tid, char *name)
 {
@@ -373,11 +374,6 @@ static int isns_deregister(void)
 	return 0;
 }
 
-static inline int list_length_is_one(const struct list_head *head)
-{
-        return (!list_empty(head) && head->next == head->prev);
-}
-
 int isns_target_register(char *name)
 {
 	char buf[4096];
@@ -387,7 +383,7 @@ int isns_target_register(char *name)
 	uint32_t port = htonl(iscsi_listen_port);
 	uint32_t node = htonl(ISNS_NODE_TARGET);
 	uint32_t type = htonl(2);
-	int err, initial = list_length_is_one(&iscsi_targets_list);
+	int err;
 
 	if (!use_isns)
 		return 0;
@@ -405,7 +401,7 @@ int isns_target_register(char *name)
 	length += isns_tlv_set(&tlv, 0, 0, 0);
 	length += isns_tlv_set_string(&tlv, ISNS_ATTR_ENTITY_IDENTIFIER, eid);
 
-	if (initial) {
+	if (!num_targets) {
 		length += isns_tlv_set(&tlv, ISNS_ATTR_ENTITY_PROTOCOL,
 				       sizeof(type), &type);
 		length += isns_tlv_set(&tlv, ISNS_ATTR_PORTAL_IP_ADDRESS,
@@ -437,6 +433,7 @@ int isns_target_register(char *name)
 		isns_scn_register(name);
 
 	isns_attr_query(name);
+	num_targets++;
 
 	return 0;
 }
@@ -458,7 +455,7 @@ int isns_target_deregister(char *name)
 	uint16_t flags, length = 0;
 	struct isns_hdr *hdr = (struct isns_hdr *) buf;
 	struct isns_tlv *tlv;
-	int err, last = list_empty(&iscsi_targets_list);
+	int err;
 	struct iscsi_target *target;
 
 	target = target_find_by_name(name);
@@ -472,6 +469,7 @@ int isns_target_deregister(char *name)
 		if (isns_connect() < 0)
 			return 0;
 
+	num_targets--;
 	isns_scn_deregister(name);
 
 	memset(buf, 0, sizeof(buf));
@@ -479,7 +477,7 @@ int isns_target_deregister(char *name)
 
 	length += isns_tlv_set_string(&tlv, ISNS_ATTR_ISCSI_NAME, name);
 	length += isns_tlv_set(&tlv, 0, 0, 0);
-	if (last)
+	if (!num_targets)
 		length += isns_tlv_set_string(&tlv, ISNS_ATTR_ENTITY_IDENTIFIER,
 					      eid);
 	else
