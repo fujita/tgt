@@ -343,6 +343,7 @@ int isns_target_register(char *name)
 	uint16_t flags = 0, length = 0;
 	struct isns_hdr *hdr = (struct isns_hdr *) buf;
 	struct isns_tlv *tlv;
+	struct iscsi_target *target;
 	uint32_t port = htonl(iscsi_listen_port);
 	uint32_t node = htonl(ISNS_NODE_TARGET);
 	uint32_t type = htonl(2);
@@ -358,7 +359,10 @@ int isns_target_register(char *name)
 	memset(buf, 0, sizeof(buf));
 	tlv = (struct isns_tlv *) hdr->pdu;
 
-	length += isns_tlv_set_string(&tlv, ISNS_ATTR_ISCSI_NAME, name);
+	target = list_first_entry(&iscsi_targets_list,
+				struct iscsi_target, tlist);
+	length += isns_tlv_set_string(&tlv, ISNS_ATTR_ISCSI_NAME,
+					tgt_targetname(target->tid));
 	length += isns_tlv_set_string(&tlv, ISNS_ATTR_ENTITY_IDENTIFIER, eid);
 
 	length += isns_tlv_set(&tlv, 0, 0, 0);
