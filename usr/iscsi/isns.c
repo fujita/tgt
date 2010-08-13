@@ -572,7 +572,7 @@ static char *print_scn_pdu(struct isns_hdr *hdr)
 		case ISNS_ATTR_ISCSI_NAME:
 			eprintf("scn name: %u, %s\n", vlen, (char *) tlv->value);
 			if (!name) {
-				snprintf(iscsi_name, sizeof(iscsi_name), (char *)tlv->value);
+				snprintf(iscsi_name, sizeof(iscsi_name), "%s", (char *)tlv->value);
 				name = iscsi_name;
 			}
 			break;

@@ -427,6 +427,7 @@ static int mmc_ops(int op, char *path, char *media_type)
 static int sbc_new(int op, char *path, char *capacity, char *media_type)
 {
 	int fd;
+	ssize_t ignored;
 
 	if (!strncasecmp("disk", media_type, 4)) {
 		uint32_t pos, size;
@@ -450,7 +451,7 @@ static int sbc_new(int op, char *path, char *capacity, char *media_type)
 		}
 
 		for (pos = 0; pos < size; pos++)
-			pwrite(fd, buf, 1024*1024, pos*1024*1024LL);
+			ignored = pwrite(fd, buf, 1024*1024, pos*1024*1024LL);
 
 		free(buf);
 		close(fd);

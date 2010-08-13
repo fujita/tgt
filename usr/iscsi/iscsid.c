@@ -2286,7 +2286,7 @@ static int iscsi_transportid(int tid, uint64_t itn_id, char *buf, int size)
 
 	put_unaligned_be16(len - 4, buf + 2);
 
-	sprintf(buf + 4, session->initiator);
+	sprintf(buf + 4, "%s", session->initiator);
 
 	p = buf + (4 + strlen(session->initiator) + 1);
 

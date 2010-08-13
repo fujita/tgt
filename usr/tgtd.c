@@ -265,6 +265,7 @@ int run_ext_program(const char *cmd,
 	pid_t pid;
 	int fds[2], ret;
 	struct ext_prog_info *ex;
+	ssize_t ignored;
 
 	ex = zalloc(sizeof(*ex));
 	if (!ex)
@@ -289,7 +290,7 @@ int run_ext_program(const char *cmd,
 
 	if (!pid) {
 		ret = system(cmd);
-		write(fds[1], &ret, sizeof(ret));
+		ignored = write(fds[1], &ret, sizeof(ret));
 		return 0;
 	}
 
