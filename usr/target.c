@@ -434,7 +434,7 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 		      int backing)
 {
 	char *p, *path = NULL, *bstype = NULL, *bsoflags = NULL;
-	int ret = 0, lu_bsoflags;
+	int ret = 0, lu_bsoflags = 0;
 	struct target *target;
 	struct scsi_lu *lu, *pos;
 	struct device_type_template *t;
@@ -497,10 +497,12 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 		goto out;
 	}
 
-	lu_bsoflags = str_to_open_flags(bsoflags);
-	if (lu_bsoflags == -1) {
-		ret = TGTADM_INVALID_REQUEST;
-		goto out;
+	if (bsoflags) {
+		lu_bsoflags = str_to_open_flags(bsoflags);
+		if (lu_bsoflags == -1) {
+			ret = TGTADM_INVALID_REQUEST;
+			goto out;
+		}
 	}
 
 	if (lu_bsoflags && !(bst->bs_oflags_supported & lu_bsoflags)) {
