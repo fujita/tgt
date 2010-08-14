@@ -138,48 +138,48 @@ static void usage(int status)
 		printf("\
 Linux SCSI Target Framework Administration Utility, version %s\n\
 \n\
-  --lld [driver] --mode target --op new --tid=[id] --targetname [name]\n\
-                        add a new target with [id] and [name]. [id] must not be zero.\n\
-  --lld [driver] --mode target --op delete --tid=[id]\n\
-                        delete the specific target with [id]. The target must\n\
+  --lld <driver> --mode target --op new --tid <id> --targetname <name>\n\
+                        add a new target with <id> and <name>. <id> must not be zero.\n\
+  --lld <driver> --mode target --op delete --tid <id>\n\
+                        delete the specific target with <id>. The target must\n\
                         have no activity.\n\
-  --lld [driver] --mode target --op show\n\
+  --lld <driver> --mode target --op show\n\
                         show all the targets.\n\
-  --lld [driver] --mode target --op show --tid=[id]\n\
+  --lld <driver> --mode target --op show --tid <id>\n\
                         show the specific target's parameters.\n\
-  --lld [driver] --mode target --op update --tid=[id] --name=[param] --value=[value]\n\
+  --lld <driver> --mode target --op update --tid <id> --name <param> --value <value>\n\
                         change the target parameters of the specific\n\
-                        target with [id].\n\
-  --lld [driver] --mode target --op bind --tid=[id] --initiator-address=[src]\n\
+                        target with <id>.\n\
+  --lld <driver> --mode target --op bind --tid <id> --initiator-address <src>\n\
                         enable the target to accept the specific initiators.\n\
-  --lld [driver] --mode target --op unbind --tid=[id] --initiator-address=[src]\n\
+  --lld <driver> --mode target --op unbind --tid <id> --initiator-address <src>\n\
                         disable the specific permitted initiators.\n\
-  --lld [driver] --mode logicalunit --op new --tid=[id] --lun=[lun] \\\n\
-                        --backing-store=[path] --bstype=[type] --bsoflags=[options]\n\
-                        add a new logical unit with [lun] to the specific\n\
-                        target with [id]. The logical unit is offered\n\
-                        to the initiators. [path] must be block device files\n\
+  --lld <driver> --mode logicalunit --op new --tid <id> --lun <lun> \\\n\
+                        --backing-store <path> --bstype <type> --bsoflags <options>\n\
+                        add a new logical unit with <lun> to the specific\n\
+                        target with <id>. The logical unit is offered\n\
+                        to the initiators. <path> must be block device files\n\
                         (including LVM and RAID devices) or regular files.\n\
                         bstype option is optional.\n\
                         bsoflags supported options are sync and direct\n\
                         (sync:direct for both).\n\
-  --lld [driver] --mode logicalunit --op delete --tid=[id] --lun=[lun]\n\
-                        delete the specific logical unit with [lun] that\n\
-                        the target with [id] has.\n\
-  --lld [driver] --mode account --op new --user=[name] --password=[pass]\n\
-                        add a new account with [name] and [pass].\n\
-  --lld [driver] --mode account --op delete --user=[name]\n\
-                        delete the specific account having [name].\n\
-  --lld [driver] --mode account --op bind --tid=[id] --user=[name] [--outgoing]\n\
-                        add the specific account having [name] to\n\
-                        the specific target with [id].\n\
-                        [user] could be [IncomingUser] or [OutgoingUser].\n\
+  --lld <driver> --mode logicalunit --op delete --tid <id> --lun <lun>\n\
+                        delete the specific logical unit with <lun> that\n\
+                        the target with <id> has.\n\
+  --lld <driver> --mode account --op new --user <name> --password <pass>\n\
+                        add a new account with <name> and <pass>.\n\
+  --lld <driver> --mode account --op delete --user <name>\n\
+                        delete the specific account having <name>.\n\
+  --lld <driver> --mode account --op bind --tid <id> --user <name> [--outgoing]\n\
+                        add the specific account having <name> to\n\
+                        the specific target with <id>.\n\
+                        <user> could be <IncomingUser> or <OutgoingUser>.\n\
                         If you use --outgoing option, the account will\n\
                         be added as an outgoing account.\n\
-  --lld [driver] --mode account --op unbind --tid=[id] --user=[name]\n\
-                        delete the specific account having [name] from specific\n\
+  --lld <driver> --mode account --op unbind --tid <id> --user <name>\n\
+                        delete the specific account having <name> from specific\n\
                         target.\n\
-  --control-port NNNN   use control port NNNN\n\
+  --control-port <port> use control port <port>\n\
   --help                display this help and exit\n\
 \n\
 Report bugs to <stgt@vger.kernel.org>.\n", TGT_VERSION);

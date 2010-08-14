@@ -1,36 +1,46 @@
+'\" t
 .\"     Title: tgtadm
 .\"    Author: 
-.\" Generator: DocBook XSL Stylesheets v1.73.2 <http://docbook.sf.net/>
-.\"      Date: 04/04/2010
+.\" Generator: DocBook XSL Stylesheets v1.75.1 <http://docbook.sf.net/>
+.\"      Date: 08/14/2010
 .\"    Manual: 
 .\"    Source: 
+.\"  Language: English
 .\"
-.TH "TGTADM" "8" "04/04/2010" "" ""
+.TH "TGTADM" "8" "08/14/2010" "" ""
+.\" -----------------------------------------------------------------
+.\" * set default formatting
+.\" -----------------------------------------------------------------
 .\" disable hyphenation
 .nh
 .\" disable justification (adjust text to left margin only)
 .ad l
+.\" -----------------------------------------------------------------
+.\" * MAIN CONTENT STARTS HERE *
+.\" -----------------------------------------------------------------
 .SH "NAME"
-tgtadm - Linux SCSI Target Administration Utility
+tgtadm \- Linux SCSI Target Administration Utility
 .SH "SYNOPSIS"
-.HP 20
-\fBtgtadm [OPTIONS]\.\.\.\fR [\-C\ \-\-control\-port\ <port>] [\-\-lld\ <driver>] [\-\-op\ <operation>] [\-\-mode\ <mode>] [\-\-tid\ <tid>] [\-T\ \-\-targetname\ <targetname>] [\-Y\ \-\-device\-type\ <type>] [\-\-lun\ <lun>] [\-\-backing\-store\ <path>] [\-\-initiator\-address\ <address>] [\-\-name\ <parameter>] [\-\-value\ <value>] [\-\-params\ <param=value[,param=value\.\.\.]>] [\-\-help]
+.HP \w'\fBtgtadm\ [OPTIONS]\&.\&.\&.\fR\ 'u
+\fBtgtadm [OPTIONS]\&.\&.\&.\fR [\-C\ \-\-control\-port\ <port>] [\-L\ \-\-lld\ <driver>] [\-o\ \-\-op\ <operation>] [\-m\ \-\-mode\ <mode>] [\-t\ \-\-tid\ <id>] [\-T\ \-\-targetname\ <targetname>] [\-Y\ \-\-device\-type\ <type>] [\-l\ \-\-lun\ <lun>] [\-b\ \-\-backing\-store\ <path>] [\-I\ \-\-initiator\-address\ <address>] [\-n\ \-\-name\ <parameter>] [\-v\ \-\-value\ <value>] [\-P\ \-\-params\ <param=value[,param=value\&.\&.\&.]>] [\-h\ \-\-help]
 .SH "DESCRIPTION"
 .PP
-tgtadm is used to monitor and modify everything about Linux SCSI target software: targets, volumes, etc\.
+tgtadm is used to monitor and modify everything about Linux SCSI target software: targets, volumes, etc\&.
 .SH "OPTIONS"
 .PP
-\fB\-C, \-\-control\-port=<port>\fR
+\fB\-C, \-\-control\-port <port>\fR
 .RS 4
-It is possible to run multiple concurrent instances of tgtd on a host\. This argument is used to control which instance the tgtadm command will operate on\.
+It is possible to run multiple concurrent instances of tgtd on a host\&. This argument is used to control which instance the tgtadm command will operate on\&.
 .RE
 .PP
-\fB\-Y, \-\-device\-type=<type>\fR
+\fB\-Y, \-\-device\-type <type>\fR
 .RS 4
-When creating a LUN, this parameter specifies the type of device to create\. Default is disk\.
+When creating a LUN, this parameter specifies the type of device to create\&. Default is disk\&.
 .RE
 .sp
+.if n \{\
 .RS 4
+.\}
 .nf
 Possible device\-types are:
     disk    : emulate a disk device
@@ -40,82 +50,86 @@ Possible device\-types are:
     changer : emulate a media changer device
       
 .fi
+.if n \{\
+.RE
+.\}
+.PP
+\fB\-\-lld <driver> \-\-op new \-\-mode target \-\-tid <id> \-\-targetname <name>\fR
+.RS 4
+Add a new target with <id> and <name>\&.
 .RE
 .PP
-\fB\-\-lld [driver] \-\-op new \-\-mode target \-\-tid=[id] \-\-targetname [name]\fR
+\fB\-\-lld <driver> \-\-op delete \-\-mode target \-\-tid <id>\fR
 .RS 4
-Add a new target with [id] and [name]\.
+Delete specific target with <id>\&. The target must have no active I_T nexus\&.
 .RE
 .PP
-\fB\-\-lld [driver] \-\-op delete \-\-mode target \-\-tid=[id]\fR
+\fB\-\-lld <driver> \-\-op show \-\-mode target\fR
 .RS 4
-Delete specific target with [id]\. The target must have no active I_T nexus\.
+Show all the targets\&.
 .RE
 .PP
-\fB\-\-lld [driver] \-\-op show \-\-mode target\fR
+\fB\-\-lld <driver> \-\-op show \-\-mode target \-\-tid <id>\fR
 .RS 4
-Show all the targets\.
+Show target parameters of a target with <id>\&.
 .RE
 .PP
-\fB\-\-lld [driver] \-\-op show \-\-mode target \-\-tid=[id]\fR
+\fB\-\-lld <driver> \-\-op new \-\-mode logicalunit \-\-tid <id> \-\-lun <lun> \-\-backing\-store <path>\fR
 .RS 4
-Show target parameters of a target with [id]\.
+Add a new logical unit with <lun> to specific target with <id>\&. The logical unit is offered to the initiators\&. <path> must be block device files (including LVM and RAID devices) or regular files\&. lun0 is reserved for a special device automatically created\&.
 .RE
 .PP
-\fB\-\-lld [driver] \-\-op new \-\-mode=logicalunit \-\-tid=[id] \-\-lun=[lun] \-\-backing\-store [path]\fR
+\fB\-\-lld <driver> \-\-op delete \-\-mode logicalunit \-\-tid <id> \-\-lun <lun>\fR
 .RS 4
-Add a new logical unit with [lun] to specific target with [id]\. The logical unit is offered to the initiators\. [path] must be block device files (including LVM and RAID devices) or regular files\. lun0 is reserved for a special device automatically created\.
+Delete specific logical unit with <lun> that the target with <id> has\&.
 .RE
 .PP
-\fB\-\-lld [driver] \-\-op delete \-\-mode=logicalunit \-\-tid=[id] \-\-lun=[lun]\fR
+\fB\-\-lld <driver> \-\-op bind \-\-mode target \-\-tid <id> \-\-initiator\-address <address>\fR
 .RS 4
-Delete specific logical unit with [lun] that the target with [id] has\.
+Add the address to the access lists of the target with <id>\&. Initiators with the address can access to the target\&. \'ALL\' is a special address to allow all initiators to access to a target\&.
 .RE
 .PP
-\fB\-\-lld [driver] \-\-op bind \-\-mode=target \-\-tid=[id] \-\-initiator\-address=[address]\fR
+\fB\-\-lld <driver> \-\-op unbind \-\-mode target \-\-tid <id> \-\-initiator\-address <address>\fR
 .RS 4
-Add the address to the access lists of the target with [id]\. Initiators with the address can access to the target\. \'ALL\' is a special address to allow all initiators to access to a target\.
+Delete the address from the access lists of the target with <id>\&.
 .RE
 .PP
-\fB\-\-lld [driver] \-\-op unbind \-\-mode=target \-\-tid=[id] \-\-initiator\-address=[address]\fR
+\fB\-\-lld <driver> \-\-op update \-\-mode target \-\-tid <id> \-\-name=<parameter> \-\-value=<value>\fR
 .RS 4
-Delete the address from the access lists of the target with [id]\.
+Change the value of <parameter> of the target with <id> to <value>\&.
 .RE
 .PP
-\fB\-\-lld [driver] \-\-op update \-\-mode=target \-\-tid=[id] \-\-name=[parameter] \-\-value=[value]\fR
+\fB\-\-lld <driver> \-\-op update \-\-mode target \-\-tid <id> \-\-params parameter=value<,\&.\&.\&.>\fR
 .RS 4
-Change the value of [parameter] of the target with [id] to [value]\.
-.RE
-.PP
-\fB\-\-lld [driver] \-\-op update \-\-mode=target \-\-tid=[id] \-\-params parameter=value[,\.\.\.]\fR
-.RS 4
-Sets/changes the value of one or more parameters\.
+Sets/changes the value of one or more parameters\&.
 .RE
 .PP
 \fB\-\-help\fR
 .RS 4
-Display a list of available options and exits\.
+Display a list of available options and exits\&.
 .RE
 .SH "LUN PARAMETERS"
 .PP
-These parameters are only applicable for "\-\-mode logicalunit"\.
+These parameters are only applicable for "\-\-mode logicalunit"\&.
 .PP
 \fBvendor_id=<string>\fR
 .RS 4
-This parameter sets the Vendor Identification string that a LUN will report in INQURY data\.
+This parameter sets the Vendor Identification string that a LUN will report in INQURY data\&.
 .RE
 .PP
 \fBproduct_id=<string>\fR
 .RS 4
-This parameter sets the Product Identification string that a LUN will report in INQURY data\.
+This parameter sets the Product Identification string that a LUN will report in INQURY data\&.
 .RE
 .PP
 \fBproduct_rev=<string>\fR
 .RS 4
-This parameter sets the Product Revision string that a LUN will report in INQURY data\.
+This parameter sets the Product Revision string that a LUN will report in INQURY data\&.
 .RE
 .sp
+.if n \{\
 .RS 4
+.\}
 .nf
 Example:
 
@@ -124,26 +138,30 @@ tgtadm \-\-lld iscsi \-\-mode logicalunit \-\-op update \e
        \-\-params vendor_id=TGTD,product_id=VirtualHD,product_rev=0103
       
 .fi
+.if n \{\
 .RE
+.\}
 .PP
 \fBremovable=<0|1>\fR
 .RS 4
-This can be used to override/change the default setting for the removable flag\. Disk devices default to non\-removable while DVD and TAPE devices default to removable\.
+This can be used to override/change the default setting for the removable flag\&. Disk devices default to non\-removable while DVD and TAPE devices default to removable\&.
 .RE
 .PP
 \fBsense_format=<0|1>\fR
 .RS 4
-This flag controls the format of sense data that the device will return\. 0 = Clasic sense format, 1 = Support descriptor format\.
+This flag controls the format of sense data that the device will return\&. 0 = Clasic sense format, 1 = Support descriptor format\&.
 .RE
 .PP
 \fBonline=<0|1>\fR
 .RS 4
-This controls whether a device is online or not\.
+This controls whether a device is online or not\&.
 .sp
-Devices default to be online when created but can be brought offline using this parameter\. Behaviour of offline devices depend on device type\. An MMC/DVD device that is offline will report that there is no disk in the unit but the actual MMC/DVD unit itself can still be communicated with\. All other device types will fail all I/O with a sense code of Not Ready\.
+Devices default to be online when created but can be brought offline using this parameter\&. Behaviour of offline devices depend on device type\&. An MMC/DVD device that is offline will report that there is no disk in the unit but the actual MMC/DVD unit itself can still be communicated with\&. All other device types will fail all I/O with a sense code of Not Ready\&.
 .RE
 .sp
+.if n \{\
 .RS 4
+.\}
 .nf
 Example:
 
@@ -152,48 +170,56 @@ tgtadm \-\-lld iscsi \-\-mode logicalunit \-\-op update \e
        \-\-params removable=1,sense_format=1,online=1
       
 .fi
+.if n \{\
 .RE
+.\}
 .PP
 \fBmode_page=<byte\-string>\fR
 .RS 4
-This parameter is used to set specific mode pages for the device and the mode page contents\. Most devices default to reasonable default mode pages automatically when the LUN is created, but this allows special settings\.
+This parameter is used to set specific mode pages for the device and the mode page contents\&. Most devices default to reasonable default mode pages automatically when the LUN is created, but this allows special settings\&.
 .RE
 .sp
+.if n \{\
 .RS 4
+.\}
 .nf
 Examples:
 
-Create mode page \'2\', subpage 0 and 14 bytes of data\.
-This is Disconnect\-Reconnect mode page\.
+Create mode page \'2\', subpage 0 and 14 bytes of data\&.
+This is Disconnect\-Reconnect mode page\&.
 
 tgtadm \-\-mode logicalunit \-\-op update \-\-tid 1 \-\-lun 2 \e
          \-\-params mode_page=2:0:14:0x80:0x80:0:0xa:0:0:0:0:0:0:0:0:0:0
 
 
-Create mode page \'10\', subpage 0 and 10 bytes of data\.
-This is Control Extension mode page\.
+Create mode page \'10\', subpage 0 and 10 bytes of data\&.
+This is Control Extension mode page\&.
 
 tgtadm \-\-lld iscsi \-\-mode logicalunit \-\-op update \-\-tid 1 \-\-lun 2 \e
          \-\-params mode_page=10:0:10:2:0:0:0:0:0:0:0:2:0
 
 
-Create mode page \'0x1c\', subpage 0 and 10 bytes of data\.
-This is Informational Exceptions Control mode page\.
+Create mode page \'0x1c\', subpage 0 and 10 bytes of data\&.
+This is Informational Exceptions Control mode page\&.
 
 tgtadm \-\-lld iscsi \-\-mode logicalunit \-\-op update \-\-tid 1 \-\-lun 2 \e
          \-\-params mode_page=0x1c:0:10:8:0:0:0:0:0:0:0:0:0
       
 .fi
+.if n \{\
 .RE
+.\}
 .SH "SMC SPECIFIC LUN PARAMETERS"
 .PP
-These parameters are only applicable for luns that are of type "changer" i\.e\. the media changer device for a DVD Jukebox or a Virtual Tape Library\.
+These parameters are only applicable for luns that are of type "changer" i\&.e\&. the media changer device for a DVD Jukebox or a Virtual Tape Library\&.
 .PP
 \fBelement_type=<1|2|3|4>\fR
 .RS 4
-This controls which type of element a certain slot in the jukebox/vtl is\.
+This controls which type of element a certain slot in the jukebox/vtl is\&.
 .sp
+.if n \{\
 .RS 4
+.\}
 .nf
 Slot types:
  1 \-> Medium Transport (picker arm)
@@ -202,48 +228,52 @@ Slot types:
  4 \-> Data Transfer device (CD drive, tape drive, MO drive etc)
 	  
 .fi
+.if n \{\
 .RE
+.\}
 .RE
 .PP
 \fBaddress=<1\-65535>\fR
 .RS 4
-This is used to create/operate on a single slot\. Address specifies the slot on which to perform the operation\.
+This is used to create/operate on a single slot\&. Address specifies the slot on which to perform the operation\&.
 .RE
 .PP
 \fBstart_address=<1\-65535>,quantity=<1\-\-65535>\fR
 .RS 4
-This is used to create/operate on an entire range of slots at once\. Start_address specifies the first address to operate on and quantity specifies the number of consequtive slots\.
+This is used to create/operate on an entire range of slots at once\&. Start_address specifies the first address to operate on and quantity specifies the number of consequtive slots\&.
 .RE
 .PP
 \fBsides=<1|2>\fR
 .RS 4
-When creating storage elements, i\.e\. "element_type=2", this parameter specifies if the media has 1 or two sides to hold data\.
+When creating storage elements, i\&.e\&. "element_type=2", this parameter specifies if the media has 1 or two sides to hold data\&.
 .RE
 .PP
 \fBbarcode=<string>\fR
 .RS 4
-This is used to assign a barcode to an element\.
+This is used to assign a barcode to an element\&.
 .RE
 .PP
 \fBmedia_home=<string>\fR
 .RS 4
-This parameter specifies a directory where all virtual media for the dvd/tape device elements are stored\.
+This parameter specifies a directory where all virtual media for the dvd/tape device elements are stored\&.
 .sp
-To assign a media image file to a storage element slot, you assign "barcode" to be the name of the image file in the "media_home" directory\.
+To assign a media image file to a storage element slot, you assign "barcode" to be the name of the image file in the "media_home" directory\&.
 .RE
 .sp
+.if n \{\
 .RS 4
+.\}
 .nf
 Example: How to create a DVD jukebox with eight disk trays and
-two empty DVD\-R disks\.
+two empty DVD\-R disks\&.
 
 
 # Create a target
-tgtadm \-\-lld iscsi \-\-mode target \-\-op new \-\-tid 1 \-T iqn\.2007\-03:virtual\-dvd:`hostname`
+tgtadm \-\-lld iscsi \-\-mode target \-\-op new \-\-tid 1 \-\-targetname iqn\&.2007\-03:virtual\-dvd:`hostname`
 
 # Create a DVD drive and give it a nice name
-# The dvd starts out without a backing store file, i\.e\. no disk loaded
-tgtadm \-\-op new \-\-mode logicalunit \-\-tid 1 \-\-lun 1 \-Y cd
+# The dvd starts out without a backing store file, i\&.e\&. no disk loaded
+tgtadm \-\-op new \-\-mode logicalunit \-\-tid 1 \-\-lun 1 \-\-device\-type cd
 tgtadm \-\-lld iscsi \-\-mode logicalunit \-\-op update \-\-tid 1 \-\-lun 1 \-\-params vendor_id=STGT_DVD,product_id=DVD101,product_rev=0010,scsi_sn=STGTDVD01,removable=1
 
 # We need a backend store file for the media changer
@@ -252,7 +282,7 @@ if [ ! \-f $HOME/smc ]; then
 fi
 
 # Create the SMC device and give it a nice name
-tgtadm \-\-lld iscsi \-\-mode logicalunit \-\-op new \-\-tid 1 \-\-lun 2 \-b $HOME/smc \-\-device\-type=changer
+tgtadm \-\-lld iscsi \-\-mode logicalunit \-\-op new \-\-tid 1 \-\-lun 2 \-\-backing\-store $HOME/smc \-\-device\-type changer
 tgtadm \-\-lld iscsi \-\-mode logicalunit \-\-op update \-\-tid 1 \-\-lun 2 \-\-params vendor_id=STK,product_id=L700,product_rev=0010,scsi_sn=XYZZY_0,removable=1
 
 # Add a Data Transfer devices (1 drive)
@@ -283,76 +313,94 @@ tgtimg \-\-op new \-\-device\-type cd \-\-type dvd+r \-\-file ${VTL}/DISK_002
 tgtadm \-\-lld iscsi \-\-mode logicalunit \-\-op update \-\-tid 1 \-\-lun 2 \-\-params element_type=2,address=1025,barcode=DISK_002,sides=1
 
 # Allow ALL initiators to connect to this target
-tgtadm \-\-lld iscsi \-\-mode target \-\-op bind \-\-tid 1 \-I ALL
+tgtadm \-\-lld iscsi \-\-mode target \-\-op bind \-\-tid 1 \-\-initiator\-address ALL
 
-# Show all our good work\.
+# Show all our good work\&.
 tgtadm \-\-lld iscsi \-\-mode target \-\-op show
       
 .fi
+.if n \{\
 .RE
+.\}
 .SH "ISNS PARAMETERS"
 .PP
-iSNS configuration for a target is by using the tgtadm command\.
+iSNS configuration for a target is by using the tgtadm command\&.
 .PP
 \fBiSNSServerIP\fR
 .RS 4
-This specifies the IP address of the iSNS server\. TGTD only supprots one iSNS server\.
+This specifies the IP address of the iSNS server\&. TGTD only supprots one iSNS server\&.
 .RE
 .sp
+.if n \{\
 .RS 4
+.\}
 .nf
 Example:
 
-tgtadm \-\-op update \-\-mode sys \-\-name iSNSServerIP \-v 192\.168\.11\.133
+tgtadm \-\-op update \-\-mode sys \-\-name iSNSServerIP \-\-value 192\&.168\&.11\&.133
       
 .fi
+.if n \{\
 .RE
+.\}
 .PP
 \fBiSNS\fR
 .RS 4
-This setting enables(on)/disables(off) iSNS\.
+This setting enables(on)/disables(off) iSNS\&.
 .RE
 .sp
+.if n \{\
 .RS 4
+.\}
 .nf
 Example:
 
-tgtadm \-\-op update \-\-mode sys \-\-name iSNS \-v On
+tgtadm \-\-op update \-\-mode sys \-\-name iSNS \-\-value On
       
 .fi
+.if n \{\
 .RE
+.\}
 .PP
 \fBiSNSServerPort\fR
 .RS 4
-This setting specifies the port to use for iSNS\.
+This setting specifies the port to use for iSNS\&.
 .RE
 .sp
+.if n \{\
 .RS 4
+.\}
 .nf
 Example:
 
-tgtadm \-\-op update \-\-mode sys \-\-name iSNSServerPort \-v 3205
+tgtadm \-\-op update \-\-mode sys \-\-name iSNSServerPort \-\-value 3205
       
 .fi
+.if n \{\
 .RE
+.\}
 .PP
 \fBiSNSAccessControl\fR
 .RS 4
-Enable/disable access control for iSNS\.
+Enable/disable access control for iSNS\&.
 .RE
 .sp
+.if n \{\
 .RS 4
+.\}
 .nf
 Example:
 
-tgtadm \-\-op update \-\-mode sys \-\-name iSNSAccessControl \-v Off
+tgtadm \-\-op update \-\-mode sys \-\-name iSNSAccessControl \-\-value Off
       
 .fi
+.if n \{\
 .RE
+.\}
 .SH "SEE ALSO"
 .PP
-tgtd(8), tgt\-admin(8), tgtimg(8), tgt\-setup\-lun(8)\.
-\fI\%http://stgt.sourceforge.net/\fR
+tgtd(8), tgt\-admin(8), tgtimg(8), tgt\-setup\-lun(8)\&.
+\m[blue]\fB\%http://stgt.sourceforge.net/\fR\m[]
 .SH "REPORTING BUGS"
 .PP
-Report bugs to <stgt@vger\.kernel\.org>
+Report bugs to <stgt@vger\&.kernel\&.org>

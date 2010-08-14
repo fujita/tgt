@@ -16,19 +16,19 @@
 	<cmdsynopsis>
 		<command>tgtadm [OPTIONS]...</command>
 		<arg choice="opt">-C --control-port &lt;port&gt;</arg>
-		<arg choice="opt">--lld &lt;driver&gt;</arg>
-		<arg choice="opt">--op &lt;operation&gt;</arg>
-		<arg choice="opt">--mode &lt;mode&gt;</arg>
-		<arg choice="opt">--tid &lt;tid&gt;</arg>
+		<arg choice="opt">-L --lld &lt;driver&gt;</arg>
+		<arg choice="opt">-o --op &lt;operation&gt;</arg>
+		<arg choice="opt">-m --mode &lt;mode&gt;</arg>
+		<arg choice="opt">-t --tid &lt;id&gt;</arg>
 		<arg choice="opt">-T --targetname &lt;targetname&gt;</arg>
 		<arg choice="opt">-Y --device-type &lt;type&gt;</arg>
-		<arg choice="opt">--lun &lt;lun&gt;</arg>
-		<arg choice="opt">--backing-store &lt;path&gt;</arg>
-		<arg choice="opt">--initiator-address &lt;address&gt;</arg>
-		<arg choice="opt">--name &lt;parameter&gt;</arg>
-		<arg choice="opt">--value &lt;value&gt;</arg>
-		<arg choice="opt">--params &lt;param=value[,param=value...]&gt;</arg>
-		<arg choice="opt">--help</arg>
+		<arg choice="opt">-l --lun &lt;lun&gt;</arg>
+		<arg choice="opt">-b --backing-store &lt;path&gt;</arg>
+		<arg choice="opt">-I --initiator-address &lt;address&gt;</arg>
+		<arg choice="opt">-n --name &lt;parameter&gt;</arg>
+		<arg choice="opt">-v --value &lt;value&gt;</arg>
+		<arg choice="opt">-P --params &lt;param=value[,param=value...]&gt;</arg>
+		<arg choice="opt">-h --help</arg>
 	</cmdsynopsis>
 	
 </refsynopsisdiv>
@@ -45,7 +45,7 @@
     <title>OPTIONS</title>
 
     <variablelist>
-      <varlistentry><term><option>-C, --control-port=&lt;port&gt;</option></term>
+      <varlistentry><term><option>-C, --control-port &lt;port&gt;</option></term>
         <listitem>
           <para>
 	    It is possible to run multiple concurrent instances of tgtd
@@ -55,7 +55,7 @@
         </listitem>
       </varlistentry>
 
-      <varlistentry><term><option>-Y, --device-type=&lt;type&gt;</option></term>
+      <varlistentry><term><option>-Y, --device-type &lt;type&gt;</option></term>
         <listitem>
           <para>
 	    When creating a LUN, this parameter specifies the type of device
@@ -72,23 +72,23 @@ Possible device-types are:
     changer : emulate a media changer device
       </screen>
 
-      <varlistentry><term><option>--lld [driver] --op new --mode target --tid=[id] --targetname [name]</option></term>
+      <varlistentry><term><option>--lld &lt;driver&gt; --op new --mode target --tid &lt;id&gt; --targetname &lt;name&gt;</option></term>
         <listitem>
           <para>
-	    Add a new target with [id] and [name].
+	    Add a new target with &lt;id&gt; and &lt;name&gt;.
           </para>
         </listitem>
       </varlistentry>
 
-      <varlistentry><term><option>--lld [driver] --op delete --mode target --tid=[id]</option></term>
+      <varlistentry><term><option>--lld &lt;driver&gt; --op delete --mode target --tid &lt;id&gt;</option></term>
         <listitem>
           <para>
-	    Delete specific target with [id]. The target must have no active I_T nexus.
+	    Delete specific target with &lt;id&gt;. The target must have no active I_T nexus.
           </para>
         </listitem>
       </varlistentry>
 
-      <varlistentry><term><option>--lld [driver] --op show --mode target</option></term>
+      <varlistentry><term><option>--lld &lt;driver&gt; --op show --mode target</option></term>
         <listitem>
           <para>
 	    Show all the targets.
@@ -96,60 +96,60 @@ Possible device-types are:
         </listitem>
       </varlistentry>
 
-      <varlistentry><term><option>--lld [driver] --op show --mode target --tid=[id]</option></term>
+      <varlistentry><term><option>--lld &lt;driver&gt; --op show --mode target --tid &lt;id&gt;</option></term>
         <listitem>
           <para>
-	    Show target parameters of a target with [id].
+	    Show target parameters of a target with &lt;id&gt;.
           </para>
         </listitem>
       </varlistentry>
 
-      <varlistentry><term><option>--lld [driver] --op new --mode=logicalunit --tid=[id] --lun=[lun] --backing-store [path]</option></term>
+      <varlistentry><term><option>--lld &lt;driver&gt; --op new --mode logicalunit --tid &lt;id&gt; --lun &lt;lun&gt; --backing-store &lt;path&gt;</option></term>
         <listitem>
           <para>
-	    Add a new logical unit with [lun] to specific target with [id]. The
-	    logical unit is offered to the initiators. [path] must be block device
+	    Add a new logical unit with &lt;lun&gt; to specific target with &lt;id&gt;. The
+	    logical unit is offered to the initiators. &lt;path&gt; must be block device
 	    files (including LVM and RAID devices) or regular files. lun0 is
 	    reserved for a special device automatically created.
           </para>
         </listitem>
       </varlistentry>
 
-      <varlistentry><term><option>--lld [driver] --op delete --mode=logicalunit --tid=[id] --lun=[lun]</option></term>
+      <varlistentry><term><option>--lld &lt;driver&gt; --op delete --mode logicalunit --tid &lt;id&gt; --lun &lt;lun&gt;</option></term>
         <listitem>
           <para>
-	    Delete specific logical unit with [lun] that the target with [id] has.
+	    Delete specific logical unit with &lt;lun&gt; that the target with &lt;id&gt; has.
           </para>
         </listitem>
       </varlistentry>
 
-      <varlistentry><term><option>--lld [driver] --op bind --mode=target --tid=[id] --initiator-address=[address]</option></term>
+      <varlistentry><term><option>--lld &lt;driver&gt; --op bind --mode target --tid &lt;id&gt; --initiator-address &lt;address&gt;</option></term>
         <listitem>
           <para>
-	    Add the address to the access lists of the target with [id]. Initiators
+	    Add the address to the access lists of the target with &lt;id&gt;. Initiators
 	    with the address can access to the target. 'ALL' is a special address
 	    to allow all initiators to access to a target.
           </para>
         </listitem>
       </varlistentry>
 
-      <varlistentry><term><option>--lld [driver] --op unbind --mode=target --tid=[id] --initiator-address=[address]</option></term>
+      <varlistentry><term><option>--lld &lt;driver&gt; --op unbind --mode target --tid &lt;id&gt; --initiator-address &lt;address&gt;</option></term>
         <listitem>
           <para>
-	    Delete the address from the access lists of the target with [id].
+	    Delete the address from the access lists of the target with &lt;id&gt;.
           </para>
         </listitem>
       </varlistentry>
 
-      <varlistentry><term><option>--lld [driver] --op update --mode=target --tid=[id] --name=[parameter] --value=[value]</option></term>
+      <varlistentry><term><option>--lld &lt;driver&gt; --op update --mode target --tid &lt;id&gt; --name=&lt;parameter&gt; --value=&lt;value&gt;</option></term>
         <listitem>
           <para>
-	    Change the value of [parameter] of the target with [id] to [value].
+	    Change the value of &lt;parameter&gt; of the target with &lt;id&gt; to &lt;value&gt;.
           </para>
         </listitem>
       </varlistentry>
 
-      <varlistentry><term><option>--lld [driver] --op update --mode=target --tid=[id] --params parameter=value[,...]</option></term>
+      <varlistentry><term><option>--lld &lt;driver&gt; --op update --mode target --tid &lt;id&gt; --params parameter=value&lt;,...&gt;</option></term>
         <listitem>
           <para>
 	    Sets/changes the value of one or more parameters.
@@ -372,11 +372,11 @@ two empty DVD-R disks.
 
 
 # Create a target
-tgtadm --lld iscsi --mode target --op new --tid 1 -T iqn.2007-03:virtual-dvd:`hostname`
+tgtadm --lld iscsi --mode target --op new --tid 1 --targetname iqn.2007-03:virtual-dvd:`hostname`
 
 # Create a DVD drive and give it a nice name
 # The dvd starts out without a backing store file, i.e. no disk loaded
-tgtadm --op new --mode logicalunit --tid 1 --lun 1 -Y cd
+tgtadm --op new --mode logicalunit --tid 1 --lun 1 --device-type cd
 tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 1 --params vendor_id=STGT_DVD,product_id=DVD101,product_rev=0010,scsi_sn=STGTDVD01,removable=1
 
 # We need a backend store file for the media changer
@@ -385,7 +385,7 @@ if [ ! -f $HOME/smc ]; then
 fi
 
 # Create the SMC device and give it a nice name
-tgtadm --lld iscsi --mode logicalunit --op new --tid 1 --lun 2 -b $HOME/smc --device-type=changer
+tgtadm --lld iscsi --mode logicalunit --op new --tid 1 --lun 2 --backing-store $HOME/smc --device-type changer
 tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params vendor_id=STK,product_id=L700,product_rev=0010,scsi_sn=XYZZY_0,removable=1
 
 # Add a Data Transfer devices (1 drive)
@@ -416,7 +416,7 @@ tgtimg --op new --device-type cd --type dvd+r --file ${VTL}/DISK_002
 tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params element_type=2,address=1025,barcode=DISK_002,sides=1
 
 # Allow ALL initiators to connect to this target
-tgtadm --lld iscsi --mode target --op bind --tid 1 -I ALL
+tgtadm --lld iscsi --mode target --op bind --tid 1 --initiator-address ALL
 
 # Show all our good work.
 tgtadm --lld iscsi --mode target --op show
@@ -443,7 +443,7 @@ tgtadm --lld iscsi --mode target --op show
       <screen format="linespecific">
 Example:
 
-tgtadm --op update --mode sys --name iSNSServerIP -v 192.168.11.133
+tgtadm --op update --mode sys --name iSNSServerIP --value 192.168.11.133
       </screen>
 
       <varlistentry><term><option>iSNS</option></term>
@@ -456,7 +456,7 @@ tgtadm --op update --mode sys --name iSNSServerIP -v 192.168.11.133
       <screen format="linespecific">
 Example:
 
-tgtadm --op update --mode sys --name iSNS -v On
+tgtadm --op update --mode sys --name iSNS --value On
       </screen>
 
       <varlistentry><term><option>iSNSServerPort</option></term>
@@ -469,7 +469,7 @@ tgtadm --op update --mode sys --name iSNS -v On
       <screen format="linespecific">
 Example:
 
-tgtadm --op update --mode sys --name iSNSServerPort -v 3205
+tgtadm --op update --mode sys --name iSNSServerPort --value 3205
       </screen>
 
       <varlistentry><term><option>iSNSAccessControl</option></term>
@@ -482,7 +482,7 @@ tgtadm --op update --mode sys --name iSNSServerPort -v 3205
       <screen format="linespecific">
 Example:
 
-tgtadm --op update --mode sys --name iSNSAccessControl -v Off
+tgtadm --op update --mode sys --name iSNSAccessControl --value Off
       </screen>
 
     </variablelist>

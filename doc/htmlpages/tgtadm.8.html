@@ -1,48 +1,48 @@
-<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1"><title>tgtadm</title><meta name="generator" content="DocBook XSL Stylesheets V1.73.2"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="refentry" lang="en"><a name="tgtadm.8"></a><div class="titlepage"></div><div class="refnamediv"><h2>Name</h2><p>tgtadm &#8212; Linux SCSI Target Administration Utility</p></div><div class="refsynopsisdiv"><h2>Synopsis</h2><div class="cmdsynopsis"><p><code class="command">tgtadm [OPTIONS]...</code>  [-C --control-port &lt;port&gt;] [--lld &lt;driver&gt;] [--op &lt;operation&gt;] [--mode &lt;mode&gt;] [--tid &lt;tid&gt;] [-T --targetname &lt;targetname&gt;] [-Y --device-type &lt;type&gt;] [--lun &lt;lun&gt;] [--backing-store &lt;path&gt;] [--initiator-address &lt;address&gt;] [--name &lt;parameter&gt;] [--value &lt;value&gt;] [--params &lt;param=value[,param=value...]&gt;] [--help]</p></div></div><div class="refsect1" lang="en"><a name="id2476151"></a><h2>DESCRIPTION</h2><p>
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1"><title>tgtadm</title><meta name="generator" content="DocBook XSL Stylesheets V1.75.1"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="refentry" title="tgtadm"><a name="tgtadm.8"></a><div class="titlepage"></div><div class="refnamediv"><h2>Name</h2><p>tgtadm &#8212; Linux SCSI Target Administration Utility</p></div><div class="refsynopsisdiv" title="Synopsis"><h2>Synopsis</h2><div class="cmdsynopsis"><p><code class="command">tgtadm [OPTIONS]...</code>  [-C --control-port &lt;port&gt;] [-L --lld &lt;driver&gt;] [-o --op &lt;operation&gt;] [-m --mode &lt;mode&gt;] [-t --tid &lt;id&gt;] [-T --targetname &lt;targetname&gt;] [-Y --device-type &lt;type&gt;] [-l --lun &lt;lun&gt;] [-b --backing-store &lt;path&gt;] [-I --initiator-address &lt;address&gt;] [-n --name &lt;parameter&gt;] [-v --value &lt;value&gt;] [-P --params &lt;param=value[,param=value...]&gt;] [-h --help]</p></div></div><div class="refsect1" title="DESCRIPTION"><a name="id247594"></a><h2>DESCRIPTION</h2><p>
       tgtadm is used to monitor and modify everything about Linux SCSI target
       software: targets, volumes, etc.
-    </p></div><div class="refsect1" lang="en"><a name="id2476163"></a><h2>OPTIONS</h2><div class="variablelist"><pre class="screen">
+    </p></div><div class="refsect1" title="OPTIONS"><a name="id247605"></a><h2>OPTIONS</h2><div class="variablelist"><pre class="screen">
 Possible device-types are:
     disk    : emulate a disk device
     tape    : emulate a tape reader
     ssc     : same as tape
     cd      : emulate a DVD drive
     changer : emulate a media changer device
-      </pre><dl><dt><span class="term"><code class="option">-C, --control-port=&lt;port&gt;</code></span></dt><dd><p>
+      </pre><dl><dt><span class="term"><code class="option">-C, --control-port &lt;port&gt;</code></span></dt><dd><p>
 	    It is possible to run multiple concurrent instances of tgtd
 	    on a host. This argument is used to control which instance
 	    the tgtadm command will operate on.
-          </p></dd><dt><span class="term"><code class="option">-Y, --device-type=&lt;type&gt;</code></span></dt><dd><p>
+          </p></dd><dt><span class="term"><code class="option">-Y, --device-type &lt;type&gt;</code></span></dt><dd><p>
 	    When creating a LUN, this parameter specifies the type of device
 	    to create. Default is disk.
-          </p></dd><dt><span class="term"><code class="option">--lld [driver] --op new --mode target --tid=[id] --targetname [name]</code></span></dt><dd><p>
-	    Add a new target with [id] and [name].
-          </p></dd><dt><span class="term"><code class="option">--lld [driver] --op delete --mode target --tid=[id]</code></span></dt><dd><p>
-	    Delete specific target with [id]. The target must have no active I_T nexus.
-          </p></dd><dt><span class="term"><code class="option">--lld [driver] --op show --mode target</code></span></dt><dd><p>
+          </p></dd><dt><span class="term"><code class="option">--lld &lt;driver&gt; --op new --mode target --tid &lt;id&gt; --targetname &lt;name&gt;</code></span></dt><dd><p>
+	    Add a new target with &lt;id&gt; and &lt;name&gt;.
+          </p></dd><dt><span class="term"><code class="option">--lld &lt;driver&gt; --op delete --mode target --tid &lt;id&gt;</code></span></dt><dd><p>
+	    Delete specific target with &lt;id&gt;. The target must have no active I_T nexus.
+          </p></dd><dt><span class="term"><code class="option">--lld &lt;driver&gt; --op show --mode target</code></span></dt><dd><p>
 	    Show all the targets.
-          </p></dd><dt><span class="term"><code class="option">--lld [driver] --op show --mode target --tid=[id]</code></span></dt><dd><p>
-	    Show target parameters of a target with [id].
-          </p></dd><dt><span class="term"><code class="option">--lld [driver] --op new --mode=logicalunit --tid=[id] --lun=[lun] --backing-store [path]</code></span></dt><dd><p>
-	    Add a new logical unit with [lun] to specific target with [id]. The
-	    logical unit is offered to the initiators. [path] must be block device
+          </p></dd><dt><span class="term"><code class="option">--lld &lt;driver&gt; --op show --mode target --tid &lt;id&gt;</code></span></dt><dd><p>
+	    Show target parameters of a target with &lt;id&gt;.
+          </p></dd><dt><span class="term"><code class="option">--lld &lt;driver&gt; --op new --mode logicalunit --tid &lt;id&gt; --lun &lt;lun&gt; --backing-store &lt;path&gt;</code></span></dt><dd><p>
+	    Add a new logical unit with &lt;lun&gt; to specific target with &lt;id&gt;. The
+	    logical unit is offered to the initiators. &lt;path&gt; must be block device
 	    files (including LVM and RAID devices) or regular files. lun0 is
 	    reserved for a special device automatically created.
-          </p></dd><dt><span class="term"><code class="option">--lld [driver] --op delete --mode=logicalunit --tid=[id] --lun=[lun]</code></span></dt><dd><p>
-	    Delete specific logical unit with [lun] that the target with [id] has.
-          </p></dd><dt><span class="term"><code class="option">--lld [driver] --op bind --mode=target --tid=[id] --initiator-address=[address]</code></span></dt><dd><p>
-	    Add the address to the access lists of the target with [id]. Initiators
+          </p></dd><dt><span class="term"><code class="option">--lld &lt;driver&gt; --op delete --mode logicalunit --tid &lt;id&gt; --lun &lt;lun&gt;</code></span></dt><dd><p>
+	    Delete specific logical unit with &lt;lun&gt; that the target with &lt;id&gt; has.
+          </p></dd><dt><span class="term"><code class="option">--lld &lt;driver&gt; --op bind --mode target --tid &lt;id&gt; --initiator-address &lt;address&gt;</code></span></dt><dd><p>
+	    Add the address to the access lists of the target with &lt;id&gt;. Initiators
 	    with the address can access to the target. 'ALL' is a special address
 	    to allow all initiators to access to a target.
-          </p></dd><dt><span class="term"><code class="option">--lld [driver] --op unbind --mode=target --tid=[id] --initiator-address=[address]</code></span></dt><dd><p>
-	    Delete the address from the access lists of the target with [id].
-          </p></dd><dt><span class="term"><code class="option">--lld [driver] --op update --mode=target --tid=[id] --name=[parameter] --value=[value]</code></span></dt><dd><p>
-	    Change the value of [parameter] of the target with [id] to [value].
-          </p></dd><dt><span class="term"><code class="option">--lld [driver] --op update --mode=target --tid=[id] --params parameter=value[,...]</code></span></dt><dd><p>
+          </p></dd><dt><span class="term"><code class="option">--lld &lt;driver&gt; --op unbind --mode target --tid &lt;id&gt; --initiator-address &lt;address&gt;</code></span></dt><dd><p>
+	    Delete the address from the access lists of the target with &lt;id&gt;.
+          </p></dd><dt><span class="term"><code class="option">--lld &lt;driver&gt; --op update --mode target --tid &lt;id&gt; --name=&lt;parameter&gt; --value=&lt;value&gt;</code></span></dt><dd><p>
+	    Change the value of &lt;parameter&gt; of the target with &lt;id&gt; to &lt;value&gt;.
+          </p></dd><dt><span class="term"><code class="option">--lld &lt;driver&gt; --op update --mode target --tid &lt;id&gt; --params parameter=value&lt;,...&gt;</code></span></dt><dd><p>
 	    Sets/changes the value of one or more parameters.
           </p></dd><dt><span class="term"><code class="option">--help</code></span></dt><dd><p>
 	    Display a list of available options and exits.
-          </p></dd></dl></div></div><div class="refsect1" lang="en"><a name="id2476392"></a><h2>LUN PARAMETERS</h2><p>
+          </p></dd></dl></div></div><div class="refsect1" title="LUN PARAMETERS"><a name="id247860"></a><h2>LUN PARAMETERS</h2><p>
       These parameters are only applicable for "--mode logicalunit".
     </p><div class="variablelist"><pre class="screen">
 Example:
@@ -108,7 +108,7 @@ tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 \
 	    and the mode page contents. Most devices default to reasonable
 	    default mode pages automatically when the LUN is created, but this
 	    allows special settings.
-          </p></dd></dl></div></div><div class="refsect1" lang="en"><a name="id2476572"></a><h2>SMC SPECIFIC LUN PARAMETERS</h2><p>
+          </p></dd></dl></div></div><div class="refsect1" title="SMC SPECIFIC LUN PARAMETERS"><a name="id248034"></a><h2>SMC SPECIFIC LUN PARAMETERS</h2><p>
       These parameters are only applicable for luns that are of type "changer"
       i.e. the media changer device for a DVD Jukebox or a Virtual Tape Library.
     </p><div class="variablelist"><pre class="screen">
@@ -117,11 +117,11 @@ two empty DVD-R disks.
 
 
 # Create a target
-tgtadm --lld iscsi --mode target --op new --tid 1 -T iqn.2007-03:virtual-dvd:`hostname`
+tgtadm --lld iscsi --mode target --op new --tid 1 --targetname iqn.2007-03:virtual-dvd:`hostname`
 
 # Create a DVD drive and give it a nice name
 # The dvd starts out without a backing store file, i.e. no disk loaded
-tgtadm --op new --mode logicalunit --tid 1 --lun 1 -Y cd
+tgtadm --op new --mode logicalunit --tid 1 --lun 1 --device-type cd
 tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 1 --params vendor_id=STGT_DVD,product_id=DVD101,product_rev=0010,scsi_sn=STGTDVD01,removable=1
 
 # We need a backend store file for the media changer
@@ -130,7 +130,7 @@ if [ ! -f $HOME/smc ]; then
 fi
 
 # Create the SMC device and give it a nice name
-tgtadm --lld iscsi --mode logicalunit --op new --tid 1 --lun 2 -b $HOME/smc --device-type=changer
+tgtadm --lld iscsi --mode logicalunit --op new --tid 1 --lun 2 --backing-store $HOME/smc --device-type changer
 tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params vendor_id=STK,product_id=L700,product_rev=0010,scsi_sn=XYZZY_0,removable=1
 
 # Add a Data Transfer devices (1 drive)
@@ -161,7 +161,7 @@ tgtimg --op new --device-type cd --type dvd+r --file ${VTL}/DISK_002
 tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params element_type=2,address=1025,barcode=DISK_002,sides=1
 
 # Allow ALL initiators to connect to this target
-tgtadm --lld iscsi --mode target --op bind --tid 1 -I ALL
+tgtadm --lld iscsi --mode target --op bind --tid 1 --initiator-address ALL
 
 # Show all our good work.
 tgtadm --lld iscsi --mode target --op show
@@ -193,24 +193,24 @@ Slot types:
 	    To assign a media image file to a storage element slot,
 	    you assign "barcode" to be the name of the image file in
 	    the "media_home" directory.
-          </p></dd></dl></div></div><div class="refsect1" lang="en"><a name="id2476744"></a><h2>iSNS PARAMETERS</h2><p>
+          </p></dd></dl></div></div><div class="refsect1" title="iSNS PARAMETERS"><a name="id248206"></a><h2>iSNS PARAMETERS</h2><p>
       iSNS configuration for a target is by using the tgtadm command.
     </p><div class="variablelist"><pre class="screen">
 Example:
 
-tgtadm --op update --mode sys --name iSNSServerIP -v 192.168.11.133
+tgtadm --op update --mode sys --name iSNSServerIP --value 192.168.11.133
       </pre><pre class="screen">
 Example:
 
-tgtadm --op update --mode sys --name iSNS -v On
+tgtadm --op update --mode sys --name iSNS --value On
       </pre><pre class="screen">
 Example:
 
-tgtadm --op update --mode sys --name iSNSServerPort -v 3205
+tgtadm --op update --mode sys --name iSNSServerPort --value 3205
       </pre><pre class="screen">
 Example:
 
-tgtadm --op update --mode sys --name iSNSAccessControl -v Off
+tgtadm --op update --mode sys --name iSNSAccessControl --value Off
       </pre><dl><dt><span class="term"><code class="option">iSNSServerIP</code></span></dt><dd><p>
 	    This specifies the IP address of the iSNS server. TGTD only
 	    supprots one iSNS server.
@@ -220,9 +220,9 @@ tgtadm --op update --mode sys --name iSNSAccessControl -v Off
 	    This setting specifies the port to use for iSNS.
           </p></dd><dt><span class="term"><code class="option">iSNSAccessControl</code></span></dt><dd><p>
 	    Enable/disable access control for iSNS.
-          </p></dd></dl></div></div><div class="refsect1" lang="en"><a name="id2476843"></a><h2>SEE ALSO</h2><p>
+          </p></dd></dl></div></div><div class="refsect1" title="SEE ALSO"><a name="id248305"></a><h2>SEE ALSO</h2><p>
       tgtd(8), tgt-admin(8), tgtimg(8), tgt-setup-lun(8).
       <a class="ulink" href="http://stgt.sourceforge.net/" target="_top">http://stgt.sourceforge.net/</a>
-    </p></div><div class="refsect1" lang="en"><a name="id2476858"></a><h2>REPORTING BUGS</h2><p>
+    </p></div><div class="refsect1" title="REPORTING BUGS"><a name="id248320"></a><h2>REPORTING BUGS</h2><p>
       Report bugs to &lt;stgt@vger.kernel.org&gt;
     </p></div></div></body></html>
