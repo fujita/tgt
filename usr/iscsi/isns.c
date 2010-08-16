@@ -59,6 +59,8 @@ struct isns_initiator {
 	struct list_head ilist;
 };
 
+struct tgt_work timeout_work;
+
 static LIST_HEAD(qry_list);
 static uint16_t scn_listen_port;
 static int use_isns, use_isns_ac, isns_fd, scn_listen_fd, scn_fd;
@@ -68,6 +70,29 @@ static uint16_t transaction;
 static char eid[ISCSI_NAME_LEN];
 static uint8_t ip[16]; /* IET supoprts only one portal */
 static struct sockaddr_storage ss;
+
+/*
+ * Section 6.2.6
+ * The registration SHALL be removed from the iSNS database if an iSNS
+ * Protocol message is not received from the iSNS client before the
+ * registration period has expired. Receipt of any iSNS Protocol
+ * message from the iSNS client automatically refreshes the Entity
+ * Registration Period and Entity Registration Timestamp. To prevent a
+ * registration from expiring, the iSNS client should send an iSNS
+ * Protocol message to the iSNS server at intervals shorter than the
+ * registration period.
+ *
+ * Implementor's Note:
+ * We send a DevAttrQry message to the iSNS server every isns_timeout
+ * seconds to keep our entries alive at the iSNS server.
+ * To start with, we assume that the registration period is greater
+ * than 30 seconds. After we register an entity we query for the
+ * registration period and change the isns_timeout to be 10 seconds less
+ * than the regiistration period. If the iSNS server doesn't respond
+ * with a registration period we stick with 30 seconds.
+ */
+#define DEFAULT_ISNS_TIMEOUT 30 /* seconds */
+static uint32_t isns_timeout = DEFAULT_ISNS_TIMEOUT;
 
 static char isns_addr[NI_MAXHOST];
 static int isns_port = ISNS_PORT;
@@ -382,6 +407,7 @@ int isns_target_register(char *name)
 			length += isns_tlv_set(&tlv, ISNS_ATTR_SCN_PORT,
 					       sizeof(sport), &sport);
 		}
+		add_work(&timeout_work, DEFAULT_ISNS_TIMEOUT);
 	}
 
 	length += isns_tlv_set_string(&tlv, ISNS_ATTR_ISCSI_NAME, name);
@@ -444,10 +470,11 @@ int isns_target_deregister(char *name)
 
 	length += isns_tlv_set_string(&tlv, ISNS_ATTR_ISCSI_NAME, name);
 	length += isns_tlv_set(&tlv, 0, 0, 0);
-	if (!num_targets)
+	if (!num_targets) {
+		del_work(&timeout_work);
 		length += isns_tlv_set_string(&tlv, ISNS_ATTR_ENTITY_IDENTIFIER,
 					      eid);
-	else
+	} else
 		length += isns_tlv_set_string(&tlv, ISNS_ATTR_ISCSI_NAME, name);
 
 	flags = ISNS_FLAG_CLIENT | ISNS_FLAG_LAST_PDU | ISNS_FLAG_FIRST_PDU;
@@ -857,6 +884,14 @@ out:
 	return err;
 }
 
+static void isns_timeout_fn(void *data)
+{
+	struct tgt_work *w = data;
+
+	isns_attr_query(NULL);
+	add_work(w, isns_timeout);
+}
+
 int isns_init(void)
 {
 	int err;
@@ -893,6 +928,9 @@ int isns_init(void)
 	if (!num_targets)
 		list_for_each_entry(target, &iscsi_targets_list, tlist)
 			isns_target_register(tgt_targetname(target->tid));
+
+	timeout_work.func = isns_timeout_fn;
+	timeout_work.data = &timeout_work;
 
 	return 0;
 }
