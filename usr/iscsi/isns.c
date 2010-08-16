@@ -998,6 +998,39 @@ int isns_init(void)
 	return 0;
 }
 
+int isns_eid_deregister(void)
+{
+	char buf[4096];
+	uint16_t flags, length = 0;
+	struct isns_hdr *hdr = (struct isns_hdr *) buf;
+	struct isns_tlv *tlv;
+	struct iscsi_target *target;
+	int err;
+
+	if (!isns_fd)
+		if (isns_connect() < 0)
+			return 0;
+
+	memset(buf, 0, sizeof(buf));
+	tlv = (struct isns_tlv *) hdr->pdu;
+
+	target = list_first_entry(&iscsi_targets_list,
+				struct iscsi_target, tlist);
+	length += isns_tlv_set_string(&tlv, ISNS_ATTR_ISCSI_NAME,
+					tgt_targetname(target->tid));
+	length += isns_tlv_set(&tlv, 0, 0, 0);
+	length += isns_tlv_set_string(&tlv, ISNS_ATTR_ENTITY_IDENTIFIER,
+					      eid);
+	flags = ISNS_FLAG_CLIENT | ISNS_FLAG_LAST_PDU | ISNS_FLAG_FIRST_PDU;
+	isns_hdr_init(hdr, ISNS_FUNC_DEV_DEREG, length, flags,
+		      ++transaction, 0);
+
+	err = write(isns_fd, buf, length + sizeof(struct isns_hdr));
+	if (err < 0)
+		eprintf("%d %m\n", length);
+
+	return 0;
+}
 void isns_exit(void)
 {
 	struct iscsi_target *target;
@@ -1005,8 +1038,13 @@ void isns_exit(void)
 	if (!use_isns)
 		return;
 
-	list_for_each_entry(target, &iscsi_targets_list, tlist)
-		isns_target_deregister(tgt_targetname(target->tid));
+	if (num_targets) {
+		del_work(&timeout_work);
+		list_for_each_entry(target, &iscsi_targets_list, tlist)
+			free_all_acl(target);
+
+		isns_eid_deregister();
+	}
 
 	if (isns_fd) {
 		tgt_event_del(isns_fd);
@@ -1021,7 +1059,7 @@ void isns_exit(void)
 		close(scn_fd);
 	}
 
-	use_isns = isns_fd = scn_listen_fd = scn_fd = 0;
+	num_targets = use_isns = isns_fd = scn_listen_fd = scn_fd = 0;
 	free(rxbuf);
 }
 
