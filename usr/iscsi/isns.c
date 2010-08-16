@@ -43,6 +43,8 @@
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 #define BUFSIZE (1 << 18)
 
+#define EID_NAME_KEY "eid"
+
 struct isns_io {
 	char *buf;
 	int offset;
@@ -307,6 +309,52 @@ static int isns_scn_register(char *name)
 	return 0;
 }
 
+static int isns_eid_attr_query(void)
+{
+	int err;
+	uint16_t flags, length = 0;
+	char buf[4096];
+	struct isns_hdr *hdr = (struct isns_hdr *) buf;
+	struct isns_tlv *tlv;
+	struct iscsi_target *target;
+	struct isns_qry_mgmt *mgmt;
+	char *name;
+
+	eprintf("\n");
+	if (!isns_fd)
+		if (isns_connect() < 0)
+			return 0;
+
+	mgmt = malloc(sizeof(*mgmt));
+	if (!mgmt)
+		return 0;
+	list_add(&mgmt->qlist, &qry_list);
+
+	memset(buf, 0, sizeof(buf));
+	tlv = (struct isns_tlv *) hdr->pdu;
+
+	strcpy(mgmt->name, EID_NAME_KEY);
+	target = list_first_entry(&iscsi_targets_list,
+				  struct iscsi_target, tlist);
+	name = tgt_targetname(target->tid);
+
+	length += isns_tlv_set_string(&tlv, ISNS_ATTR_ISCSI_NAME, name);
+	length += isns_tlv_set_string(&tlv, ISNS_ATTR_ENTITY_IDENTIFIER, eid);
+	length += isns_tlv_set(&tlv, 0, 0, 0);
+	length += isns_tlv_set(&tlv, ISNS_ATTR_REGISTRATION_PERIOD, 0, 0);
+
+	flags = ISNS_FLAG_CLIENT | ISNS_FLAG_LAST_PDU | ISNS_FLAG_FIRST_PDU;
+	isns_hdr_init(hdr, ISNS_FUNC_DEV_ATTR_QRY, length, flags,
+		      ++transaction, 0);
+	mgmt->transaction = transaction;
+
+	err = write(isns_fd, buf, length + sizeof(struct isns_hdr));
+	if (err < 0)
+		eprintf("%d %m\n", length);
+
+	return 0;
+}
+
 static int isns_attr_query(char *name)
 {
 	int err;
@@ -425,6 +473,8 @@ int isns_target_register(char *name)
 	if (scn_listen_port)
 		isns_scn_register(name);
 
+	if (!num_targets)
+		isns_eid_attr_query();
 	isns_attr_query(name);
 	num_targets++;
 
@@ -625,9 +675,10 @@ static void qry_rsp_handle(struct isns_hdr *hdr)
 	uint16_t function, length, flags, transaction, sequence;
 	uint32_t status = (uint32_t) (*hdr->pdu);
 	struct isns_qry_mgmt *mgmt, *n;
-	struct iscsi_target *target;
+	struct iscsi_target *target = NULL;
 	struct isns_initiator *ini;
 	char *name = NULL;
+	int reg_period = 0;
 
 	get_hdr_param(hdr, function, length, flags, transaction, sequence);
 
@@ -652,13 +703,15 @@ found:
 		goto free_qry_mgmt;
 	}
 
-	target = target_find_by_name(mgmt->name);
-	if (!target) {
-		eprintf("invalid tid %s\n", mgmt->name);
-		goto free_qry_mgmt;
-	}
+	if (strcmp(mgmt->name, EID_NAME_KEY)) {
+		target = target_find_by_name(mgmt->name);
+		if (!target) {
+			eprintf("invalid tid %s\n", mgmt->name);
+			goto free_qry_mgmt;
+		}
 
-	free_all_acl(target);
+		free_all_acl(target);
+	}
 
 	/* skip status */
 	tlv = (struct isns_tlv *) ((char *) hdr->pdu + 4);
@@ -688,6 +741,8 @@ found:
 			} else
 				name = NULL;
 			break;
+		case ISNS_ATTR_REGISTRATION_PERIOD:
+			reg_period = ntohl(*(tlv->value));
 		default:
 			name = NULL;
 			break;
@@ -696,6 +751,14 @@ found:
 		length -= (sizeof(*tlv) + vlen);
 		tlv = (struct isns_tlv *) ((char *) tlv->value + vlen);
 	}
+
+	/*
+	 * If the iSNS server provided a registration period, change
+	 * isns_timeout to be slighly less than the period, to make
+	 * sure our registrations are not kicked out
+	 */
+	if (reg_period)
+		isns_timeout = reg_period - 10;
 
 free_qry_mgmt:
 	free(mgmt);
