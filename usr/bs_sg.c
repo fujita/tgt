@@ -269,6 +269,26 @@ static void bs_sg_cmd_complete(int fd, int events, void *data)
 	cmd->scsi_cmd_done(cmd, io_hdr.status);
 }
 
+static int get_bsg_major(char *path)
+{
+	FILE *devfd;
+	char majorno[8];
+	char dev[64];
+	char tmp[16];
+	int ch;
+	int i;
+
+	sscanf(path, "/dev/bsg/%s", tmp);
+	sprintf(dev, "/sys/class/bsg/%s/dev", tmp);
+	devfd = fopen(dev, "r");
+	if (!devfd)
+		return -1;
+	fscanf(devfd, "%s:", majorno);
+	fclose(devfd);
+
+	return atoi(majorno);
+}
+
 static int chk_sg_device(char *path)
 {
 	struct stat st;
@@ -287,9 +307,10 @@ static int chk_sg_device(char *path)
 	if (major(st.st_rdev) == SCSI_GENERIC_MAJOR)
 		return 0;
 
-	/* This is not yet defined in include/linux/major.h.. */
-	if (major(st.st_rdev) == 254)
-		return 1;
+	if (!strncmp("/dev/bsg", path, 8)) {
+		if (major(st.st_rdev) == get_bsg_major(path))
+			return 1;
+	}
 
 	return -1;
 }
