@@ -275,8 +275,6 @@ static int get_bsg_major(char *path)
 	char majorno[8];
 	char dev[64];
 	char tmp[16];
-	int ch;
-	int i;
 
 	sscanf(path, "/dev/bsg/%s", tmp);
 	sprintf(dev, "/sys/class/bsg/%s/dev", tmp);
