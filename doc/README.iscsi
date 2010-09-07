@@ -9,7 +9,7 @@ The iSCSI target driver works with the 2.6.X kernels.
 
 First, you need to compile the source code:
 
-host:~/tgt/usr$ make ISCSI=1
+host:~/tgt/usr$ make
 
 Try the following commands:
 

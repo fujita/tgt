@@ -10,7 +10,7 @@ PREFIX ?= /usr
 export VERSION PREFIX
 
 # Export the feature switches so sub-make knows about them
-export ISCSI ISCSI_RDMA IBMVIO FCOE FCP
+export ISCSI_RDMA IBMVIO FCOE FCP
 
 .PHONY: all
 all: programs doc conf scripts

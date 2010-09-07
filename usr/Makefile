@@ -10,8 +10,6 @@ TGTD_OBJS += $(addprefix ibmvio/, ibmvio.o)
 TGTD_OBJS += bs_mmap.o tgtif.o
 endif
 
-ifneq ($(ISCSI),)
-CFLAGS += -DISCSI
 TGTD_OBJS += $(addprefix iscsi/, conn.o param.o session.o \
 		iscsid.o target.o chap.o sha1.o md5.o transport.o iscsi_tcp.o \
 		isns.o)
@@ -21,7 +19,6 @@ ifneq ($(ISCSI_RDMA),)
 CFLAGS += -DISCSI_RDMA
 TGTD_OBJS += iscsi/iscsi_rdma.o
 LIBS += -libverbs -lrdmacm
-endif
 endif
 
 ifneq ($(FCP),)
