@@ -38,19 +38,8 @@
 #include "libssc.h"
 #include "scsi.h"
 
-#undef eprintf
-#define eprintf(fmt, args...)						\
-do {									\
-	fprintf(stderr, "%s: " fmt, program_name, ##args);		\
-} while (0)
-
-#undef dprintf
-#define dprintf(fmt, args...)						\
-do {									\
-	if (debug)							\
-		fprintf(stderr, "%s %d: " fmt,				\
-			__FUNCTION__, __LINE__, ##args);		\
-} while (0)
+#define NO_LOGGING
+#include "log.h"
 
 enum {
 	OP_NEW,
