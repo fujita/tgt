@@ -1722,6 +1722,7 @@ int tgt_target_show_all(char *buf, int rest)
 				 _TAB3 "Size: %s\n"
 				 _TAB3 "Online: %s\n"
 				 _TAB3 "Removable media: %s\n"
+				 _TAB3 "Readonly: %s\n"
 				 _TAB3 "Backing store type: %s\n"
 				 _TAB3 "Backing store path: %s\n"
 				 _TAB3 "Backing store flags: %s\n",
@@ -1732,6 +1733,7 @@ int tgt_target_show_all(char *buf, int rest)
 				 print_disksize(lu->size),
 				 lu->attrs.online ? "Yes" : "No",
 				 lu->attrs.removable ? "Yes" : "No",
+				 lu->attrs.readonly ? "Yes" : "No",
 				 lu->bst ?
 					(lu->bst->bs_name ? : "Unknown") :
 					"None",

@@ -288,6 +288,22 @@ tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 \
          --params mode_page=0x1c:0:10:8:0:0:0:0:0:0:0:0:0
       </screen>
 
+      <varlistentry><term><option>readonly=&lt;0|1&gt;</option></term>
+        <listitem>
+          <para>
+	    This sets the read-only flag of a LUN. A read-only LUN will
+	    refuse any attempts to write data to it.
+          </para>
+          <para>
+	    This parameter only applies to DISK devices.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <screen format="linespecific">
+tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 1 \
+         --params readonly=1
+      </screen>
 
     </variablelist>
   </refsect1>

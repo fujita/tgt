@@ -63,6 +63,7 @@ struct lu_phy_attr {
 	unsigned char device_type; /* Peripheral device type */
 	char qualifier;		/* Peripheral Qualifier */
 	char removable;		/* Removable media */
+	char readonly;          /* Read-Only media */
 	char online;		/* Logical Unit online */
 	char sense_format;	/* Descrptor format sense data supported */
 

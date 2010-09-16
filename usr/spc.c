@@ -1578,7 +1578,7 @@ enum {
 	Opt_scsi_id, Opt_scsi_sn,
 	Opt_vendor_id, Opt_product_id,
 	Opt_product_rev, Opt_sense_format,
-	Opt_removable, Opt_online,
+	Opt_removable, Opt_readonly, Opt_online,
 	Opt_mode_page,
 	Opt_path,
 	Opt_bsoflags,
@@ -1593,6 +1593,7 @@ static match_table_t tokens = {
 	{Opt_product_rev, "product_rev=%s"},
 	{Opt_sense_format, "sense_format=%s"},
 	{Opt_removable, "removable=%s"},
+	{Opt_readonly, "readonly=%s"},
 	{Opt_online, "online=%s"},
 	{Opt_mode_page, "mode_page=%s"},
 	{Opt_path, "path=%s"},
@@ -1664,6 +1665,10 @@ int lu_config(struct scsi_lu *lu, char *params, match_fn_t *fn)
 			match_strncpy(buf, &args[0], sizeof(buf));
 			attrs->removable = atoi(buf);
 			break;
+		case Opt_readonly:
+			match_strncpy(buf, &args[0], sizeof(buf));
+			attrs->readonly = atoi(buf);
+			break;
 		case Opt_online:
 			match_strncpy(buf, &args[0], sizeof(buf));
 			if (atoi(buf))
@@ -1722,6 +1727,7 @@ int spc_lu_init(struct scsi_lu *lu)
 	lu_vpd[pg]->vpd_update(lu, lu->attrs.scsi_id);
 
 	lu->attrs.removable = 0;
+	lu->attrs.readonly = 0;
 	lu->attrs.sense_format = 0;
 	lu->dev_type_template.lu_offline(lu);
 

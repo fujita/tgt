@@ -72,15 +72,54 @@ static int sbc_mode_select(int host_no, struct scsi_cmd *cmd)
 	return spc_mode_select(host_no, cmd, sbc_mode_page_update);
 }
 
+static int sbc_mode_sense(int host_no, struct scsi_cmd *cmd)
+{
+	int ret;
+
+	ret = spc_mode_sense(host_no, cmd);
+
+	/*
+	 * If this is a read-only lun, we must modify the data and set the
+	 * write protect bit
+	 */
+	if (cmd->dev->attrs.readonly && ret == SAM_STAT_GOOD) {
+		uint8_t *data, mode6;
+
+		mode6 = (cmd->scb[0] == 0x1a);
+		data = scsi_get_in_buffer(cmd);
+
+		if (mode6)
+			data[2] |= 0x80;
+		else
+			data[3] |= 0x80;
+	}
+
+	return ret;
+}
+
 static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 {
 	int ret;
 	unsigned char key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_LUN_NOT_SUPPORTED;
+	struct scsi_lu *lu = cmd->dev;
 
 	ret = device_reserved(cmd);
 	if (ret)
 		return SAM_STAT_RESERVATION_CONFLICT;
+
+	if (lu->attrs.readonly) {
+		switch (cmd->scb[0]) {
+		case WRITE_6:
+		case WRITE_10:
+		case WRITE_12:
+		case WRITE_16:
+			key = DATA_PROTECT;
+			asc = ASC_WRITE_PROTECT;
+			goto sense;
+			break;
+		}
+	}
 
 	cmd->scsi_cmd_done = target_cmd_io_done;
 
@@ -94,6 +133,7 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 		return SAM_STAT_GOOD;
 	}
 
+sense:
 	cmd->offset = 0;
 	scsi_set_in_resid_by_actual(cmd, 0);
 	scsi_set_out_resid_by_actual(cmd, 0);
@@ -301,7 +341,7 @@ static struct device_type_template sbc_template = {
 
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_mode_sense, NULL, PR_WE_FA|PR_EA_FA|PR_WE_FN|PR_EA_FN},
+		{sbc_mode_sense, NULL, PR_WE_FA|PR_EA_FA|PR_WE_FN|PR_EA_FN},
 		{spc_start_stop, NULL, PR_SPECIAL},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
@@ -360,7 +400,7 @@ static struct device_type_template sbc_template = {
 
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_mode_sense, NULL, PR_WE_FA|PR_EA_FA|PR_WE_FN|PR_EA_FN},
+		{sbc_mode_sense, NULL, PR_WE_FA|PR_EA_FA|PR_WE_FN|PR_EA_FN},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
