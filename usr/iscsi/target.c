@@ -188,6 +188,50 @@ int ip_acl(int tid, struct iscsi_connection *conn)
 	}
 	return -EPERM;
 }
+static int
+get_redirect_address(char *callback, char *buffer, int buflen,
+			char **address, char **ip_port, int *rsn)
+{
+	char *p, *addr, *port;
+
+	bzero(buffer, buflen);
+	if (call_program(callback, NULL, NULL, buffer, buflen, 0))
+		return -1;
+
+	/* syntax is string_addr:string_port:string_reason */
+	addr = p = buffer;
+	if (*p == '[') {
+		while (*p != ']' && *p != '\0')
+			p++;
+		if (*p == ']') {
+			p++;
+			if (*p != ':')
+				return -1;
+		}
+	} else {
+		while (*p != ':' && *p != '\0')
+			p++;
+	}
+	if (!*p)
+		return -1;
+	*p = '\0';
+	port = ++p;
+	while (*p != ':' && *p != '\0')
+		p++;
+	if (!*p)
+		return -1;
+	*p = '\0';
+	p++;
+	if (!strncmp(p, "Temporary", 9))
+		*rsn = ISCSI_LOGIN_STATUS_TGT_MOVED_TEMP;
+	else if (!strncmp(p, "Permanent", 9))
+		*rsn = ISCSI_LOGIN_STATUS_TGT_MOVED_PERM;
+	else
+		return -1;
+	*address = addr;
+	*ip_port = port;
+	return 0;
+}
 
 int target_redirected(struct iscsi_target *target,
 	struct iscsi_connection *conn, char *buf, int *reason)
@@ -195,15 +239,22 @@ int target_redirected(struct iscsi_target *target,
 	struct sockaddr_storage from;
 	struct addrinfo hints, *res;
 	socklen_t len;
-	int ret, rsn;
+	int ret = 1, rsn;
 	char *p, *q, *str, *port, *addr;
+	char buffer[NI_MAXHOST + NI_MAXSERV + 4];
 
-	if (!strlen(target->redirect_info.addr))
-		return 0;
+	if (target->redirect_info.callback)
+		ret = get_redirect_address(target->redirect_info.callback,
+				buffer, sizeof(buffer), &addr, &port, &rsn);
 
-	addr = target->redirect_info.addr;
-	port = target->redirect_info.port;
-	rsn = target->redirect_info.reason;
+	if (ret) {
+		if (!strlen(target->redirect_info.addr))
+			return 0;
+
+		addr = target->redirect_info.addr;
+		port = target->redirect_info.port;
+		rsn = target->redirect_info.reason;
+	}
 
 	if (rsn != ISCSI_LOGIN_STATUS_TGT_MOVED_TEMP &&
 	    rsn != ISCSI_LOGIN_STATUS_TGT_MOVED_PERM)
