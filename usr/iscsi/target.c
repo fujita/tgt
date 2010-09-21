@@ -419,6 +419,13 @@ int iscsi_target_update(int mode, int op, int tid, uint64_t sid, uint64_t lun,
 				err = TGTADM_SUCCESS;
 			} else
 				break;
+		} else if (!strncmp(name, "RedirectCallback", 16)) {
+			target->redirect_info.callback = strdup(str);
+			if (!target->redirect_info.callback) {
+				err = TGTADM_NOMEM;
+				break;
+			}
+			err = TGTADM_SUCCESS;
 		}
 
 		idx = param_index_by_name(name, session_keys);

@@ -248,6 +248,7 @@ struct iscsi_target {
 		char addr[NI_MAXHOST + 1];
 		char port[NI_MAXSERV + 1];
 		uint8_t reason;
+		char	*callback;
 	} redirect_info;
 
 	struct list_head isns_list;
