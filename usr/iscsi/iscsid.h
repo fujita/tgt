@@ -317,7 +317,8 @@ extern int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid,
 			     uint64_t lun, char *buf, int rest);
 int iscsi_target_update(int mode, int op, int tid, uint64_t sid, uint64_t lun,
 			uint32_t cid, char *name);
-int target_redirected(struct iscsi_target *target, struct iscsi_connection *conn);
+int target_redirected(struct iscsi_target *target,
+	struct iscsi_connection *conn, char *buf, int *reason);
 
 /* param.c */
 int param_index_by_name(char *name, struct iscsi_key *keys);

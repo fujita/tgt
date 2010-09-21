@@ -189,19 +189,24 @@ int ip_acl(int tid, struct iscsi_connection *conn)
 	return -EPERM;
 }
 
-int target_redirected(struct iscsi_target *target, struct iscsi_connection *conn)
+int target_redirected(struct iscsi_target *target,
+	struct iscsi_connection *conn, char *buf, int *reason)
 {
 	struct sockaddr_storage from;
 	struct addrinfo hints, *res;
 	socklen_t len;
-	int ret;
-	char *p, *q, *str;
+	int ret, rsn;
+	char *p, *q, *str, *port, *addr;
 
 	if (!strlen(target->redirect_info.addr))
 		return 0;
 
-	if (target->redirect_info.reason != ISCSI_LOGIN_STATUS_TGT_MOVED_TEMP &&
-	    target->redirect_info.reason != ISCSI_LOGIN_STATUS_TGT_MOVED_PERM)
+	addr = target->redirect_info.addr;
+	port = target->redirect_info.port;
+	rsn = target->redirect_info.reason;
+
+	if (rsn != ISCSI_LOGIN_STATUS_TGT_MOVED_TEMP &&
+	    rsn != ISCSI_LOGIN_STATUS_TGT_MOVED_PERM)
 		return 0;
 
 	len = sizeof(from);
@@ -209,7 +214,7 @@ int target_redirected(struct iscsi_target *target, struct iscsi_connection *conn
 	if (ret < 0)
 		return 0;
 
-	p = strdup(target->redirect_info.addr);
+	p = strdup(addr);
 	if (!p)
 		return 0;
 	str = p;
@@ -237,6 +242,10 @@ int target_redirected(struct iscsi_target *target, struct iscsi_connection *conn
 	freeaddrinfo(res);
 	free(str);
 
+	if (!ret) {
+		sprintf(buf, "%s:%s", addr, port);
+		*reason = rsn;
+	}
 	return !ret;
 }
 
