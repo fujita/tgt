@@ -239,14 +239,31 @@ int target_redirected(struct iscsi_target *target,
 	struct sockaddr_storage from;
 	struct addrinfo hints, *res;
 	socklen_t len;
-	int ret = 1, rsn;
+	int ret, rsn;
 	char *p, *q, *str, *port, *addr;
 	char buffer[NI_MAXHOST + NI_MAXSERV + 4];
+	char dst[INET6_ADDRSTRLEN], in_buf[1024];
 
-	if (target->redirect_info.callback)
-		ret = get_redirect_address(target->redirect_info.callback,
-				buffer, sizeof(buffer), &addr, &port, &rsn);
+	len = sizeof(from);
+	ret = conn->tp->ep_getpeername(conn, (struct sockaddr *)&from, &len);
+	if (ret < 0)
+		return 0;
 
+	ret = 1;
+	if (target->redirect_info.callback) {
+		p = in_buf;
+		p += sprintf(p, "%s ", target->redirect_info.callback);
+		p += sprintf(p, "%s ", tgt_targetname(target->tid));
+		ret = getnameinfo((struct sockaddr *)&from, sizeof(from), dst,
+				sizeof(dst), NULL, 0, NI_NUMERICHOST);
+		if (ret)
+			goto predefined;
+		sprintf(p, "%s", dst);
+		ret = get_redirect_address(in_buf, buffer,
+					sizeof(buffer), &addr, &port, &rsn);
+	}
+
+predefined:
 	if (ret) {
 		if (!strlen(target->redirect_info.addr))
 			return 0;
@@ -258,11 +275,6 @@ int target_redirected(struct iscsi_target *target,
 
 	if (rsn != ISCSI_LOGIN_STATUS_TGT_MOVED_TEMP &&
 	    rsn != ISCSI_LOGIN_STATUS_TGT_MOVED_PERM)
-		return 0;
-
-	len = sizeof(from);
-	ret = conn->tp->ep_getpeername(conn, (struct sockaddr *)&from, &len);
-	if (ret < 0)
 		return 0;
 
 	p = strdup(addr);
