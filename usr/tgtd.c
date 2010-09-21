@@ -30,8 +30,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <ctype.h>
 #include <sys/resource.h>
 #include <sys/epoll.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 #include "list.h"
 #include "tgtd.h"
@@ -235,66 +238,71 @@ void tgt_remove_sched_event(struct event_data *evt)
 	}
 }
 
-struct ext_prog_info {
-	void (*callback)(void *data, int result);
-	void *data;
-};
-
-static void run_ext_callback(int fd, int events, void *data)
+/* strcpy, while eating multiple white spaces */
+void str_spacecpy(char **dest, const char *src)
 {
-	int ret, result;
-	struct ext_prog_info *ex = data;
+	const char *s = src;
+	char *d = *dest;
 
-	ret = read(fd, &result, sizeof(result));
-	if (ret != sizeof(result)) {
-		result = -EINVAL;
-		eprintf("failed to get the result.");
+	while (*s) {
+		if (isspace(*s)) {
+			if (!*(s+1))
+				break;
+			if (isspace(*(s+1))) {
+				s++;
+				continue;
+			}
+		}
+		*d++ = *s++;
 	}
-
-	if (ex->callback)
-		ex->callback(ex->data, result);
-
-	tgt_event_del(fd);
-	close(fd);
-	free(data);
+	*d = '\0';
 }
 
-int run_ext_program(const char *cmd,
-		    void (*callback)(void *data, int result), void *data)
+int call_program(const char *cmd, void (*callback)(void *data, int result),
+		void *data, char *output, int op_len, int flags)
 {
 	pid_t pid;
-	int fds[2], ret;
-	struct ext_prog_info *ex;
-	ssize_t ignored;
+	int fds[2], ret, i;
+	char *pos, arg[256];
+	char *argv[sizeof(arg) / 2];
 
-	ex = zalloc(sizeof(*ex));
-	if (!ex)
-		return -ENOMEM;
+	i = 0;
+	pos = arg;
+	str_spacecpy(&pos, cmd);
+	if (strchr(cmd, ' ')) {
+		while (pos != '\0')
+			argv[i++] = strsep(&pos, " ");
+	} else
+		argv[i++] = arg;
+	argv[i] =  NULL;
 
 	ret = pipe(fds);
-	if (ret < 0) {
-		free(ex);
+	if (ret < 0)
 		return ret;
-	}
 
 	eprintf("%d %d\n", fds[0], fds[1]);
-
-	ex->callback = callback;
-	ex->data = data;
-
-	tgt_event_add(fds[0], EPOLLIN, run_ext_callback, ex);
 
 	pid = fork();
 	if (pid < 0)
 		return pid;
 
 	if (!pid) {
-		ret = system(cmd);
-		ignored = write(fds[1], &ret, sizeof(ret));
-		return 0;
-	}
+		close(1);
+		dup(fds[1]);
+		close(fds[0]);
+		ret = execv(argv[0], argv);
+		exit(-1);
+	} else {
+		close(fds[1]);
+		waitpid(pid, &i, 0);
+		ret = read(fds[0], output, op_len);
+		if (ret < 0)
+			eprintf("failed to get the output from <%s>.", cmd);
 
-	close(fds[1]);
+		if (callback)
+			callback(data, WEXITSTATUS(i));
+		close(fds[0]);
+	}
 
 	return 0;
 }

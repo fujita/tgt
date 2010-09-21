@@ -335,6 +335,7 @@ struct event_data {
 	struct list_head e_list;
 };
 
-int run_ext_program(const char *cmd,
-		    void (*callback)(void *data, int result), void *data);
+int call_program(const char *cmd,
+		    void (*callback)(void *data, int result), void *data,
+		    char *output, int op_len, int flags);
 #endif
