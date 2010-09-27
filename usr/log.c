@@ -340,6 +340,7 @@ static void log_sigsegv(void)
 	log_flush();
 	closelog();
 	free_logarea();
+	exit(1);
 }
 
 int log_init(char *program_name, int size, int daemon, int debug)
