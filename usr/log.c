@@ -259,7 +259,7 @@ static void dolog(int prio, const char *fmt, va_list ap)
 
 	if (la) {
 		ts.tv_sec = 0;
-		ts.tv_nsec = 10000;
+		ts.tv_nsec = 10000000;
 
 		ops.sem_num = 0;
 		ops.sem_flg = 0;
