@@ -239,8 +239,8 @@ int target_redirected(struct iscsi_target *target,
 	struct sockaddr_storage from;
 	struct addrinfo hints, *res;
 	socklen_t len;
-	int ret, rsn;
-	char *p, *q, *str, *port, *addr;
+	int ret, rsn = 0;
+	char *p, *q, *str, *port = NULL, *addr;
 	char buffer[NI_MAXHOST + NI_MAXSERV + 4];
 	char dst[INET6_ADDRSTRLEN], in_buf[1024];
 
