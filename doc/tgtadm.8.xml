@@ -24,6 +24,7 @@
 		<arg choice="opt">-Y --device-type &lt;type&gt;</arg>
 		<arg choice="opt">-l --lun &lt;lun&gt;</arg>
 		<arg choice="opt">-b --backing-store &lt;path&gt;</arg>
+		<arg choice="opt">-E --bstype &lt;type&gt;</arg>
 		<arg choice="opt">-I --initiator-address &lt;address&gt;</arg>
 		<arg choice="opt">-n --name &lt;parameter&gt;</arg>
 		<arg choice="opt">-v --value &lt;value&gt;</arg>
@@ -70,6 +71,25 @@ Possible device-types are:
     ssc     : same as tape
     cd      : emulate a DVD drive
     changer : emulate a media changer device
+    pt      : passthrough type to export a /dev/sg device
+      </screen>
+
+      <varlistentry><term><option>-E, --bstype &lt;type&gt;</option></term>
+        <listitem>
+          <para>
+	    When creating a LUN, this parameter specifies the type of backend storage
+	    to to use.
+          </para>
+        </listitem>
+      </varlistentry>
+      <screen format="linespecific">
+Possible backend types are:
+    rdwr    : Use normal file I/O. This is the default for disk devices
+    aio     : Use Asynchronous I/O
+    mmap    : Use memory mapping for the backend file
+
+    sg      : Special backend type for passthrough devices
+    ssc     : Special backend type for tape emulation
       </screen>
 
       <varlistentry><term><option>--lld &lt;driver&gt; --op new --mode target --tid &lt;id&gt; --targetname &lt;name&gt;</option></term>
@@ -439,6 +459,41 @@ tgtadm --lld iscsi --mode target --op show
       </screen>
 
     </variablelist>
+  </refsect1>
+
+
+  <refsect1><title>Passthrough devices</title>
+    <para>
+      In addition to device emulation TGTD also supports utilizing existing SG devices on the host and exporting these through a special passthrough device type.
+    </para>
+    <varlistentry><term><option>--bstype=sg</option></term>
+      <listitem>
+        <para>
+	  This specifies that an SG devices is used.
+        </para>
+      </listitem>
+    </varlistentry>
+    <varlistentry><term><option>--device-type=pt</option></term>
+      <listitem>
+        <para>
+	  This specifies that passthrough device type is used.
+        </para>
+      </listitem>
+    </varlistentry>
+    <varlistentry><term><option>--backing-store=&lt;/dev/sg4&gt;</option></term>
+      <listitem>
+        <para>
+	  This specifies which device to export through TGTD.
+        </para>
+      </listitem>
+    </varlistentry>
+    <screen format="linespecific">
+Example:
+Make /dev/sg4 available to initiators connecting to TGTD.
+
+tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 1 --bstype=sg --device-type=pt --backing-store=/dev/sg4
+    </screen>
+
   </refsect1>
 
 

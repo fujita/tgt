@@ -1,13 +1,22 @@
-<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1"><title>tgtadm</title><meta name="generator" content="DocBook XSL Stylesheets V1.75.1"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="refentry" title="tgtadm"><a name="tgtadm.8"></a><div class="titlepage"></div><div class="refnamediv"><h2>Name</h2><p>tgtadm &#8212; Linux SCSI Target Administration Utility</p></div><div class="refsynopsisdiv" title="Synopsis"><h2>Synopsis</h2><div class="cmdsynopsis"><p><code class="command">tgtadm [OPTIONS]...</code>  [-C --control-port &lt;port&gt;] [-L --lld &lt;driver&gt;] [-o --op &lt;operation&gt;] [-m --mode &lt;mode&gt;] [-t --tid &lt;id&gt;] [-T --targetname &lt;targetname&gt;] [-Y --device-type &lt;type&gt;] [-l --lun &lt;lun&gt;] [-b --backing-store &lt;path&gt;] [-I --initiator-address &lt;address&gt;] [-n --name &lt;parameter&gt;] [-v --value &lt;value&gt;] [-P --params &lt;param=value[,param=value...]&gt;] [-h --help]</p></div></div><div class="refsect1" title="DESCRIPTION"><a name="id247594"></a><h2>DESCRIPTION</h2><p>
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1"><title>tgtadm</title><meta name="generator" content="DocBook XSL Stylesheets V1.75.2"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="refentry" title="tgtadm"><a name="tgtadm.8"></a><div class="titlepage"></div><div class="refnamediv"><h2>Name</h2><p>tgtadm &#8212; Linux SCSI Target Administration Utility</p></div><div class="refsynopsisdiv" title="Synopsis"><h2>Synopsis</h2><div class="cmdsynopsis"><p><code class="command">tgtadm [OPTIONS]...</code>  [-C --control-port &lt;port&gt;] [-L --lld &lt;driver&gt;] [-o --op &lt;operation&gt;] [-m --mode &lt;mode&gt;] [-t --tid &lt;id&gt;] [-T --targetname &lt;targetname&gt;] [-Y --device-type &lt;type&gt;] [-l --lun &lt;lun&gt;] [-b --backing-store &lt;path&gt;] [-E --bstype &lt;type&gt;] [-I --initiator-address &lt;address&gt;] [-n --name &lt;parameter&gt;] [-v --value &lt;value&gt;] [-P --params &lt;param=value[,param=value...]&gt;] [-h --help]</p></div></div><div class="refsect1" title="DESCRIPTION"><a name="id415940"></a><h2>DESCRIPTION</h2><p>
       tgtadm is used to monitor and modify everything about Linux SCSI target
       software: targets, volumes, etc.
-    </p></div><div class="refsect1" title="OPTIONS"><a name="id247605"></a><h2>OPTIONS</h2><div class="variablelist"><pre class="screen">
+    </p></div><div class="refsect1" title="OPTIONS"><a name="id415951"></a><h2>OPTIONS</h2><div class="variablelist"><pre class="screen">
 Possible device-types are:
     disk    : emulate a disk device
     tape    : emulate a tape reader
     ssc     : same as tape
     cd      : emulate a DVD drive
     changer : emulate a media changer device
+    pt      : passthrough type to export a /dev/sg device
+      </pre><pre class="screen">
+Possible backend types are:
+    rdwr    : Use normal file I/O. This is the default for disk devices
+    aio     : Use Asynchronous I/O
+    mmap    : Use memory mapping for the backend file
+
+    sg      : Special backend type for passthrough devices
+    ssc     : Special backend type for tape emulation
       </pre><dl><dt><span class="term"><code class="option">-C, --control-port &lt;port&gt;</code></span></dt><dd><p>
 	    It is possible to run multiple concurrent instances of tgtd
 	    on a host. This argument is used to control which instance
@@ -15,6 +24,9 @@ Possible device-types are:
           </p></dd><dt><span class="term"><code class="option">-Y, --device-type &lt;type&gt;</code></span></dt><dd><p>
 	    When creating a LUN, this parameter specifies the type of device
 	    to create. Default is disk.
+          </p></dd><dt><span class="term"><code class="option">-E, --bstype &lt;type&gt;</code></span></dt><dd><p>
+	    When creating a LUN, this parameter specifies the type of backend storage
+	    to to use.
           </p></dd><dt><span class="term"><code class="option">--lld &lt;driver&gt; --op new --mode target --tid &lt;id&gt; --targetname &lt;name&gt;</code></span></dt><dd><p>
 	    Add a new target with &lt;id&gt; and &lt;name&gt;.
           </p></dd><dt><span class="term"><code class="option">--lld &lt;driver&gt; --op delete --mode target --tid &lt;id&gt;</code></span></dt><dd><p>
@@ -42,7 +54,7 @@ Possible device-types are:
 	    Sets/changes the value of one or more parameters.
           </p></dd><dt><span class="term"><code class="option">--help</code></span></dt><dd><p>
 	    Display a list of available options and exits.
-          </p></dd></dl></div></div><div class="refsect1" title="LUN PARAMETERS"><a name="id247860"></a><h2>LUN PARAMETERS</h2><p>
+          </p></dd></dl></div></div><div class="refsect1" title="LUN PARAMETERS"><a name="id416196"></a><h2>LUN PARAMETERS</h2><p>
       These parameters are only applicable for "--mode logicalunit".
     </p><div class="variablelist"><pre class="screen">
 Example:
@@ -78,6 +90,9 @@ This is Informational Exceptions Control mode page.
 
 tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 \
          --params mode_page=0x1c:0:10:8:0:0:0:0:0:0:0:0:0
+      </pre><pre class="screen">
+tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 1 \
+         --params readonly=1
       </pre><dl><dt><span class="term"><code class="option">vendor_id=&lt;string&gt;</code></span></dt><dd><p>
 	    This parameter sets the Vendor Identification string that a LUN
 	    will report in INQURY data.
@@ -108,7 +123,12 @@ tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 \
 	    and the mode page contents. Most devices default to reasonable
 	    default mode pages automatically when the LUN is created, but this
 	    allows special settings.
-          </p></dd></dl></div></div><div class="refsect1" title="SMC SPECIFIC LUN PARAMETERS"><a name="id248034"></a><h2>SMC SPECIFIC LUN PARAMETERS</h2><p>
+          </p></dd><dt><span class="term"><code class="option">readonly=&lt;0|1&gt;</code></span></dt><dd><p>
+	    This sets the read-only flag of a LUN. A read-only LUN will
+	    refuse any attempts to write data to it.
+          </p><p>
+	    This parameter only applies to DISK devices.
+          </p></dd></dl></div></div><div class="refsect1" title="SMC SPECIFIC LUN PARAMETERS"><a name="id416369"></a><h2>SMC SPECIFIC LUN PARAMETERS</h2><p>
       These parameters are only applicable for luns that are of type "changer"
       i.e. the media changer device for a DVD Jukebox or a Virtual Tape Library.
     </p><div class="variablelist"><pre class="screen">
@@ -193,7 +213,20 @@ Slot types:
 	    To assign a media image file to a storage element slot,
 	    you assign "barcode" to be the name of the image file in
 	    the "media_home" directory.
-          </p></dd></dl></div></div><div class="refsect1" title="iSNS PARAMETERS"><a name="id248206"></a><h2>iSNS PARAMETERS</h2><p>
+          </p></dd></dl></div></div><div class="refsect1" title="Passthrough devices"><a name="id416529"></a><h2>Passthrough devices</h2><p>
+      In addition to device emulation TGTD also supports utilizing existing SG devices on the host and exporting these through a special passthrough device type.
+    </p><dt><span class="term"><code class="option">--bstype=sg</code></span></dt><dd><p>
+	  This specifies that an SG devices is used.
+        </p></dd><dt><span class="term"><code class="option">--device-type=pt</code></span></dt><dd><p>
+	  This specifies that passthrough device type is used.
+        </p></dd><dt><span class="term"><code class="option">--backing-store=&lt;/dev/sg4&gt;</code></span></dt><dd><p>
+	  This specifies which device to export through TGTD.
+        </p></dd><pre class="screen">
+Example:
+Make /dev/sg4 available to initiators connecting to TGTD.
+
+tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 1 --bstype=sg --device-type=pt --backing-store=/dev/sg4
+    </pre></div><div class="refsect1" title="iSNS PARAMETERS"><a name="id416588"></a><h2>iSNS PARAMETERS</h2><p>
       iSNS configuration for a target is by using the tgtadm command.
     </p><div class="variablelist"><pre class="screen">
 Example:
@@ -220,9 +253,9 @@ tgtadm --op update --mode sys --name iSNSAccessControl --value Off
 	    This setting specifies the port to use for iSNS.
           </p></dd><dt><span class="term"><code class="option">iSNSAccessControl</code></span></dt><dd><p>
 	    Enable/disable access control for iSNS.
-          </p></dd></dl></div></div><div class="refsect1" title="SEE ALSO"><a name="id248305"></a><h2>SEE ALSO</h2><p>
+          </p></dd></dl></div></div><div class="refsect1" title="SEE ALSO"><a name="id416681"></a><h2>SEE ALSO</h2><p>
       tgtd(8), tgt-admin(8), tgtimg(8), tgt-setup-lun(8).
       <a class="ulink" href="http://stgt.sourceforge.net/" target="_top">http://stgt.sourceforge.net/</a>
-    </p></div><div class="refsect1" title="REPORTING BUGS"><a name="id248320"></a><h2>REPORTING BUGS</h2><p>
+    </p></div><div class="refsect1" title="REPORTING BUGS"><a name="id416695"></a><h2>REPORTING BUGS</h2><p>
       Report bugs to &lt;stgt@vger.kernel.org&gt;
     </p></div></div></body></html>
