@@ -30,11 +30,26 @@
 
   <refsect1><title>DESCRIPTION</title>
     <para>
-      Tgtd is a SCSI Target daemon. It can be used to provide iSCSI target
-      service to a network.
+      Tgtd is a SCSI Target daemon. It can be used to provide SCSI target
+      service to a network. The most common service is iSCSI but other services are also
+      supported.
     </para>
   </refsect1>
 
+
+  <refsect1><title>Device types</title>
+    <para>
+      Tgtd provides support for both emulated and passthrough of real devices.
+    </para>
+  </refsect1>
+  <screen format="linespecific">
+    Tgtd can emulate the following types of devices:
+    
+    disk       : Normal disk device. Emulates a SCSI harddisk.
+    tape       : Tape device. Emulates a SCSI tape drive.
+    cd         : CD device. Emulates a SCSI DVD burner.
+    changer    : Media changer. Emulate the changer device for a virtual tape library or DVD jukebox.
+  </screen>
 
   <refsect1>
     <title>OPTIONS</title>
