@@ -852,7 +852,7 @@ static int spc_pr_read_reservation(int host_no, struct scsi_cmd *cmd)
 		else
 			res_key = reg->key;
 
-		put_unaligned_be32(res_key, &buf[8]);
+		put_unaligned_be64(res_key, &buf[8]);
 		buf[21] = ((reg->pr_scope << 4) & 0xf0) | (reg->pr_type & 0x0f);
 	} else
 		put_unaligned_be32(0, &buf[4]);
