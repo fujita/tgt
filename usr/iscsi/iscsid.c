@@ -1917,8 +1917,21 @@ static int do_recv(struct iscsi_connection *conn, int next_state)
 			return -EIO;
 	}
 
+	conn->stats.rxdata_octets += ret;
 	conn->rx_size -= ret;
 	conn->rx_buffer += ret;
+
+	if (conn->rx_iostate == IOSTATE_RX_BHS) {
+		switch (conn->req.bhs.opcode & ISCSI_OPCODE_MASK) {
+		case ISCSI_OP_SCSI_CMD:
+			conn->stats.scsicmd_pdus++;
+			break;
+		case ISCSI_OP_SCSI_DATA_OUT:
+			conn->stats.dataout_pdus++;
+		}
+	}
+
+
 	if (!conn->rx_size)
 		conn->rx_iostate = next_state;
 
@@ -1929,6 +1942,7 @@ void iscsi_rx_handler(struct iscsi_connection *conn)
 {
 	int ret = 0, hdigest, ddigest;
 	uint32_t crc;
+
 
 	if (conn->state == STATE_SCSI) {
 		struct param *p = conn->session_param;
@@ -2085,8 +2099,21 @@ again:
 		return -EIO;
 	}
 
+	conn->stats.txdata_octets += ret;
 	conn->tx_size -= ret;
 	conn->tx_buffer += ret;
+
+	if (conn->tx_iostate == IOSTATE_TX_BHS) {
+		switch (conn->rsp.bhs.opcode) {
+		case ISCSI_OP_SCSI_DATA_IN:
+			conn->stats.datain_pdus++;
+			break;
+		case ISCSI_OP_SCSI_CMD_RSP:
+			conn->stats.scsirsp_pdus++;
+			break;
+		}
+	}
+
 	if (conn->tx_size)
 		goto again;
 	conn->tx_iostate = next_state;

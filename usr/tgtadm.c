@@ -372,6 +372,8 @@ static int str_to_mode(char *str)
 		return MODE_CONNECTION;
 	else if (!strcmp("account", str))
 		return MODE_ACCOUNT;
+	else if (!strcmp("stats", str))
+		return MODE_STATS;
 	else {
 		eprintf("unknown mode: %s\n", str);
 		exit(1);

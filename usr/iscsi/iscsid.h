@@ -197,6 +197,8 @@ struct iscsi_connection {
 	} auth;
 
 	struct iscsi_transport *tp;
+
+	struct iscsi_stats stats;
 };
 
 #define STATE_FREE		0

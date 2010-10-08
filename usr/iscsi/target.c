@@ -532,21 +532,6 @@ static int show_iscsi_param(char *buf, struct param *param, int rest)
 	return total;
 }
 
-static int iscsi_target_show_session(struct iscsi_target* target, uint64_t sid,
-				     char *buf, int rest)
-{
-	int len = 0, total = 0;
-	struct iscsi_session *session;
-
-	list_for_each_entry(session, &target->sessions_list, slist) {
-		if (session->tsih == sid)
-			len = show_iscsi_param(buf, session->session_param, rest);
-			buffer_check(buf, total, len, rest);
-	}
-
-	return total;
-}
-
 #define __buffer_check(buf, total, len, rest)	\
 ({						\
 	buf += len;				\
@@ -555,6 +540,70 @@ static int iscsi_target_show_session(struct iscsi_target* target, uint64_t sid,
 	if (!rest)				\
 		return total;			\
 })
+
+static struct iscsi_session *iscsi_target_find_session(
+	struct iscsi_target *target,
+	uint64_t sid)
+{
+	struct iscsi_session *session;
+
+	list_for_each_entry(session, &target->sessions_list, slist) {
+		if (session->tsih == sid)
+			return session;
+	}
+
+	return NULL;
+
+}
+
+static int iscsi_target_show_session(struct iscsi_target *target, uint64_t sid,
+				     char *buf, int rest)
+{
+	int len = 0, total = 0;
+	struct iscsi_session *session;
+
+	session = iscsi_target_find_session(target, sid);
+
+	if (session) {
+		len = show_iscsi_param(buf, session->session_param, rest);
+		__buffer_check(buf, total, len, rest);
+
+	}
+
+	return total;
+}
+
+static int iscsi_target_show_stats(struct iscsi_target *target, uint64_t sid,
+				   char *buf, int rest)
+{
+	int len = 0, total = 0;
+	struct iscsi_session *session;
+	struct iscsi_connection *conn;
+
+	session = iscsi_target_find_session(target, sid);
+
+	if (session) {
+		list_for_each_entry(conn, &session->conn_list, clist) {
+			len = snprintf(buf, rest,
+				       "rxdata_octets: %" PRIu64 "\n"
+				       "txdata_octets: %" PRIu64 "\n"
+				       "dataout_pdus:  %d\n"
+				       "datain_pdus:   %d\n"
+				       "scsicmd_pdus:  %d\n"
+				       "scsirsp_pdus:  %d\n",
+				       conn->stats.rxdata_octets,
+				       conn->stats.txdata_octets,
+				       conn->stats.dataout_pdus,
+				       conn->stats.datain_pdus,
+				       conn->stats.scsicmd_pdus,
+				       conn->stats.scsirsp_pdus);
+			__buffer_check(buf, total, len, rest);
+		}
+	}
+
+	return total;
+
+}
 
 static int show_redirect_info(struct iscsi_target* target, char *buf, int rest)
 {
@@ -603,6 +652,10 @@ int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid, uint64_t lu
 		break;
 	case MODE_SESSION:
 		len = iscsi_target_show_session(target, sid, buf, rest);
+		total += len;
+		break;
+	case MODE_STATS:
+		len = iscsi_target_show_stats(target, sid, buf, rest);
 		total += len;
 		break;
 	default:
