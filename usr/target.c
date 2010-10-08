@@ -234,6 +234,33 @@ void ua_sense_add_other_it_nexus(uint64_t itn_id, struct scsi_lu *lu,
 	}
 }
 
+void ua_sense_add_it_nexus(uint64_t itn_id, struct scsi_lu *lu,
+				 uint16_t asc)
+{
+	struct it_nexus *itn;
+	struct it_nexus_lu_info *itn_lu;
+	int ret;
+
+	list_for_each_entry(itn, &lu->tgt->it_nexus_list, nexus_siblings) {
+
+		if (itn->itn_id == itn_id) {
+			list_for_each_entry(itn_lu, &itn->it_nexus_lu_info_list,
+					    lu_info_siblings) {
+
+				if (itn_lu->lu == lu) {
+					ret = ua_sense_add(itn_lu, asc);
+					if (ret)
+						eprintf("fail to add ua %"
+							PRIu64 " %" PRIu64
+							"\n", lu->lun, itn_id);
+					break;
+				}
+			}
+			break;
+		}
+	}
+}
+
 int it_nexus_create(int tid, uint64_t itn_id, int host_no, char *info)
 {
 	int i, ret;

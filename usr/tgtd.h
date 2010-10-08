@@ -282,6 +282,8 @@ extern int ua_sense_del(struct scsi_cmd *cmd, int del);
 extern void ua_sense_clear(struct it_nexus_lu_info *itn_lu, uint16_t asc);
 extern void ua_sense_add_other_it_nexus(uint64_t itn_id, struct scsi_lu *lu,
 					uint16_t asc);
+extern void ua_sense_add_it_nexus(uint64_t itn_id, struct scsi_lu *lu,
+					uint16_t asc);
 
 extern uint64_t scsi_get_devid(int lid, uint8_t *pdu);
 extern int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd);
