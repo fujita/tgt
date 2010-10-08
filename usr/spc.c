@@ -1205,9 +1205,8 @@ static int spc_pr_clear(int host_no, struct scsi_cmd *cmd)
 				 registration_siblings) {
 		/* we don't send myself */
 		if (sibling != reg)
-			ua_sense_add_other_it_nexus(sibling->nexus_id,
-						    cmd->dev,
-						    ASC_RESERVATIONS_PREEMPTED);
+			ua_sense_add_it_nexus(sibling->nexus_id,
+				cmd->dev, ASC_RESERVATIONS_PREEMPTED);
 		list_del(&sibling->registration_siblings);
 		free(sibling);
 	}
