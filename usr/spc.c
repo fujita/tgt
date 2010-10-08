@@ -926,6 +926,19 @@ static struct registration *lookup_registration_by_nexus(struct scsi_lu *lu,
 	return NULL;
 }
 
+static int check_registration_key_exists(struct scsi_lu *lu, uint64_t key)
+{
+	struct registration *reg;
+
+	list_for_each_entry(reg, &lu->registration_list,
+				registration_siblings) {
+		if (reg->key == key)
+			return 0;
+	}
+
+	return 1;
+}
+
 static void __unregister(struct scsi_lu *lu, struct registration *reg)
 {
 	list_del(&reg->registration_siblings);
@@ -1211,10 +1224,11 @@ static int spc_pr_preempt(int host_no, struct scsi_cmd *cmd)
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 	uint8_t key = ILLEGAL_REQUEST;
 	int ret, abort;
+	int res_released = 0, remove_all_reg = 0;
 	uint64_t res_key, sa_res_key;
 	uint8_t pr_scope, pr_type;
 	uint8_t *buf;
-	struct registration *reg, *sibling, *n;
+	struct registration *holder, *reg, *sibling, *n;
 
 	ret = check_pr_out_basic_parameter(cmd);
 	if (ret)
@@ -1237,56 +1251,59 @@ static int spc_pr_preempt(int host_no, struct scsi_cmd *cmd)
 	if (reg->key != res_key)
 		return SAM_STAT_RESERVATION_CONFLICT;
 
-remove_registration:
-	if (!cmd->dev->pr_holder) {
-		list_for_each_entry_safe(sibling, n, &cmd->dev->registration_list,
-					 registration_siblings) {
+	if (sa_res_key) {
+		ret = check_registration_key_exists(cmd->dev, sa_res_key);
+		if (ret)
+			return SAM_STAT_RESERVATION_CONFLICT;
+	}
 
-			if (sibling->key == sa_res_key) {
-				__unregister(cmd->dev, sibling);
-				break;
+	holder = cmd->dev->pr_holder;
+
+	if (holder) {
+		if (holder->pr_type == PR_TYPE_WRITE_EXCLUSIVE_ALLREG ||
+			holder->pr_type == PR_TYPE_EXCLUSIVE_ACCESS_ALLREG) {
+
+			if (!sa_res_key) {
+				if (pr_type != holder->pr_type ||
+					pr_scope != holder->pr_scope)
+					res_released = 1;
+				reg->pr_type = pr_type;
+				reg->pr_scope = pr_scope;
+				cmd->dev->pr_holder = reg;
+				remove_all_reg = 1;
+			}
+		} else {
+			if (holder->key == sa_res_key) {
+				if ((pr_type != holder->pr_type) ||
+					(pr_scope != holder->pr_scope))
+					res_released = 1;
+				reg->pr_type = pr_type;
+				reg->pr_scope = pr_scope;
+				cmd->dev->pr_holder = reg;
+			} else {
+				if (!sa_res_key)
+					goto sense;
 			}
 		}
-
-		return SAM_STAT_GOOD;
 	}
 
-	if (cmd->dev->pr_holder->pr_type == PR_TYPE_WRITE_EXCLUSIVE_ALLREG ||
-	    cmd->dev->pr_holder->pr_type == PR_TYPE_EXCLUSIVE_ACCESS_ALLREG) {
+	list_for_each_entry_safe(sibling, n, &cmd->dev->registration_list,
+					registration_siblings) {
+		if (sibling == reg)
+			continue;
 
-		if (sa_res_key)
-			goto remove_registration;
-
-		list_for_each_entry_safe(sibling, n, &cmd->dev->registration_list,
-					 registration_siblings) {
-
-			if (sibling == reg)
-				continue;
-
+		if (sibling->key == sa_res_key || remove_all_reg) {
+			ua_sense_add_it_nexus(sibling->nexus_id,
+				cmd->dev, ASC_RESERVATIONS_PREEMPTED);
 			__unregister(cmd->dev, sibling);
+		} else {
+			if (res_released)
+				ua_sense_add_it_nexus(sibling->nexus_id,
+				cmd->dev, ASC_RESERVATIONS_RELEASED);
 		}
-
-		cmd->dev->pr_holder = reg;
-		reg->pr_type = pr_type;
-		reg->pr_scope = pr_scope;
-
-		return SAM_STAT_GOOD;
 	}
 
-	if (cmd->dev->pr_holder->key == sa_res_key) {
-		cmd->dev->pr_holder = reg;
-		reg->pr_type = pr_type;
-		reg->pr_scope = pr_scope;
-
-		goto remove_registration;
-	}
-
-	if (sa_res_key)
-		goto remove_registration;
-
-	else
-		goto sense;
-
+	cmd->dev->prgeneration++;
 	return SAM_STAT_GOOD;
 sense:
 	scsi_set_in_resid_by_actual(cmd, 0);
