@@ -78,7 +78,12 @@ static void bs_mmap_request(struct scsi_cmd *cmd)
 
 static int bs_mmap_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 {
-	*fd = backed_file_open(path, O_RDWR| O_LARGEFILE, size);
+	*fd = backed_file_open(path, O_RDWR|O_LARGEFILE, size);
+	/* If we get access denied, try opening the file in readonly mode */
+	if (*fd == -1 && errno == EACCES) {
+		*fd = backed_file_open(path, O_RDONLY|O_LARGEFILE, size);
+		lu->attrs.readonly = 1;
+	}
 	if (*fd < 0)
 		return *fd;
 
