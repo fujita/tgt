@@ -19,6 +19,7 @@
  *
  */
 
+#define _XOPEN_SOURCE 600
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -416,10 +417,9 @@ static int mmc_ops(int op, char *path, char *media_type)
 static int sbc_new(int op, char *path, char *capacity, char *media_type)
 {
 	int fd;
-	ssize_t ignored;
 
 	if (!strncasecmp("disk", media_type, 4)) {
-		uint32_t pos, size;
+		uint32_t size;
 		char *buf;
 
 		sscanf(capacity, "%d", &size);
@@ -438,9 +438,10 @@ static int sbc_new(int op, char *path, char *capacity, char *media_type)
 			perror("Failed creating file");
 			exit(2);
 		}
-
-		for (pos = 0; pos < size; pos++)
-			ignored = pwrite(fd, buf, 1024*1024, pos*1024*1024LL);
+		if (posix_fallocate(fd, 0, size*1024*1024LL) == -1) {
+			perror("posix_fallocate failed.");
+			exit(3);
+		}
 
 		free(buf);
 		close(fd);
