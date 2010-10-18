@@ -375,6 +375,8 @@ void iscsi_target_destroy(int tid)
 	}
 
 	list_del(&target->tlist);
+	if (target->redirect_info.callback)
+		free(target->redirect_info.callback);
 	free(target);
 	isns_target_deregister(tgt_targetname(tid));
 
