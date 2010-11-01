@@ -201,13 +201,15 @@ static int sbc_service_action(int host_no, struct scsi_cmd *cmd)
 {
 	uint32_t *data;
 	uint64_t size;
-	int len = 16;
+	int len = 32;
 
 	if (cmd->scb[1] != SAI_READ_CAPACITY_16)
 		goto sense;
 
-	if (scsi_get_in_length(cmd) < len)
+	if (scsi_get_in_length(cmd) < 12)
 		goto overflow;
+
+	len = min_t(int, len, scsi_get_in_length(cmd));
 
 	data = scsi_get_in_buffer(cmd);
 	memset(data, 0, len);
