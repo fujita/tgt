@@ -631,6 +631,16 @@ static int show_redirect_info(struct iscsi_target* target, char *buf, int rest)
 	return total;
 }
 
+static int show_redirect_callback(struct iscsi_target *target, char *buf, int rest)
+{
+	int len, total = 0;
+
+	len = snprintf(buf, rest, "RedirectCallback=%s\n", target->redirect_info.callback);
+	__buffer_check(buf, total, len, rest);
+
+	return total;
+}
+
 int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid, uint64_t lun,
 		      char *buf, int rest)
 {
@@ -648,7 +658,9 @@ int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid, uint64_t lu
 		total = isns_show(buf, rest);
 		break;
 	case MODE_TARGET:
-		if (strlen(target->redirect_info.addr))
+		if (target->redirect_info.callback)
+			len = show_redirect_callback(target, buf, rest);
+		else if (strlen(target->redirect_info.addr))
 			len = show_redirect_info(target, buf, rest);
 		else
 			len = show_iscsi_param(buf, target->session_param, rest);
