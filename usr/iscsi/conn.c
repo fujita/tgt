@@ -121,6 +121,14 @@ void conn_close(struct iscsi_connection *conn)
 		iscsi_free_task(task);
 	}
 
+	if (conn->tx_task) {
+		dprintf("Add current tx task to the tx list for removal "
+			"%p %" PRIx64 "\n",
+			conn->tx_task, conn->tx_task->tag);
+		list_add(&conn->tx_task->c_list, &conn->tx_clist);
+		conn->tx_task = NULL;
+	}
+
 	list_for_each_entry_safe(task, tmp, &conn->tx_clist, c_list) {
 		uint8_t op;
 
@@ -158,13 +166,6 @@ void conn_close(struct iscsi_connection *conn)
 		iscsi_free_task(conn->rx_task);
 	}
 	conn->rx_task = NULL;
-
-	if (conn->tx_task) {
-		eprintf("Forcing release of tx task %p %" PRIx64 "\n",
-			conn->tx_task, conn->tx_task->tag);
-		iscsi_free_task(conn->tx_task);
-	}
-	conn->tx_task = NULL;
 
 	/* cleaning up commands waiting for SCSI_DATA_OUT */
 	list_for_each_entry_safe(task, tmp, &conn->task_list, c_siblings) {
