@@ -50,7 +50,12 @@ INCLUDES += -I.
 
 CFLAGS += -D_GNU_SOURCE
 CFLAGS += $(INCLUDES)
-CFLAGS += -g -O2 -Wall -Wstrict-prototypes -fno-strict-aliasing -fPIC
+ifneq ($(DEBUG),)
+CFLAGS += -g -O0 -ggdb -rdynamic
+else
+CFLAGS += -g -O2 -fno-strict-aliasing
+endif
+CFLAGS += -Wall -Wstrict-prototypes -fPIC
 CFLAGS += -DTGT_VERSION=\"$(VERSION)$(EXTRAVERSION)\"
 
 LIBS += -lpthread
