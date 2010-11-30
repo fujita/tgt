@@ -431,7 +431,7 @@ static void login_start(struct iscsi_connection *conn)
 	char *name, *alias, *session_type, *target_name;
 	struct iscsi_target *target;
 	char buf[NI_MAXHOST + NI_MAXSERV + 4];
-	int reason;
+	int reason, redir;
 
 	conn->cid = be16_to_cpu(req->cid);
 	memcpy(conn->isid, req->isid, sizeof(req->isid));
@@ -491,7 +491,14 @@ static void login_start(struct iscsi_connection *conn)
 
 		conn->tid = target->tid;
 
-		if (target_redirected(target, conn, buf, &reason)) {
+		redir = target_redirected(target, conn, buf, &reason);
+		if (redir < 0) {
+			rsp->status_class = ISCSI_STATUS_CLS_TARGET_ERR;
+			rsp->status_detail = ISCSI_LOGIN_STATUS_TARGET_ERROR;
+			conn->state = STATE_EXIT;
+			return;
+		}
+		else if (redir) {
 			text_key_add(conn, "TargetAddress", buf);
 			rsp->status_class = ISCSI_STATUS_CLS_REDIRECT;
 			rsp->status_detail = reason;

@@ -261,6 +261,8 @@ int target_redirected(struct iscsi_target *target,
 		sprintf(p, "%s", dst);
 		ret = get_redirect_address(in_buf, buffer,
 					sizeof(buffer), &addr, &port, &rsn);
+		if (ret)
+			return -1;
 	}
 
 predefined:
