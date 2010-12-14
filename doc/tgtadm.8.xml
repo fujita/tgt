@@ -497,6 +497,42 @@ tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 1 --bstype=sg --dev
   </refsect1>
 
 
+  <refsect1><title>Header Digest and Data Digest</title>
+    <para>
+      Header and data digests can be set on a per target parameter.
+      TGTD supports two modes, None and CRC32C.
+      When the digest is set to None, TDTD will negotiate that digests
+      will not be used, and when CRC32C is set, TGTD will force the
+      connection to use digest.
+    </para>
+
+    <refsect2><title>Viewing the current settings</title>
+      <para>
+	This command is used to view the current settings for header/data
+	digest.
+      </para>
+      <screen format="linespecific">
+tgtadm --op show --mode target --tid 1
+  ...
+  HeaderDigest=None
+  DataDigest=None
+  ...
+      </screen>
+    </refsect2>
+    <refsect2><title>Setting digest</title>
+      <screen format="linespecific">
+Set header digest to CRC32C:
+tgtadm --op update --mode target --tid 1 -n HeaderDigest -v CRC32C
+
+Set data digest to None:
+tgtadm --op update --mode target --tid 1 -n DataDigest -v None
+      </screen>
+    </refsect2>
+  </refsect1>
+
+
+
+
   <refsect1><title>iSNS PARAMETERS</title>
     <para>
       iSNS configuration for a target is by using the tgtadm command.
@@ -555,10 +591,7 @@ Example:
 
 tgtadm --op update --mode sys --name iSNSAccessControl --value Off
       </screen>
-
     </variablelist>
-
-
   </refsect1>
 
 

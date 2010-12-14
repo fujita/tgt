@@ -2,12 +2,12 @@
 .\"     Title: tgtadm
 .\"    Author: [FIXME: author] [see http://docbook.sf.net/el/author]
 .\" Generator: DocBook XSL Stylesheets v1.75.2 <http://docbook.sf.net/>
-.\"      Date: 10/02/2010
+.\"      Date: 12/14/2010
 .\"    Manual: [FIXME: manual]
 .\"    Source: [FIXME: source]
 .\"  Language: English
 .\"
-.TH "TGTADM" "8" "10/02/2010" "[FIXME: source]" "[FIXME: manual]"
+.TH "TGTADM" "8" "12/14/2010" "[FIXME: source]" "[FIXME: manual]"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -401,6 +401,43 @@ Make /dev/sg4 available to initiators connecting to TGTD\&.
 
 tgtadm \-\-lld iscsi \-\-op new \-\-mode logicalunit \-\-tid 1 \-\-lun 1 \-\-bstype=sg \-\-device\-type=pt \-\-backing\-store=/dev/sg4
     
+.fi
+.if n \{\
+.RE
+.\}
+.SH "HEADER DIGEST AND DATA DIGEST"
+.PP
+Header and data digests can be set on a per target parameter\&. TGTD supports two modes, None and CRC32C\&. When the digest is set to None, TDTD will negotiate that digests will not be used, and when CRC32C is set, TGTD will force the connection to use digest\&.
+.SS "Viewing the current settings"
+.PP
+This command is used to view the current settings for header/data digest\&.
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+tgtadm \-\-op show \-\-mode target \-\-tid 1
+  \&.\&.\&.
+  HeaderDigest=None
+  DataDigest=None
+  \&.\&.\&.
+      
+.fi
+.if n \{\
+.RE
+.\}
+.SS "Setting digest"
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+Set header digest to CRC32C:
+tgtadm \-\-op update \-\-mode target \-\-tid 1 \-n HeaderDigest \-v CRC32C
+
+Set data digest to None:
+tgtadm \-\-op update \-\-mode target \-\-tid 1 \-n DataDigest \-v None
+      
 .fi
 .if n \{\
 .RE
