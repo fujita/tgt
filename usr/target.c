@@ -445,13 +445,14 @@ __device_lookup(int tid, uint64_t lun, struct target **t)
 }
 
 enum {
-	Opt_path, Opt_bstype, Opt_bsoflags, Opt_err,
+	Opt_path, Opt_bstype, Opt_bsoflags, Opt_blocksize, Opt_err,
 };
 
 static match_table_t device_tokens = {
 	{Opt_path, "path=%s"},
 	{Opt_bstype, "bstype=%s"},
 	{Opt_bsoflags, "bsoflags=%s"},
+	{Opt_blocksize, "blocksize=%s"},
 	{Opt_err, NULL},
 };
 
@@ -460,7 +461,8 @@ static void __cmd_done(struct target *, struct scsi_cmd *);
 int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 		      int backing)
 {
-	char *p, *path = NULL, *bstype = NULL, *bsoflags = NULL;
+	char *p, *path = NULL, *bstype = NULL;
+	char *bsoflags = NULL, *blocksize = NULL;
 	int ret = 0, lu_bsoflags = 0;
 	struct target *target;
 	struct scsi_lu *lu, *pos;
@@ -486,6 +488,9 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 			break;
 		case Opt_bsoflags:
 			bsoflags = match_strdup(&args[0]);
+		case Opt_blocksize:
+			blocksize = match_strdup(&args[0]);
+			break;
 		default:
 			break;
 		}
@@ -565,7 +570,26 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	lu->cmd_perform = &target_cmd_perform;
 	lu->cmd_done = &__cmd_done;
 
- 	if (lu->dev_type_template.lu_init) {
+	lu->blk_shift = 0;
+	if (blocksize) {
+		unsigned int bsize;
+		unsigned int bshift;
+
+		dprintf("blocksize=%s\n", blocksize);
+		bsize = strtoul(blocksize, NULL, 0);
+
+		bshift = get_blk_shift(bsize);
+		if (bshift > 0)
+			lu->blk_shift = bshift;
+		else {
+			if (bsize > 0)
+				eprintf("%u is invalid block size\n", bsize);
+			else
+				eprintf("%s is invalid block size\n", blocksize);
+		}
+	}
+
+	if (lu->dev_type_template.lu_init) {
 		ret = lu->dev_type_template.lu_init(lu);
 		if (ret)
 			goto fail_lu_init;
@@ -624,6 +648,8 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 out:
 	if (bstype)
 		free(bstype);
+	if (blocksize)
+		free(blocksize);
 	if (path)
 		free(path);
 	if (bsoflags)
@@ -1746,7 +1772,7 @@ int tgt_target_show_all(char *buf, int rest)
   				 _TAB3 "Type: %s\n"
 				 _TAB3 "SCSI ID: %s\n"
 				 _TAB3 "SCSI SN: %s\n"
-				 _TAB3 "Size: %s\n"
+				 _TAB3 "Size: %s, Block size: %d\n"
 				 _TAB3 "Online: %s\n"
 				 _TAB3 "Removable media: %s\n"
 				 _TAB3 "Readonly: %s\n"
@@ -1758,6 +1784,7 @@ int tgt_target_show_all(char *buf, int rest)
 				 lu->attrs.scsi_id,
 				 lu->attrs.scsi_sn,
 				 print_disksize(lu->size),
+				 1U << lu->blk_shift,
 				 lu->attrs.online ? "Yes" : "No",
 				 lu->attrs.removable ? "Yes" : "No",
 				 lu->attrs.readonly ? "Yes" : "No",

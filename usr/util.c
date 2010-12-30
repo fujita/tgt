@@ -175,3 +175,22 @@ char *open_flags_to_str(char *dest, int flags)
 	}
 	return dest;
 }
+
+int get_blk_shift(unsigned int size)
+{
+	int shift = 0;
+
+	if (!size)
+		return -1;
+
+	/* find the first non-zero bit */
+	while ((size & (1 << shift)) == 0)
+		shift++;
+
+	/* if more non-zero bits, then size is not a power of 2 */
+	if (size > (1 << shift))
+		return -1;
+
+	return shift;
+}
+

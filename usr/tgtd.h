@@ -154,6 +154,7 @@ struct scsi_lu {
 	uint64_t lun;
 	char *path;
 	int bsoflags;
+	unsigned int blk_shift;
 
 	/* the list of devices belonging to a target */
 	struct list_head device_siblings;

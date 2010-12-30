@@ -41,7 +41,9 @@
 #include "spc.h"
 #include "tgtadm_error.h"
 
-#define BLK_SHIFT	9
+#define DEFAULT_BLK_SHIFT 9
+
+static unsigned int blk_shift = DEFAULT_BLK_SHIFT;
 
 static int sbc_mode_page_update(struct scsi_cmd *cmd, uint8_t *data, int *changed)
 {
@@ -123,7 +125,7 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 
 	cmd->scsi_cmd_done = target_cmd_io_done;
 
-	cmd->offset = (scsi_rw_offset(cmd->scb) << BLK_SHIFT);
+	cmd->offset = (scsi_rw_offset(cmd->scb) << cmd->dev->blk_shift);
 	ret = cmd->dev->bst->bs_cmd_submit(cmd);
 	if (ret) {
 		key = HARDWARE_ERROR;
@@ -163,6 +165,7 @@ static int sbc_release(int host_no, struct scsi_cmd *cmd)
 static int sbc_read_capacity(int host_no, struct scsi_cmd *cmd)
 {
 	uint32_t *data;
+	unsigned int bshift;
 	uint64_t size;
 	uint8_t *scb = cmd->scb;
 	unsigned char key = ILLEGAL_REQUEST;
@@ -177,11 +180,12 @@ static int sbc_read_capacity(int host_no, struct scsi_cmd *cmd)
 		goto overflow;
 
 	data = scsi_get_in_buffer(cmd);
-	size = cmd->dev->size >> BLK_SHIFT;
+	bshift = cmd->dev->blk_shift;
+	size = cmd->dev->size >> bshift;
 
 	data[0] = (size >> 32) ?
 		__cpu_to_be32(0xffffffff) : __cpu_to_be32(size - 1);
-	data[1] = __cpu_to_be32(1U << BLK_SHIFT);
+	data[1] = __cpu_to_be32(1U << bshift);
 
 overflow:
 	scsi_set_in_resid_by_actual(cmd, 8);
@@ -200,6 +204,7 @@ static int sbc_verify(int host_no, struct scsi_cmd *cmd)
 static int sbc_service_action(int host_no, struct scsi_cmd *cmd)
 {
 	uint32_t *data;
+	unsigned int bshift;
 	uint64_t size;
 	int len = 32;
 
@@ -214,10 +219,11 @@ static int sbc_service_action(int host_no, struct scsi_cmd *cmd)
 	data = scsi_get_in_buffer(cmd);
 	memset(data, 0, len);
 
-	size = cmd->dev->size >> BLK_SHIFT;
+	bshift = cmd->dev->blk_shift;
+	size = cmd->dev->size >> bshift;
 
 	*((uint64_t *)(data)) = __cpu_to_be64(size - 1);
-	data[2] = __cpu_to_be32(1UL << BLK_SHIFT);
+	data[2] = __cpu_to_be32(1UL << bshift);
 
 overflow:
 	scsi_set_in_resid_by_actual(cmd, len);
@@ -276,11 +282,14 @@ static int sbc_lu_init(struct scsi_lu *lu)
 	lu->attrs.version_desc[2] = 0x0300; /* SPC-3 */
 
 	data = lu->mode_block_descriptor;
-	size = lu->size >> BLK_SHIFT;
+
+	if (!lu->blk_shift)
+		lu->blk_shift = blk_shift; /* if unset, use default shift */
+	size = lu->size >> lu->blk_shift; /* calculate size in blocks */
 
 	*(uint32_t *)(data) = (size >> 32) ?
 			__cpu_to_be32(0xffffffff) : __cpu_to_be32(size);
-	*(uint32_t *)(data + 4) = __cpu_to_be32(1 << BLK_SHIFT);
+	*(uint32_t *)(data + 4) = __cpu_to_be32(1 << lu->blk_shift);
 
 	/* Vendor uniq - However most apps seem to call for mode page 0*/
 	add_mode_page(lu, "0:0:0");
