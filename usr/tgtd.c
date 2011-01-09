@@ -329,6 +329,8 @@ static int tgt_exec_scheduled(void)
 	return work_remains;
 }
 
+#define TGTD_EVENT_TIMEOUT	2000
+
 static void event_loop(void)
 {
 	int nevent, i, sched_remains, timeout;
@@ -337,7 +339,7 @@ static void event_loop(void)
 
 retry:
 	sched_remains = tgt_exec_scheduled();
-	timeout = sched_remains ? 0 : TGTD_TICK_PERIOD * 1000;
+	timeout = sched_remains ? 0 : TGTD_EVENT_TIMEOUT;
 
 	nevent = epoll_wait(ep_fd, events, ARRAY_SIZE(events), timeout);
 	if (nevent < 0) {
@@ -350,8 +352,7 @@ retry:
 			tev = (struct event_data *) events[i].data.ptr;
 			tev->handler(tev->fd, events[i].events, tev->data);
 		}
-	} else
-		schedule();
+	}
 
 	if (system_active)
 		goto retry;
@@ -517,11 +518,17 @@ int main(int argc, char **argv)
 		}
 	}
 
+	err = work_timer_start();
+	if (err)
+		exit(1);
+
 	bs_init();
 
 	event_loop();
 
 	lld_exit();
+
+	work_timer_stop();
 
 	ipc_exit();
 
