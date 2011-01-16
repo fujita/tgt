@@ -488,6 +488,7 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 			break;
 		case Opt_bsoflags:
 			bsoflags = match_strdup(&args[0]);
+			break;
 		case Opt_blocksize:
 			blocksize = match_strdup(&args[0]);
 			break;
