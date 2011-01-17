@@ -1987,6 +1987,13 @@ again:
 		conn->req.ahssize = conn->req.bhs.hlength * 4;
 		conn->req.datasize = ntoh24(conn->req.bhs.dlength);
 		conn->rx_size = conn->req.ahssize;
+
+		if (conn->state != STATE_SCSI &&
+		    conn->req.ahssize > INCOMING_BUFSIZE) {
+			conn->state = STATE_CLOSE;
+			return;
+		}
+
 		if (conn->rx_size) {
 			conn->rx_buffer = conn->req.ahs;
 			conn->rx_iostate = IOSTATE_RX_AHS;
@@ -2039,6 +2046,14 @@ again:
 		if (conn->rx_size) {
 			conn->rx_iostate = IOSTATE_RX_DATA;
 			conn->rx_buffer = conn->req.data;
+
+			if (conn->state != STATE_SCSI) {
+				if (conn->req.ahssize + conn->rx_size >
+				    INCOMING_BUFSIZE) {
+					conn->state = STATE_CLOSE;
+					return;
+				}
+			}
 		} else {
 			conn->rx_iostate = IOSTATE_RX_END;
 			break;
