@@ -7,7 +7,7 @@ struct tgt_work {
 	struct list_head entry;
 	void (*func)(void *);
 	void *data;
-	struct timeval when;
+	unsigned int when;
 };
 
 extern int work_timer_start(void);
