@@ -329,8 +329,6 @@ static int tgt_exec_scheduled(void)
 	return work_remains;
 }
 
-#define TGTD_EVENT_TIMEOUT	2000
-
 static void event_loop(void)
 {
 	int nevent, i, sched_remains, timeout;
@@ -339,7 +337,7 @@ static void event_loop(void)
 
 retry:
 	sched_remains = tgt_exec_scheduled();
-	timeout = sched_remains ? 0 : TGTD_EVENT_TIMEOUT;
+	timeout = sched_remains ? 0 : -1;
 
 	nevent = epoll_wait(ep_fd, events, ARRAY_SIZE(events), timeout);
 	if (nevent < 0) {
