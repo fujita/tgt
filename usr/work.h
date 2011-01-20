@@ -11,7 +11,7 @@ struct tgt_work {
 };
 
 extern int work_timer_start(void);
-extern int work_timer_stop(void);
+extern void work_timer_stop(void);
 
 extern void add_work(struct tgt_work *work, unsigned int second);
 extern void del_work(struct tgt_work *work);

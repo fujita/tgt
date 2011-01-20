@@ -24,6 +24,7 @@
 #include <stdint.h>
 #include <signal.h>
 #include <sys/epoll.h>
+#include <sys/timerfd.h>
 
 #include "list.h"
 #include "util.h"
@@ -40,9 +41,9 @@ static struct itimerval work_timer = {
 	{WORK_TIMER_INT_SEC, WORK_TIMER_INT_USEC}
 };
 
-static int elapsed_msecs;
+static unsigned int elapsed_msecs;
 static int timer_pending;
-static int timer_fd[2];
+static int timer_fd[2] = {-1, -1};
 
 static LIST_HEAD(active_work_list);
 static LIST_HEAD(inactive_work_list);
@@ -76,28 +77,69 @@ static void work_timer_sig_handler(int data)
 
 static void work_timer_evt_handler(int fd, int events, void *data)
 {
-	unsigned int n;
 	int err;
+	static int first = 1;
 
-	err = read(timer_fd[0], &n, sizeof(n));
-	if (err < 0) {
-		eprintf("Failed to read from pipe, %m\n");
-		return;
+	if (timer_fd[1] == -1) {
+		unsigned long long s;
+		struct timeval cur_time;
+
+		err = read(timer_fd[0], &s, sizeof(s));
+		if (err < 0) {
+			if (err != -EAGAIN)
+				eprintf("failed to read from timerfd, %m\n");
+			return;
+		}
+
+		if (first) {
+			first = 0;
+			err = gettimeofday(&cur_time, NULL);
+			if (err) {
+				eprintf("gettimeofday failed, %m\n");
+				exit(1);
+			}
+			elapsed_msecs = timeval_to_msecs(cur_time);
+			return;
+		}
+
+		elapsed_msecs += (unsigned int)s * WORK_TIMER_INT_MSEC;
+	} else {
+		unsigned int n;
+		struct timeval cur_time;
+
+		err = read(timer_fd[0], &n, sizeof(n));
+		if (err < 0) {
+			eprintf("Failed to read from pipe, %m\n");
+			return;
+		}
+
+		timer_pending = 0;
+
+		err = gettimeofday(&cur_time, NULL);
+		if (err) {
+			eprintf("gettimeofday failed, %m\n");
+			exit(1);
+		}
+
+		elapsed_msecs = timeval_to_msecs(cur_time);
 	}
-
-	timer_pending = 0;
 
 	execute_work();
 }
 
 int work_timer_start(void)
 {
-	struct sigaction s;
 	struct timeval t;
 	int err;
 
 	if (elapsed_msecs)
 		return 0;
+
+	timer_fd[0] = timerfd_create(CLOCK_REALTIME, TFD_NONBLOCK);
+	if (timer_fd[0] < 0)
+		eprintf("use the signal based schedular\n");
+	else
+		eprintf("use the timer_fd based schedular\n");
 
 	err = gettimeofday(&t, NULL);
 	if (err) {
@@ -106,30 +148,45 @@ int work_timer_start(void)
 	}
 	elapsed_msecs = timeval_to_msecs(t);
 
-	sigemptyset(&s.sa_mask);
-	sigaddset(&s.sa_mask, SIGALRM);
-	s.sa_flags = 0;
-	s.sa_handler = work_timer_sig_handler;
-	err = sigaction(SIGALRM, &s, NULL);
-	if (err) {
-		eprintf("Failed to setup timer handler\n");
-		goto timer_err;
+	if (timer_fd[0] < 0) {
+		struct sigaction s;
+
+		sigemptyset(&s.sa_mask);
+		sigaddset(&s.sa_mask, SIGALRM);
+		s.sa_flags = 0;
+		s.sa_handler = work_timer_sig_handler;
+		err = sigaction(SIGALRM, &s, NULL);
+		if (err) {
+			eprintf("Failed to setup timer handler\n");
+			goto timer_err;
+		}
+
+		err = setitimer(ITIMER_REAL, &work_timer, 0);
+		if (err) {
+			eprintf("Failed to set timer\n");
+			goto timer_err;
+		}
+
+		err = pipe(timer_fd);
+		if (err) {
+			eprintf("Failed to open timer pipe\n");
+			goto timer_err;
+		}
+	} else {
+		struct itimerspec new, old;
+
+		new.it_value.tv_sec = 0;
+		new.it_value.tv_nsec = 1;
+
+		new.it_interval.tv_sec = 0;
+		new.it_interval.tv_nsec = WORK_TIMER_INT_USEC * 1000;
+
+		err = timerfd_settime(timer_fd[0], TFD_TIMER_ABSTIME, &new, &old);
+		if (err < 0)
+			goto timer_err;
 	}
 
-	err = setitimer(ITIMER_REAL, &work_timer, 0);
-	if (err) {
-		eprintf("Failed to set timer\n");
-		goto timer_err;
-	}
-
-	err = pipe(timer_fd);
-	if (err) {
-		eprintf("Failed to open timer pipe\n");
-		goto timer_err;
-	}
-
-	err = tgt_event_add(timer_fd[0], EPOLLIN,
-			    work_timer_evt_handler, NULL);
+	err = tgt_event_add(timer_fd[0], EPOLLIN, work_timer_evt_handler, NULL);
 	if (err) {
 		eprintf("failed to add timer event, fd:%d\n", timer_fd[0]);
 		goto timer_err;
@@ -144,12 +201,10 @@ timer_err:
 	return err;
 }
 
-int work_timer_stop(void)
+void work_timer_stop(void)
 {
-	int err;
-
 	if (!elapsed_msecs)
-		return 0;
+		return;
 
 	elapsed_msecs = 0;
 
@@ -157,16 +212,17 @@ int work_timer_stop(void)
 
 	if (timer_fd[0] > 0)
 		close(timer_fd[0]);
-	if (timer_fd[1] > 0)
+
+	if (timer_fd[1] > 0) {
+		int ret;
 		close(timer_fd[1]);
 
-	err = setitimer(ITIMER_REAL, 0, 0);
-	if (err)
-		eprintf("Failed to stop timer\n");
-	else
-		dprintf("Timer stopped\n");
-
-	return err;
+		ret = setitimer(ITIMER_REAL, 0, 0);
+		if (ret)
+			eprintf("Failed to stop timer\n");
+		else
+			dprintf("Timer stopped\n");
+	}
 }
 
 void add_work(struct tgt_work *work, unsigned int second)
@@ -202,17 +258,7 @@ void del_work(struct tgt_work *work)
 
 static void execute_work()
 {
-	struct timeval cur_time;
 	struct tgt_work *work, *n;
-	int err;
-
-	err = gettimeofday(&cur_time, NULL);
-	if (err) {
-		eprintf("gettimeofday failed, %m\n");
-		exit(1);
-	}
-
-	elapsed_msecs = timeval_to_msecs(cur_time);
 
 	list_for_each_entry_safe(work, n, &inactive_work_list, entry) {
 		if (before(elapsed_msecs, work->when))
