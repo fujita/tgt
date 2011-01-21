@@ -24,7 +24,7 @@
 #include <stdint.h>
 #include <signal.h>
 #include <sys/epoll.h>
-#include <sys/timerfd.h>
+#include <sys/time.h>
 
 #include "list.h"
 #include "util.h"
@@ -32,13 +32,12 @@
 #include "work.h"
 #include "tgtd.h"
 
-#define WORK_TIMER_INT_SEC      0
 #define WORK_TIMER_INT_MSEC     500
 #define WORK_TIMER_INT_USEC     (WORK_TIMER_INT_MSEC * 1000)
 
 static struct itimerval work_timer = {
-	{WORK_TIMER_INT_SEC, WORK_TIMER_INT_USEC},
-	{WORK_TIMER_INT_SEC, WORK_TIMER_INT_USEC}
+	{0, WORK_TIMER_INT_USEC},
+	{0, WORK_TIMER_INT_USEC}
 };
 
 static unsigned int elapsed_msecs;
@@ -135,12 +134,6 @@ int work_timer_start(void)
 	if (elapsed_msecs)
 		return 0;
 
-	timer_fd[0] = timerfd_create(CLOCK_REALTIME, TFD_NONBLOCK);
-	if (timer_fd[0] < 0)
-		eprintf("use the signal based schedular\n");
-	else
-		eprintf("use the timer_fd based schedular\n");
-
 	err = gettimeofday(&t, NULL);
 	if (err) {
 		eprintf("gettimeofday failed, %m\n");
@@ -148,8 +141,13 @@ int work_timer_start(void)
 	}
 	elapsed_msecs = timeval_to_msecs(t);
 
-	if (timer_fd[0] < 0) {
+	timer_fd[0] = __timerfd_create(WORK_TIMER_INT_USEC);
+	if (timer_fd[0] >= 0)
+		eprintf("use timer_fd based scheduler\n");
+	else {
 		struct sigaction s;
+
+		eprintf("use signal based scheduler\n");
 
 		sigemptyset(&s.sa_mask);
 		sigaddset(&s.sa_mask, SIGALRM);
@@ -172,18 +170,6 @@ int work_timer_start(void)
 			eprintf("Failed to open timer pipe\n");
 			goto timer_err;
 		}
-	} else {
-		struct itimerspec new, old;
-
-		new.it_value.tv_sec = 0;
-		new.it_value.tv_nsec = 1;
-
-		new.it_interval.tv_sec = 0;
-		new.it_interval.tv_nsec = WORK_TIMER_INT_USEC * 1000;
-
-		err = timerfd_settime(timer_fd[0], TFD_TIMER_ABSTIME, &new, &old);
-		if (err < 0)
-			goto timer_err;
 	}
 
 	err = tgt_event_add(timer_fd[0], EPOLLIN, work_timer_evt_handler, NULL);
@@ -192,8 +178,7 @@ int work_timer_start(void)
 		goto timer_err;
 	}
 
-	dprintf("started, timeout: %d sec %d msec\n",
-		WORK_TIMER_INT_SEC, WORK_TIMER_INT_MSEC);
+	dprintf("started, timeout: %d msec\n", WORK_TIMER_INT_MSEC);
 	return 0;
 
 timer_err:

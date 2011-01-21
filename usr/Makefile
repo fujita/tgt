@@ -4,6 +4,10 @@ ifneq ($(shell test -e /usr/include/linux/signalfd.h && echo 1),)
 CFLAGS += -DUSE_SIGNALFD
 endif
 
+ifneq ($(shell test -e /usr/include/sys/timerfd.h && echo 1),)
+CFLAGS += -DUSE_TIMERFD
+endif
+
 ifneq ($(IBMVIO),)
 CFLAGS += -DIBMVIO -DUSE_KERNEL
 TGTD_OBJS += $(addprefix ibmvio/, ibmvio.o)
