@@ -488,6 +488,14 @@ static void login_start(struct iscsi_connection *conn)
 			conn->state = STATE_EXIT;
 			return;
 		}
+		if (target->rdma) {
+			eprintf("Target %s is RDMA, but conn cid:%d from %s is TCP\n",
+				target_name, conn->cid, conn->initiator);
+			rsp->status_class = ISCSI_STATUS_CLS_INITIATOR_ERR;
+			rsp->status_detail = ISCSI_LOGIN_STATUS_TGT_NOT_FOUND;
+			conn->state = STATE_EXIT;
+			return;
+		}
 
 		conn->tid = target->tid;
 
@@ -2292,7 +2300,7 @@ out:
 	return ret;
 }
 
-static int iscsi_transportid(int tid, uint64_t itn_id, char *buf, int size)
+int iscsi_transportid(int tid, uint64_t itn_id, char *buf, int size)
 {
 	struct iscsi_session *session;
 	char *p;

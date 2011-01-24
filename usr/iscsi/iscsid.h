@@ -214,6 +214,9 @@ struct iscsi_connection {
 #define STATE_CLOSE		10
 #define STATE_EXIT		11
 #define STATE_SCSI		12
+#define STATE_INIT		13
+#define STATE_START		14
+#define STATE_READY		15
 
 #define AUTH_STATE_START	0
 #define AUTH_STATE_CHALLENGE	1
@@ -254,6 +257,8 @@ struct iscsi_target {
 	} redirect_info;
 
 	struct list_head isns_list;
+
+	int rdma;
 };
 
 enum task_flags {
@@ -296,6 +301,7 @@ extern void conn_read_pdu(struct iscsi_connection *conn);
 extern int iscsi_tx_handler(struct iscsi_connection *conn);
 extern void iscsi_rx_handler(struct iscsi_connection *conn);
 extern int iscsi_scsi_cmd_execute(struct iscsi_task *task);
+extern int iscsi_transportid(int tid, uint64_t itn_id, char *buf, int size);
 
 /* iscsid.c iscsi_task */
 extern void iscsi_free_task(struct iscsi_task *task);
