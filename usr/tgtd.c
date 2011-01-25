@@ -55,11 +55,12 @@ static struct option const long_options[] =
 	{"foreground", no_argument, 0, 'f'},
 	{"control-port", required_argument, 0, 'C'},
 	{"debug", required_argument, 0, 'd'},
+	{"version", no_argument, 0, 'V'},
 	{"help", no_argument, 0, 'h'},
 	{0, 0, 0, 0},
 };
 
-static char *short_options = "fC:d:h";
+static char *short_options = "fC:d:Vh";
 
 static void usage(int status)
 {
@@ -72,10 +73,17 @@ Target framework daemon, version %s\n\
   -f, --foreground        make the program run in the foreground\n\
   -C, --control-port NNNN use port NNNN for the mgmt channel\n\
   -d, --debug debuglevel  print debugging information\n\
+  -V, --version           print version and exit\n\
   -h, --help              display this help and exit\n\
 ", TGT_VERSION);
 	}
 	exit(status);
+}
+
+static void version(void)
+{
+	printf("%s\n", TGT_VERSION);
+	exit(0);
 }
 
 /* Default TGT mgmt port */
@@ -459,8 +467,8 @@ int main(int argc, char **argv)
 		case 'd':
 			is_debug = atoi(optarg);
 			break;
-		case 'v':
-			exit(0);
+		case 'V':
+			version();
 			break;
 		case 'h':
 			usage(0);

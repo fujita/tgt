@@ -90,6 +90,7 @@ static const char * tgtadm_strerror(int err)
 struct option const long_options[] = {
 	{"debug", no_argument, NULL, 'd'},
 	{"help", no_argument, NULL, 'h'},
+	{"version", no_argument, NULL, 'V'},
 	{"lld", required_argument, NULL, 'L'},
 	{"op", required_argument, NULL, 'o'},
 	{"mode", required_argument, NULL, 'm'},
@@ -116,7 +117,7 @@ struct option const long_options[] = {
 	{NULL, 0, NULL, 0},
 };
 
-static char *short_options = "dhL:o:m:t:s:c:l:n:v:b:E:f:T:I:u:p:H:P:B:Y:O:C:";
+static char *short_options = "dhVL:o:m:t:s:c:l:n:v:b:E:f:T:I:u:p:H:P:B:Y:O:C:";
 
 static void usage(int status)
 {
@@ -174,6 +175,12 @@ Linux SCSI Target Framework Administration Utility, version %s\n\
 Report bugs to <stgt@vger.kernel.org>.\n", TGT_VERSION);
 	}
 	exit(status == 0 ? 0 : EINVAL);
+}
+
+static void version(void)
+{
+	printf("%s\n", TGT_VERSION);
+	exit(0);
 }
 
 /* default port to use for the mgmt channel */
@@ -526,6 +533,9 @@ int main(int argc, char **argv)
 			break;
 		case 'C':
 			control_port = strtol(optarg, NULL, 10);
+			break;
+		case 'V':
+			version();
 			break;
 		case 'd':
 			debug = 1;
