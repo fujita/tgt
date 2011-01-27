@@ -21,7 +21,7 @@ TGTD_OBJS += bs_rdwr.o bs_aio.o
 
 ifneq ($(ISCSI_RDMA),)
 CFLAGS += -DISCSI_RDMA
-TGTD_OBJS += iscsi/iscsi_rdma.o
+TGTD_OBJS += iscsi/iser.o iscsi/iser_text.o
 LIBS += -libverbs -lrdmacm
 endif
 
