@@ -412,6 +412,8 @@ static void iser_login_start(struct iscsi_connection *iscsi_conn,
 	int req_datasize = rx_pdu->membuf.size;
 	char *name, *alias, *session_type, *target_name;
 	struct iscsi_target *target;
+	char buf[NI_MAXHOST + NI_MAXSERV + 4];
+	int reason;
 
 	iscsi_conn->cid = be16_to_cpu(req_bhs->cid);
 	memcpy(iscsi_conn->isid, req_bhs->isid, sizeof(req_bhs->isid));
@@ -474,6 +476,14 @@ static void iser_login_start(struct iscsi_connection *iscsi_conn,
 			return;
 		}
 		iscsi_conn->tid = target->tid;
+
+		if (target_redirected(target, iscsi_conn, buf, &reason)) {
+			iser_text_key_add(iscsi_conn, tx_pdu, "TargetAddress", buf);
+			rsp_bhs->status_class = ISCSI_STATUS_CLS_REDIRECT;
+			rsp_bhs->status_detail = reason;
+			iscsi_conn->state = STATE_EXIT;
+			return;
+		}
 
 		if (tgt_get_target_state(target->tid) != SCSI_TARGET_READY) {
 			rsp_bhs->status_class = ISCSI_STATUS_CLS_TARGET_ERR;
