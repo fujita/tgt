@@ -753,19 +753,11 @@ static void iser_task_free_in_bufs(struct iser_task *task)
 
 static void iser_complete_task(struct iser_task *task)
 {
+	struct iser_conn *conn = task->conn;
+
 	if (unlikely(task->opcode != ISCSI_OP_SCSI_CMD)) {
 		dprintf("task:%p, non-cmd\n", task);
 		return;
-	}
-
-	/* we are completing scsi cmd task, returning from target */
-	if (likely(task_in_scsi(task))) {
-		target_cmd_done(&task->scmd);
-		clear_task_in_scsi(task);
-	}
-	if (task->extdata) {
-		free(task->extdata);
-		task->extdata = NULL;
 	}
 
 	list_del(&task->session_list);
@@ -775,7 +767,17 @@ static void iser_complete_task(struct iser_task *task)
 		iser_task_free_out_bufs(task);
 		/* iser_task_free_dout_tasks(task); // ToDo: multiple out buffers */
 	}
-	dprintf("task:%p\n", task);
+
+	/* we are completing scsi cmd task, returning from target */
+	if (likely(task_in_scsi(task))) {
+		target_cmd_done(&task->scmd);
+		clear_task_in_scsi(task);
+		iser_conn_put(conn);
+	}
+	if (task->extdata) {
+		free(task->extdata);
+		task->extdata = NULL;
+	}
 }
 
 static char *iser_conn_login_phase_name(enum iser_login_phase phase)
@@ -1819,12 +1821,15 @@ static int iser_tm_exec(struct iser_task *task)
 					  (unsigned long) task, fn, req_bhs->lun,
 					  req_bhs->rtt, 0);
 		set_task_in_scsi(task);
+		iser_conn_get(conn);
+
 		switch (ret) {
 		case MGMT_REQ_QUEUED:
 			break;
 		case MGMT_REQ_FAILED:
 		case MGMT_REQ_DONE:
 			clear_task_in_scsi(task);
+			iser_conn_put(conn);
 			break;
 		}
 	}
@@ -1962,6 +1967,8 @@ static void iser_scsi_cmd_iosubmit(struct iser_task *task)
 	dprintf("task:%p tag:0x%04"PRIx64 "\n", task, task->tag);
 
 	set_task_in_scsi(task);
+	iser_conn_get(conn);
+
 	target_cmd_queue(session->target->tid, scmd);
 }
 
