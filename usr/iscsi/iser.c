@@ -2175,8 +2175,7 @@ static void iser_sched_tx(struct event_data *evt)
 	int num_reqs = 0;
 	int err;
 
-	if (unlikely(conn->h.state == STATE_CLOSE ||
-		     conn->h.state == STATE_EXIT)) {
+	if (unlikely(conn->h.state == STATE_CLOSE)) {
 		dprintf("conn:%p closing, ignoring tx\n", conn);
 		return;
 	}
@@ -2805,9 +2804,6 @@ out:
 static void iser_login_tx_complete(struct iser_conn *conn)
 {
 	switch (conn->h.state) {
-	case STATE_EXIT:
-		conn->h.state = STATE_CLOSE;
-		break;
 	case STATE_SECURITY_LOGIN:
 		conn->h.state = STATE_LOGIN;
 		break;
