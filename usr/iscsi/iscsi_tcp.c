@@ -384,6 +384,12 @@ static int iscsi_tcp_getpeername(struct iscsi_connection *conn,
 	return getpeername(tcp_conn->fd, sa, len);
 }
 
+static void iscsi_tcp_conn_force_close(struct iscsi_connection *conn)
+{
+	conn->state = STATE_CLOSE;
+	conn->tp->ep_event_modify(conn, EPOLLIN|EPOLLOUT|EPOLLERR);
+}
+
 static struct iscsi_transport iscsi_tcp = {
 	.name			= "iscsi",
 	.rdma			= 0,
@@ -397,6 +403,7 @@ static struct iscsi_transport iscsi_tcp = {
 	.ep_write_begin		= iscsi_tcp_write_begin,
 	.ep_write_end		= iscsi_tcp_write_end,
 	.ep_close		= iscsi_tcp_close,
+	.ep_force_close		= iscsi_tcp_conn_force_close,
 	.ep_release		= iscsi_tcp_release,
 	.ep_show		= iscsi_tcp_show,
 	.ep_event_modify	= iscsi_event_modify,

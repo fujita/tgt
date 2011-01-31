@@ -513,7 +513,7 @@ int iscsi_target_update(int mode, int op, int tid, uint64_t sid, uint64_t lun,
 		break;
 	case MODE_CONNECTION:
 		if (op == OP_DELETE)
-			err = conn_close_force(tid, sid, cid);
+			err = conn_close_admin(tid, sid, cid);
 		break;
 	default:
 		break;

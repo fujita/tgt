@@ -1215,6 +1215,16 @@ void iser_conn_close(struct iser_conn *conn)
 		&conn->h, conn->cm_id, conn->h.refcount);
 }
 
+static void iser_conn_force_close(struct iscsi_connection *iscsi_conn)
+{
+	struct iser_conn *conn = ISER_CONN(iscsi_conn);
+
+	eprintf("conn:%p\n", &conn->h);
+	conn->h.closed = 1;
+	iser_conn_close(conn);
+	iser_conn_put(conn);
+}
+
 /*
  * Called when the connection is freed, from iscsi, but won't do anything until
  * all posted WRs have gone away.  So also called again from RX progress when
@@ -3415,6 +3425,7 @@ static struct iscsi_transport iscsi_iser = {
 	.rdma   		= 1,
 	.data_padding   	= 1,
 	.ep_show		= iser_show,
+	.ep_force_close		= iser_conn_force_close,
 	.ep_getsockname 	= iser_getsockname,
 	.ep_getpeername 	= iser_getpeername,
 };

@@ -28,6 +28,7 @@ struct iscsi_transport {
 	int (*ep_rdma_read)(struct iscsi_connection *conn);
 	int (*ep_rdma_write)(struct iscsi_connection *conn);
 	size_t (*ep_close)(struct iscsi_connection *conn);
+	void (*ep_force_close)(struct iscsi_connection *conn);
 	void (*ep_release)(struct iscsi_connection *conn);
 
 	int (*ep_show)(struct iscsi_connection *conn, char *buf, int rest);

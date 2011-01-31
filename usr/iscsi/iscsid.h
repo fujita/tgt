@@ -292,7 +292,7 @@ extern int conn_get(struct iscsi_connection *conn);
 extern struct iscsi_connection * conn_find(struct iscsi_session *session, uint32_t cid);
 extern int conn_take_fd(struct iscsi_connection *conn);
 extern void conn_add_to_session(struct iscsi_connection *conn, struct iscsi_session *session);
-extern int conn_close_force(uint32_t tid, uint64_t sid, uint32_t cid);
+extern int conn_close_admin(uint32_t tid, uint64_t sid, uint32_t cid);
 
 /* iscsid.c */
 extern char *text_key_find(struct iscsi_connection *conn, char *searchKey);

@@ -216,7 +216,7 @@ int conn_take_fd(struct iscsi_connection *conn)
 }
 
 /* called by tgtadm */
-int conn_close_force(uint32_t tid, uint64_t sid, uint32_t cid)
+int conn_close_admin(uint32_t tid, uint64_t sid, uint32_t cid)
 {
 	struct iscsi_target* target = NULL;
 	struct iscsi_session *session;
@@ -233,9 +233,7 @@ int conn_close_force(uint32_t tid, uint64_t sid, uint32_t cid)
 			list_for_each_entry(conn, &session->conn_list, clist) {
 				if (conn->cid == cid) {
 					eprintf("close %" PRIx64 " %u\n", sid, cid);
-					conn->state = STATE_CLOSE;
-					conn->tp->ep_event_modify(conn,
-						  EPOLLIN|EPOLLOUT|EPOLLERR);
+					conn->tp->ep_force_close(conn);
 					return TGTADM_SUCCESS;
 				}
 			}
