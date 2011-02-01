@@ -1795,7 +1795,8 @@ int tgt_target_show_all(char *buf, int rest)
 				 lu->path ? : "None",
 				 open_flags_to_str(strflags, lu->bsoflags));
 
-		if (!strcmp(tgt_drivers[target->lid]->name, "iscsi")) {
+		if (!strcmp(tgt_drivers[target->lid]->name, "iscsi") ||
+		    !strcmp(tgt_drivers[target->lid]->name, "iser")) {
 			int i, aid;
 
 			shprintf(total, buf, rest, _TAB1
