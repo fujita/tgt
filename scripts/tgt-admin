@@ -406,7 +406,7 @@ sub add_params {
 
 	if ($param eq "scsi_id" || $param eq "scsi_sn" || $param eq "vendor_id" || $param eq "product_id" ||
 	    $param eq "product_rev" || $param eq "sense_format" || $param eq "removable" || $param eq "online" ||
-	    $param eq "path" || $param eq "mode_page") {
+	    $param eq "path" || $param eq "mode_page" || $param eq "readonly") {
 		return("tgtadm -C $control_port --lld $driver --op update --mode logicalunit --tid $next_tid --lun=$lun --params $param=\"$param_value\"");
 	}
 	if ($param eq "params") {
@@ -561,7 +561,7 @@ sub add_backing_direct {
 			}
 
 			# Add these parameters if they were not overwritten in the config file
-			my @opts = ("scsi_id", "sense_format", "removable", "online", "path");
+			my @opts = ("scsi_id", "sense_format", "removable", "online", "path", "readonly");
 			foreach my $single_opt (@opts) {
 				check_if_hash_array($$target_options_ref{$single_opt},$single_opt);
 				if ($params_added{$single_opt} ne 1 && length $$target_options_ref{$single_opt}) {
