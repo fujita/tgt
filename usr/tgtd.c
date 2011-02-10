@@ -285,27 +285,45 @@ int call_program(const char *cmd, void (*callback)(void *data, int result),
 	argv[i] =  NULL;
 
 	ret = pipe(fds);
-	if (ret < 0)
+	if (ret < 0) {
+		eprintf("pipe create failed for %s, %m\n", cmd);
 		return ret;
+	}
 
-	eprintf("%d %d\n", fds[0], fds[1]);
+	dprintf("%s, pipe: %d %d\n", cmd, fds[0], fds[1]);
 
 	pid = fork();
-	if (pid < 0)
+	if (pid < 0) {
+		eprintf("fork failed for: %s, %m\n", cmd);
+		close(fds[0]);
+		close(fds[1]);
 		return pid;
+	}
 
 	if (!pid) {
 		close(1);
 		dup(fds[1]);
 		close(fds[0]);
-		ret = execv(argv[0], argv);
+		execv(argv[0], argv);
+
+		eprintf("execv failed for: %s, %m\n", cmd);
 		exit(-1);
 	} else {
 		close(fds[1]);
-		waitpid(pid, &i, 0);
+		do {
+			ret = waitpid(pid, &i, 0);
+		} while (ret < 0 && errno == EINTR);
+		if (ret < 0) {
+			eprintf("waitpid failed for: %s, %m\n", cmd);
+			close(fds[0]);
+			return ret;
+		}
 		ret = read(fds[0], output, op_len);
-		if (ret < 0)
-			eprintf("failed to get the output from <%s>.", cmd);
+		if (ret < 0) {
+			eprintf("failed to get the output from: %s\n", cmd);
+			close(fds[0]);
+			return ret;
+		}
 
 		if (callback)
 			callback(data, WEXITSTATUS(i));
