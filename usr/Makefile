@@ -8,12 +8,6 @@ ifneq ($(shell test -e /usr/include/sys/timerfd.h && echo 1),)
 CFLAGS += -DUSE_TIMERFD
 endif
 
-ifneq ($(IBMVIO),)
-CFLAGS += -DIBMVIO -DUSE_KERNEL
-TGTD_OBJS += $(addprefix ibmvio/, ibmvio.o)
-TGTD_OBJS += bs_mmap.o tgtif.o
-endif
-
 TGTD_OBJS += $(addprefix iscsi/, conn.o param.o session.o \
 		iscsid.o target.o chap.o sha1.o md5.o transport.o iscsi_tcp.o \
 		isns.o)
@@ -22,12 +16,6 @@ TGTD_OBJS += bs_rdwr.o bs_aio.o
 ifneq ($(ISCSI_RDMA),)
 TGTD_OBJS += iscsi/iser.o iscsi/iser_text.o
 LIBS += -libverbs -lrdmacm
-endif
-
-ifneq ($(FCP),)
-CFLAGS += -DFCP -DUSE_KERNEL
-TGTD_OBJS += $(addprefix fc/, fc.o)
-TGTD_OBJS += bs_mmap.o tgtif.o
 endif
 
 ifneq ($(FCOE),)
