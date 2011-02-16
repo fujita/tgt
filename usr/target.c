@@ -1061,7 +1061,7 @@ static void __cmd_done(struct target *target, struct scsi_cmd *cmd)
 
 	err = target->bst->bs_cmd_done(cmd);
 
-	dprintf("%d %p %p %u %u %d\n", cmd_mmapio(cmd), scsi_get_out_buffer(cmd),
+	dprintf("%p %p %u %u %d\n", scsi_get_out_buffer(cmd),
 		scsi_get_in_buffer(cmd), scsi_get_out_length(cmd),
 		scsi_get_in_length(cmd), err);
 
@@ -1086,7 +1086,7 @@ void __cmd_done_passthrough(struct target *target, struct scsi_cmd *cmd)
 
 	err = target->bst->bs_cmd_done(cmd);
 
-	dprintf("%d %p %p %u %u %d\n", cmd_mmapio(cmd), scsi_get_out_buffer(cmd),
+	dprintf("%p %p %u %u %d\n", scsi_get_out_buffer(cmd),
 		scsi_get_in_buffer(cmd), scsi_get_out_length(cmd),
 		scsi_get_in_length(cmd), err);
 }

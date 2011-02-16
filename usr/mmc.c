@@ -125,8 +125,6 @@ static int mmc_rw(int host_no, struct scsi_cmd *cmd)
 			/* once we close the track it becomes a DVD_ROM */
 			mmc->current_profile = PROFILE_DVD_ROM;
 		}
-
-		set_cmd_mmapio(cmd);
 		return SAM_STAT_GOOD;
 	}
 	return 0;

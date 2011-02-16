@@ -72,10 +72,8 @@ static int ssc_rw(int host_no, struct scsi_cmd *cmd)
 	if (ret) {
 		key = HARDWARE_ERROR;
 		asc = ASC_INTERNAL_TGT_FAILURE;
-	} else {
-		set_cmd_mmapio(cmd);
+	} else
 		return SAM_STAT_GOOD;
-	}
 
 	cmd->offset = 0;
 	scsi_set_in_resid_by_actual(cmd, 0);

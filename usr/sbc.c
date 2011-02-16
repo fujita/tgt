@@ -130,10 +130,8 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 	if (ret) {
 		key = HARDWARE_ERROR;
 		asc = ASC_INTERNAL_TGT_FAILURE;
-	} else {
-		set_cmd_mmapio(cmd);
+	} else
 		return SAM_STAT_GOOD;
-	}
 
 sense:
 	cmd->offset = 0;
