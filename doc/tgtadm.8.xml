@@ -531,6 +531,57 @@ tgtadm --op update --mode target --tid 1 -n DataDigest -v None
   </refsect1>
 
 
+  <refsect1><title>CHAP Authentication</title>
+    <para>
+      CHAP authentication is supported to require authentication before
+      an initiator is allowed to log in and access devices.
+      TGTD supports setting CHAP for normal log in sessions only, not
+      for discovery sessions. Discovery sessions are always possible
+      without authentication.
+    </para>
+    <para>
+      CHAP authentication is set on the target level.
+      To set up CHAP authentication we first need to create an account
+      and its associated password, then we bind the account to one or more
+      targets.
+    </para>
+
+    <refsect2><title>Setting CHAP on a target</title>
+      <para>
+	These two commands create a user account and binds it to target 1.
+      </para>
+      <screen format="linespecific">
+tgtadm --lld iscsi --op new --mode account --user ronnie --password password
+tgtadm --lld iscsi --op bind --mode account --tid 1 --user ronnie
+      </screen>
+    </refsect2>
+
+    <refsect2><title>List all accounts</title>
+      <para>
+	This command is used to list all accounts that have been created.
+      </para>
+      <screen format="linespecific">
+tgtadm --lld iscsi --op show --mode account
+Account list:
+    ronnie
+      </screen>
+    </refsect2>
+
+    <refsect2><title>Show if a target requires authentication</title>
+      <para>
+	When listing the targets, each target that has authantication enabled
+	will contain a listing of all accoutns bound to that target.
+      </para>
+      <screen format="linespecific">
+tgtadm --lld iscsi --op show --mode target
+Target 1: iqn.ronnie.test
+...
+Account information:
+    ronnie
+...
+      </screen>
+    </refsect2>
+  </refsect1>
 
 
   <refsect1><title>iSNS PARAMETERS</title>
