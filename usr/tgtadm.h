@@ -1,7 +1,7 @@
 #ifndef TGTADM_H
 #define TGTADM_H
 
-#define TGT_IPC_NAMESPACE	"/tmp/.TGT_IPC_ABSTRACT_NAMESPACE"
+#define TGT_IPC_NAMESPACE	"/var/run/tgtd.ipc_abstract_namespace"
 #define TGT_LLD_NAME_LEN	64
 
 #define GLOBAL_TID (~0U)

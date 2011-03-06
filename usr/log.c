@@ -33,7 +33,7 @@
 
 #include "log.h"
 
-#define SEMKEY	0xA7L
+#define SEMKEY	0x54475444L /* TGTD */
 #define LOGDBG 0
 
 #if LOGDBG
