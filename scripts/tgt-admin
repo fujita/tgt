@@ -162,7 +162,7 @@ sub parse_configs {
 		# Check if alternative configuration file exists
 		if (-e "$alternate_conf") {
 			execute("# Using $alternate_conf as configuration file\n");
-			%conf = ParseConfig(-ConfigFile => "$alternate_conf", -UseApacheInclude => 1, -IncludeGlob => 1,);
+			%conf = ParseConfig(-ConfigFile => "$alternate_conf", -UseApacheInclude => 1, -IncludeGlob => 1, -MergeDuplicateBlocks => 1);
 		}
 		else {
 			die("Config file $alternate_conf not found. Exiting...\n");
@@ -170,7 +170,7 @@ sub parse_configs {
 	} else {
 		# Parse the config file with Config::General
 		if (-e "$configfile") {
-			%conf = ParseConfig(-ConfigFile => "$configfile", -UseApacheInclude => 1, -IncludeGlob => 1,);
+			%conf = ParseConfig(-ConfigFile => "$configfile", -UseApacheInclude => 1, -IncludeGlob => 1, -MergeDuplicateBlocks => 1);
 		} else {
 			die("Config file $configfile not found. Exiting...\n");
 		}
