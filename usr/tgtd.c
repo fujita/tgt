@@ -309,7 +309,24 @@ int call_program(const char *cmd, void (*callback)(void *data, int result),
 		eprintf("execv failed for: %s, %m\n", cmd);
 		exit(-1);
 	} else {
+		struct timeval tv;
+		fd_set rfds;
+		int ret_sel;
+
 		close(fds[1]);
+		/* 0.1 second is okay, as the initiator will retry anyway */
+		do {
+			FD_ZERO(&rfds);
+			FD_SET(fds[0], &rfds);
+			tv.tv_sec = 0;
+			tv.tv_usec = 100000;
+			ret_sel = select(fds[0]+1, &rfds, NULL, NULL, &tv);
+		} while (ret_sel < 0 && errno == EINTR);
+		if (ret_sel <= 0) { /* error or timeout */
+			eprintf("timeout on redirect callback, terminating "
+				"child pid %d\n", pid);
+			kill(pid, SIGTERM);
+		}
 		do {
 			ret = waitpid(pid, &i, 0);
 		} while (ret < 0 && errno == EINTR);
@@ -318,11 +335,13 @@ int call_program(const char *cmd, void (*callback)(void *data, int result),
 			close(fds[0]);
 			return ret;
 		}
-		ret = read(fds[0], output, op_len);
-		if (ret < 0) {
-			eprintf("failed to get the output from: %s\n", cmd);
-			close(fds[0]);
-			return ret;
+		if (ret_sel > 0) {
+			ret = read(fds[0], output, op_len);
+			if (ret < 0) {
+				eprintf("failed to get output from: %s\n", cmd);
+				close(fds[0]);
+				return ret;
+			}
 		}
 
 		if (callback)
