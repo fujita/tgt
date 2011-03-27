@@ -33,7 +33,6 @@
 
 #include "log.h"
 
-#define SEMKEY	0x54475444L /* TGTD */
 #define LOGDBG 0
 
 #if LOGDBG
@@ -50,6 +49,8 @@ static pid_t pid;
 static int logarea_init (int size)
 {
 	int shmid;
+	extern char mgmt_path[];
+	key_t semkey;
 
 	logdbg(stderr,"enter logarea_init\n");
 
@@ -109,13 +110,23 @@ static int logarea_init (int size)
 
 	shmctl(shmid, IPC_RMID, NULL);
 
-	if ((la->semid = semget(SEMKEY, 1, 0666 | IPC_CREAT)) < 0) {
+	if ((semkey = ftok(mgmt_path, 'a')) < 0) {
+		syslog(LOG_ERR, "semkey failed %d", errno);
+		return 1;
+	}
+
+        if ((semget(semkey, 0, IPC_EXCL)) > 0) {
+		/* Semkey may exists after SIGKILL tgtd */
+		syslog(LOG_WARNING, "semkey 0x%x already exists", semkey);
+	}
+	if ((la->semid = semget(semkey, 1, 0666 | IPC_CREAT)) < 0) {
 		syslog(LOG_ERR, "semget failed %d", errno);
 		shmdt(la->buff);
 		shmdt(la->start);
 		shmdt(la);
 		return 1;
 	}
+	syslog(LOG_INFO, "semkey 0x%x", semkey);
 
 	la->semarg.val=1;
 	if (semctl(la->semid, 0, SETVAL, la->semarg) < 0) {

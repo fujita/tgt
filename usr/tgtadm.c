@@ -190,7 +190,7 @@ static int ipc_mgmt_connect(int *fd)
 {
 	int err;
 	struct sockaddr_un addr;
-	char path[256];
+	char mgmt_path[256];
 
 	*fd = socket(AF_LOCAL, SOCK_STREAM, 0);
 	if (*fd < 0) {
@@ -200,8 +200,8 @@ static int ipc_mgmt_connect(int *fd)
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_LOCAL;
-	sprintf(path, "%s.%d", TGT_IPC_NAMESPACE, control_port);
-	strncpy(addr.sun_path, path, sizeof(addr.sun_path));
+	sprintf(mgmt_path, "%s.%d", TGT_IPC_NAMESPACE, control_port);
+	strncpy(addr.sun_path, mgmt_path, sizeof(addr.sun_path));
 
 	err = connect(*fd, (struct sockaddr *) &addr, sizeof(addr));
 	if (err < 0)

@@ -59,6 +59,7 @@ struct mgmt_task {
 };
 
 static int ipc_fd;
+char mgmt_path[256];
 
 static void set_show_results(struct tgtadm_rsp *rsp, int *err)
 {
@@ -567,7 +568,6 @@ int ipc_init(void)
 	extern short control_port;
 	int fd, err;
 	struct sockaddr_un addr;
-	char path[256];
 
 	fd = socket(AF_LOCAL, SOCK_STREAM, 0);
 	if (fd < 0) {
@@ -575,11 +575,11 @@ int ipc_init(void)
 		return -1;
 	}
 
-	sprintf(path, "%s.%d", TGT_IPC_NAMESPACE, control_port);
-	unlink(path);
+	sprintf(mgmt_path, "%s.%d", TGT_IPC_NAMESPACE, control_port);
+	unlink(mgmt_path);
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_LOCAL;
-	strncpy(addr.sun_path, path, sizeof(addr.sun_path));
+	strncpy(addr.sun_path, mgmt_path, sizeof(addr.sun_path));
 
 	err = bind(fd, (struct sockaddr *) &addr, sizeof(addr));
 	if (err) {
