@@ -4,8 +4,8 @@
 #include "log.h"
 #include "scsi_cmnd.h"
 
-#define SCSI_ID_LEN		24
-#define SCSI_SN_LEN		32
+#define SCSI_ID_LEN		36
+#define SCSI_SN_LEN		36
 
 #define VENDOR_ID_LEN		8
 #define PRODUCT_ID_LEN		16
