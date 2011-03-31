@@ -190,9 +190,9 @@ static int mmc_read_toc(int host_no, struct scsi_cmd *cmd)
 
 	switch (toc_format) {
 	case 0:	/* formatted toc */
-		if (toc_track) {
+		if (toc_track != 1) {
 			/* we only do single session data disks so only
-			   track 0 is valid */
+			   the first track (track 1) is valid */
 			scsi_set_in_resid_by_actual(cmd, 0);
 			sense_data_build(cmd, NOT_READY,
 					 ASC_INVALID_FIELD_IN_CDB);
@@ -206,7 +206,7 @@ static int mmc_read_toc(int host_no, struct scsi_cmd *cmd)
 
 		/* size of return data */
 		data[0] = 0;
-		data[1] = 0x1a;
+		data[1] = 0x12;
 
 		data[2] = 1;	/* first track */
 		data[3] = 1;	/* last track */
