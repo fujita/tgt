@@ -102,6 +102,8 @@ static int sbc_mode_sense(int host_no, struct scsi_cmd *cmd)
 static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 {
 	int ret;
+	uint64_t lba;
+	uint32_t tl;
 	unsigned char key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_LUN_NOT_SUPPORTED;
 	struct scsi_lu *lu = cmd->dev;
@@ -123,9 +125,27 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 		}
 	}
 
-	cmd->scsi_cmd_done = target_cmd_io_done;
+	lba = scsi_rw_offset(cmd->scb) << cmd->dev->blk_shift;
+	tl  = scsi_rw_count(cmd->scb) << cmd->dev->blk_shift;
 
-	cmd->offset = (scsi_rw_offset(cmd->scb) << cmd->dev->blk_shift);
+	/* Verify that if we are reading data that we are not reading beyond
+	   the end-of-lun */
+	switch (cmd->scb[0]) {
+	case READ_6:
+	case READ_10:
+	case READ_12:
+	case READ_16:
+		if (tl && (lba + tl > lu->size)) {
+			key = ILLEGAL_REQUEST;
+			asc = ASC_LBA_OUT_OF_RANGE;
+			goto sense;
+		}
+		break;
+	}
+
+	cmd->scsi_cmd_done = target_cmd_io_done;
+	cmd->offset = lba;
+
 	ret = cmd->dev->bst->bs_cmd_submit(cmd);
 	if (ret) {
 		key = HARDWARE_ERROR;
