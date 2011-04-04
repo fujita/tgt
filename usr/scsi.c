@@ -152,6 +152,8 @@ uint32_t scsi_rw_count(uint8_t *scb)
 	case READ_6:
 	case WRITE_6:
 		cnt = scb[4];
+		if (!cnt)
+			cnt = 256;
 		break;
 	case READ_10:
 	case WRITE_10:
