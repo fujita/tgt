@@ -128,19 +128,12 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 	lba = scsi_rw_offset(cmd->scb) << cmd->dev->blk_shift;
 	tl  = scsi_rw_count(cmd->scb) << cmd->dev->blk_shift;
 
-	/* Verify that if we are reading data that we are not reading beyond
+	/* Verify that we are not doing i/o beyond
 	   the end-of-lun */
-	switch (cmd->scb[0]) {
-	case READ_6:
-	case READ_10:
-	case READ_12:
-	case READ_16:
-		if (tl && (lba + tl > lu->size)) {
-			key = ILLEGAL_REQUEST;
-			asc = ASC_LBA_OUT_OF_RANGE;
-			goto sense;
-		}
-		break;
+	if (tl && (lba + tl > lu->size)) {
+		key = ILLEGAL_REQUEST;
+		asc = ASC_LBA_OUT_OF_RANGE;
+		goto sense;
 	}
 
 	cmd->scsi_cmd_done = target_cmd_io_done;
