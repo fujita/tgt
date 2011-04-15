@@ -169,20 +169,20 @@ static void iscsi_tcp_event_handler(int fd, int events, void *data)
 	}
 }
 
-static int iscsi_tcp_init(void)
+static int iscsi_tcp_init_portal(struct iscsi_portal *portal)
 {
 	struct addrinfo hints, *res, *res0;
 	char servname[64];
 	int ret, fd, opt, nr_sock = 0;
 
 	memset(servname, 0, sizeof(servname));
-	snprintf(servname, sizeof(servname), "%d", iscsi_listen_port);
+	snprintf(servname, sizeof(servname), "%d", portal->port);
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
 
-	ret = getaddrinfo(iscsi_portal_addr, servname, &hints, &res0);
+	ret = getaddrinfo(portal->addr, servname, &hints, &res0);
 	if (ret) {
 		eprintf("unable to get address info, %m\n");
 		return -errno;
@@ -237,12 +237,37 @@ static int iscsi_tcp_init(void)
 		else {
 			listen_fds[nr_sock] = fd;
 			nr_sock++;
+			portal->fd = fd;
 		}
 	}
 
 	freeaddrinfo(res0);
 
 	return !nr_sock;
+}
+
+static int iscsi_tcp_init(void)
+{
+	struct iscsi_portal *portal;
+
+	/* if the user did not set a portal we default to wildcard
+	   for ipv4 and ipv6
+	*/
+	if (list_empty(&iscsi_portals_list)) {
+		iscsi_add_portal("0::0", 0);
+		iscsi_add_portal("0.0.0.0", 0);
+	}
+
+	list_for_each_entry(portal, &iscsi_portals_list,
+			    iscsi_portal_siblings) {
+		int ret;
+
+		ret = iscsi_tcp_init_portal(portal);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
 }
 
 static void iscsi_tcp_exit(void)

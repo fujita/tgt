@@ -43,8 +43,7 @@
 
 #define MAX_QUEUE_CMD	128
 
-int iscsi_listen_port = ISCSI_LISTEN_PORT;
-char *iscsi_portal_addr;
+LIST_HEAD(iscsi_portals_list);
 
 enum {
 	IOSTATE_FREE,
@@ -72,6 +71,18 @@ enum {
 	IOSTATE_TX_INIT_DDIGEST,
 	IOSTATE_TX_DDIGEST,
 	IOSTATE_TX_END,
+};
+
+void iscsi_add_portal(char *addr, int port)
+{
+	struct iscsi_portal *new_portal;
+
+	new_portal = zalloc(sizeof(struct iscsi_portal));
+	new_portal->addr = strdup(addr);
+	new_portal->port = port ? port : ISCSI_LISTEN_PORT;
+	new_portal->fd   = -1;
+
+	list_add(&new_portal->iscsi_portal_siblings, &iscsi_portals_list);
 };
 
 void conn_read_pdu(struct iscsi_connection *conn)
@@ -827,7 +838,7 @@ static void text_scan_text(struct iscsi_connection *conn)
 			struct sockaddr_storage ss;
 			socklen_t slen, blen;
 			char *p, buf[NI_MAXHOST + 128];
-			int ret;
+			int ret, port;
 
 			if (value[0] == 0)
 				continue;
@@ -861,7 +872,14 @@ static void text_scan_text(struct iscsi_connection *conn)
 			if (ss.ss_family == AF_INET6)
 				 *p++ = ']';
 
-			sprintf(p, ":%d,1", iscsi_listen_port);
+			if (ss.ss_family == AF_INET6)
+				port = ntohs(((struct sockaddr_in6 *)
+						&ss)->sin6_port);
+			else
+				port = ntohs(((struct sockaddr_in *)
+						&ss)->sin_port);
+
+			sprintf(p, ":%d,1", port);
 			target_list_build(conn, buf,
 					  strcmp(value, "All") ? value : NULL);
 		} else
@@ -2374,13 +2392,13 @@ static int iscsi_param_parser(char *p)
 	while (*p) {
 		if (!strncmp(p, "portal", 6)) {
 			char *addr, *q;
-			int len;
+			int len, port = 0;
 
 			addr = p + 7;
 
 			q = strchr(addr, ':');
 			if (q)
-				iscsi_listen_port = atoi(q + 1);
+				port = atoi(q + 1);
 			else
 				q = strchr(addr, ',');
 
@@ -2389,13 +2407,12 @@ static int iscsi_param_parser(char *p)
 			else
 				len = strlen(addr);
 
-			if (iscsi_portal_addr) {
-				free(iscsi_portal_addr);
-				iscsi_portal_addr = NULL;
-			}
 			if (len) {
-				iscsi_portal_addr = zalloc(len + 1);
-				memcpy(iscsi_portal_addr, addr, len);
+				char *tmp;
+				tmp = zalloc(len + 1);
+				memcpy(tmp, addr, len);
+				iscsi_add_portal(tmp, port);
+				free(tmp);
 			}
 		}
 

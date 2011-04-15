@@ -71,6 +71,7 @@ static char *rxbuf;
 static uint16_t transaction;
 static char eid[ISCSI_NAME_LEN];
 static uint8_t ip[16]; /* IET supoprts only one portal */
+static uint16_t port;
 static struct sockaddr_storage ss;
 
 /*
@@ -147,10 +148,14 @@ static int isns_get_ip(int fd)
 		ip[14] = 0xff & (addr >> 16);
 		ip[13] = 0xff & (addr >> 8);
 		ip[12] = 0xff & addr;
+
+		port = (((struct sockaddr_in *) &lss)->sin_port);
 		break;
 	case AF_INET6:
 		for (i = 0; i < ARRAY_SIZE(ip); i++)
 			ip[i] = ((struct sockaddr_in6 *) &lss)->sin6_addr.s6_addr[i];
+
+		port = (((struct sockaddr_in6 *) &lss)->sin6_port);
 		break;
 	}
 
@@ -417,7 +422,7 @@ int isns_target_register(char *name)
 	struct isns_hdr *hdr = (struct isns_hdr *) buf;
 	struct isns_tlv *tlv;
 	struct iscsi_target *target;
-	uint32_t port = htonl(iscsi_listen_port);
+	uint32_t p    = htonl(port);
 	uint32_t node = htonl(ISNS_NODE_TARGET);
 	uint32_t type = htonl(2);
 	int err;
@@ -447,7 +452,7 @@ int isns_target_register(char *name)
 		length += isns_tlv_set(&tlv, ISNS_ATTR_PORTAL_IP_ADDRESS,
 				       sizeof(ip), &ip);
 		length += isns_tlv_set(&tlv, ISNS_ATTR_PORTAL_PORT,
-				       sizeof(port), &port);
+				       sizeof(p), &p);
 		flags = ISNS_FLAG_REPLACE;
 
 		if (scn_listen_port) {
@@ -958,14 +963,14 @@ static void isns_timeout_fn(void *data)
 int isns_init(void)
 {
 	int err;
-	char port[8];
+	char p[8];
 	struct addrinfo hints, *res;
 	struct iscsi_target *target;
 
-	snprintf(port, sizeof(port), "%d", isns_port);
+	snprintf(p, sizeof(p), "%d", isns_port);
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_socktype = SOCK_STREAM;
-	err = getaddrinfo(isns_addr, (char *) &port, &hints, &res);
+	err = getaddrinfo(isns_addr, (char *) &p, &hints, &res);
 	if (err) {
 		eprintf("getaddrinfo error %s\n", isns_addr);
 		return -1;

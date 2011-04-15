@@ -266,8 +266,14 @@ enum task_flags {
 	TASK_in_scsi,
 };
 
-extern int iscsi_listen_port;
-extern char *iscsi_portal_addr;
+struct iscsi_portal {
+	struct list_head iscsi_portal_siblings;
+	char *addr;
+	int port;
+	int fd;
+};
+
+extern struct list_head iscsi_portals_list;
 
 #define set_task_pending(t)	((t)->flags |= (1 << TASK_pending))
 #define clear_task_pending(t)	((t)->flags &= ~(1 << TASK_pending))
@@ -302,6 +308,7 @@ extern int iscsi_tx_handler(struct iscsi_connection *conn);
 extern void iscsi_rx_handler(struct iscsi_connection *conn);
 extern int iscsi_scsi_cmd_execute(struct iscsi_task *task);
 extern int iscsi_transportid(int tid, uint64_t itn_id, char *buf, int size);
+extern void iscsi_add_portal(char *addr, int port);
 
 /* iscsid.c iscsi_task */
 extern void iscsi_free_task(struct iscsi_task *task);
