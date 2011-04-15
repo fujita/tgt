@@ -112,6 +112,18 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 	if (ret)
 		return SAM_STAT_RESERVATION_CONFLICT;
 
+	switch (cmd->scb[0]) {
+	case READ_10:
+	case READ_12:
+	case READ_16:
+		if (cmd->scb[1] & 0xe0) {
+			key = ILLEGAL_REQUEST;
+			asc = ASC_INVALID_OP_CODE;
+			goto sense;
+		}
+		break;
+	}
+
 	if (lu->attrs.readonly) {
 		switch (cmd->scb[0]) {
 		case WRITE_6:
