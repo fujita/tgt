@@ -302,7 +302,11 @@ int call_program(const char *cmd, void (*callback)(void *data, int result),
 
 	if (!pid) {
 		close(1);
-		dup(fds[1]);
+		ret = dup(fds[1]);
+		if (ret < 0) {
+			eprintf("dup failed for: %s, %m\n", cmd);
+			exit(-1);
+		}
 		close(fds[0]);
 		execv(argv[0], argv);
 
