@@ -246,6 +246,58 @@ static int iscsi_tcp_init_portal(struct iscsi_portal *portal)
 	return !nr_sock;
 }
 
+int iscsi_add_portal(char *addr, int port, int tpgt, int do_create)
+{
+	struct iscsi_portal *new_portal;
+
+	list_for_each_entry(new_portal, &iscsi_portals_list,
+			    iscsi_portal_siblings) {
+		if (!strcmp(addr, new_portal->addr)
+			&& port == new_portal->port) {
+			eprintf("add_portal failed. This portal already "
+				"exists %s:%d\n", addr, port);
+			return -1;
+		}
+	}
+
+	new_portal = zalloc(sizeof(struct iscsi_portal));
+	new_portal->addr = strdup(addr);
+	new_portal->port = port ? port : ISCSI_LISTEN_PORT;
+	new_portal->tpgt = tpgt;
+	new_portal->fd   = -1;
+
+	if (do_create && iscsi_tcp_init_portal(new_portal)) {
+		eprintf("failed to create/bind to portal %s:%d\n", addr, port);
+		free(new_portal->addr);
+		free(new_portal);
+		return -1;
+	}
+
+	list_add(&new_portal->iscsi_portal_siblings, &iscsi_portals_list);
+	return 0;
+};
+
+int iscsi_delete_portal(char *addr, int port)
+{
+	struct iscsi_portal *portal;
+
+	list_for_each_entry(portal, &iscsi_portals_list,
+			    iscsi_portal_siblings) {
+		if (!strcmp(addr, portal->addr) && port == portal->port) {
+			if (portal->fd != -1)
+				tgt_event_del(portal->fd);
+			close(portal->fd);
+			list_del(&portal->iscsi_portal_siblings);
+			free(portal->addr);
+			free(portal);
+			return 0;
+		}
+	}
+	eprintf("delete_portal failed. No such portal found %s:%d\n",
+			addr, port);
+	return -1;
+}
+
 static int iscsi_tcp_init(void)
 {
 	struct iscsi_portal *portal;
@@ -254,8 +306,8 @@ static int iscsi_tcp_init(void)
 	   for ipv4 and ipv6
 	*/
 	if (list_empty(&iscsi_portals_list)) {
-		iscsi_add_portal("0::0", 0);
-		iscsi_add_portal("0.0.0.0", 0);
+		iscsi_add_portal("0::0", 0, 1, 0);
+		iscsi_add_portal("0.0.0.0", 0, 1, 0);
 	}
 
 	list_for_each_entry(portal, &iscsi_portals_list,

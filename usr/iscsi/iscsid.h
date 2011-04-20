@@ -270,6 +270,7 @@ struct iscsi_portal {
 	struct list_head iscsi_portal_siblings;
 	char *addr;
 	int port;
+	int tpgt;
 	int fd;
 };
 
@@ -308,7 +309,8 @@ extern int iscsi_tx_handler(struct iscsi_connection *conn);
 extern void iscsi_rx_handler(struct iscsi_connection *conn);
 extern int iscsi_scsi_cmd_execute(struct iscsi_task *task);
 extern int iscsi_transportid(int tid, uint64_t itn_id, char *buf, int size);
-extern void iscsi_add_portal(char *addr, int port);
+extern int iscsi_add_portal(char *addr, int port, int tpgt, int do_create);
+extern int iscsi_delete_portal(char *addr, int port);
 
 /* iscsid.c iscsi_task */
 extern void iscsi_free_task(struct iscsi_task *task);

@@ -247,6 +247,9 @@ int system_show(int mode, char *buf, int rest);
 int is_system_available(void);
 int is_system_inactive(void);
 
+extern int tgt_portal_create(int lld, char *args);
+extern int tgt_portal_destroy(int lld, char *args);
+
 extern int tgt_bind_host_to_target(int tid, int host_no);
 extern int tgt_unbind_host_to_target(int tid, int host_no);
 extern int tgt_bound_target_lookup(int host_no);

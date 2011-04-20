@@ -373,6 +373,8 @@ static int str_to_mode(char *str)
 		return MODE_TARGET;
 	else if (!strcmp("logicalunit", str) || !strcmp("lu", str))
 		return MODE_DEVICE;
+	else if (!strcmp("portal", str) || !strcmp("pt", str))
+		return MODE_PORTAL;
 	else if (!strcmp("session", str) || !strcmp("sess", str))
 		return MODE_SESSION;
 	else if (!strcmp("connection", str) || !strcmp("conn", str))
@@ -432,7 +434,7 @@ int main(int argc, char **argv)
 	uint32_t cid, hostno;
 	uint64_t sid, lun;
 	char *name, *value, *path, *targetname, *params, *address, *targetOps;
-	char *bstype;
+	char *portalOps, *bstype;
 	char *bsoflags;
 	char *user, *password;
 	char *buf;
@@ -447,7 +449,8 @@ int main(int argc, char **argv)
 	dev_type = TYPE_DISK;
 	ac_dir = ACCOUNT_TYPE_INCOMING;
 	rest = BUFSIZE;
-	name = value = path = targetname = address = targetOps = bstype = NULL;
+	name = value = path = targetname = address = NULL;
+	targetOps = portalOps = bstype = NULL;
 	bsoflags = user = password = NULL;
 
 	buf = valloc(bufsz);
@@ -490,7 +493,10 @@ int main(int argc, char **argv)
 			lun = strtoull(optarg, NULL, 10);
 			break;
 		case 'P':
-			targetOps = optarg;
+			if (mode == MODE_PORTAL)
+				portalOps = optarg;
+			else
+				targetOps = optarg;
 			break;
 		case 'n':
 			name = optarg;
@@ -762,6 +768,50 @@ int main(int argc, char **argv)
 		}
 	}
 
+	if (mode == MODE_PORTAL) {
+		switch (op) {
+		case OP_NEW:
+			rc = verify_mode_params(argc, argv, "LmoCP");
+			if (rc) {
+				eprintf("portal mode: option '-%c' is not "
+					  "allowed/supported\n", rc);
+				exit(EINVAL);
+			}
+			if (!portalOps) {
+				eprintf("you must specify --param "
+					  "portal=<portal>\n");
+				exit(EINVAL);
+			}
+			break;
+		case OP_DELETE:
+			rc = verify_mode_params(argc, argv, "LmoCP");
+			if (rc) {
+				eprintf("portal mode: option '-%c' is not "
+					  "allowed/supported\n", rc);
+				exit(EINVAL);
+			}
+			if (!portalOps) {
+				eprintf("you must specify --param "
+					  "portal=<portal>\n");
+				exit(EINVAL);
+			}
+			break;
+		case OP_SHOW:
+			rc = verify_mode_params(argc, argv, "LmoC");
+			if (rc) {
+				eprintf("option '-%c' not supported in "
+					"portal mode\n", rc);
+				exit(EINVAL);
+			}
+			break;
+		default:
+			eprintf("option %d not supported in "
+					"portal mode\n", op);
+			exit(EINVAL);
+			break;
+		}
+	}
+
 	req->op = op;
 	req->tid = tid;
 	req->sid = sid;
@@ -805,6 +855,9 @@ int main(int argc, char **argv)
 	if (targetOps)
 		shprintf(total, params, rest, "%stargetOps %s,",
 			 rest == BUFSIZE ? "" : ",", targetOps);
+	if (portalOps)
+		shprintf(total, params, rest, "%sportalOps %s,",
+			 rest == BUFSIZE ? "" : ",", portalOps);
 
 	req->len = sizeof(*req) + total;
 

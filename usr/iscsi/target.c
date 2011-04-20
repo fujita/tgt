@@ -609,6 +609,31 @@ static int iscsi_target_show_stats(struct iscsi_target *target, uint64_t sid,
 
 }
 
+static int iscsi_target_show_portals(struct iscsi_target *target, uint64_t sid,
+				   char *buf, int rest)
+{
+	int len = 0, total = 0;
+	struct iscsi_portal *portal;
+
+	list_for_each_entry(portal, &iscsi_portals_list,
+			iscsi_portal_siblings) {
+		int is_ipv6;
+
+		is_ipv6 = strchr(portal->addr, ':') != NULL;
+		len = snprintf(buf, rest,
+			       "Portal: %s%s%s:%d,%d\n",
+			       is_ipv6 ? "[" : "",
+			       portal->addr,
+			       is_ipv6 ? "]" : "",
+			       portal->port ? portal->port : ISCSI_LISTEN_PORT,
+			       portal->tpgt);
+		__buffer_check(buf, total, len, rest);
+	}
+
+	return total;
+
+}
+
 static int show_redirect_info(struct iscsi_target* target, char *buf, int rest)
 {
 	int len, total = 0;
@@ -647,7 +672,7 @@ int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid, uint64_t lu
 	struct iscsi_target* target = NULL;
 	int len, total = 0;
 
-	if (mode != MODE_SYSTEM) {
+	if (mode != MODE_SYSTEM && mode != MODE_PORTAL) {
 	    target = target_find_by_id(tid);
 	    if (!target)
 		    return -TGTADM_NO_TARGET;
@@ -668,6 +693,10 @@ int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid, uint64_t lu
 		break;
 	case MODE_SESSION:
 		len = iscsi_target_show_session(target, sid, buf, rest);
+		total += len;
+		break;
+	case MODE_PORTAL:
+		len = iscsi_target_show_portals(target, sid, buf, rest);
 		total += len;
 		break;
 	case MODE_STATS:

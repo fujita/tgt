@@ -11,6 +11,9 @@ struct tgt_driver {
 	int (*target_create)(struct target *);
 	void (*target_destroy)(int);
 
+	int (*portal_create)(char *);
+	int (*portal_destroy)(char *);
+
 	int (*lu_create)(struct scsi_lu *);
 
 	int (*update)(int, int, int ,uint64_t, uint64_t, uint32_t, char *);

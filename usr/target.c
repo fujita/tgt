@@ -1964,6 +1964,56 @@ int tgt_target_destroy(int lld_no, int tid)
 	return 0;
 }
 
+int tgt_portal_create(int lld, char *args)
+{
+	char *portals = NULL;
+
+	portals = strstr(args, "portal=");
+	if (!portals) {
+		eprintf("invalid option when creating portals: %s\n", args);
+		return TGTADM_INVALID_REQUEST;
+	}
+
+	if (tgt_drivers[lld]->portal_create) {
+		if (tgt_drivers[lld]->portal_create(portals)) {
+			eprintf("failed to create portal %s\n", portals);
+			return TGTADM_INVALID_REQUEST;
+		}
+	} else {
+		eprintf("can not create portals for for this lld type\n");
+		return TGTADM_INVALID_REQUEST;
+	}
+
+	dprintf("succeed to create new portals %s\n", portals);
+
+	return 0;
+}
+
+int tgt_portal_destroy(int lld, char *args)
+{
+	char *portals = NULL;
+
+	portals = strstr(args, "portal=");
+	if (!portals) {
+		eprintf("invalid option when destroying portals: %s\n", args);
+		return TGTADM_INVALID_REQUEST;
+	}
+
+	if (tgt_drivers[lld]->portal_destroy) {
+		if (tgt_drivers[lld]->portal_destroy(portals)) {
+			eprintf("failed to destroy portal %s\n", portals);
+			return TGTADM_INVALID_REQUEST;
+		}
+	} else {
+		eprintf("can not destroy portals for for this lld type\n");
+		return TGTADM_INVALID_REQUEST;
+	}
+
+	dprintf("succeed to destroy portals %s\n", portals);
+
+	return 0;
+}
+
 int account_show(char *buf, int rest)
 {
 	int total = 0, max = rest;

@@ -73,18 +73,6 @@ enum {
 	IOSTATE_TX_END,
 };
 
-void iscsi_add_portal(char *addr, int port)
-{
-	struct iscsi_portal *new_portal;
-
-	new_portal = zalloc(sizeof(struct iscsi_portal));
-	new_portal->addr = strdup(addr);
-	new_portal->port = port ? port : ISCSI_LISTEN_PORT;
-	new_portal->fd   = -1;
-
-	list_add(&new_portal->iscsi_portal_siblings, &iscsi_portals_list);
-};
-
 void conn_read_pdu(struct iscsi_connection *conn)
 {
 	conn->rx_iostate = IOSTATE_RX_BHS;
@@ -2371,48 +2359,58 @@ int iscsi_transportid(int tid, uint64_t itn_id, char *buf, int size)
 	return len;
 }
 
-static struct tgt_driver iscsi = {
-	.name			= "iscsi",
-	.use_kernel		= 0,
-	.init			= iscsi_init,
-	.exit			= iscsi_exit,
-	.target_create		= iscsi_target_create,
-	.target_destroy		= iscsi_target_destroy,
-
-	.update			= iscsi_target_update,
-	.show			= iscsi_target_show,
-	.cmd_end_notify		= iscsi_scsi_cmd_done,
-	.mgmt_end_notify	= iscsi_tm_done,
-	.transportid		= iscsi_transportid,
-	.default_bst		= "rdwr",
-};
-
-static int iscsi_param_parser(char *p)
+static int iscsi_param_parse_portals(char *p, int do_add,
+			int do_create, int do_delete)
 {
 	while (*p) {
 		if (!strncmp(p, "portal", 6)) {
 			char *addr, *q;
-			int len, port = 0;
+			int len = 0, port = 0;
 
 			addr = p + 7;
 
-			q = strchr(addr, ':');
+			if (addr[0] == '[') {
+				addr++;
+				q = strchr(addr, ']');
+				if (!q) {
+					eprintf("malformed string when parsing "
+						"portal (%s). mismatched ipv6 "
+						"'[' ']'\n", p);
+					return -1;
+				}
+				q++;
+				len = q - addr -1;
+				if (*q != ':')
+					q = NULL;
+			} else
+				q = strchr(addr, ':');
+
 			if (q)
 				port = atoi(q + 1);
 			else
 				q = strchr(addr, ',');
 
-			if (q)
-				len = q - addr;
-			else
-				len = strlen(addr);
+			if (!len) {
+				if (q)
+					len = q - addr;
+				else
+					len = strlen(addr);
+			}
 
 			if (len) {
 				char *tmp;
 				tmp = zalloc(len + 1);
 				memcpy(tmp, addr, len);
-				iscsi_add_portal(tmp, port);
-				free(tmp);
+				if (do_add && iscsi_add_portal(tmp, port, 1,
+							do_create)) {
+					free(tmp);
+					return -1;
+				}
+				if (do_delete && iscsi_delete_portal(tmp,
+							port)) {
+					free(tmp);
+					return -1;
+				}
 			}
 		}
 
@@ -2423,6 +2421,40 @@ static int iscsi_param_parser(char *p)
 
 	return 0;
 }
+
+static int iscsi_param_parser(char *p)
+{
+	return iscsi_param_parse_portals(p, 1, 0, 0);
+}
+
+static int iscsi_portal_create(char *p)
+{
+	return iscsi_param_parse_portals(p, 1, 1, 0);
+}
+
+static int iscsi_portal_destroy(char *p)
+{
+	return iscsi_param_parse_portals(p, 0, 0, 1);
+}
+
+static struct tgt_driver iscsi = {
+	.name			= "iscsi",
+	.use_kernel		= 0,
+	.init			= iscsi_init,
+	.exit			= iscsi_exit,
+	.target_create		= iscsi_target_create,
+	.target_destroy		= iscsi_target_destroy,
+
+	.portal_create		= iscsi_portal_create,
+	.portal_destroy		= iscsi_portal_destroy,
+
+	.update			= iscsi_target_update,
+	.show			= iscsi_target_show,
+	.cmd_end_notify		= iscsi_scsi_cmd_done,
+	.mgmt_end_notify	= iscsi_tm_done,
+	.transportid		= iscsi_transportid,
+	.default_bst		= "rdwr",
+};
 
 __attribute__((constructor)) static void iscsi_driver_constructor(void)
 {

@@ -188,6 +188,7 @@ Possible backend types are:
     </variablelist>
   </refsect1>
 
+
   <refsect1><title>LUN PARAMETERS</title>
     <para>
       These parameters are only applicable for "--mode logicalunit".
@@ -582,6 +583,40 @@ Account information:
       </screen>
     </refsect2>
   </refsect1>
+
+
+  <refsect1><title>iSCSI PORTALS</title>
+    <para>
+      iSCSI portals can be viewed, added and removed at runtime.
+    </para>
+    <refsect2><title>List portals</title>
+      <para>
+      This command is used to list the current iSCSI portals defined on the target:
+      </para>
+      <screen format="linespecific">
+tgtadm --lld iscsi --op show --mode portal
+Portal: 10.1.1.101:3260,1
+Portal: 127.0.0.1:3260,1
+      </screen>
+    </refsect2>
+    <refsect2><title>Add portal</title>
+      <para>
+      This command is used to add a portal to the target :
+      </para>
+      <screen format="linespecific">
+tgtadm --lld iscsi --op new --mode portal --param portal=10.1.1.101:3260
+      </screen>
+    </refsect2>
+    <refsect2><title>Remove portal</title>
+      <para>
+      This command is used to remove a portal from the target :
+      </para>
+      <screen format="linespecific">
+tgtadm --lld iscsi --op delete --mode portal --param portal=10.1.1.101:3260
+      </screen>
+    </refsect2>
+  </refsect1>
+
 
 
   <refsect1><title>iSNS PARAMETERS</title>

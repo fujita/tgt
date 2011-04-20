@@ -164,6 +164,41 @@ static int target_mgmt(int lld_no, struct mgmt_task *mtask)
 	return err;
 }
 
+static int portal_mgmt(int lld_no, struct mgmt_task *mtask,
+		       struct tgtadm_req *req,
+		       struct tgtadm_rsp *rsp)
+{
+	int err = TGTADM_INVALID_REQUEST;
+
+	switch (req->op) {
+	case OP_SHOW:
+		if (tgt_drivers[lld_no]->show) {
+			err = tgt_drivers[lld_no]->show(req->mode,
+							req->tid, req->sid,
+							req->cid, req->lun,
+							mtask->buf,
+							mtask->bsize);
+
+			set_show_results(rsp, &err);
+			return err;
+		}
+		break;
+	case OP_NEW:
+		err = tgt_portal_create(lld_no, mtask->buf);
+		break;
+	case OP_DELETE:
+		err = tgt_portal_destroy(lld_no, mtask->buf);
+		break;
+	default:
+		break;
+	}
+
+	rsp->err = err;
+	rsp->len = sizeof(*rsp);
+
+	return err;
+}
+
 static int device_mgmt(int lld_no, struct tgtadm_req *req, char *params,
 		       struct tgtadm_rsp *rsp, int *rlen)
 {
@@ -352,6 +387,9 @@ static int tgt_mgmt(struct mgmt_task *mtask)
 		break;
 	case MODE_TARGET:
 		err = target_mgmt(lld_no, mtask);
+		break;
+	case MODE_PORTAL:
+		err = portal_mgmt(lld_no, mtask, req, rsp);
 		break;
 	case MODE_DEVICE:
 		err = device_mgmt(lld_no, req, mtask->buf, rsp, &len);
