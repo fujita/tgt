@@ -1988,7 +1988,7 @@ static struct {
 	{TGT_SYSTEM_READY, "ready"},
 };
 
-static char *system_state_name(enum scsi_target_state state)
+static char *system_state_name(enum tgt_system_state state)
 {
 	int i;
 	char *name = NULL;
