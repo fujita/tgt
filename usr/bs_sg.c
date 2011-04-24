@@ -46,7 +46,8 @@
 #include "tgtadm_error.h"
 
 #define BS_SG_RESVD_SZ  (512 * 1024)
-#define BS_SG_TIMEOUT	2000
+
+static unsigned int sg_timeout = 30 * 1000; /* 30 seconds */
 
 static int graceful_read(int fd, void *p_read, int to_read)
 {
@@ -149,7 +150,7 @@ static int bs_bsg_cmd_submit(struct scsi_cmd *cmd)
 	/* SCSI: (auto)sense data */
 	io_hdr.response = (unsigned long)cmd->sense_buffer;
 	/* Using the same 2000 millisecond timeout.. */
-	io_hdr.timeout = BS_SG_TIMEOUT;
+	io_hdr.timeout = sg_timeout;
 	/* [i->o] unused internally */
 	io_hdr.usr_ptr = (unsigned long)cmd;
 	dprintf("[%d] Set io_hdr->usr_ptr from cmd: %p\n", getpid(), cmd);
@@ -166,6 +167,29 @@ static int bs_bsg_cmd_submit(struct scsi_cmd *cmd)
 	}
 
 	return 0;
+}
+
+static void bs_sg_cmd_setup(struct sg_io_hdr *hdr,
+			   unsigned char *cmd, int cmd_len,
+			   void *data, int data_len, int direction,
+			   void *sense, int sense_len,
+			   int timeout)
+{
+	memset(hdr, 0, sizeof(*hdr));
+	hdr->interface_id = 'S';
+	hdr->cmdp = cmd;
+	hdr->cmd_len = cmd_len;
+
+	hdr->dxfer_direction = direction;
+	hdr->dxfer_len = data_len;
+	hdr->dxferp = data;
+
+	hdr->mx_sb_len = sense_len;
+	hdr->sbp = sense;
+	hdr->timeout = timeout;
+	hdr->pack_id = -1;
+	hdr->usr_ptr = NULL;
+	hdr->flags = 0;
 }
 
 static int bs_sg_cmd_submit(struct scsi_cmd *cmd)
@@ -191,7 +215,7 @@ static int bs_sg_cmd_submit(struct scsi_cmd *cmd)
 	}
 	io_hdr.mx_sb_len = sizeof(cmd->sense_buffer);
 	io_hdr.sbp = cmd->sense_buffer;
-	io_hdr.timeout = BS_SG_TIMEOUT;
+	io_hdr.timeout = sg_timeout;
 	io_hdr.pack_id = -1;
 	io_hdr.usr_ptr = cmd;
 	io_hdr.flags |= SG_FLAG_DIRECT_IO;
@@ -344,6 +368,9 @@ static int init_bsg_device(int fd)
 static int init_sg_device(int fd)
 {
 	int t, err;
+	struct sg_io_hdr hdr;
+	unsigned char cmd[6];
+	unsigned char resp[36];
 
 	err = ioctl(fd, SG_GET_VERSION_NUM, &t);
 	if ((err < 0) || (t < 30000)) {
@@ -357,6 +384,20 @@ static int init_sg_device(int fd)
 		eprintf("SG_SET_RESERVED_SIZE errno: %d\n", errno);
 		return -1;
 	}
+
+	memset(&cmd, 0, sizeof(cmd));
+	memset(&resp, 0, sizeof(resp));
+
+	cmd[0] = INQUIRY;
+	cmd[4] = sizeof(resp);
+
+	bs_sg_cmd_setup(&hdr, cmd, sizeof(cmd), resp, sizeof(resp),
+			SG_DXFER_FROM_DEV, NULL, 0, 30000);
+
+	err = ioctl(fd, SG_IO, &hdr);
+
+	if (!err && (resp[0] & 0x1f) == TYPE_TAPE)
+		sg_timeout = 14000 * 1000;
 
 	return 0;
 }
