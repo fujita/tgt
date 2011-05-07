@@ -338,13 +338,24 @@ static int sys_mgmt(int lld_no, struct mgmt_task *mtask)
 	return err;
 }
 
-static int connection_mgmt(int lld_no, struct mgmt_task *mtask)
+static int connection_mgmt(int lld_no, struct mgmt_task *mtask,
+			   struct tgtadm_req *req,
+			   struct tgtadm_rsp *rsp)
 {
-	struct tgtadm_req *req = &mtask->req;
-	struct tgtadm_rsp *rsp = &mtask->rsp;
 	int err = TGTADM_INVALID_REQUEST;
 
 	switch (req->op) {
+	case OP_SHOW:
+		if (tgt_drivers[lld_no]->show) {
+			err = tgt_drivers[lld_no]->show(req->mode,
+							req->tid, req->sid,
+							req->cid, req->lun,
+							mtask->buf,
+							mtask->bsize);
+			set_show_results(rsp, &err);
+			return err;
+		}
+		break;
 	default:
 		if (tgt_drivers[lld_no]->update)
 			err = tgt_drivers[lld_no]->update(req->mode, req->op,
@@ -398,7 +409,7 @@ static int tgt_mgmt(struct mgmt_task *mtask)
 		err = account_mgmt(lld_no, mtask);
 		break;
 	case MODE_CONNECTION:
-		err = connection_mgmt(lld_no, mtask);
+		err = connection_mgmt(lld_no, mtask, req, rsp);
 		break;
 	default:
 		if (req->op == OP_SHOW && tgt_drivers[lld_no]->show) {

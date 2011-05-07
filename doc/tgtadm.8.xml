@@ -618,6 +618,32 @@ tgtadm --lld iscsi --op delete --mode portal --param portal=10.1.1.101:3260
   </refsect1>
 
 
+  <refsect1><title>iSCSI CONNECTIONS</title>
+    <para>
+      iSCSI connections can be viewed and forced closed at runtime.
+    </para>
+    <refsect2><title>List all active connections for a target</title>
+      <para>
+      This command is used to list the all the active iSCSI connections to the target with connection id, initiator name and ip address for the initiator :
+      </para>
+      <screen format="linespecific">
+tgtadm --lld iscsi --op show --mode conn --tid 1
+Session: 2
+    Connection: 0
+        Initiator: iqn.2008-11.org.linux-kvm:
+        IP Address: 127.0.0.1
+      </screen>
+    </refsect2>
+    <refsect2><title>Close an existing connection</title>
+      <para>
+      This command is used to close an iSCSI connection. Note that forcibly closing iSCSI connections can lead to data-loss.
+      </para>
+      <screen format="linespecific">
+tgtadm --lld iscsi --op delete --mode conn --tid 1 --sid 2 --cid 0
+      </screen>
+    </refsect2>
+  </refsect1>
+
 
   <refsect1><title>iSNS PARAMETERS</title>
     <para>

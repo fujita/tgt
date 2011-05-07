@@ -609,6 +609,35 @@ static int iscsi_target_show_stats(struct iscsi_target *target, uint64_t sid,
 
 }
 
+static int iscsi_target_show_connections(struct iscsi_target *target,
+					 uint64_t sid,
+					 char *buf, int rest)
+{
+	struct iscsi_session *session;
+	struct iscsi_connection *conn;
+	char addr[128];
+	int len = 0, total = 0;
+
+	list_for_each_entry(session, &target->sessions_list, slist) {
+		list_for_each_entry(conn, &session->conn_list, clist) {
+			memset(addr, 0, sizeof(addr));
+			conn->tp->ep_show(conn, addr, sizeof(addr));
+
+
+			len = snprintf(buf, rest, "Session: %u\n"
+				_TAB1 "Connection: %u\n"
+				_TAB2 "Initiator: %s\n"
+				_TAB2 "%s\n",
+				session->tsih,
+				conn->cid,
+				session->initiator,
+				addr);
+			__buffer_check(buf, total, len, rest);
+		}
+	}
+	return total;
+}
+
 static int iscsi_target_show_portals(struct iscsi_target *target, uint64_t sid,
 				   char *buf, int rest)
 {
@@ -697,6 +726,10 @@ int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid, uint64_t lu
 		break;
 	case MODE_PORTAL:
 		len = iscsi_target_show_portals(target, sid, buf, rest);
+		total += len;
+		break;
+	case MODE_CONNECTION:
+		len = iscsi_target_show_connections(target, sid, buf, rest);
 		total += len;
 		break;
 	case MODE_STATS:

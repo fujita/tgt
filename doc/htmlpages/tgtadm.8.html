@@ -1,7 +1,7 @@
-<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1"><title>tgtadm</title><meta name="generator" content="DocBook XSL Stylesheets V1.75.2"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="refentry" title="tgtadm"><a name="tgtadm.8"></a><div class="titlepage"></div><div class="refnamediv"><h2>Name</h2><p>tgtadm &#8212; Linux SCSI Target Administration Utility</p></div><div class="refsynopsisdiv" title="Synopsis"><h2>Synopsis</h2><div class="cmdsynopsis"><p><code class="command">tgtadm [OPTIONS]...</code>  [-C --control-port &lt;port&gt;] [-L --lld &lt;driver&gt;] [-o --op &lt;operation&gt;] [-m --mode &lt;mode&gt;] [-t --tid &lt;id&gt;] [-T --targetname &lt;targetname&gt;] [-Y --device-type &lt;type&gt;] [-l --lun &lt;lun&gt;] [-b --backing-store &lt;path&gt;] [-E --bstype &lt;type&gt;] [-I --initiator-address &lt;address&gt;] [-n --name &lt;parameter&gt;] [-v --value &lt;value&gt;] [-P --params &lt;param=value[,param=value...]&gt;] [-h --help]</p></div></div><div class="refsect1" title="DESCRIPTION"><a name="id319787"></a><h2>DESCRIPTION</h2><p>
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1"><title>tgtadm</title><meta name="generator" content="DocBook XSL Stylesheets V1.75.2"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="refentry" title="tgtadm"><a name="tgtadm.8"></a><div class="titlepage"></div><div class="refnamediv"><h2>Name</h2><p>tgtadm &#8212; Linux SCSI Target Administration Utility</p></div><div class="refsynopsisdiv" title="Synopsis"><h2>Synopsis</h2><div class="cmdsynopsis"><p><code class="command">tgtadm [OPTIONS]...</code>  [-C --control-port &lt;port&gt;] [-L --lld &lt;driver&gt;] [-o --op &lt;operation&gt;] [-m --mode &lt;mode&gt;] [-t --tid &lt;id&gt;] [-T --targetname &lt;targetname&gt;] [-Y --device-type &lt;type&gt;] [-l --lun &lt;lun&gt;] [-b --backing-store &lt;path&gt;] [-E --bstype &lt;type&gt;] [-I --initiator-address &lt;address&gt;] [-n --name &lt;parameter&gt;] [-v --value &lt;value&gt;] [-P --params &lt;param=value[,param=value...]&gt;] [-h --help]</p></div></div><div class="refsect1" title="DESCRIPTION"><a name="id269679"></a><h2>DESCRIPTION</h2><p>
       tgtadm is used to monitor and modify everything about Linux SCSI target
       software: targets, volumes, etc.
-    </p></div><div class="refsect1" title="OPTIONS"><a name="id319798"></a><h2>OPTIONS</h2><div class="variablelist"><pre class="screen">
+    </p></div><div class="refsect1" title="OPTIONS"><a name="id269690"></a><h2>OPTIONS</h2><div class="variablelist"><pre class="screen">
 Possible device-types are:
     disk    : emulate a disk device
     tape    : emulate a tape reader
@@ -54,7 +54,7 @@ Possible backend types are:
 	    Sets/changes the value of one or more parameters.
           </p></dd><dt><span class="term"><code class="option">--help</code></span></dt><dd><p>
 	    Display a list of available options and exits.
-          </p></dd></dl></div></div><div class="refsect1" title="LUN PARAMETERS"><a name="id320042"></a><h2>LUN PARAMETERS</h2><p>
+          </p></dd></dl></div></div><div class="refsect1" title="LUN PARAMETERS"><a name="id269935"></a><h2>LUN PARAMETERS</h2><p>
       These parameters are only applicable for "--mode logicalunit".
     </p><div class="variablelist"><pre class="screen">
 Example:
@@ -128,7 +128,7 @@ tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 1 \
 	    refuse any attempts to write data to it.
           </p><p>
 	    This parameter only applies to DISK devices.
-          </p></dd></dl></div></div><div class="refsect1" title="SMC SPECIFIC LUN PARAMETERS"><a name="id320216"></a><h2>SMC SPECIFIC LUN PARAMETERS</h2><p>
+          </p></dd></dl></div></div><div class="refsect1" title="SMC SPECIFIC LUN PARAMETERS"><a name="id270108"></a><h2>SMC SPECIFIC LUN PARAMETERS</h2><p>
       These parameters are only applicable for luns that are of type "changer"
       i.e. the media changer device for a DVD Jukebox or a Virtual Tape Library.
     </p><div class="variablelist"><pre class="screen">
@@ -213,7 +213,7 @@ Slot types:
 	    To assign a media image file to a storage element slot,
 	    you assign "barcode" to be the name of the image file in
 	    the "media_home" directory.
-          </p></dd></dl></div></div><div class="refsect1" title="Passthrough devices"><a name="id320376"></a><h2>Passthrough devices</h2><p>
+          </p></dd></dl></div></div><div class="refsect1" title="Passthrough devices"><a name="id270268"></a><h2>Passthrough devices</h2><p>
       In addition to device emulation TGTD also supports utilizing existing SG devices on the host and exporting these through a special passthrough device type.
     </p><dt><span class="term"><code class="option">--bstype=sg</code></span></dt><dd><p>
 	  This specifies that an SG devices is used.
@@ -226,13 +226,13 @@ Example:
 Make /dev/sg4 available to initiators connecting to TGTD.
 
 tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 1 --bstype=sg --device-type=pt --backing-store=/dev/sg4
-    </pre></div><div class="refsect1" title="Header Digest and Data Digest"><a name="id320434"></a><h2>Header Digest and Data Digest</h2><p>
+    </pre></div><div class="refsect1" title="Header Digest and Data Digest"><a name="id270326"></a><h2>Header Digest and Data Digest</h2><p>
       Header and data digests can be set on a per target parameter.
       TGTD supports two modes, None and CRC32C.
       When the digest is set to None, TDTD will negotiate that digests
       will not be used, and when CRC32C is set, TGTD will force the
       connection to use digest.
-    </p><div class="refsect2" title="Viewing the current settings"><a name="id320445"></a><h3>Viewing the current settings</h3><p>
+    </p><div class="refsect2" title="Viewing the current settings"><a name="id270337"></a><h3>Viewing the current settings</h3><p>
 	This command is used to view the current settings for header/data
 	digest.
       </p><pre class="screen">
@@ -241,13 +241,13 @@ tgtadm --op show --mode target --tid 1
   HeaderDigest=None
   DataDigest=None
   ...
-      </pre></div><div class="refsect2" title="Setting digest"><a name="id320461"></a><h3>Setting digest</h3><pre class="screen">
+      </pre></div><div class="refsect2" title="Setting digest"><a name="id270353"></a><h3>Setting digest</h3><pre class="screen">
 Set header digest to CRC32C:
 tgtadm --op update --mode target --tid 1 -n HeaderDigest -v CRC32C
 
 Set data digest to None:
 tgtadm --op update --mode target --tid 1 -n DataDigest -v None
-      </pre></div></div><div class="refsect1" title="CHAP Authentication"><a name="id320475"></a><h2>CHAP Authentication</h2><p>
+      </pre></div></div><div class="refsect1" title="CHAP Authentication"><a name="id270367"></a><h2>CHAP Authentication</h2><p>
       CHAP authentication is supported to require authentication before
       an initiator is allowed to log in and access devices.
       TGTD supports setting CHAP for normal log in sessions only, not
@@ -258,18 +258,18 @@ tgtadm --op update --mode target --tid 1 -n DataDigest -v None
       To set up CHAP authentication we first need to create an account
       and its associated password, then we bind the account to one or more
       targets.
-    </p><div class="refsect2" title="Setting CHAP on a target"><a name="id320490"></a><h3>Setting CHAP on a target</h3><p>
+    </p><div class="refsect2" title="Setting CHAP on a target"><a name="id270382"></a><h3>Setting CHAP on a target</h3><p>
 	These two commands create a user account and binds it to target 1.
       </p><pre class="screen">
 tgtadm --lld iscsi --op new --mode account --user ronnie --password password
 tgtadm --lld iscsi --op bind --mode account --tid 1 --user ronnie
-      </pre></div><div class="refsect2" title="List all accounts"><a name="id320507"></a><h3>List all accounts</h3><p>
+      </pre></div><div class="refsect2" title="List all accounts"><a name="id270399"></a><h3>List all accounts</h3><p>
 	This command is used to list all accounts that have been created.
       </p><pre class="screen">
 tgtadm --lld iscsi --op show --mode account
 Account list:
     ronnie
-      </pre></div><div class="refsect2" title="Show if a target requires authentication"><a name="id320523"></a><h3>Show if a target requires authentication</h3><p>
+      </pre></div><div class="refsect2" title="Show if a target requires authentication"><a name="id270415"></a><h3>Show if a target requires authentication</h3><p>
 	When listing the targets, each target that has authantication enabled
 	will contain a listing of all accoutns bound to that target.
       </p><pre class="screen">
@@ -279,23 +279,37 @@ Target 1: iqn.ronnie.test
 Account information:
     ronnie
 ...
-      </pre></div></div><div class="refsect1" title="iSCSI PORTALS"><a name="id320541"></a><h2>iSCSI PORTALS</h2><p>
+      </pre></div></div><div class="refsect1" title="iSCSI PORTALS"><a name="id270433"></a><h2>iSCSI PORTALS</h2><p>
       iSCSI portals can be viewed, added and removed at runtime.
-    </p><div class="refsect2" title="List portals"><a name="id320549"></a><h3>List portals</h3><p>
+    </p><div class="refsect2" title="List portals"><a name="id270441"></a><h3>List portals</h3><p>
       This command is used to list the current iSCSI portals defined on the target:
       </p><pre class="screen">
 tgtadm --lld iscsi --op show --mode portal
 Portal: 10.1.1.101:3260,1
 Portal: 127.0.0.1:3260,1
-      </pre></div><div class="refsect2" title="Add portal"><a name="id320565"></a><h3>Add portal</h3><p>
+      </pre></div><div class="refsect2" title="Add portal"><a name="id270457"></a><h3>Add portal</h3><p>
       This command is used to add a portal to the target :
       </p><pre class="screen">
 tgtadm --lld iscsi --op new --mode portal --param portal=10.1.1.101:3260
-      </pre></div><div class="refsect2" title="Remove portal"><a name="id320581"></a><h3>Remove portal</h3><p>
+      </pre></div><div class="refsect2" title="Remove portal"><a name="id270473"></a><h3>Remove portal</h3><p>
       This command is used to remove a portal from the target :
       </p><pre class="screen">
 tgtadm --lld iscsi --op delete --mode portal --param portal=10.1.1.101:3260
-      </pre></div></div><div class="refsect1" title="iSNS PARAMETERS"><a name="id320598"></a><h2>iSNS PARAMETERS</h2><p>
+      </pre></div></div><div class="refsect1" title="iSCSI CONNECTIONS"><a name="id270490"></a><h2>iSCSI CONNECTIONS</h2><p>
+      iSCSI connections can be viewed and forced closed at runtime.
+    </p><div class="refsect2" title="List all active connections for a target"><a name="id270498"></a><h3>List all active connections for a target</h3><p>
+      This command is used to list the all the active iSCSI connections to the target with connection id, initiator name and ip address for the initiator :
+      </p><pre class="screen">
+tgtadm --lld iscsi --op show --mode conn --tid 1
+Session: 2
+    Connection: 0
+        Initiator: iqn.2008-11.org.linux-kvm:
+        IP Address: 127.0.0.1
+      </pre></div><div class="refsect2" title="Close an existing connection"><a name="id270516"></a><h3>Close an existing connection</h3><p>
+      This command is used to close an iSCSI connection. Note that forcibly closing iSCSI connections can lead to data-loss.
+      </p><pre class="screen">
+tgtadm --lld iscsi --op delete --mode conn --tid 1 --sid 2 --cid 0
+      </pre></div></div><div class="refsect1" title="iSNS PARAMETERS"><a name="id270533"></a><h2>iSNS PARAMETERS</h2><p>
       iSNS configuration for a target is by using the tgtadm command.
     </p><div class="variablelist"><pre class="screen">
 Example:
@@ -322,9 +336,9 @@ tgtadm --op update --mode sys --name iSNSAccessControl --value Off
 	    This setting specifies the port to use for iSNS.
           </p></dd><dt><span class="term"><code class="option">iSNSAccessControl</code></span></dt><dd><p>
 	    Enable/disable access control for iSNS.
-          </p></dd></dl></div></div><div class="refsect1" title="SEE ALSO"><a name="id320691"></a><h2>SEE ALSO</h2><p>
+          </p></dd></dl></div></div><div class="refsect1" title="SEE ALSO"><a name="id270627"></a><h2>SEE ALSO</h2><p>
       tgtd(8), tgt-admin(8), tgtimg(8), tgt-setup-lun(8).
       <a class="ulink" href="http://stgt.sourceforge.net/" target="_top">http://stgt.sourceforge.net/</a>
-    </p></div><div class="refsect1" title="REPORTING BUGS"><a name="id320705"></a><h2>REPORTING BUGS</h2><p>
+    </p></div><div class="refsect1" title="REPORTING BUGS"><a name="id270641"></a><h2>REPORTING BUGS</h2><p>
       Report bugs to &lt;stgt@vger.kernel.org&gt;
     </p></div></div></body></html>
