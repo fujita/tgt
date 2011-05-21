@@ -1431,7 +1431,7 @@ static int iscsi_tm_execute(struct iscsi_task *task)
 		ret = target_mgmt_request(conn->session->target->tid,
 					  conn->session->tsih,
 					  (unsigned long)task, fn, req->lun,
-					  req->itt, 0);
+					  req->rtt, 0);
 		set_task_in_scsi(task);
 		switch (ret) {
 		case MGMT_REQ_QUEUED:
