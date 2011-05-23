@@ -45,6 +45,8 @@
 
 LIST_HEAD(iscsi_portals_list);
 
+char *portal_arguments;
+
 enum {
 	IOSTATE_FREE,
 
@@ -2359,8 +2361,8 @@ int iscsi_transportid(int tid, uint64_t itn_id, char *buf, int size)
 	return len;
 }
 
-static int iscsi_param_parse_portals(char *p, int do_add,
-			int do_create, int do_delete)
+int iscsi_param_parse_portals(char *p, int do_add,
+			int do_delete)
 {
 	while (*p) {
 		if (!strncmp(p, "portal", 6)) {
@@ -2401,8 +2403,8 @@ static int iscsi_param_parse_portals(char *p, int do_add,
 				char *tmp;
 				tmp = zalloc(len + 1);
 				memcpy(tmp, addr, len);
-				if (do_add && iscsi_add_portal(tmp, port, 1,
-							do_create)) {
+				if (do_add && iscsi_add_portal(tmp,
+							port, 1)) {
 					free(tmp);
 					return -1;
 				}
@@ -2424,17 +2426,18 @@ static int iscsi_param_parse_portals(char *p, int do_add,
 
 static int iscsi_param_parser(char *p)
 {
-	return iscsi_param_parse_portals(p, 1, 0, 0);
+	portal_arguments = p;
+	return 0;
 }
 
 static int iscsi_portal_create(char *p)
 {
-	return iscsi_param_parse_portals(p, 1, 1, 0);
+	return iscsi_param_parse_portals(p, 1, 0);
 }
 
 static int iscsi_portal_destroy(char *p)
 {
-	return iscsi_param_parse_portals(p, 0, 0, 1);
+	return iscsi_param_parse_portals(p, 0, 1);
 }
 
 static struct tgt_driver iscsi = {

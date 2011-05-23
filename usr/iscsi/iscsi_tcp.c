@@ -169,20 +169,25 @@ static void iscsi_tcp_event_handler(int fd, int events, void *data)
 	}
 }
 
-static int iscsi_tcp_init_portal(struct iscsi_portal *portal)
+int iscsi_tcp_init_portal(char *addr, int port, int tpgt)
 {
 	struct addrinfo hints, *res, *res0;
 	char servname[64];
 	int ret, fd, opt, nr_sock = 0;
+	struct iscsi_portal *portal = NULL;
+	char addrstr[64];
+	void *addrptr;
+
+	port = port ? port : ISCSI_LISTEN_PORT;
 
 	memset(servname, 0, sizeof(servname));
-	snprintf(servname, sizeof(servname), "%d", portal->port);
+	snprintf(servname, sizeof(servname), "%d", port);
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
 
-	ret = getaddrinfo(portal->addr, servname, &hints, &res0);
+	ret = getaddrinfo(addr, servname, &hints, &res0);
 	if (ret) {
 		eprintf("unable to get address info, %m\n");
 		return -errno;
@@ -237,8 +242,26 @@ static int iscsi_tcp_init_portal(struct iscsi_portal *portal)
 		else {
 			listen_fds[nr_sock] = fd;
 			nr_sock++;
-			portal->fd = fd;
 		}
+
+		portal = zalloc(sizeof(struct iscsi_portal));
+		switch (res->ai_family) {
+		case AF_INET:
+			addrptr = &((struct sockaddr_in *)
+				    res->ai_addr)->sin_addr;
+			break;
+		case AF_INET6:
+			addrptr = &((struct sockaddr_in6 *)
+				    res->ai_addr)->sin6_addr;
+			break;
+		}
+		portal->addr = strdup(inet_ntop(res->ai_family, addrptr,
+			     addrstr, sizeof(addrstr)));
+		portal->port = port;
+		portal->tpgt = tpgt;
+		portal->fd   = fd;
+
+		list_add(&portal->iscsi_portal_siblings, &iscsi_portals_list);
 	}
 
 	freeaddrinfo(res0);
@@ -246,34 +269,13 @@ static int iscsi_tcp_init_portal(struct iscsi_portal *portal)
 	return !nr_sock;
 }
 
-int iscsi_add_portal(char *addr, int port, int tpgt, int do_create)
+int iscsi_add_portal(char *addr, int port, int tpgt)
 {
-	struct iscsi_portal *new_portal;
-
-	list_for_each_entry(new_portal, &iscsi_portals_list,
-			    iscsi_portal_siblings) {
-		if (!strcmp(addr, new_portal->addr)
-			&& port == new_portal->port) {
-			eprintf("add_portal failed. This portal already "
-				"exists %s:%d\n", addr, port);
-			return -1;
-		}
-	}
-
-	new_portal = zalloc(sizeof(struct iscsi_portal));
-	new_portal->addr = strdup(addr);
-	new_portal->port = port ? port : ISCSI_LISTEN_PORT;
-	new_portal->tpgt = tpgt;
-	new_portal->fd   = -1;
-
-	if (do_create && iscsi_tcp_init_portal(new_portal)) {
+	if (iscsi_tcp_init_portal(addr, port, tpgt)) {
 		eprintf("failed to create/bind to portal %s:%d\n", addr, port);
-		free(new_portal->addr);
-		free(new_portal);
 		return -1;
 	}
 
-	list_add(&new_portal->iscsi_portal_siblings, &iscsi_portals_list);
 	return 0;
 };
 
@@ -300,23 +302,15 @@ int iscsi_delete_portal(char *addr, int port)
 
 static int iscsi_tcp_init(void)
 {
-	struct iscsi_portal *portal;
+	/* If we were passed any portals on the command line */
+	if (portal_arguments)
+		iscsi_param_parse_portals(portal_arguments, 1, 0);
 
 	/* if the user did not set a portal we default to wildcard
 	   for ipv4 and ipv6
 	*/
 	if (list_empty(&iscsi_portals_list)) {
-		iscsi_add_portal("0::0", 0, 1, 0);
-		iscsi_add_portal("0.0.0.0", 0, 1, 0);
-	}
-
-	list_for_each_entry(portal, &iscsi_portals_list,
-			    iscsi_portal_siblings) {
-		int ret;
-
-		ret = iscsi_tcp_init_portal(portal);
-		if (ret)
-			return ret;
+		iscsi_add_portal(NULL, 3260, 1);
 	}
 
 	return 0;

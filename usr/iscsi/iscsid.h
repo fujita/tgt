@@ -276,6 +276,8 @@ struct iscsi_portal {
 
 extern struct list_head iscsi_portals_list;
 
+extern char *portal_arguments;
+
 #define set_task_pending(t)	((t)->flags |= (1 << TASK_pending))
 #define clear_task_pending(t)	((t)->flags &= ~(1 << TASK_pending))
 #define task_pending(t)		((t)->flags & (1 << TASK_pending))
@@ -309,8 +311,9 @@ extern int iscsi_tx_handler(struct iscsi_connection *conn);
 extern void iscsi_rx_handler(struct iscsi_connection *conn);
 extern int iscsi_scsi_cmd_execute(struct iscsi_task *task);
 extern int iscsi_transportid(int tid, uint64_t itn_id, char *buf, int size);
-extern int iscsi_add_portal(char *addr, int port, int tpgt, int do_create);
+extern int iscsi_add_portal(char *addr, int port, int tpgt);
 extern int iscsi_delete_portal(char *addr, int port);
+extern int iscsi_param_parse_portals(char *p, int do_add, int do_delete);
 
 /* iscsid.c iscsi_task */
 extern void iscsi_free_task(struct iscsi_task *task);
