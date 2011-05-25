@@ -364,7 +364,7 @@ static size_t iscsi_tcp_close(struct iscsi_connection *conn)
 	struct iscsi_tcp_connection *tcp_conn = TCP_CONN(conn);
 
 	tgt_event_del(tcp_conn->fd);
-	return close(tcp_conn->fd);
+	return 0;
 }
 
 static void iscsi_tcp_release(struct iscsi_connection *conn)
@@ -372,6 +372,7 @@ static void iscsi_tcp_release(struct iscsi_connection *conn)
 	struct iscsi_tcp_connection *tcp_conn = TCP_CONN(conn);
 
 	conn_exit(conn);
+	close(tcp_conn->fd);
 	free(tcp_conn);
 }
 
