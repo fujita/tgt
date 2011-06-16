@@ -100,27 +100,6 @@ do {									\
 
 extern unsigned long pagesize, pageshift;
 
-#if defined (SYNC_FILE_RANGE_WAIT_BEFORE) && \
-	(defined(__NR_sync_file_range) || defined(__NR_sync_file_range2))
-static inline int __sync_file_range(int fd, __off64_t offset, __off64_t bytes)
-{
-	int ret;
-#if defined(__NR_sync_file_range)
-	long int n = __NR_sync_file_range;
-#else
-	long int n = __NR_sync_file_range2;
-#endif
-	unsigned int flags = SYNC_FILE_RANGE_WAIT_BEFORE | SYNC_FILE_RANGE_WRITE
-		| SYNC_FILE_RANGE_WAIT_AFTER;
-	ret = syscall(n, fd, offset, bytes, flags);
-	if (ret)
-		ret = fsync(fd);
-	return ret;
-}
-#else
-#define __sync_file_range(fd, offset, bytes) fsync(fd)
-#endif
-
 #if defined(__NR_signalfd) && defined(USE_SIGNALFD)
 
 /*

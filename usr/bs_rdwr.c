@@ -50,7 +50,7 @@ static void bs_sync_sync_range(struct scsi_cmd *cmd, uint32_t length,
 {
 	int ret;
 
-	ret = __sync_file_range(cmd->dev->fd, cmd->offset, length);
+	ret = fdatasync(cmd->dev->fd);
 	if (ret)
 		set_medium_error(result, key, asc);
 }
