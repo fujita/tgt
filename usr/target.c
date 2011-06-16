@@ -1449,7 +1449,7 @@ int account_ctl(int tid, int type, char *user, int bind)
 			if (i == target->account.max_inaccount)
 				err = TGTADM_NO_USER;
 		} else
-			if (target->account.out_aid)
+			if (target->account.out_aid == ac->aid)
 				target->account.out_aid = 0;
 			else
 				err = TGTADM_NO_USER;
