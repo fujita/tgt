@@ -176,7 +176,7 @@ int iscsi_tcp_init_portal(char *addr, int port, int tpgt)
 	int ret, fd, opt, nr_sock = 0;
 	struct iscsi_portal *portal = NULL;
 	char addrstr[64];
-	void *addrptr;
+	void *addrptr = NULL;
 
 	port = port ? port : ISCSI_LISTEN_PORT;
 
