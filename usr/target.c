@@ -1564,6 +1564,73 @@ char *acl_get(int tid, int idx)
 	return NULL;
 }
 
+int iqn_acl_add(int tid, char *name)
+{
+	char *str;
+	struct target *target;
+	struct iqn_acl_entry *iqn_acl, *tmp;
+
+	target = target_lookup(tid);
+	if (!target)
+		return TGTADM_NO_TARGET;
+
+	list_for_each_entry_safe(iqn_acl, tmp, &target->iqn_acl_list, iqn_aclent_list)
+		if (!strcmp(name, iqn_acl->name))
+			return TGTADM_ACL_EXIST;
+
+	iqn_acl = zalloc(sizeof(*iqn_acl));
+	if (!iqn_acl)
+		return TGTADM_NOMEM;
+
+	str = strdup(name);
+	if (!str) {
+		free(iqn_acl);
+		return TGTADM_NOMEM;
+	}
+
+	iqn_acl->name = str;
+	list_add_tail(&iqn_acl->iqn_aclent_list, &target->iqn_acl_list);
+
+	return 0;
+}
+
+void iqn_acl_del(int tid, char *name)
+{
+	struct target *target;
+	struct iqn_acl_entry *iqn_acl, *tmp;
+
+	target = target_lookup(tid);
+	if (!target)
+		return;
+
+	list_for_each_entry_safe(iqn_acl, tmp, &target->iqn_acl_list, iqn_aclent_list) {
+		if (!strcmp(name, iqn_acl->name)) {
+			list_del(&iqn_acl->iqn_aclent_list);
+			free(iqn_acl->name);
+			free(iqn_acl);
+			break;
+		}
+	}
+}
+
+char *iqn_acl_get(int tid, int idx)
+{
+	int i = 0;
+	struct target *target;
+	struct iqn_acl_entry *iqn_acl;
+
+	target = target_lookup(tid);
+	if (!target)
+		return NULL;
+
+	list_for_each_entry(iqn_acl, &target->iqn_acl_list, iqn_aclent_list) {
+		if (idx == i++)
+			return iqn_acl->name;
+	}
+
+	return NULL;
+}
+
 /*
  * if we have lots of host, use something like radix tree for
  * efficiency.
@@ -1744,6 +1811,7 @@ int tgt_target_show_all(char *buf, int rest)
 	struct target *target;
 	struct scsi_lu *lu;
 	struct acl_entry *acl;
+	struct iqn_acl_entry *iqn_acl;
 	struct it_nexus *nexus;
 
 	list_for_each_entry(target, &target_list, target_siblings) {
@@ -1817,6 +1885,10 @@ int tgt_target_show_all(char *buf, int rest)
 		shprintf(total, buf, rest, _TAB1 "ACL information:\n");
 		list_for_each_entry(acl, &target->acl_list, aclent_list)
 			shprintf(total, buf, rest, _TAB2 "%s\n", acl->address);
+
+		list_for_each_entry(iqn_acl, &target->iqn_acl_list, iqn_aclent_list)
+			shprintf(total, buf, rest, _TAB2 "%s\n", iqn_acl->name);
+
 	}
 	return total;
 overflow:
@@ -1909,6 +1981,7 @@ int tgt_target_create(int lld, int tid, char *args)
 	list_add_tail(&target->target_siblings, &pos->target_siblings);
 
 	INIT_LIST_HEAD(&target->acl_list);
+	INIT_LIST_HEAD(&target->iqn_acl_list);
 	INIT_LIST_HEAD(&target->it_nexus_list);
 
 	tgt_device_create(tid, TYPE_RAID, 0, NULL, 0);
@@ -1926,6 +1999,7 @@ int tgt_target_destroy(int lld_no, int tid)
 	int ret;
 	struct target *target;
 	struct acl_entry *acl, *tmp;
+	struct iqn_acl_entry *iqn_acl, *tmp1;
 	struct scsi_lu *lu;
 
 	target = target_lookup(tid);
@@ -1955,6 +2029,12 @@ int tgt_target_destroy(int lld_no, int tid)
 		list_del(&acl->aclent_list);
 		free(acl->address);
 		free(acl);
+	}
+
+	list_for_each_entry_safe(iqn_acl, tmp1, &target->iqn_acl_list, iqn_aclent_list) {
+		list_del(&iqn_acl->iqn_aclent_list);
+		free(iqn_acl->name);
+		free(iqn_acl);
 	}
 
 	free(target->account.in_aids);
@@ -2123,4 +2203,5 @@ __attribute__((constructor)) static void target_constructor(void)
 	global_target.tid = GLOBAL_TID;
 
 	INIT_LIST_HEAD(&global_target.acl_list);
+	INIT_LIST_HEAD(&global_target.iqn_acl_list);
 }

@@ -26,6 +26,7 @@
 		<arg choice="opt">-b --backing-store &lt;path&gt;</arg>
 		<arg choice="opt">-E --bstype &lt;type&gt;</arg>
 		<arg choice="opt">-I --initiator-address &lt;address&gt;</arg>
+		<arg choice="opt">-Q --initiator-name &lt;name&gt;</arg>
 		<arg choice="opt">-n --name &lt;parameter&gt;</arg>
 		<arg choice="opt">-v --value &lt;value&gt;</arg>
 		<arg choice="opt">-P --params &lt;param=value[,param=value...]&gt;</arg>
@@ -153,10 +154,27 @@ Possible backend types are:
         </listitem>
       </varlistentry>
 
+      <varlistentry><term><option>--lld &lt;driver&gt; --op bind --mode target --tid &lt;id&gt; --initiator-name &lt;name&gt;</option></term>
+        <listitem>
+          <para>
+	    Add the initiator's name to the access lists of the target with &lt;id&gt;. 
+            Initiators with the names can access to the target. 
+          </para>
+        </listitem>
+      </varlistentry>
+
       <varlistentry><term><option>--lld &lt;driver&gt; --op unbind --mode target --tid &lt;id&gt; --initiator-address &lt;address&gt;</option></term>
         <listitem>
           <para>
 	    Delete the address from the access lists of the target with &lt;id&gt;.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry><term><option>--lld &lt;driver&gt; --op unbind --mode target --tid &lt;id&gt; --initiator-name &lt;name&gt;</option></term>
+        <listitem>
+          <para>
+	    Delete the initiator's name from the access lists of the target with &lt;id&gt;.
           </para>
         </listitem>
       </varlistentry>

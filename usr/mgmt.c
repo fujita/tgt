@@ -92,9 +92,13 @@ static int target_mgmt(int lld_no, struct mgmt_task *mtask)
 		else {
 			char *p;
 
-			p = strchr(mtask->buf, '=');
+			p = strstr(mtask->buf, "initiator-address=");
 			if (p)
-				err = acl_add(req->tid, p + 1);
+				err = acl_add(req->tid, p + strlen("initiator-address="));
+
+			p = strstr(mtask->buf, "initiator-name=");
+			if (p)
+				err = iqn_acl_add(req->tid, p + strlen("initiator-name="));
 		}
 		break;
 	case OP_UNBIND:
@@ -103,10 +107,16 @@ static int target_mgmt(int lld_no, struct mgmt_task *mtask)
 		else {
 			char *p;
 
-			p = strchr(mtask->buf, '=');
+			p = strstr(mtask->buf, "initiator-address=");
 			if (p) {
 				err = 0;
-				acl_del(req->tid, p + 1);
+				acl_del(req->tid, p + strlen("initiator-address="));
+			}
+
+			p = strstr(mtask->buf, "initiator-name=");
+			if (p) {
+				err = 0;
+				iqn_acl_del(req->tid, p + strlen("initiator-name="));
 			}
 		}
 		break;

@@ -13,6 +13,11 @@ struct acl_entry {
 	struct list_head aclent_list;
 };
 
+struct iqn_acl_entry {
+	char *name;
+	struct list_head iqn_aclent_list;
+};
+
 struct tgt_account {
 	int out_aid;
 	int nr_inaccount;
@@ -37,6 +42,8 @@ struct target {
 	struct backingstore_template *bst;
 
 	struct list_head acl_list;
+
+	struct list_head iqn_acl_list;
 
 	struct tgt_account account;
 };

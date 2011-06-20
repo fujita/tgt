@@ -331,6 +331,7 @@ struct iscsi_target * target_find_by_name(const char *name);
 struct iscsi_target * target_find_by_id(int tid);
 extern void target_list_build(struct iscsi_connection *, char *, char *);
 extern int ip_acl(int tid, struct iscsi_connection *conn);
+extern int iqn_acl(int tid, struct iscsi_connection *conn);
 extern int iscsi_target_create(struct target *);
 extern void iscsi_target_destroy(int);
 extern int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid,

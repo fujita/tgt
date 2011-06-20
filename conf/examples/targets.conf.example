@@ -181,6 +181,8 @@ default-driver iscsi
     # Outgoing user
     outgoinguser userA secretpassA
 
+    # TID of controller
+    controller_tid 10
 </target>
 
 
@@ -211,20 +213,29 @@ default-driver iscsi
     allow-in-use yes
 </target>
 
+# Specify controller TID of target
+# Must be unique for all targets
+# To reduce risk of duplicating controller TIDs, specify TID for all targets
+# or none
+<target iqn.2008-09.com.example:server.target9>
+    backing-store /dev/LVM/somedevice
+    allow-in-use yes
+    controller_tid 10
+</target>
 
 
 
 
 # Not supported configurations, and therefore, commented out:
 
-#<target iqn.2008-09.com.example:server.target9>
+#<target iqn.2008-09.com.example:server.badtarget1>
 #    backing-store /dev/LVM/somedevice1
 #    backing-store /dev/LVM/somedevice2
 #    lun 10
 #    lun 11
 #</target>
 
-#<target iqn.2008-09.com.example:server.target10>
+#<target iqn.2008-09.com.example:server.badtarget2>
 #    <direct-store /dev/sdd>
 #        vendor_id VENDOR1
 #    </direct-store>
@@ -234,7 +245,7 @@ default-driver iscsi
 
 # This one will break the parser:
 
-#<target iqn.2008-09.com.example:server.target11>
+#<target iqn.2008-09.com.example:server.badtarget3>
 #    <direct-store /dev/sdd>
 #        vendor_id VENDOR1
 #    </direct-store>

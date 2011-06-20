@@ -105,6 +105,7 @@ struct option const long_options[] = {
 	{"bsoflags", required_argument, NULL, 'f'},
 	{"targetname", required_argument, NULL, 'T'},
 	{"initiator-address", required_argument, NULL, 'I'},
+	{"initiator-name", required_argument, NULL, 'Q'},
 	{"user", required_argument, NULL, 'u'},
 	{"password", required_argument, NULL, 'p'},
 	{"host", required_argument, NULL, 'H'},
@@ -117,7 +118,7 @@ struct option const long_options[] = {
 	{NULL, 0, NULL, 0},
 };
 
-static char *short_options = "dhVL:o:m:t:s:c:l:n:v:b:E:f:T:I:u:p:H:P:B:Y:O:C:";
+static char *short_options = "dhVL:o:m:t:s:c:l:n:v:b:E:f:T:I:Q:u:p:H:P:B:Y:O:C:";
 
 static void usage(int status)
 {
@@ -140,9 +141,11 @@ Linux SCSI Target Framework Administration Utility, version %s\n\
   --lld <driver> --mode target --op update --tid <id> --name <param> --value <value>\n\
                         change the target parameters of the specific\n\
                         target with <id>.\n\
-  --lld <driver> --mode target --op bind --tid <id> --initiator-address <src>\n\
+  --lld <driver> --mode target --op bind --tid <id> --initiator-address <address>\n\
+  --lld <driver> --mode target --op bind --tid <id> --initiator-name <name>\n\
                         enable the target to accept the specific initiators.\n\
-  --lld <driver> --mode target --op unbind --tid <id> --initiator-address <src>\n\
+  --lld <driver> --mode target --op unbind --tid <id> --initiator-address <address>\n\
+  --lld <driver> --mode target --op unbind --tid <id> --initiator-name <name>\n\
                         disable the specific permitted initiators.\n\
   --lld <driver> --mode logicalunit --op new --tid <id> --lun <lun> \\\n\
                         --backing-store <path> --bstype <type> --bsoflags <options>\n\
@@ -433,7 +436,7 @@ int main(int argc, char **argv)
 	int op, total, tid, rest, mode, dev_type, ac_dir;
 	uint32_t cid, hostno;
 	uint64_t sid, lun;
-	char *name, *value, *path, *targetname, *params, *address, *targetOps;
+	char *name, *value, *path, *targetname, *params, *address, *iqnname, *targetOps;
 	char *portalOps, *bstype;
 	char *bsoflags;
 	char *user, *password;
@@ -449,7 +452,7 @@ int main(int argc, char **argv)
 	dev_type = TYPE_DISK;
 	ac_dir = ACCOUNT_TYPE_INCOMING;
 	rest = BUFSIZE;
-	name = value = path = targetname = address = NULL;
+	name = value = path = targetname = address = iqnname = NULL;
 	targetOps = portalOps = bstype = NULL;
 	bsoflags = user = password = NULL;
 
@@ -512,6 +515,9 @@ int main(int argc, char **argv)
 			break;
 		case 'I':
 			address = optarg;
+			break;
+		case 'Q':
+			iqnname = optarg;
 			break;
 		case 'u':
 			user = optarg;
@@ -623,15 +629,15 @@ int main(int argc, char **argv)
 			break;
 		case OP_BIND:
 		case OP_UNBIND:
-			rc = verify_mode_params(argc, argv, "LmotIBHC");
+			rc = verify_mode_params(argc, argv, "LmotIQBHC");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
 				exit(EINVAL);
 			}
-			if (!address && !hostno) {
+			if (!address && !iqnname && !hostno) {
 				eprintf("%s operation requires"
-					" initiator-address or bus\n",
+					" initiator-address, initiator-name or bus\n",
 					op == OP_BIND ? "bind" : "unbind");
 				exit(EINVAL);
 			}
@@ -845,6 +851,9 @@ int main(int argc, char **argv)
 	if (address)
 		shprintf(total, params, rest, "%sinitiator-address=%s",
 			 rest == BUFSIZE ? "" : ",", address);
+	if (iqnname)
+		shprintf(total, params, rest, "%sinitiator-name=%s",
+			 rest == BUFSIZE ? "" : ",", iqnname);
 	if (user)
 		shprintf(total, params, rest, "%suser=%s",
 			 rest == BUFSIZE ? "" : ",", user);

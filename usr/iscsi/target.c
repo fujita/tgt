@@ -188,6 +188,35 @@ int ip_acl(int tid, struct iscsi_connection *conn)
 	}
 	return -EPERM;
 }
+
+static int iqn_match(struct iscsi_connection *conn, char *name)
+{
+	return strcmp(conn->initiator, name);
+}
+
+int iqn_acl(int tid, struct iscsi_connection *conn)
+{
+	int idx, enable, err;
+	char *name;
+
+	enable = 0;
+	for (idx = 0;; idx++) {
+		name = iqn_acl_get(tid, idx);
+		if (!name)
+			break;
+
+		enable = 1;
+		err = iqn_match(conn, name);
+		if (!err)
+			return 0;
+	}
+
+	if (!enable)
+		return 0;
+	else
+		return -EPERM;
+}
+
 static int
 get_redirect_address(char *callback, char *buffer, int buflen,
 			char **address, char **ip_port, int *rsn)
@@ -323,6 +352,9 @@ void target_list_build(struct iscsi_connection *conn, char *addr, char *name)
 			continue;
 
 		if (ip_acl(target->tid, conn))
+			continue;
+
+		if (iqn_acl(target->tid, conn))
 			continue;
 
 		if (isns_scn_access(target->tid, conn->initiator))
