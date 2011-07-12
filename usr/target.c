@@ -1984,7 +1984,7 @@ int tgt_target_create(int lld, int tid, char *args)
 	return 0;
 }
 
-int tgt_target_destroy(int lld_no, int tid)
+int tgt_target_destroy(int lld_no, int tid, int force)
 {
 	int ret;
 	struct target *target;
@@ -1996,7 +1996,7 @@ int tgt_target_destroy(int lld_no, int tid)
 	if (!target)
 		return TGTADM_NO_TARGET;
 
-	if (!list_empty(&target->it_nexus_list)) {
+	if (!force && !list_empty(&target->it_nexus_list)) {
 		eprintf("target %d still has it nexus\n", tid);
 		return TGTADM_TARGET_ACTIVE;
 	}
@@ -2011,7 +2011,7 @@ int tgt_target_destroy(int lld_no, int tid)
 	}
 
 	if (tgt_drivers[lld_no]->target_destroy)
-		tgt_drivers[lld_no]->target_destroy(tid);
+		tgt_drivers[lld_no]->target_destroy(tid, force);
 
 	list_del(&target->target_siblings);
 

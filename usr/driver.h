@@ -8,7 +8,7 @@ struct tgt_driver {
 	void (*exit)(void);
 
 	int (*target_create)(struct target *);
-	void (*target_destroy)(int);
+	void (*target_destroy)(int, int);
 
 	int (*portal_create)(char *);
 	int (*portal_destroy)(char *);

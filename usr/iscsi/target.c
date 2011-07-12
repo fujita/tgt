@@ -389,9 +389,11 @@ struct iscsi_target* target_find_by_id(int tid)
 	return NULL;
 }
 
-void iscsi_target_destroy(int tid)
+void iscsi_target_destroy(int tid, int force)
 {
 	struct iscsi_target* target;
+	struct iscsi_session *session, *stmp;
+	struct iscsi_connection *conn, *ctmp;
 
 	target = target_find_by_id(tid);
 	if (!target) {
@@ -399,10 +401,17 @@ void iscsi_target_destroy(int tid)
 		return;
 	}
 
-	if (target->nr_sessions) {
+	if (!force && target->nr_sessions) {
 		eprintf("the target %d still has sessions\n", tid);
 		return;
 	}
+
+	list_for_each_entry_safe(session, stmp, &target->sessions_list, slist) {
+		list_for_each_entry_safe(conn, ctmp, &session->conn_list, clist) {
+			conn_close(conn);
+		}
+	}
+
 	if (!list_empty(&target->sessions_list)) {
 		eprintf("bug still have sessions %d\n", tid);
 		exit(-1);

@@ -109,8 +109,8 @@ struct option const long_options[] = {
 	{"user", required_argument, NULL, 'u'},
 	{"password", required_argument, NULL, 'p'},
 	{"host", required_argument, NULL, 'H'},
+	{"force", no_argument, NULL, 'F'},
 	{"params", required_argument, NULL, 'P'},
-
 	{"bus", required_argument, NULL, 'B'},
 	{"device-type", required_argument, NULL, 'Y'},
 	{"outgoing", no_argument, NULL, 'O'},
@@ -118,7 +118,7 @@ struct option const long_options[] = {
 	{NULL, 0, NULL, 0},
 };
 
-static char *short_options = "dhVL:o:m:t:s:c:l:n:v:b:E:f:T:I:Q:u:p:H:P:B:Y:O:C:";
+static char *short_options = "dhVL:o:m:t:s:c:l:n:v:b:E:f:T:I:Q:u:p:H:F:P:B:Y:O:C:";
 
 static void usage(int status)
 {
@@ -131,9 +131,10 @@ Linux SCSI Target Framework Administration Utility, version %s\n\
 \n\
   --lld <driver> --mode target --op new --tid <id> --targetname <name>\n\
                         add a new target with <id> and <name>. <id> must not be zero.\n\
-  --lld <driver> --mode target --op delete --tid <id>\n\
-                        delete the specific target with <id>. The target must\n\
-                        have no activity.\n\
+  --lld <driver> --mode target --op delete [--force] --tid <id>\n\
+			delete the specific target with <id>.\n\
+			With force option, the specific target is deleted \n\
+			even if there is an activity.\n\
   --lld <driver> --mode target --op show\n\
                         show all the targets.\n\
   --lld <driver> --mode target --op show --tid <id>\n\
@@ -435,7 +436,7 @@ int main(int argc, char **argv)
 	int ch, longindex, rc;
 	int op, total, tid, rest, mode, dev_type, ac_dir;
 	uint32_t cid, hostno;
-	uint64_t sid, lun;
+	uint64_t sid, lun, force;
 	char *name, *value, *path, *targetname, *params, *address, *iqnname, *targetOps;
 	char *portalOps, *bstype;
 	char *bsoflags;
@@ -455,6 +456,7 @@ int main(int argc, char **argv)
 	name = value = path = targetname = address = iqnname = NULL;
 	targetOps = portalOps = bstype = NULL;
 	bsoflags = user = password = NULL;
+	force = 0;
 
 	buf = valloc(bufsz);
 	if (!buf) {
@@ -530,6 +532,9 @@ int main(int argc, char **argv)
 			break;
 		case 'H':
 			hostno = strtol(optarg, NULL, 10);
+			break;
+		case 'F':
+			force = 1;
 			break;
 		case 'f':
 			bsoflags = optarg;
@@ -619,6 +624,13 @@ int main(int argc, char **argv)
 			}
 			break;
 		case OP_DELETE:
+			rc = verify_mode_params(argc, argv, "LmotCF");
+			if (rc) {
+				eprintf("target mode: option '-%c' is not "
+					  "allowed/supported\n", rc);
+				exit(EINVAL);
+			}
+			break;
 		case OP_SHOW:
 			rc = verify_mode_params(argc, argv, "LmotC");
 			if (rc) {
@@ -827,6 +839,7 @@ int main(int argc, char **argv)
 	req->host_no = hostno;
 	req->device_type = dev_type;
 	req->ac_dir = ac_dir;
+	req->force = force;
 
 	params = buf + sizeof(*req);
 

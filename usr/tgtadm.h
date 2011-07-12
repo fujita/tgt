@@ -47,6 +47,7 @@ struct tgtadm_req {
 	uint32_t device_type;
 	uint32_t ac_dir;
 	uint32_t pack;
+	uint32_t force;
 };
 
 struct tgtadm_rsp {

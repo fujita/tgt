@@ -30,6 +30,7 @@
 		<arg choice="opt">-n --name &lt;parameter&gt;</arg>
 		<arg choice="opt">-v --value &lt;value&gt;</arg>
 		<arg choice="opt">-P --params &lt;param=value[,param=value...]&gt;</arg>
+		<arg choice="opt">-F --force</arg>
 		<arg choice="opt">-h --help</arg>
 	</cmdsynopsis>
 	
@@ -105,6 +106,14 @@ Possible backend types are:
         <listitem>
           <para>
 	    Delete specific target with &lt;id&gt;. The target must have no active I_T nexus.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry><term><option>--lld &lt;driver&gt; --op delete --force --mode target --tid &lt;id&gt;</option></term>
+        <listitem>
+          <para>
+	    Delete specific target forcibly with &lt;id&gt;. 
           </para>
         </listitem>
       </varlistentry>

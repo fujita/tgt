@@ -225,7 +225,7 @@ extern int device_reserved(struct scsi_cmd *cmd);
 extern int tgt_device_path_update(struct target *target, struct scsi_lu *lu, char *path);
 
 extern int tgt_target_create(int lld, int tid, char *args);
-extern int tgt_target_destroy(int lld, int tid);
+extern int tgt_target_destroy(int lld, int tid, int force);
 extern char *tgt_targetname(int tid);
 extern int tgt_target_show_all(char *buf, int rest);
 int system_set_state(char *str);

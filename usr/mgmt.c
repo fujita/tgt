@@ -83,7 +83,7 @@ static int target_mgmt(int lld_no, struct mgmt_task *mtask)
 		err = tgt_target_create(lld_no, req->tid, mtask->buf);
 		break;
 	case OP_DELETE:
-		err = tgt_target_destroy(lld_no, req->tid);
+		err = tgt_target_destroy(lld_no, req->tid, req->force);
 		break;
 	case OP_BIND:
 		/* FIXME */

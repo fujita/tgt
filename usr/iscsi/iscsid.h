@@ -333,7 +333,7 @@ extern void target_list_build(struct iscsi_connection *, char *, char *);
 extern int ip_acl(int tid, struct iscsi_connection *conn);
 extern int iqn_acl(int tid, struct iscsi_connection *conn);
 extern int iscsi_target_create(struct target *);
-extern void iscsi_target_destroy(int);
+extern void iscsi_target_destroy(int tid, int force);
 extern int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid,
 			     uint64_t lun, char *buf, int rest);
 int iscsi_target_update(int mode, int op, int tid, uint64_t sid, uint64_t lun,
