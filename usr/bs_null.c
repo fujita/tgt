@@ -48,18 +48,12 @@ static void bs_null_close(struct scsi_lu *lu)
 {
 }
 
-static int bs_null_cmd_done(struct scsi_cmd *cmd)
-{
-	return 0;
-}
-
 static struct backingstore_template null_bst = {
 	.bs_name		= "null",
 	.bs_datasize		= 0,
 	.bs_open		= bs_null_open,
 	.bs_close		= bs_null_close,
 	.bs_cmd_submit		= bs_null_cmd_submit,
-	.bs_cmd_done		= bs_null_cmd_done,
 };
 
 __attribute__((constructor)) static void bs_null_constructor(void)

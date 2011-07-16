@@ -124,7 +124,6 @@ struct backingstore_template {
 	int (*bs_init)(struct scsi_lu *dev);
 	void (*bs_exit)(struct scsi_lu *dev);
 	int (*bs_cmd_submit)(struct scsi_cmd *cmd);
-	int (*bs_cmd_done)(struct scsi_cmd *cmd);
 	int bs_oflags_supported;
 
 	struct list_head backingstore_siblings;

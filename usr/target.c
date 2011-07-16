@@ -1055,15 +1055,12 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 static void __cmd_done(struct target *target, struct scsi_cmd *cmd)
 {
 	struct tgt_cmd_queue *q;
-	int err;
 
 	cmd_hlist_remove(cmd);
 
-	err = target->bst->bs_cmd_done(cmd);
-
-	dprintf("%p %p %u %u %d\n", scsi_get_out_buffer(cmd),
+	dprintf("%p %p %u %u\n", scsi_get_out_buffer(cmd),
 		scsi_get_in_buffer(cmd), scsi_get_out_length(cmd),
-		scsi_get_in_length(cmd), err);
+		scsi_get_in_length(cmd));
 
 	q = &cmd->dev->cmd_queue;
 	q->active_cmd--;
@@ -1082,13 +1079,9 @@ static void __cmd_done(struct target *target, struct scsi_cmd *cmd)
  */
 void __cmd_done_passthrough(struct target *target, struct scsi_cmd *cmd)
 {
-	int err;
-
-	err = target->bst->bs_cmd_done(cmd);
-
-	dprintf("%p %p %u %u %d\n", scsi_get_out_buffer(cmd),
+	dprintf("%p %p %u %u\n", scsi_get_out_buffer(cmd),
 		scsi_get_in_buffer(cmd), scsi_get_out_length(cmd),
-		scsi_get_in_length(cmd), err);
+		scsi_get_in_length(cmd));
 }
 
 struct scsi_cmd *target_cmd_lookup(int tid, uint64_t itn_id, uint64_t tag)

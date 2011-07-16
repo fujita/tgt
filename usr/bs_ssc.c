@@ -686,11 +686,6 @@ static void bs_ssc_close(struct scsi_lu *lu)
 	close(lu->fd);
 }
 
-static int bs_ssc_cmd_done(struct scsi_cmd *cmd)
-{
-	return 0;
-}
-
 static struct backingstore_template ssc_bst = {
 	.bs_name		= "ssc",
 	.bs_datasize		= sizeof(struct bs_thread_info),
@@ -699,7 +694,6 @@ static struct backingstore_template ssc_bst = {
 	.bs_open		= bs_ssc_open,
 	.bs_close		= bs_ssc_close,
 	.bs_cmd_submit		= bs_thread_cmd_submit,
-	.bs_cmd_done		= bs_ssc_cmd_done,
 };
 
 __attribute__((constructor)) static void bs_ssc_constructor(void)

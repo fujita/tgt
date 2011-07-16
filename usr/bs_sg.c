@@ -463,11 +463,6 @@ static void bs_sg_close(struct scsi_lu *lu)
 	close(lu->fd);
 }
 
-static int bs_sg_cmd_done(struct scsi_cmd *cmd)
-{
-	return 0;
-}
-
 static int bs_sg_lu_init(struct scsi_lu *lu)
 {
 	if (spc_lu_init(lu))
@@ -483,7 +478,6 @@ static struct backingstore_template sg_bst = {
 	.bs_open		= bs_sg_open,
 	.bs_close		= bs_sg_close,
 	.bs_cmd_submit		= bs_sg_cmd_submit,
-	.bs_cmd_done		= bs_sg_cmd_done,
 };
 
 static struct backingstore_template bsg_bst = {
@@ -493,7 +487,6 @@ static struct backingstore_template bsg_bst = {
 	.bs_open		= bs_sg_open,
 	.bs_close		= bs_sg_close,
 	.bs_cmd_submit		= bs_bsg_cmd_submit,
-	.bs_cmd_done		= bs_sg_cmd_done,
 };
 
 static struct device_type_template sg_template = {

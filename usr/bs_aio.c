@@ -231,11 +231,6 @@ static int bs_aio_cmd_submit(struct scsi_cmd *cmd)
 	return ret;
 }
 
-static int bs_aio_cmd_done(struct scsi_cmd *cmd)
-{
-	return 0;
-}
-
 static struct backingstore_template aio_bst = {
 	.bs_name		= "aio",
 	.bs_datasize		= sizeof(struct bs_aio_info),
@@ -244,7 +239,6 @@ static struct backingstore_template aio_bst = {
 	.bs_open		= bs_aio_open,
 	.bs_close		= bs_aio_close,
 	.bs_cmd_submit		= bs_aio_cmd_submit,
-	.bs_cmd_done		= bs_aio_cmd_done,
 };
 
 __attribute__((constructor)) static void bs_rdwr_constructor(void)

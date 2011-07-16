@@ -162,11 +162,6 @@ static void bs_rdwr_exit(struct scsi_lu *lu)
 	bs_thread_close(info);
 }
 
-static int bs_rdwr_cmd_done(struct scsi_cmd *cmd)
-{
-	return 0;
-}
-
 static struct backingstore_template rdwr_bst = {
 	.bs_name		= "rdwr",
 	.bs_datasize		= sizeof(struct bs_thread_info),
@@ -175,7 +170,6 @@ static struct backingstore_template rdwr_bst = {
 	.bs_init		= bs_rdwr_init,
 	.bs_exit		= bs_rdwr_exit,
 	.bs_cmd_submit		= bs_thread_cmd_submit,
-	.bs_cmd_done		= bs_rdwr_cmd_done,
 	.bs_oflags_supported    = O_SYNC | O_DIRECT,
 };
 
