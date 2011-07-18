@@ -188,7 +188,9 @@ fi
 
 echo "Using transport: $lld_name"
 
-tgt_name="iqn.2001-04.com.$(hostname -s)-$tgt_name"
+if ! [[ $tgt_name =~ ^iqn ]]; then
+    tgt_name="iqn.2001-04.com.$(hostname -s)-$tgt_name"
+fi
 
 # Make sure that a target with the same name doesn't exist
 check_if_tgt_exists
