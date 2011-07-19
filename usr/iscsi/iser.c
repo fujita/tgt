@@ -3435,7 +3435,6 @@ static struct iscsi_transport iscsi_iser = {
 
 static struct tgt_driver iser = {
 	.name   		= "iser",
-	.use_kernel     	= 0,
 	.init   		= iser_init,
 	.exit   		= iser_exit,
 	.target_create  	= iser_target_create,

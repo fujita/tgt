@@ -3,7 +3,6 @@
 
 struct tgt_driver {
 	const char *name;
-	int use_kernel;
 
 	int (*init)(int, char *);
 	void (*exit)(void);

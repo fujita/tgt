@@ -217,7 +217,6 @@ static int fcoe_init(int index, char *args)
 
 static struct tgt_driver fcoe = {
 	.name			= "fcoe",
-	.use_kernel		= 0,
 	.target_create		= fcoe_target_create,
 	.target_destroy		= fcoe_target_destroy,
 	.init			= fcoe_init,

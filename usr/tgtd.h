@@ -208,15 +208,6 @@ enum mgmt_req_result {
 	MGMT_REQ_QUEUED,
 };
 
-#ifdef USE_KERNEL
-extern int kreq_init(void);
-#else
-static inline int kreq_init(void)	\
-{					\
-	return 0;			\
-}
-#endif
-
 extern int system_active;
 extern int is_debug;
 
