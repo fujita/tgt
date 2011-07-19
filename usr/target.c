@@ -1103,7 +1103,6 @@ void target_cmd_done(struct scsi_cmd *cmd)
 	mreq = cmd->mreq;
 	if (mreq && !--mreq->busy) {
 		mreq->result = mreq->function == ABORT_TASK ? -EEXIST : 0;
-		mreq->itn_id = cmd->cmd_itn_id;
 		tgt_drivers[cmd->c_target->lid]->mgmt_end_notify(mreq);
 		free(mreq);
 	}
@@ -1186,9 +1185,7 @@ enum mgmt_req_result target_mgmt_request(int tid, uint64_t itn_id,
 	}
 
 	mreq->mid = req_id;
-	mreq->itn_id = itn_id;
 	mreq->function = function;
-	mreq->host_no = host_no;
 
 	switch (function) {
 	case ABORT_TASK:

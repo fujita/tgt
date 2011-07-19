@@ -200,10 +200,6 @@ struct mgmt_req {
 	int busy;
 	int function;
 	int result;
-
-	/* for kernel llds */
-	int host_no;
-	uint64_t itn_id;
 };
 
 enum mgmt_req_result {
