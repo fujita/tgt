@@ -13,15 +13,15 @@ Physical tape library connected and configured to host:
 [2:0:1:0]    tape    IBM      ULT3580-TD4      8192  /dev/st1  /dev/sg4
 [2:0:1:1]    mediumx IBM      3573-TL          6.50  -         /dev/sg5
 
-Please refer to the README.iscsi, README.iser or README.fcoe for
-instructions specific to setting up the transport layer specific section.
+Please refer to the README.iscsi or README.iser for instructions
+specific to setting up the transport layer specific section.
 
 Many of the examples below are using the iSCSI lld (low Level) transport.
 
 
 Starting the daemon
 -------------
-Please refer to 'Starting the daemon' in the README.iscsi, README.iser or README.fcoe
+Please refer to 'Starting the daemon' in the README.iscsi or README.iser.
 on instructions for correctly starting the daemon for your transport of choice.
 
 
@@ -29,8 +29,8 @@ Configuration
 -------------
 Everyting is configured via the tgtadm management tool.
 
-Please refer to "Configuration" in  README.iscsi, README.iser or README.fcoe on how to
-configure your target for the transport of choice.
+Please refer to "Configuration" in README.iscsi or README.iser on how
+to configure your target for the transport of choice.
 
 Return to here for further instructions on setting up each logical unit using the
 passthrough module.

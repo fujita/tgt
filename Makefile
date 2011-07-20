@@ -10,7 +10,7 @@ PREFIX ?= /usr
 export VERSION PREFIX
 
 # Export the feature switches so sub-make knows about them
-export ISCSI_RDMA FCOE
+export ISCSI_RDMA
 
 .PHONY: all
 all: programs doc conf scripts

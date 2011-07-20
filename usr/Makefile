@@ -18,25 +18,6 @@ TGTD_OBJS += iscsi/iser.o iscsi/iser_text.o
 LIBS += -libverbs -lrdmacm
 endif
 
-ifneq ($(FCOE),)
-TGTD_OBJS += $(addprefix fcoe/,\
-	openfc_target.o \
-	openfc_scst.o \
-	fcs_state.o \
-	fc_exch.o \
-	fc_disc_targ.o \
-	fc_frame.o \
-	fc_local_port.o \
-	fc_remote_port.o \
-	fc_sess.o \
-	fc_virt_fab.o \
-	fc_port.o \
-	fcoe_if.o fcoe_dev.o \
-	sa_event.o sa_timer.o sa_hash_kern.o sa_state.o\
-	crc32_le.o crc32_le_tab.o)
-TGTD_OBJS += bs_rdwr.o
-endif
-
 INCLUDES += -I.
 
 CFLAGS += -D_GNU_SOURCE
@@ -88,4 +69,4 @@ install: $(PROGRAMS)
 
 .PHONY: clean
 clean:
-	rm -f *.[od] $(PROGRAMS) iscsi/*.[od] ibmvio/*.[od] fc/*.[od] fcoe/*.[od]
+	rm -f *.[od] $(PROGRAMS) iscsi/*.[od] ibmvio/*.[od] fc/*.[od]
