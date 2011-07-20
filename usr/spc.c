@@ -1211,6 +1211,7 @@ static int spc_pr_clear(int host_no, struct scsi_cmd *cmd)
 		free(sibling);
 	}
 
+	cmd->dev->prgeneration++;
 	return SAM_STAT_GOOD;
 sense:
 	scsi_set_in_resid_by_actual(cmd, 0);
@@ -1385,6 +1386,7 @@ found:
 	if (unreg)
 		__unregister(cmd->dev, reg);
 
+	cmd->dev->prgeneration++;
 	return SAM_STAT_GOOD;
 sense:
 	scsi_set_in_resid_by_actual(cmd, 0);
