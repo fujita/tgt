@@ -1413,10 +1413,10 @@ static int iscsi_tm_execute(struct iscsi_task *task)
 		fn = ABORT_TASK_SET;
 		break;
 	case ISCSI_TM_FUNC_CLEAR_ACA:
-		fn = CLEAR_TASK_SET;
+		err = ISCSI_TMF_RSP_NOT_SUPPORTED;
 		break;
 	case ISCSI_TM_FUNC_CLEAR_TASK_SET:
-		fn = CLEAR_ACA;
+		err = ISCSI_TMF_RSP_NOT_SUPPORTED;
 		break;
 	case ISCSI_TM_FUNC_LOGICAL_UNIT_RESET:
 		fn = LOGICAL_UNIT_RESET;
