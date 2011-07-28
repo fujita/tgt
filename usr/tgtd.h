@@ -211,9 +211,6 @@ enum mgmt_req_result {
 extern int system_active;
 extern int is_debug;
 
-extern int kspace_send_tsk_mgmt_res(struct mgmt_req *mreq);
-extern int kspace_send_cmd_res(uint64_t nid, int result, struct scsi_cmd *);
-
 extern int ipc_init(void);
 extern void ipc_exit(void);
 extern int tgt_device_create(int tid, int dev_type, uint64_t lun, char *args, int backing);
