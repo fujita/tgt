@@ -97,8 +97,6 @@ static int mmc_rw(int host_no, struct scsi_cmd *cmd)
 		break;
 	}
 
-	cmd->scsi_cmd_done = target_cmd_io_done;
-
 	offset = scsi_rw_offset(cmd->scb);
 	cmd->offset = (offset << MMC_BLK_SHIFT);
 

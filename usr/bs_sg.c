@@ -95,7 +95,6 @@ static int bs_sg_rw(int host_no, struct scsi_cmd *cmd)
 	unsigned char key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_LUN_NOT_SUPPORTED;
 
-	cmd->scsi_cmd_done = target_cmd_io_done;
 	ret = cmd->dev->bst->bs_cmd_submit(cmd);
 	if (ret) {
 		key = HARDWARE_ERROR;
@@ -262,8 +261,7 @@ static void bs_bsg_cmd_complete(int fd, int events, void *data)
 		scsi_set_out_resid_by_actual(cmd, 0);
 		scsi_set_in_resid_by_actual(cmd, 0);
 	}
-	dprintf("[%d] BSG() Calling cmd->scsi_cmd_done()\n", getpid());
-	cmd->scsi_cmd_done(cmd, io_hdr.device_status);
+	target_cmd_io_done(cmd, io_hdr.device_status);
 }
 
 static void bs_sg_cmd_complete(int fd, int events, void *data)
@@ -297,7 +295,7 @@ static void bs_sg_cmd_complete(int fd, int events, void *data)
 		scsi_set_in_resid_by_actual(cmd, resid);
 	}
 
-	cmd->scsi_cmd_done(cmd, io_hdr.status);
+	target_cmd_io_done(cmd, io_hdr.status);
 }
 
 static int get_bsg_major(char *path)

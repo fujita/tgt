@@ -140,7 +140,7 @@ static void bs_thread_request_done(int fd, int events, void *data)
 		dprintf("back to tgtd, %p\n", cmd);
 
 		list_del(&cmd->bs_list);
-		cmd->scsi_cmd_done(cmd, scsi_get_result(cmd));
+		target_cmd_io_done(cmd, scsi_get_result(cmd));
 	}
 
 rewrite:
@@ -175,7 +175,7 @@ static void bs_sig_request_done(int fd, int events, void *data)
 
 		list_del(&cmd->bs_list);
 
-		cmd->scsi_cmd_done(cmd, scsi_get_result(cmd));
+		target_cmd_io_done(cmd, scsi_get_result(cmd));
 	}
 }
 

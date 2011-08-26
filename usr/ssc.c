@@ -66,8 +66,6 @@ static int ssc_rw(int host_no, struct scsi_cmd *cmd)
 	if (ret)
 		return SAM_STAT_RESERVATION_CONFLICT;
 
-	cmd->scsi_cmd_done = target_cmd_io_done;
-
 	ret = cmd->dev->bst->bs_cmd_submit(cmd);
 	if (ret) {
 		key = HARDWARE_ERROR;

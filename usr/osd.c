@@ -31,7 +31,6 @@
 
 static int osd_varlen_cdb(int host_no, struct scsi_cmd *cmd)
 {
-	cmd->scsi_cmd_done = target_cmd_io_done;
 	return cmd->dev->bst->bs_cmd_submit(cmd);
 }
 
