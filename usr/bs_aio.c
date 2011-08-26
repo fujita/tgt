@@ -103,7 +103,7 @@ get_events:
 			result = SAM_STAT_CHECK_CONDITION;
 		}
 
-		target_cmd_io_done(cmd, result);
+		cmd->scsi_cmd_done(cmd, result);
 	}
 
 	if (total)
