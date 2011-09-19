@@ -719,7 +719,7 @@ int main(int argc, char **argv)
 				tid = GLOBAL_TID;
 			break;
 		case OP_UNBIND:
-			rc = verify_mode_params(argc, argv, "LmotuC");
+			rc = verify_mode_params(argc, argv, "LmotuOC");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
