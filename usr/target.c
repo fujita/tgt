@@ -355,22 +355,6 @@ static struct scsi_lu *device_lookup(struct target *target, uint64_t lun)
 	return NULL;
 }
 
-static struct scsi_cmd *cmd_lookup(int tid, uint64_t itn_id, uint64_t tag)
-{
-	struct scsi_cmd *cmd;
-	struct it_nexus *itn;
-
-	itn = it_nexus_lookup(tid, itn_id);
-	if (!itn)
-		return NULL;
-
-	list_for_each_entry(cmd, &itn->cmd_hash_list[hashfn(tag)], c_hlist) {
-		if (cmd->tag == tag)
-			return cmd;
-	}
-	return NULL;
-}
-
 static void cmd_hlist_insert(struct it_nexus *itn, struct scsi_cmd *cmd)
 {
 	struct list_head *list = &itn->cmd_hash_list[hashfn(cmd->tag)];
@@ -1084,18 +1068,6 @@ void __cmd_done_passthrough(struct target *target, struct scsi_cmd *cmd)
 		scsi_get_in_length(cmd));
 }
 
-struct scsi_cmd *target_cmd_lookup(int tid, uint64_t itn_id, uint64_t tag)
-{
-	struct scsi_cmd *cmd;
-
-	cmd = cmd_lookup(tid, itn_id, tag);
-	if (!cmd)
-		eprintf("Cannot find cmd %d %" PRIx64 " %" PRIx64 "\n",
-			tid, itn_id, tag);
-
-	return cmd;
-}
-
 void target_cmd_done(struct scsi_cmd *cmd)
 {
 	struct mgmt_req *mreq;
@@ -1680,18 +1652,6 @@ int tgt_unbind_host_to_target(int tid, int host_no)
 			return 0;
 		}
 	}
-	return -ENOENT;
-}
-
-int tgt_bound_target_lookup(int host_no)
-{
-	struct bound_host *bhost;
-
-	list_for_each_entry(bhost, &bound_host_list, bhost_siblings) {
-		if (bhost->host_no == host_no)
-			return bhost->target->tid;
-	}
-
 	return -ENOENT;
 }
 

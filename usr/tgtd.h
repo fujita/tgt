@@ -235,7 +235,6 @@ extern int tgt_portal_destroy(int lld, char *args);
 
 extern int tgt_bind_host_to_target(int tid, int host_no);
 extern int tgt_unbind_host_to_target(int tid, int host_no);
-extern int tgt_bound_target_lookup(int host_no);
 
 struct event_data;
 typedef void (*sched_event_handler_t)(struct event_data *tev);
@@ -257,7 +256,6 @@ extern int target_cmd_perform(int tid, struct scsi_cmd *cmd);
 extern int target_cmd_perform_passthrough(int tid, struct scsi_cmd *cmd);
 extern void target_cmd_done(struct scsi_cmd *cmd);
 extern void __cmd_done_passthrough(struct target *target, struct scsi_cmd *cmd);
-struct scsi_cmd *target_cmd_lookup(int tid, uint64_t itn_id, uint64_t tag);
 
 extern enum mgmt_req_result target_mgmt_request(int tid, uint64_t itn_id,
 						uint64_t req_id, int function,
