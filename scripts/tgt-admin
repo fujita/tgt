@@ -763,7 +763,8 @@ sub process_options {
 			^DefaultTime2Retain$|
 			^OFMarkInt$|
 			^IFMarkInt$|
-			^MaxConnections/x) {
+			^MaxConnections$|
+			^state/x) {
 	        # if we have one command, force it to be an array anyway
 		force_array();
 		if (length @$value[1]) {
