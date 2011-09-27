@@ -210,6 +210,7 @@ enum mgmt_req_result {
 
 extern int system_active;
 extern int is_debug;
+extern int nr_iothreads;
 
 extern int ipc_init(void);
 extern void ipc_exit(void);

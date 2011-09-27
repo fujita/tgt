@@ -1,9 +1,8 @@
-#define NR_WORKER_THREADS	4
-
 typedef void (request_func_t) (struct scsi_cmd *);
 
 struct bs_thread_info {
-	pthread_t worker_thread[NR_WORKER_THREADS];
+	pthread_t *worker_thread;
+	int nr_worker_threads;
 
 	/* wokers sleep on this and signaled by tgtd */
 	pthread_cond_t pending_cond;

@@ -148,11 +148,13 @@ static void bs_rdwr_close(struct scsi_lu *lu)
 	close(lu->fd);
 }
 
+int nr_iothreads = 16;
+
 static int bs_rdwr_init(struct scsi_lu *lu)
 {
 	struct bs_thread_info *info = BS_THREAD_I(lu);
 
-	return bs_thread_open(info, bs_rdwr_request, NR_WORKER_THREADS);
+	return bs_thread_open(info, bs_rdwr_request, nr_iothreads);
 }
 
 static void bs_rdwr_exit(struct scsi_lu *lu)

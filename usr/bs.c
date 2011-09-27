@@ -24,6 +24,7 @@
 #include <inttypes.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -327,6 +328,11 @@ int bs_thread_open(struct bs_thread_info *info, request_func_t *rfn,
 {
 	int i, ret;
 
+	info->worker_thread = zalloc(sizeof(pthread_t) * nr_threads);
+	if (!info->worker_thread)
+		return TGTADM_NOMEM;
+
+	eprintf("%d\n", nr_threads);
 	info->request_fn = rfn;
 
 	INIT_LIST_HEAD(&info->pending_list);
@@ -334,11 +340,6 @@ int bs_thread_open(struct bs_thread_info *info, request_func_t *rfn,
 	pthread_cond_init(&info->pending_cond, NULL);
 	pthread_mutex_init(&info->pending_lock, NULL);
 	pthread_mutex_init(&info->startup_lock, NULL);
-
-	if (nr_threads > ARRAY_SIZE(info->worker_thread)) {
-		eprintf("too many threads %d\n", nr_threads);
-		nr_threads = ARRAY_SIZE(info->worker_thread);
-	}
 
 	pthread_mutex_lock(&info->startup_lock);
 	for (i = 0; i < nr_threads; i++) {
@@ -353,6 +354,7 @@ int bs_thread_open(struct bs_thread_info *info, request_func_t *rfn,
 		}
 	}
 	pthread_mutex_unlock(&info->startup_lock);
+	info->nr_worker_threads = nr_threads;
 
 	return 0;
 destroy_threads:
@@ -367,6 +369,7 @@ destroy_threads:
 	pthread_cond_destroy(&info->pending_cond);
 	pthread_mutex_destroy(&info->pending_lock);
 	pthread_mutex_destroy(&info->startup_lock);
+	free(info->worker_thread);
 
 	return TGTADM_NOMEM;
 }
@@ -378,13 +381,13 @@ void bs_thread_close(struct bs_thread_info *info)
 	info->stop = 1;
 	pthread_cond_broadcast(&info->pending_cond);
 
-	for (i = 0; info->worker_thread[i] &&
-		     i < ARRAY_SIZE(info->worker_thread); i++)
+	for (i = 0; info->worker_thread[i] && i < info->nr_worker_threads; i++)
 		pthread_join(info->worker_thread[i], NULL);
 
 	pthread_cond_destroy(&info->pending_cond);
 	pthread_mutex_destroy(&info->pending_lock);
 	pthread_mutex_destroy(&info->startup_lock);
+	free(info->worker_thread);
 
 	info->stop = 0;
 }
