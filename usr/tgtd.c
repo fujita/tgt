@@ -478,11 +478,9 @@ int main(int argc, char **argv)
 	int is_daemon = 1, is_debug = 0;
 	int ret;
 
-	/* do not allow ctrl-c for now... */
 	sa_new.sa_handler = signal_catch;
 	sigemptyset(&sa_new.sa_mask);
 	sa_new.sa_flags = 0;
-	sigaction(SIGINT, &sa_new, &sa_old);
 	sigaction(SIGPIPE, &sa_new, &sa_old);
 	sigaction(SIGTERM, &sa_new, &sa_old);
 
