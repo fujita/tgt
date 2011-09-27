@@ -263,7 +263,7 @@ void ua_sense_add_it_nexus(uint64_t itn_id, struct scsi_lu *lu,
 
 int it_nexus_create(int tid, uint64_t itn_id, int host_no, char *info)
 {
-	int i, ret;
+	int ret;
 	struct target *target;
 	struct it_nexus *itn;
 	struct scsi_lu *lu;
@@ -308,8 +308,7 @@ int it_nexus_create(int tid, uint64_t itn_id, int host_no, char *info)
 			 &itn->it_nexus_lu_info_list);
 	}
 
-	for (i = 0; i < ARRAY_SIZE(itn->cmd_hash_list); i++)
-		INIT_LIST_HEAD(&itn->cmd_hash_list[i]);
+	INIT_LIST_HEAD(&itn->cmd_list);
 
 	list_add_tail(&itn->nexus_siblings, &target->it_nexus_list);
 
@@ -321,7 +320,6 @@ out:
 
 int it_nexus_destroy(int tid, uint64_t itn_id)
 {
-	int i;
 	struct it_nexus *itn;
 	struct scsi_lu *lu;
 
@@ -331,9 +329,8 @@ int it_nexus_destroy(int tid, uint64_t itn_id)
 	if (!itn)
 		return -ENOENT;
 
-	for (i = 0; i < ARRAY_SIZE(itn->cmd_hash_list); i++)
-		if (!list_empty(&itn->cmd_hash_list[i]))
-			return -EBUSY;
+	if (!list_empty(&itn->cmd_list))
+		return -EBUSY;
 
 	list_for_each_entry(lu, &itn->nexus_target->device_list, device_siblings)
 		device_release(tid, itn_id, lu->lun, 0);
@@ -357,8 +354,7 @@ static struct scsi_lu *device_lookup(struct target *target, uint64_t lun)
 
 static void cmd_hlist_insert(struct it_nexus *itn, struct scsi_cmd *cmd)
 {
-	struct list_head *list = &itn->cmd_hash_list[hashfn(cmd->tag)];
-	list_add(&cmd->c_hlist, list);
+	list_add(&cmd->c_hlist, &itn->cmd_list);
 }
 
 static void cmd_hlist_remove(struct scsi_cmd *cmd)
@@ -1109,22 +1105,19 @@ static int abort_task_set(struct mgmt_req *mreq, struct target* target,
 {
 	struct scsi_cmd *cmd, *tmp;
 	struct it_nexus *itn;
-	int i, err, count = 0;
+	int err, count = 0;
 
 	eprintf("found %" PRIx64 " %d\n", tag, all);
 
 	list_for_each_entry(itn, &target->it_nexus_list, nexus_siblings) {
-		for (i = 0; i < ARRAY_SIZE(itn->cmd_hash_list); i++) {
-			struct list_head *list = &itn->cmd_hash_list[i];
-			list_for_each_entry_safe(cmd, tmp, list, c_hlist) {
-				if ((all && itn->itn_id == itn_id) ||
-				    (cmd->tag == tag && itn->itn_id == itn_id) ||
-				    (lun && !memcmp(cmd->lun, lun, sizeof(cmd->lun)))) {
-					err = abort_cmd(target, mreq, cmd);
-					if (err)
-						mreq->busy++;
-					count++;
-				}
+		list_for_each_entry_safe(cmd, tmp, &itn->cmd_list, c_hlist) {
+			if ((all && itn->itn_id == itn_id) ||
+			    (cmd->tag == tag && itn->itn_id == itn_id) ||
+			    (lun && !memcmp(cmd->lun, lun, sizeof(cmd->lun)))) {
+				err = abort_cmd(target, mreq, cmd);
+				if (err)
+					mreq->busy++;
+				count++;
 			}
 		}
 	}

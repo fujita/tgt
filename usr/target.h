@@ -2,11 +2,6 @@
 #define __TARGET_H__
 
 #include <limits.h>
-#define BITS_PER_LONG (ULONG_MAX == 0xFFFFFFFFUL ? 32 : 64)
-#include "hash.h"
-
-#define	HASH_ORDER	4
-#define	hashfn(val)	hash_long((unsigned long) (val), HASH_ORDER)
 
 struct acl_entry {
 	char *address;
@@ -52,7 +47,7 @@ struct it_nexus {
 	uint64_t itn_id;
 	long ctime;
 
-	struct list_head cmd_hash_list[1 << HASH_ORDER];
+	struct list_head cmd_list;
 
 	struct target *nexus_target;
 
