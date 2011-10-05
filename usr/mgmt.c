@@ -109,14 +109,12 @@ static int target_mgmt(int lld_no, struct mgmt_task *mtask)
 
 			p = strstr(mtask->buf, "initiator-address=");
 			if (p) {
-				err = 0;
-				acl_del(req->tid, p + strlen("initiator-address="));
+				err = acl_del(req->tid, p + strlen("initiator-address="));
 			}
 
 			p = strstr(mtask->buf, "initiator-name=");
 			if (p) {
-				err = 0;
-				iqn_acl_del(req->tid, p + strlen("initiator-name="));
+				err = iqn_acl_del(req->tid, p + strlen("initiator-name="));
 			}
 		}
 		break;

@@ -285,11 +285,11 @@ extern enum scsi_target_state tgt_get_target_state(int tid);
 extern int tgt_set_target_state(int tid, char *str);
 
 extern int acl_add(int tid, char *address);
-extern void acl_del(int tid, char *address);
+extern int acl_del(int tid, char *address);
 extern char *acl_get(int tid, int idx);
 
 extern int iqn_acl_add(int tid, char *name);
-extern void iqn_acl_del(int tid, char *name);
+extern int iqn_acl_del(int tid, char *name);
 extern char *iqn_acl_get(int tid, int idx);
 
 extern int account_lookup(int tid, int type, char *user, int ulen, char *password, int plen);

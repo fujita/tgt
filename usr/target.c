@@ -1482,23 +1482,26 @@ int acl_add(int tid, char *address)
 	return 0;
 }
 
-void acl_del(int tid, char *address)
+int acl_del(int tid, char *address)
 {
 	struct target *target;
 	struct acl_entry *acl, *tmp;
+	int err = TGTADM_ACL_NOEXIST;
 
 	target = target_lookup(tid);
 	if (!target)
-		return;
+		return TGTADM_NO_TARGET;
 
 	list_for_each_entry_safe(acl, tmp, &target->acl_list, aclent_list) {
 		if (!strcmp(address, acl->address)) {
 			list_del(&acl->aclent_list);
 			free(acl->address);
 			free(acl);
+			err = 0;
 			break;
 		}
 	}
+	return err;
 }
 
 char *acl_get(int tid, int idx)
@@ -1549,23 +1552,26 @@ int iqn_acl_add(int tid, char *name)
 	return 0;
 }
 
-void iqn_acl_del(int tid, char *name)
+int iqn_acl_del(int tid, char *name)
 {
 	struct target *target;
 	struct iqn_acl_entry *iqn_acl, *tmp;
+	int err = TGTADM_ACL_NOEXIST;
 
 	target = target_lookup(tid);
 	if (!target)
-		return;
+		return TGTADM_NO_TARGET;
 
 	list_for_each_entry_safe(iqn_acl, tmp, &target->iqn_acl_list, iqn_aclent_list) {
 		if (!strcmp(name, iqn_acl->name)) {
 			list_del(&iqn_acl->iqn_aclent_list);
 			free(iqn_acl->name);
 			free(iqn_acl);
+			err = 0;
 			break;
 		}
 	}
+	return err;
 }
 
 char *iqn_acl_get(int tid, int idx)

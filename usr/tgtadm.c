@@ -66,6 +66,7 @@ static const char * tgtadm_strerror(int err)
 		{ TGTADM_TARGET_EXIST, "this target already exists" },
 		{ TGTADM_LUN_EXIST, "this logical unit number already exists" },
 		{ TGTADM_ACL_EXIST, "this access control rule already exists" },
+		{ TGTADM_ACL_NOEXIST, "this access control rule does not exist" },
 		{ TGTADM_USER_EXIST, "this account already exists" },
 		{ TGTADM_NO_USER, "can't find the account" },
 		{ TGTADM_TOO_MANY_USER, "too many accounts" },
