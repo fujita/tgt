@@ -315,6 +315,7 @@ sub add_targets {
 						execute("# Target $target already exists!");
 					}
 				}
+				$tgtadm_output_tid{$target} = $next_tid;
 			}
 			if (length $single_target && $in_configfile == 0 && $configured == 0) {
 				print "Target $single_target is currently not configured\n";
@@ -1138,7 +1139,6 @@ EOF
 
 # Find the biggest tid
 sub find_max_tid {
-	process_targets;
 	my @all_targets = keys %tgtadm_output_tid;
 	my $maxtid = 0;
 	foreach my $var (@all_targets) {
