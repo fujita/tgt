@@ -261,8 +261,7 @@ static int account_mgmt(int lld_no,  struct mgmt_task *mtask)
 			err = account_add(user, password);
 		} else {
 			if (req->op == OP_DELETE) {
-				account_del(user);
-				err = 0;
+				err = account_del(user);
 			} else
 				err = account_ctl(req->tid, req->ac_dir,
 						  user, req->op == OP_BIND);

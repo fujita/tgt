@@ -1412,14 +1412,14 @@ int account_ctl(int tid, int type, char *user, int bind)
 	return err;
 }
 
-void account_del(char *user)
+int account_del(char *user)
 {
 	struct account_entry *ac;
 	struct target *target;
 
 	ac = __account_lookup_user(user);
 	if (!ac)
-		return;
+		return TGTADM_NO_USER;
 
 	list_for_each_entry(target, &target_list, target_siblings) {
 		account_ctl(target->tid, ACCOUNT_TYPE_INCOMING, ac->user, 0);
@@ -1433,6 +1433,7 @@ void account_del(char *user)
 	free(ac->user);
 	free(ac->password);
 	free(ac);
+	return 0;
 }
 
 int account_available(int tid, int dir)
