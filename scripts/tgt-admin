@@ -711,7 +711,6 @@ sub process_options {
 			check_value($userpass[1]);
 			# Only delete or create account if it doesn't already exist
 			if (! exists $existing_accounts{$userpass[0]} ) {
-				execute("tgtadm -C $control_port --lld $driver --mode account --op delete --user=$userpass[0]");
 				execute("tgtadm -C $control_port --lld $driver --mode account --op new --user=$userpass[0] --password=$userpass[1]");
 				$existing_accounts{$userpass[0]} = 1;
 			}
@@ -729,7 +728,6 @@ sub process_options {
 		check_value($userpass[1]);
 		# Only delete or create account if it doesn't already exist
 		if (! exists $existing_accounts{$userpass[0]} ) {
-			execute("tgtadm -C $control_port --lld $driver --mode account --op delete --user=$userpass[0]");
 			execute("tgtadm -C $control_port --lld $driver --mode account --op new --user=$userpass[0] --password=$userpass[1]");
 			$existing_accounts{$userpass[0]} = 1;
 		}
