@@ -464,6 +464,7 @@ sub add_backing_direct {
 		my @exec_commands;
 		my $device_type;
 		my $bs_type;
+		my $block_size;
 		my %luns;
 		my @added_luns;
 		# Find out LUNs which are "reserved" in the config file
@@ -512,6 +513,10 @@ sub add_backing_direct {
 						}
 						if ($store_option eq "bs-type") {
 							$bs_type = $result;
+							$params_added{$store_option} = 1;
+						}
+						if ($store_option eq "block-size") {
+							$block_size = $result;
 							$params_added{$store_option} = 1;
 						}
 						if ($store_option eq "mode_page") {
@@ -635,7 +640,8 @@ sub add_backing_direct {
 		# Execute commands for a given LUN
 		if (length $device_type) { $device_type = "--device-type $device_type" };
 		if (length $bs_type) { $bs_type = "--bstype $bs_type" };
-		execute("tgtadm -C $control_port --lld $driver --op new --mode logicalunit --tid $next_tid --lun $lun -b $backing_store $device_type $bs_type");
+		if (length $block_size) { $block_size = "--blocksize $block_size" };
+		execute("tgtadm -C $control_port --lld $driver --op new --mode logicalunit --tid $next_tid --lun $lun -b $backing_store $device_type $bs_type $block_size");
 
 		# Commands should be executed in order
 		my @execute_last;

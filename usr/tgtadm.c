@@ -104,6 +104,7 @@ struct option const long_options[] = {
 	{"backing-store", required_argument, NULL, 'b'},
 	{"bstype", required_argument, NULL, 'E'},
 	{"bsoflags", required_argument, NULL, 'f'},
+	{"blocksize", required_argument, NULL, 'y'},
 	{"targetname", required_argument, NULL, 'T'},
 	{"initiator-address", required_argument, NULL, 'I'},
 	{"initiator-name", required_argument, NULL, 'Q'},
@@ -119,7 +120,7 @@ struct option const long_options[] = {
 	{NULL, 0, NULL, 0},
 };
 
-static char *short_options = "dhVL:o:m:t:s:c:l:n:v:b:E:f:T:I:Q:u:p:H:F:P:B:Y:O:C:";
+static char *short_options = "dhVL:o:m:t:s:c:l:n:v:b:E:f:y:T:I:Q:u:p:H:F:P:B:Y:O:C:";
 
 static void usage(int status)
 {
@@ -441,6 +442,7 @@ int main(int argc, char **argv)
 	char *name, *value, *path, *targetname, *params, *address, *iqnname, *targetOps;
 	char *portalOps, *bstype;
 	char *bsoflags;
+	char *blocksize;
 	char *user, *password;
 	char *buf;
 	size_t bufsz = BUFSIZE + sizeof(struct tgtadm_req);
@@ -456,7 +458,7 @@ int main(int argc, char **argv)
 	rest = BUFSIZE;
 	name = value = path = targetname = address = iqnname = NULL;
 	targetOps = portalOps = bstype = NULL;
-	bsoflags = user = password = NULL;
+	bsoflags = blocksize = user = password = NULL;
 	force = 0;
 
 	buf = valloc(bufsz);
@@ -539,6 +541,9 @@ int main(int argc, char **argv)
 			break;
 		case 'f':
 			bsoflags = optarg;
+			break;
+		case 'y':
+			blocksize = optarg;
 			break;
 		case 'E':
 			bstype = optarg;
@@ -751,7 +756,7 @@ int main(int argc, char **argv)
 		}
 		switch (op) {
 		case OP_NEW:
-			rc = verify_mode_params(argc, argv, "LmoftlbEYC");
+			rc = verify_mode_params(argc, argv, "LmofytlbEYC");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
@@ -772,7 +777,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		case OP_UPDATE:
-			rc = verify_mode_params(argc, argv, "LmoftlPC");
+			rc = verify_mode_params(argc, argv, "LmofytlPC");
 			if (rc) {
 				eprintf("option '-%c' not supported in "
 					"logicalunit mode\n", rc);
@@ -859,6 +864,9 @@ int main(int argc, char **argv)
 	if (bsoflags)
 		shprintf(total, params, rest, "%sbsoflags=%s",
 			 rest == BUFSIZE ? "" : ",", bsoflags);
+	if (blocksize)
+		shprintf(total, params, rest, "%sblocksize=%s",
+			 rest == BUFSIZE ? "" : ",", blocksize);
 	if (targetname)
 		shprintf(total, params, rest, "%stargetname=%s",
 			 rest == BUFSIZE ? "" : ",", targetname);
