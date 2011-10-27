@@ -212,102 +212,6 @@ Example usage:
     </variablelist>
   </refsect1>
 
-  <refsect1><title>CONFIGURATION FILE SYNTAX</title>
-    <para>
-       The defualt configuration file is /etc/tgt/target.conf. It defines all
-       the targets and their properties.
-       The configuration file is in XML format and uses tags.
-       Configuration file contains several target blocks, where each block
-       contains target's properties such as storage devices,
-       initator ACL and authorization information. You can include other
-       config files using:
-       include /etc/tgt/xen/*.conf.
-    </para>
-
-    <variablelist>
-
-      <varlistentry><term><option>backing-store</option></term>
-        <listitem>
-          <para>
-	    Defines a virtual device on the target.
-          </para>
-        </listitem>
-      </varlistentry>
-
-      <varlistentry><term><option>direct-store</option></term>
-        <listitem>
-          <para>
-	    Defines a direct mapped device with the same properties
-	    as the physical device (such as VENDOR_ID, SERIAL_NUM, etc.)
-          </para>
-        </listitem>
-      </varlistentry>
-
-      <varlistentry><term><option>initiator-address</option></term>
-        <listitem>
-          <para>
-	    Allows connections only from the specified IP
-	    address. Defaults to ALL if no "initiator-address" is specified.
-          </para>
-        </listitem>
-      </varlistentry>
-
-      <varlistentry><term><option>incominguser</option></term>
-        <listitem>
-          <para>
-	    Define iscsi incoming authentication setting. If no
-	    "incominguser" is specified, it is not used.
-          </para>
-        </listitem>
-      </varlistentry>
-
-      <varlistentry><term><option>outgoinguser</option></term>
-        <listitem>
-          <para>
-	    Define iscsi outgoing authentication setting. If no
-	    "outgoinguser" is specified, it is not used.
-          </para>
-        </listitem>
-	<screen format="linespecific">
-Example configuration file:
-
-&lt;target iqn.2007-04.com.example:san.monitoring&gt;
-backing-store /dev/san/monitoring
-
-# if no "incominguser" is specified, it is not used
-incominguser backup secretpass12
-
-# defaults to ALL if no "initiator-address" is specified
-initiator-address 192.168.1.2
-&lt;/target&gt;
-
-&lt;target iqn.2007-02.com.example:san.xen1&gt;
-backing-store /dev/san/xen1-disk1 # LUN1
-direct-store /dev/san/xen1-disk2  # LUN2
-
-initiator-address 192.168.1.2     # Allowed IP
-initiator-address 192.168.5.6     # Allowed IP
-
-incominguser user1 secretpass12
-incominguser user2 secretpass23
-
-outgoinguser userA secretpassA
-&lt;/target&gt;
-
-&lt;target iqn.2007-02.com.example:san.xen2&gt;
-backing-store /dev/san/xen2
-&lt;/target&gt;
-
-&lt;target iqn.2007-06.com.example:san.vmware1&gt;
-backing-store /dev/san/vmware1
-&lt;/target&gt;
-	</screen>
-      </varlistentry>
-
-    </variablelist>
-  </refsect1>
-
-
   <refsect1><title>FILES</title>
     <variablelist>
 
@@ -333,7 +237,7 @@ backing-store /dev/san/vmware1
 
   <refsect1><title>SEE ALSO</title>
     <para>
-      tgtd(8), tgtadm(8), tgtimg(8), tgt-setup-lun(8).
+      targets.conf(5), tgtd(8), tgtadm(8), tgtimg(8), tgt-setup-lun(8).
       <ulink url="http://stgt.sourceforge.net/"/>
     </para>
   </refsect1>
