@@ -298,6 +298,14 @@
       <varlistentry><term><option>allow-in-use &lt;val&gt;</option></term>
       </varlistentry>
 
+      <varlistentry><term><option>block-size&lt;val&gt;</option></term>
+	<listitem>
+	  <para>
+	    Specify the block size for this LUN.
+	  </para>
+	</listitem>
+      </varlistentry>
+
       <varlistentry><term><option>params &lt;vals&gt;</option></term>
 	<listitem>
 	  <para>
