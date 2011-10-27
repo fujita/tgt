@@ -3336,8 +3336,10 @@ static int iser_init(int index, char *args)
 	int err;
 
 	err = iser_ib_init();
-	if (err)
+	if (err) {
+		iser_send_nop = 0;
 		return err;
+	}
 
 	if (iser_send_nop) {
 		nop_work.func = iser_nop_work_handler;
