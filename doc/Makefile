@@ -15,7 +15,7 @@ XMLHTML = htmlpages/tgtd.8.html htmlpages/tgtadm.8.html \
 		htmlpages/targets.conf.5.html
 
 .PHONY:all
-all:
+all: xmlman xmlhtml
 
 .PHONY: install
 install: $(MANPAGES) $(DOCS)
