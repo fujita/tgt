@@ -9,10 +9,11 @@ DOCS = README.iscsi README.iser \
 
 XSLTPROC = /usr/bin/xsltproc
 XMLMAN = manpages/tgtd.8 manpages/tgtadm.8 manpages/tgtimg.8 \
-		manpages/tgt-admin.8 manpages/targets.conf.5
+		manpages/tgt-admin.8 manpages/targets.conf.5 \
+		manpages/tgt-setup-lun.8
 XMLHTML = htmlpages/tgtd.8.html htmlpages/tgtadm.8.html \
 		htmlpages/tgtimg.8.html htmlpages/tgt-admin.8.html \
-		htmlpages/targets.conf.5.html
+		htmlpages/targets.conf.5.html htmlpages/tgt-setup-lun.8.html
 
 .PHONY:all
 all: xmlman xmlhtml
@@ -57,6 +58,12 @@ manpages/targets.conf.5: targets.conf.5.xml
 	-test -z "$(XSLTPROC)" || $(XSLTPROC) -o $@ http://docbook.sourceforge.net/release/xsl/current/manpages/docbook.xsl $<
 
 htmlpages/targets.conf.5.html: targets.conf.5.xml
+	-test -z "$(XSLTPROC)" || $(XSLTPROC) -o $@ http://docbook.sourceforge.net/release/xsl/current/html/docbook.xsl $<
+
+manpages/tgt-setup-lun.8: tgt-setup-lun.8.xml
+	-test -z "$(XSLTPROC)" || $(XSLTPROC) -o $@ http://docbook.sourceforge.net/release/xsl/current/manpages/docbook.xsl $<
+
+htmlpages/tgt-setup-lun.8.html: tgt-setup-lun.8.xml
 	-test -z "$(XSLTPROC)" || $(XSLTPROC) -o $@ http://docbook.sourceforge.net/release/xsl/current/html/docbook.xsl $<
 
 xmlman: $(XMLMAN)
