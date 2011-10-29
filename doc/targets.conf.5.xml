@@ -194,6 +194,14 @@
         </listitem>
       </varlistentry>
 
+      <varlistentry><term><option>initiator-name &lt;addr&gt;</option></term>
+        <listitem>
+          <para>
+	    Allows connections only from the specified initiator name.
+          </para>
+        </listitem>
+      </varlistentry>
+
       <varlistentry><term><option>incominguser &lt;user&gt; &lt;userpassword&gt;</option></term>
         <listitem>
           <para>

@@ -750,6 +750,16 @@ sub process_options {
 		}
 	}
 
+	if ($option eq "initiator-name") {
+	        # if we have one command, force it to be an array anyway
+		force_array();
+		my @value_arr = @$value;
+		foreach my $initiator_name (@value_arr) {
+			check_value($initiator_name);
+			execute("tgtadm -C $control_port --lld $driver --op bind --mode target --tid $next_tid -Q $initiator_name");
+		}
+	}
+
 	if ($option =~ m/^MaxRecvDataSegmentLength$|
 			^MaxXmitDataSegmentLength$|
 			^HeaderDigest$|
