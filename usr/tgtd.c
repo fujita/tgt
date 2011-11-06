@@ -414,8 +414,11 @@ static int lld_init(char *args)
 	for (i = nr = 0; tgt_drivers[i]; i++) {
 		if (tgt_drivers[i]->init) {
 			err = tgt_drivers[i]->init(i, args);
-			if (err)
+			if (err) {
+				tgt_drivers[i]->drv_state = DRIVER_ERR;
 				continue;
+			}
+			tgt_drivers[i]->drv_state = DRIVER_INIT;
 		}
 		nr++;
 	}
@@ -429,6 +432,7 @@ static void lld_exit(void)
 	for (i = 0; tgt_drivers[i]; i++) {
 		if (tgt_drivers[i]->exit)
 			tgt_drivers[i]->exit();
+		tgt_drivers[i]->drv_state = DRIVER_EXIT;
 	}
 }
 

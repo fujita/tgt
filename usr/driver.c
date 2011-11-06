@@ -51,9 +51,26 @@ int register_driver(struct tgt_driver *drv)
 
 	for (i = 0; i < ARRAY_SIZE(tgt_drivers); i++)
 		if (!tgt_drivers[i]) {
+			drv->drv_state = DRIVER_REGD;
 			tgt_drivers[i] = drv;
 			return 0;
 		}
 
 	return -1;
+}
+
+const char *driver_state_name(struct tgt_driver *drv)
+{
+	switch (drv->drv_state) {
+	case DRIVER_REGD:
+		return "uninitialized";
+	case DRIVER_INIT:
+		return "ready";
+	case DRIVER_ERR:
+		return "error";
+	case DRIVER_EXIT:
+		return "stopped";
+	default:
+		return "unsupported";
+	}
 }

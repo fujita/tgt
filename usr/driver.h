@@ -1,8 +1,16 @@
 #ifndef __DRIVER_H__
 #define __DRIVER_H__
 
+enum tgt_driver_state {
+	DRIVER_REGD = 0, /* just registered */
+	DRIVER_INIT, /* initialized ok */
+	DRIVER_ERR,  /* failed to initialize */
+	DRIVER_EXIT  /* exited */
+};
+
 struct tgt_driver {
 	const char *name;
+	enum tgt_driver_state drv_state;
 
 	int (*init)(int, char *);
 	void (*exit)(void);
@@ -31,5 +39,6 @@ struct tgt_driver {
 extern struct tgt_driver *tgt_drivers[];
 extern int get_driver_index(char *name);
 extern int register_driver(struct tgt_driver *drv);
+extern const char *driver_state_name(struct tgt_driver *drv);
 
 #endif /* __DRIVER_H__ */
