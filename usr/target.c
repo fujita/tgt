@@ -2101,6 +2101,7 @@ int system_set_state(char *str)
 int system_show(int mode, char *buf, int rest)
 {
 	int total = 0, max = rest;
+	int i;
 
 	/* FIXME: too hacky */
 	if (mode != MODE_SYSTEM)
@@ -2109,6 +2110,13 @@ int system_show(int mode, char *buf, int rest)
 	shprintf(total, buf, rest, "System:\n");
 	shprintf(total, buf, rest, _TAB1 "State: %s\n",
 		 system_state_name(sys_state));
+
+	shprintf(total, buf, rest, "LLDs:\n");
+	for (i = 0; tgt_drivers[i]; i++) {
+		shprintf(total, buf, rest, _TAB1 "%s: %s\n",
+			 tgt_drivers[i]->name,
+			 driver_state_name(tgt_drivers[i]));
+	}
 
 	if (global_target.account.nr_inaccount) {
 		int i, aid;
