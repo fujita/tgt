@@ -387,8 +387,12 @@ static int tgt_mgmt(struct mgmt_task *mtask)
 		lld_no = 0;
 	else {
 		lld_no = get_driver_index(req->lld);
-		if (lld_no < 0) {
-			eprintf("can't find the driver\n");
+		if (lld_no < 0 || tgt_drivers[lld_no]->drv_state != DRIVER_INIT) {
+			if (lld_no < 0)
+				eprintf("can't find the driver %s\n", req->lld);
+			else
+				eprintf("driver %s is in state: %s\n",
+					req->lld, driver_state_name(tgt_drivers[lld_no]));
 			rsp->err = TGTADM_NO_DRIVER;
 			rsp->len = sizeof(*rsp);
 			return 0;
