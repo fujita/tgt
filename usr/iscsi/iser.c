@@ -134,7 +134,7 @@ static inline void schedule_task_iosubmit(struct iser_task *task,
 	list_add_tail(&task->exec_list, &conn->iosubmit_list);
 	tgt_add_sched_event(&conn->sched_iosubmit);
 
-	dprintf("task:%p tag:0x%04"PRIx64 "cmdsn:0x%x\n",
+	dprintf("task:%p tag:0x%04"PRIx64 " cmdsn:0x%x\n",
 		task, task->tag, task->cmd_sn);
 }
 
@@ -144,7 +144,7 @@ static inline void schedule_rdma_read(struct iser_task *task,
 	list_add_tail(&task->rdma_list, &conn->rdma_rd_list);
 	tgt_add_sched_event(&conn->sched_rdma_rd);
 
-	dprintf("task:%p tag:0x%04"PRIx64 "cmdsn:0x%x\n",
+	dprintf("task:%p tag:0x%04"PRIx64 " cmdsn:0x%x\n",
 		task, task->tag, task->cmd_sn);
 }
 
@@ -154,7 +154,7 @@ static inline void schedule_resp_tx(struct iser_task *task,
 	list_add_tail(&task->tx_list, &conn->resp_tx_list);
 	tgt_add_sched_event(&conn->sched_tx);
 
-	dprintf("task:%p tag:0x%04"PRIx64 "cmdsn:0x%x\n",
+	dprintf("task:%p tag:0x%04"PRIx64 " cmdsn:0x%x\n",
 		task, task->tag, task->cmd_sn);
 }
 
@@ -164,7 +164,7 @@ static inline void schedule_post_recv(struct iser_task *task,
 	list_add_tail(&task->recv_list, &conn->post_recv_list);
 	tgt_add_sched_event(&conn->sched_post_recv);
 
-	dprintf("task:%p tag:0x%04"PRIx64 "cmdsn:0x%x\n",
+	dprintf("task:%p tag:0x%04"PRIx64 " cmdsn:0x%x\n",
 		task, task->tag, task->cmd_sn);
 }
 
@@ -393,8 +393,8 @@ static void iser_prep_resp_send_req(struct iser_task *task,
 	txd->send_wr.next = (next_wr ? &next_wr->send_wr : NULL);
 	txd->send_wr.send_flags = (signaled ? IBV_SEND_SIGNALED : 0);
 
-	dprintf("task:%p wr_id:0x%"PRIx64 "tag:0x%04"PRIx64 ""
-		"dtbuf:%p dtsz:%u ahs_sz:%u stat:0x%x statsn:0x%x expcmdsn:0x%x\n",
+	dprintf("task:%p wr_id:0x%"PRIx64 " tag:0x%04"PRIx64 " dtbuf:%p "
+		"dtsz:%u ahs_sz:%u stat:0x%x statsn:0x%x expcmdsn:0x%x\n",
 		task, txd->send_wr.wr_id, task->tag,
 		pdu->membuf.addr, pdu->membuf.size, pdu->ahssize,
 		bhs->rsvd2[1], ntohl(bhs->statsn), ntohl(bhs->exp_statsn));
@@ -431,8 +431,8 @@ static void iser_prep_rdma_wr_send_req(struct iser_task *task,
 	/* offset += rdmad->sge.length // ToDo: multiple RDMA-Write buffers */
 	rdmad->send_wr.wr.rdma.rkey = task->rem_read_stag;
 
-	dprintf(" task:%p tag:0x%04"PRIx64 "wr_id:0x%"PRIx64 "daddr:0x%"PRIx64 "dsz:%u "
-		"bufsz:%u rdma:%d lkey:%x raddr:%"PRIx64 "rkey:%x rems:%u\n",
+	dprintf(" task:%p tag:0x%04"PRIx64 " wr_id:0x%"PRIx64 " daddr:0x%"PRIx64 " dsz:%u "
+		"bufsz:%u rdma:%d lkey:%x raddr:%"PRIx64 " rkey:%x rems:%u\n",
 		task, task->tag, rdmad->send_wr.wr_id, rdmad->sge.addr,
 		rdmad->sge.length, rdma_buf->size, rdma_buf->rdma,
 		rdmad->sge.lkey, rdmad->send_wr.wr.rdma.remote_addr,
@@ -475,8 +475,8 @@ static void iser_prep_rdma_rd_send_req(struct iser_task *task,
 	rdmad->send_wr.wr.rdma.rkey =
 		(uint32_t) task->rem_write_stag;
 
-	dprintf("task:%p wr_id:0x%"PRIx64 "tag:0x%04"PRIx64 "daddr:0x%"PRIx64 "dsz:%u "
-		"bufsz:%u rdma:%d lkey:%x raddr:%"PRIx64 "rkey:%x rems:%u\n",
+	dprintf("task:%p wr_id:0x%"PRIx64 " tag:0x%04"PRIx64 " daddr:0x%"PRIx64 " dsz:%u "
+		"bufsz:%u rdma:%d lkey:%x raddr:%"PRIx64 " rkey:%x rems:%u\n",
 		task, rdmad->send_wr.wr_id, task->tag, rdmad->sge.addr,
 		rdmad->sge.length, rdma_buf->size, rdma_buf->rdma,
 		rdmad->sge.lkey, rdmad->send_wr.wr.rdma.remote_addr,
@@ -1676,7 +1676,7 @@ static int iser_logout_exec(struct iser_task *task)
 
 	/* add the logout resp to tx list, and force all scheduled tx now */
 	list_add_tail(&task->tx_list, &conn->resp_tx_list);
-	dprintf("add to tx list, logout resp task:%p tag:0x%04"PRIx64 "cmdsn:0x%x\n",
+	dprintf("add to tx list, logout resp task:%p tag:0x%04"PRIx64 " cmdsn:0x%x\n",
 		task, task->tag, task->cmd_sn);
 	tgt_remove_sched_event(&conn->sched_tx);
 	iser_sched_tx(&conn->sched_tx);
@@ -2060,7 +2060,7 @@ static int iser_scsi_cmd_done(uint64_t nid, int result,
 		memcpy(sense->data, scmd->sense_buffer, sense_len);
 		task->pdu.membuf.size = sense_len + sizeof(*sense);
 	}
-	dprintf("task:%p tag:0x%04"PRIx64 "status:%x statsn:%d flags:0x%x "
+	dprintf("task:%p tag:0x%04"PRIx64 " status:%x statsn:%d flags:0x%x "
 		"in_len:%d out_len:%d rsd:%d birsd:%d\n",
 		task, task->tag, rsp_bhs->cmd_status,
 		conn->h.stat_sn-1, rsp_bhs->flags,
@@ -2395,7 +2395,7 @@ static int iser_scsi_cmd_rx(struct iser_task *task)
 
 	list_add_tail(&task->session_list, &session->cmd_list);
 out:
-	dprintf("task:%p tag:0x%04"PRIx64 "scsi_op:0x%x %s%s in_len:%d out_len:%d "
+	dprintf("task:%p tag:0x%04"PRIx64 " scsi_op:0x%x %s%s in_len:%d out_len:%d "
 		"imm_sz:%d unsol_sz:%d cmdsn:0x%x expcmdsn:0x%x\n",
 		task, task->tag, req_bhs->cdb[0],
 		task->is_read ? "rd" : "", task->is_write ? "wr" : "",
@@ -2579,7 +2579,7 @@ static int iser_queue_task(struct iscsi_session *session,
 	int err;
 
 	if (unlikely(task->is_immediate)) {
-		dprintf("exec imm task task:%p tag:0x%0" PRIx64 "cmd_sn:0x%x\n",
+		dprintf("exec imm task task:%p tag:0x%0"PRIx64 " cmd_sn:0x%x\n",
 			task, task->tag, cmd_sn);
 		err = iser_task_delivery(task);
 		if (likely(!err || err == -ENOMEM))
@@ -2918,13 +2918,13 @@ static void handle_wc_error(struct ibv_wc *wc)
 	struct iser_conn *conn = task ? task->conn : NULL;
 
 	if (wc->status != IBV_WC_WR_FLUSH_ERR)
-		eprintf("conn:%p task:%p tag:0x%04"PRIx64 "wr_id:0x%p op:%s "
+		eprintf("conn:%p task:%p tag:0x%04"PRIx64 " wr_id:0x%p op:%s "
 			"err:%s vendor_err:0x%0x\n",
 			&conn->h, task, task->tag, req,
 			iser_ib_op_to_str(req->iser_ib_op),
 			ibv_wc_status_str(wc->status), wc->vendor_err);
 	else
-		dprintf("conn:%p task:%p tag:0x%04"PRIx64 "wr_id:0x%p op:%s "
+		dprintf("conn:%p task:%p tag:0x%04"PRIx64 " wr_id:0x%p op:%s "
 			"err:%s vendor_err:0x%0x\n",
 			&conn->h, task, task->tag, req,
 			iser_ib_op_to_str(req->iser_ib_op),
