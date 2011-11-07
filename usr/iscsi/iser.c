@@ -1910,7 +1910,7 @@ static void iser_task_free_dout_tasks(struct iser_task *task)
 	}
 }
 
-static void iser_scsi_cmd_iosubmit(struct iser_task *task)
+static void iser_scsi_cmd_iosubmit(struct iser_task *task, int not_last)
 {
 	struct iscsi_cmd *req_bhs = (struct iscsi_cmd *) task->pdu.bhs;
 	struct scsi_cmd *scmd = &task->scmd;
@@ -1919,6 +1919,8 @@ static void iser_scsi_cmd_iosubmit(struct iser_task *task)
 	struct iser_membuf *data_buf;
 
 	scmd->state = 0;
+	if (not_last)
+		set_cmd_not_last(scmd);
 	scsi_set_in_length(scmd, 0);
 	scsi_set_out_length(scmd, 0);
 
@@ -2094,7 +2096,7 @@ static void iser_sched_buf_alloc(struct event_data *evt)
 	}
 }
 
-static inline int task_batch_type(struct iser_task *task)
+static inline int task_can_batch(struct iser_task *task)
 {
 	struct iscsi_cmd *req_bhs = (struct iscsi_cmd *) task->pdu.bhs;
 
@@ -2118,13 +2120,17 @@ static inline int task_batch_type(struct iser_task *task)
 static void iser_sched_iosubmit(struct event_data *evt)
 {
 	struct iser_conn *conn = (struct iser_conn *) evt->data;
-	struct iser_task *task = NULL;
+	struct iser_task *task, *next_task;
+	int last_in_batch;
 
-	while (!list_empty(&conn->iosubmit_list)) {
-		task = list_first_entry(&conn->iosubmit_list,
-					struct iser_task, exec_list);
+	list_for_each_entry_safe(task, next_task, &conn->iosubmit_list, exec_list) {
+		if (&next_task->exec_list == &conn->iosubmit_list)
+			last_in_batch = 1; /* end of list */
+		else
+			last_in_batch = (task_can_batch(task) &&
+					 task_can_batch(next_task)) ? 0 : 1;
 		list_del(&task->exec_list);
-		iser_scsi_cmd_iosubmit(task);
+		iser_scsi_cmd_iosubmit(task, !last_in_batch);
 	}
 }
 
