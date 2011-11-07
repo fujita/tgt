@@ -100,6 +100,7 @@ enum {
 	TGT_CMD_QUEUED,
 	TGT_CMD_PROCESSED,
 	TGT_CMD_ASYNC,
+	TGT_CMD_NOT_LAST,
 };
 
 #define CMD_FNS(bit, name)						\
@@ -119,3 +120,4 @@ static inline int cmd_##name(const struct scsi_cmd *c)			\
 CMD_FNS(QUEUED, queued)
 CMD_FNS(PROCESSED, processed)
 CMD_FNS(ASYNC, async)
+CMD_FNS(NOT_LAST, not_last)
