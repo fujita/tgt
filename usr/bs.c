@@ -39,7 +39,7 @@
 #include "util.h"
 #include "bs_thread.h"
 
-static LIST_HEAD(bst_list);
+LIST_HEAD(bst_list);
 
 static LIST_HEAD(finished_list);
 static pthread_mutex_t finished_lock;

@@ -2101,6 +2101,8 @@ int system_set_state(char *str)
 int system_show(int mode, char *buf, int rest)
 {
 	int total = 0, max = rest;
+	struct backingstore_template *bst;
+	struct device_type_template *devt;
 	int i;
 
 	/* FIXME: too hacky */
@@ -2117,6 +2119,14 @@ int system_show(int mode, char *buf, int rest)
 			 tgt_drivers[i]->name,
 			 driver_state_name(tgt_drivers[i]));
 	}
+
+	shprintf(total, buf, rest, "Backing stores:\n");
+	list_for_each_entry(bst, &bst_list, backingstore_siblings)
+		shprintf(total, buf, rest, _TAB1 "%s\n", bst->bs_name);
+
+	shprintf(total, buf, rest, "Device types:\n");
+	list_for_each_entry(devt, &device_type_list, device_type_siblings)
+		shprintf(total, buf, rest, _TAB1 "%s\n", print_type(devt->type));
 
 	if (global_target.account.nr_inaccount) {
 		int i, aid;
