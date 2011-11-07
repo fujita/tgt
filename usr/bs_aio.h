@@ -39,24 +39,6 @@ enum {
 		IOCB_CMD_PWRITEV = 8,
 };
 
-#ifndef __NR_eventfd
-#if defined(__x86_64__)
-#define __NR_eventfd 284
-#elif defined(__i386__)
-#define __NR_eventfd 323
-#elif defined(__powerpc__)
-#define __NR_eventfd 307
-#elif defined(__powerpc64__)
-#define __NR_eventfd 307
-#elif defined(__ia64__)
-#define __NR_eventfd 1309
-#elif defined(__sparc__) || defined(__sparc64__)
-#define __NR_eventfd 313
-#else
-#error Cannot detect your architecture
-#endif
-#endif
-
 #define IOCB_FLAG_RESFD		(1 << 0)
 
 #if defined(__LITTLE_ENDIAN)
@@ -103,32 +85,6 @@ struct iocb {
 	 */
 	int32_t	aio_resfd;
 }; /* 64 bytes */
-
-static inline void io_prep_pread(struct iocb *iocb, int fd, void *buf,
-				 int nr_segs, int64_t offset, int afd)
-{
-	iocb->aio_fildes = fd;
-	iocb->aio_lio_opcode = IOCB_CMD_PREAD;
-	iocb->aio_reqprio = 0;
-	iocb->aio_buf = (uint64_t)(unsigned long)buf;
-	iocb->aio_nbytes = nr_segs;
-	iocb->aio_offset = offset;
-	iocb->aio_flags = IOCB_FLAG_RESFD;
-	iocb->aio_resfd = afd;
-}
-
-static inline void io_prep_pwrite(struct iocb *iocb, int fd, void const *buf,
-				  int nr_segs, int64_t offset, int afd)
-{
-	iocb->aio_fildes = fd;
-	iocb->aio_lio_opcode = IOCB_CMD_PWRITE;
-	iocb->aio_reqprio = 0;
-	iocb->aio_buf = (uint64_t)(unsigned long)buf;
-	iocb->aio_nbytes = nr_segs;
-	iocb->aio_offset = offset;
-	iocb->aio_flags = IOCB_FLAG_RESFD;
-	iocb->aio_resfd = afd;
-}
 
 static inline int io_setup(unsigned nr_reqs, io_context_t *ctx)
 {

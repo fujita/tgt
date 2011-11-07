@@ -11,7 +11,13 @@ endif
 TGTD_OBJS += $(addprefix iscsi/, conn.o param.o session.o \
 		iscsid.o target.o chap.o sha1.o md5.o transport.o iscsi_tcp.o \
 		isns.o)
-TGTD_OBJS += bs_rdwr.o bs_aio.o
+TGTD_OBJS += bs_rdwr.o
+
+ifneq ($(shell test -e /usr/include/sys/eventfd.h && echo 1),)
+CFLAGS += -DUSE_EVENTFD
+TGTD_OBJS += bs_aio.o
+LIBS += -laio
+endif
 
 ifneq ($(ISCSI_RDMA),)
 TGTD_OBJS += iscsi/iser.o iscsi/iser_text.o

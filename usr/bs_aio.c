@@ -1,8 +1,9 @@
 /*
- * AIO file backing store routine
+ * AIO backing store
  *
  * Copyright (C) 2006-2007 FUJITA Tomonori <tomof@acm.org>
  * Copyright (C) 2006-2007 Mike Christie <michaelc@cs.wisc.edu>
+ * Copyright (C) 2011 Alexander Nezhinsky <alexandern@mellanox.com>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -20,147 +21,344 @@
  * 02110-1301 USA
  */
 #include <errno.h>
-#include <fcntl.h>
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <pthread.h>
-
 #include <linux/fs.h>
 #include <sys/epoll.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/eventfd.h>
+#include <libaio.h>
 
 #include "list.h"
 #include "util.h"
 #include "tgtd.h"
+#include "target.h"
 #include "scsi.h"
-
-#include "bs_aio.h"
 
 #ifndef O_DIRECT
 #define O_DIRECT 040000
 #endif
 
-/* FIXME */
-#define MAX_AIO_REQS 2048
+#define AIO_MAX_IODEPTH    128
 
 struct bs_aio_info {
-	int afd;
+	struct list_head dev_list_entry;
 	io_context_t ctx;
 
-	struct io_event events[MAX_AIO_REQS];
+	struct list_head cmd_wait_list;
+	unsigned int nwaiting;
+	unsigned int npending;
+	unsigned int iodepth;
+
+	int resubmit;
+
+	struct scsi_lu *lu;
+	int evt_fd;
+
+	struct iocb iocb_arr[AIO_MAX_IODEPTH];
+	struct iocb *piocb_arr[AIO_MAX_IODEPTH];
+	struct io_event io_evts[AIO_MAX_IODEPTH];
 };
 
-static void bs_aio_endio(int fd, int events, void *data)
+static struct list_head bs_aio_dev_list = LIST_HEAD_INIT(bs_aio_dev_list);
+
+static inline struct bs_aio_info *BS_AIO_I(struct scsi_lu *lu)
+{
+	return (struct bs_aio_info *) ((char *)lu + sizeof(*lu));
+}
+
+static void bs_aio_iocb_prep(struct bs_aio_info *info, int idx,
+			     struct scsi_cmd *cmd)
+{
+	struct iocb *iocb = &info->iocb_arr[idx];
+	unsigned int scsi_op = (unsigned int)cmd->scb[0];
+
+	iocb->data = cmd;
+	iocb->key = 0;
+	iocb->aio_reqprio = 0;
+	iocb->aio_fildes = info->lu->fd;
+
+	switch (scsi_op) {
+	case WRITE_6:
+	case WRITE_10:
+	case WRITE_12:
+	case WRITE_16:
+		iocb->aio_lio_opcode = IO_CMD_PWRITE;
+		iocb->u.c.buf = scsi_get_out_buffer(cmd);
+		iocb->u.c.nbytes = scsi_get_out_length(cmd);
+
+		dprintf("prep WR cmd:%p op:%x buf:0x%p sz:%lx\n",
+			cmd, scsi_op, iocb->u.c.buf, iocb->u.c.nbytes);
+		break;
+
+	case READ_6:
+	case READ_10:
+	case READ_12:
+	case READ_16:
+		iocb->aio_lio_opcode = IO_CMD_PREAD;
+		iocb->u.c.buf = scsi_get_in_buffer(cmd);
+		iocb->u.c.nbytes = scsi_get_in_length(cmd);
+
+		dprintf("prep RD cmd:%p op:%x buf:0x%p sz:%lx\n",
+			cmd, scsi_op, iocb->u.c.buf, iocb->u.c.nbytes);
+		break;
+
+	default:
+		return;
+	}
+
+	iocb->u.c.offset = cmd->offset;
+	iocb->u.c.flags |= (1 << 0); /* IOCB_FLAG_RESFD - use eventfd file desc. */
+	iocb->u.c.resfd = info->evt_fd;
+}
+
+static int bs_aio_submit_dev_batch(struct bs_aio_info *info)
+{
+	int nsubmit, nsuccess;
+	struct scsi_cmd *cmd, *next;
+	int i = 0;
+
+	nsubmit = info->iodepth - info->npending; /* max allowed to submit */
+	if (nsubmit > info->nwaiting)
+		nsubmit = info->nwaiting;
+
+	dprintf("nsubmit:%d waiting:%d pending:%d, tgt:%d lun:%"PRId64 "\n",
+		nsubmit, info->nwaiting, info->npending,
+		info->lu->tgt->tid, info->lu->lun);
+
+	if (!nsubmit)
+		return 0;
+
+	list_for_each_entry_safe(cmd, next, &info->cmd_wait_list, bs_list) {
+		bs_aio_iocb_prep(info, i, cmd);
+		list_del(&cmd->bs_list);
+		if (++i == nsubmit)
+			break;
+	}
+
+	nsuccess = io_submit(info->ctx, nsubmit, info->piocb_arr);
+	if (unlikely(nsuccess < 0)) {
+		if (nsuccess == -EAGAIN) {
+			eprintf("delayed submit %d cmds to tgt:%d lun:%"PRId64 "\n",
+				nsubmit, info->lu->tgt->tid, info->lu->lun);
+			nsuccess = 0; /* leave the dev pending with all cmds */
+		}
+		else {
+			eprintf("failed to submit %d cmds to tgt:%d lun:%"PRId64
+				", err: %d\n",
+				nsubmit, info->lu->tgt->tid,
+				info->lu->lun, -nsuccess);
+			return nsuccess;
+		}
+	}
+	if (unlikely(nsuccess < nsubmit)) {
+		for (i=nsubmit-1; i >= nsuccess; i--) {
+			cmd = info->iocb_arr[i].data;
+			list_add(&cmd->bs_list, &info->cmd_wait_list);
+		}
+	}
+
+	info->npending += nsuccess;
+	info->nwaiting -= nsuccess;
+	/* if no cmds remain, remove the dev from the pending list */
+	if (likely(!info->nwaiting))
+			list_del(&info->dev_list_entry);
+
+	dprintf("submitted %d of %d cmds to tgt:%d lun:%"PRId64
+		", waiting:%d pending:%d\n",
+		nsuccess, nsubmit, info->lu->tgt->tid, info->lu->lun,
+		info->nwaiting, info->npending);
+	return 0;
+}
+
+static int bs_aio_submit_all_devs(void)
+{
+	struct bs_aio_info *dev_info, *next_dev;
+	int err;
+
+	/* pass over all devices having some queued cmds and submit */
+	list_for_each_entry_safe(dev_info, next_dev, &bs_aio_dev_list, dev_list_entry) {
+		err = bs_aio_submit_dev_batch(dev_info);
+		if (unlikely(err))
+			return err;
+	}
+	return 0;
+}
+
+static int bs_aio_cmd_submit(struct scsi_cmd *cmd)
+{
+	struct scsi_lu *lu = cmd->dev;
+	struct bs_aio_info *info = BS_AIO_I(lu);
+	unsigned int scsi_op = (unsigned int)cmd->scb[0];
+
+	switch (scsi_op) {
+	case WRITE_6:
+	case WRITE_10:
+	case WRITE_12:
+	case WRITE_16:
+	case READ_6:
+	case READ_10:
+	case READ_12:
+	case READ_16:
+		break;
+
+	case SYNCHRONIZE_CACHE:
+	case SYNCHRONIZE_CACHE_16:
+	default:
+		dprintf("skipped cmd:%p op:%x\n", cmd, scsi_op);
+		return 0;
+	}
+
+	list_add_tail(&cmd->bs_list, &info->cmd_wait_list);
+	if (!info->nwaiting)
+		list_add_tail(&info->dev_list_entry, &bs_aio_dev_list);
+	info->nwaiting++;
+	set_cmd_async(cmd);
+
+	if (!cmd_not_last(cmd)) /* last cmd in batch */
+		return bs_aio_submit_all_devs();
+
+	if (info->nwaiting == info->iodepth - info->npending)
+		return bs_aio_submit_dev_batch(info);
+
+	return 0;
+}
+
+static void bs_aio_complete_one(struct io_event *ep)
+{
+	struct scsi_cmd *cmd = (void *)(unsigned long)ep->data;
+	uint32_t length;
+	int result;
+
+	switch (cmd->scb[0]) {
+	case WRITE_6:
+	case WRITE_10:
+	case WRITE_12:
+	case WRITE_16:
+		length = scsi_get_out_length(cmd);
+		break;
+	default:
+		length = scsi_get_in_length(cmd);
+		break;
+	}
+
+	if (likely(ep->res == length))
+		result = SAM_STAT_GOOD;
+	else {
+		sense_data_build(cmd, MEDIUM_ERROR, 0);
+		result = SAM_STAT_CHECK_CONDITION;
+	}
+	dprintf("cmd: %p\n", cmd);
+	target_cmd_io_done(cmd, result);
+}
+
+static void bs_aio_get_completions(int fd, int events, void *data)
 {
 	struct bs_aio_info *info = data;
 	int i, ret;
-	uint64_t total, nr;
+	uint64_t ncomplete, nevents;
 
-retry:
-	ret = read(info->afd, &total, sizeof(total));
-	if (ret < 0) {
-		eprintf("AIO pthread will be dead, %m\n");
+retry_read:
+	ret = read(info->evt_fd, &ncomplete, sizeof(ncomplete));
+	if (unlikely(ret < 0)) {
+		eprintf("failed to read AIO completions, %m\n");
 		if (errno == EAGAIN || errno == EINTR)
-			goto retry;
+			goto retry_read;
 
 		return;
 	}
-get_events:
-	nr = min_t(long, total, MAX_AIO_REQS);
-	ret = io_getevents(info->ctx, 1, nr, info->events, NULL);
-	if (ret <= 0)
-		return;
 
-	nr = ret;
-	total -= nr;
-
-	for (i = 0; i < nr; i++) {
-		struct io_event *ep = &info->events[i];
-		struct scsi_cmd *cmd = (void *)(unsigned long)ep->data;
-		int result;
-		uint32_t length;
-
-		switch (cmd->scb[0]) {
-		case WRITE_6:
-		case WRITE_10:
-		case WRITE_12:
-		case WRITE_16:
-			length = scsi_get_out_length(cmd);
-			break;
-		default:
-			length = scsi_get_in_length(cmd);
-			break;
+	while (ncomplete) {
+		nevents = min_t(long, ncomplete, ARRAY_SIZE(info->io_evts));
+retry_getevts:
+		ret = io_getevents(info->ctx, 1, nevents, info->io_evts, NULL);
+		if (likely(ret > 0)) {
+			nevents = ret;
+			info->npending -= nevents;
+		} else {
+			if (ret == -EINTR)
+				goto retry_getevts;
+			eprintf("io_getevents failed, err:%d\n", -ret);
+			return;
 		}
+		dprintf("got %ld ioevents out of %ld, pending %d\n",
+			nevents, ncomplete, info->npending);
 
-		if (ep->res == length)
-			result = SAM_STAT_GOOD;
-		else {
-			sense_data_build(cmd, MEDIUM_ERROR, 0);
-			result = SAM_STAT_CHECK_CONDITION;
-		}
-
-		target_cmd_io_done(cmd, result);
+		for (i = 0; i < nevents; i++)
+			bs_aio_complete_one(&info->io_evts[i]);
+		ncomplete -= nevents;
 	}
 
-	if (total)
-		goto get_events;
+	if (info->nwaiting) {
+		dprintf("submit waiting cmds to tgt:%d lun:%"PRId64 "\n",
+			info->lu->tgt->tid, info->lu->lun);
+		bs_aio_submit_dev_batch(info);
+	}
 }
 
 static int bs_aio_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 {
+	struct bs_aio_info *info = BS_AIO_I(lu);
+	int ret, afd;
+
+	info->iodepth = AIO_MAX_IODEPTH;
+	eprintf("create aio context for tgt:%d lun:%"PRId64 ", max iodepth:%d\n",
+		info->lu->tgt->tid, info->lu->lun, info->iodepth);
+	ret = io_setup(info->iodepth, &info->ctx);
+	if (ret) {
+		eprintf("failed to create aio context, %m\n");
+		return -1;
+	}
+
+	afd = eventfd(0, O_NONBLOCK);
+	if (afd < 0) {
+		eprintf("failed to create eventfd for tgt:%d lun:%"PRId64 ", %m\n",
+			info->lu->tgt->tid, info->lu->lun);
+		ret = afd;
+		goto close_ctx;
+	}
+	dprintf("eventfd:%d for tgt:%d lun:%"PRId64 "\n",
+		afd, info->lu->tgt->tid, info->lu->lun);
+
+	ret = tgt_event_add(afd, EPOLLIN, bs_aio_get_completions, info);
+	if (ret)
+		goto close_eventfd;
+	info->evt_fd = afd;
+
+	eprintf("open %s, RW, O_DIRECT for tgt:%d lun:%"PRId64 "\n",
+		path, info->lu->tgt->tid, info->lu->lun);
 	*fd = backed_file_open(path, O_RDWR|O_LARGEFILE|O_DIRECT, size);
 	/* If we get access denied, try opening the file in readonly mode */
 	if (*fd == -1 && (errno == EACCES || errno == EROFS)) {
+		eprintf("open %s, READONLY, O_DIRECT for tgt:%d lun:%"PRId64 "\n",
+			path, info->lu->tgt->tid, info->lu->lun);
 		*fd = backed_file_open(path, O_RDONLY|O_LARGEFILE|O_DIRECT,
 				       size);
 		lu->attrs.readonly = 1;
 	}
-	if (*fd < 0)
-		return *fd;
-	return 0;
-}
-
-static int bs_aio_init(struct scsi_lu *lu)
-{
-	int ret, afd;
-	struct bs_aio_info *info =
-		(struct bs_aio_info *) ((char *)lu + sizeof(*lu));
-
-	ret = io_setup(MAX_AIO_REQS, &info->ctx);
-	if (ret) {
-		eprintf("fail to create aio_queue, %m\n");
-		return -1;
+	if (*fd < 0) {
+		eprintf("failed to open %s, for tgt:%d lun:%"PRId64 ", %m\n",
+			path, info->lu->tgt->tid, info->lu->lun);
+		ret = *fd;
+		goto remove_tgt_evt;
+	}
+	else {
+		eprintf("%s opened successfully for tgt:%d lun:%"PRId64 "\n",
+			path, info->lu->tgt->tid, info->lu->lun);
+		return 0;
 	}
 
-	afd = eventfd(0);
-	if (afd < 0) {
-		eprintf("fail to create eventfd, %m\n");
-		goto close_ctx;
-	}
-
-	ret = fcntl(afd, F_SETFL, fcntl(afd, F_GETFL, 0) | O_NONBLOCK);
-	if (ret) {
-		eprintf("fail to configure eventfd, %m\n");
-		goto close_eventfd;
-	}
-
-	ret = tgt_event_add(afd, EPOLLIN, bs_aio_endio, info);
-	if (ret)
-		goto close_eventfd;
-
-	info->afd = afd;
-
-	return 0;
-
+remove_tgt_evt:
+	tgt_event_del(afd);
 close_eventfd:
 	close(afd);
 close_ctx:
 	io_destroy(info->ctx);
-	return -1;
+	return ret;
 }
 
 static void bs_aio_close(struct scsi_lu *lu)
@@ -168,80 +366,42 @@ static void bs_aio_close(struct scsi_lu *lu)
 	close(lu->fd);
 }
 
-static void bs_aio_exit(struct scsi_lu *lu)
+static int bs_aio_init(struct scsi_lu *lu)
 {
-	struct bs_aio_info *info =
-		(struct bs_aio_info *) ((char *)lu + sizeof(*lu));
+	struct bs_aio_info *info = BS_AIO_I(lu);
+	int i;
 
-	close(info->afd);
-	io_destroy(info->ctx);
+	memset(info, 0, sizeof(*info));
+	INIT_LIST_HEAD(&info->dev_list_entry);
+	INIT_LIST_HEAD(&info->cmd_wait_list);
+	info->lu = lu;
+
+	for (i=0; i < ARRAY_SIZE(info->iocb_arr); i++)
+		info->piocb_arr[i] = &info->iocb_arr[i];
+
+	return 0;
 }
 
-static int bs_aio_cmd_submit(struct scsi_cmd *cmd)
+static void bs_aio_exit(struct scsi_lu *lu)
 {
-	struct scsi_lu *lu = cmd->dev;
-	struct bs_aio_info *info =
-		(struct bs_aio_info *)((char *)lu + sizeof(*lu));
-	struct iocb iocb, *io;
-	uint32_t length;
-	int ret = 0, do_io = 0;
+	struct bs_aio_info *info = BS_AIO_I(lu);
 
-	io = &iocb;
-	memset(io, 0, sizeof(*io));
-
-	switch (cmd->scb[0]) {
-	case SYNCHRONIZE_CACHE:
-	case SYNCHRONIZE_CACHE_16:
-		break;
-	case WRITE_6:
-	case WRITE_10:
-	case WRITE_12:
-	case WRITE_16:
-		do_io = 1;
-		length = scsi_get_out_length(cmd);
-		io_prep_pwrite(io, lu->fd, scsi_get_out_buffer(cmd),
-			       length, cmd->offset, info->afd);
-
-		break;
-	case READ_6:
-	case READ_10:
-	case READ_12:
-	case READ_16:
-		do_io = 1;
-		length = scsi_get_in_length(cmd);
-		io_prep_pread(io, lu->fd, scsi_get_in_buffer(cmd),
-			      length, cmd->offset, info->afd);
-		break;
-	default:
-		break;
-	}
-
-	if (do_io) {
-		io->aio_data = (uint64_t)(unsigned long)cmd;
-		ret = io_submit(info->ctx, 1, &io);
-		if (ret == 1) {
-			set_cmd_async(cmd);
-			ret = 0;
-		} else {
-			sense_data_build(cmd, MEDIUM_ERROR, 0);
-			ret = SAM_STAT_CHECK_CONDITION;
-		}
-	}
-
-	return ret;
+	close(info->evt_fd);
+	io_destroy(info->ctx);
 }
 
 static struct backingstore_template aio_bst = {
 	.bs_name		= "aio",
-	.bs_datasize		= sizeof(struct bs_aio_info),
+	.bs_datasize    	= sizeof(struct bs_aio_info),
 	.bs_init		= bs_aio_init,
 	.bs_exit		= bs_aio_exit,
 	.bs_open		= bs_aio_open,
-	.bs_close		= bs_aio_close,
-	.bs_cmd_submit		= bs_aio_cmd_submit,
+	.bs_close       	= bs_aio_close,
+	.bs_cmd_submit  	= bs_aio_cmd_submit,
 };
 
 __attribute__((constructor)) static void bs_rdwr_constructor(void)
 {
 	register_backingstore_template(&aio_bst);
 }
+
