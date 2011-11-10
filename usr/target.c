@@ -450,6 +450,7 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	struct backingstore_template *bst;
 	struct it_nexus_lu_info *itn_lu;
 	struct it_nexus *itn;
+	char strflags[128];
 
 	dprintf("%d %" PRIu64 "\n", tid, lun);
 
@@ -518,8 +519,11 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 		}
 	}
 
-	if (lu_bsoflags && !(bst->bs_oflags_supported & lu_bsoflags)) {
-		eprintf("bsoflags not supported\n");
+	if (lu_bsoflags && ((bst->bs_oflags_supported & lu_bsoflags) != lu_bsoflags)) {
+		eprintf("bsoflags %s not supported by backing store %s\n",
+			open_flags_to_str(strflags,
+			(bst->bs_oflags_supported & lu_bsoflags) ^ lu_bsoflags),
+			bst->bs_name);
 		ret = TGTADM_INVALID_REQUEST;
 		goto out;
 	}
