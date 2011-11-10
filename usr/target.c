@@ -2104,6 +2104,7 @@ int system_show(int mode, char *buf, int rest)
 	struct backingstore_template *bst;
 	struct device_type_template *devt;
 	int i;
+	char strflags[128];
 
 	/* FIXME: too hacky */
 	if (mode != MODE_SYSTEM)
@@ -2121,8 +2122,14 @@ int system_show(int mode, char *buf, int rest)
 	}
 
 	shprintf(total, buf, rest, "Backing stores:\n");
-	list_for_each_entry(bst, &bst_list, backingstore_siblings)
-		shprintf(total, buf, rest, _TAB1 "%s\n", bst->bs_name);
+	list_for_each_entry(bst, &bst_list, backingstore_siblings) {
+		if (!bst->bs_oflags_supported)
+			shprintf(total, buf, rest, _TAB1 "%s\n", bst->bs_name);
+		else
+			shprintf(total, buf, rest, _TAB1 "%s (bsoflags %s)\n",
+				 bst->bs_name,
+				 open_flags_to_str(strflags, bst->bs_oflags_supported));
+	}
 
 	shprintf(total, buf, rest, "Device types:\n");
 	list_for_each_entry(devt, &device_type_list, device_type_siblings)
