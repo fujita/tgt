@@ -82,6 +82,15 @@ Target framework daemon, version %s\n\
 	exit(status);
 }
 
+static void bad_optarg(int ret, int ch, char *optarg)
+{
+	if (ret == ERANGE)
+		fprintf(stderr, "-%c argument value '%s' out of range\n", ch, optarg);
+	else
+		fprintf(stderr, "-%c argument value '%s' invalid\n", ch, optarg);
+	usage(ret);
+}
+
 static void version(void)
 {
 	printf("%s\n", TGT_VERSION);
@@ -502,13 +511,19 @@ int main(int argc, char **argv)
 			is_daemon = 0;
 			break;
 		case 'C':
-			control_port = atoi(optarg);
+			ret = str_to_val(optarg, control_port, 0, USHRT_MAX);
+			if (ret)
+				bad_optarg(ret, ch, optarg);
 			break;
 		case 't':
-			nr_iothreads = atoi(optarg);
+			ret = str_to_val(optarg, nr_iothreads, 0, USHRT_MAX);
+			if (ret)
+				bad_optarg(ret, ch, optarg);
 			break;
 		case 'd':
-			is_debug = atoi(optarg);
+			ret = str_to_val(optarg, is_debug, 0, 1);
+			if (ret)
+				bad_optarg(ret, ch, optarg);
 			break;
 		case 'V':
 			version();
