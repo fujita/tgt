@@ -8,6 +8,7 @@
 #include <signal.h>
 #include <syscall.h>
 #include <unistd.h>
+#include <limits.h>
 #include <linux/types.h>
 
 #include "be_byteshift.h"
@@ -137,5 +138,17 @@ static inline int __signalfd(int fd, const sigset_t *mask, int flags)
 struct signalfd_siginfo {
 };
 #endif
+
+#define str_to_val(str, val, minv, maxv)		\
+({							\
+	char *ptr;					\
+	int ret = 0;					\
+	val = (typeof(val)) strtoull(str, &ptr, 0);	\
+	if (errno || ptr == str) 			\
+		ret = EINVAL;				\
+	else if (val < minv || val > maxv)		\
+		ret = ERANGE;				\
+	ret;						\
+})
 
 #endif
