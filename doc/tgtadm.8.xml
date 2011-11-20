@@ -88,7 +88,6 @@ Possible device-types are:
 Possible backend types are:
     rdwr    : Use normal file I/O. This is the default for disk devices
     aio     : Use Asynchronous I/O
-    mmap    : Use memory mapping for the backend file
 
     sg      : Special backend type for passthrough devices
     ssc     : Special backend type for tape emulation
