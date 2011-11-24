@@ -139,7 +139,7 @@ struct signalfd_siginfo {
 };
 #endif
 
-#define str_to_val(str, val, minv, maxv)		\
+#define str_to_int(str, val, minv, maxv)		\
 ({							\
 	char *ptr;					\
 	int ret = 0;					\

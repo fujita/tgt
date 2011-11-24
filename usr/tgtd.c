@@ -511,17 +511,17 @@ int main(int argc, char **argv)
 			is_daemon = 0;
 			break;
 		case 'C':
-			ret = str_to_val(optarg, control_port, 0, USHRT_MAX);
+			ret = str_to_int(optarg, control_port, 0, USHRT_MAX);
 			if (ret)
 				bad_optarg(ret, ch, optarg);
 			break;
 		case 't':
-			ret = str_to_val(optarg, nr_iothreads, 0, USHRT_MAX);
+			ret = str_to_int(optarg, nr_iothreads, 0, USHRT_MAX);
 			if (ret)
 				bad_optarg(ret, ch, optarg);
 			break;
 		case 'd':
-			ret = str_to_val(optarg, is_debug, 0, 1);
+			ret = str_to_int(optarg, is_debug, 0, 1);
 			if (ret)
 				bad_optarg(ret, ch, optarg);
 			break;
