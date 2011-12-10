@@ -257,9 +257,9 @@ static int ssc_new(int op, char *path, char *barcode, char *capacity,
 	struct MAM_info mi;
 	int fd, ret;
 	uint8_t current_media[1024];
-	uint32_t size;
+	uint64_t size;
 
-	sscanf(capacity, "%d", &size);
+	sscanf(capacity, "%llu", &size);
 	if (size == 0)
 		size = 8000;
 
