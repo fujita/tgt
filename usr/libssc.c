@@ -181,13 +181,13 @@ int ssc_write_mam_info(int fd, struct MAM_info *i)
 	return  0;
 }
 
-int ssc_read_blkhdr(int fd, struct blk_header_info *i, off_t offset)
+int ssc_read_blkhdr(int fd, struct blk_header_info *i, loff_t offset)
 {
 	size_t count;
 	struct blk_header h, *m = &h;
 	uint32_t crc = ~0;
 
-	count = pread(fd, m, SSC_BLK_HDR_SIZE, offset);
+	count = pread64(fd, m, SSC_BLK_HDR_SIZE, offset);
 	if (count != SSC_BLK_HDR_SIZE)
 		return 1;
 
@@ -207,7 +207,7 @@ int ssc_read_blkhdr(int fd, struct blk_header_info *i, off_t offset)
 	return 0;
 }
 
-int ssc_write_blkhdr(int fd, struct blk_header_info *i, off_t offset)
+int ssc_write_blkhdr(int fd, struct blk_header_info *i, loff_t offset)
 {
 	size_t count;
 	struct blk_header h, *m = &h;
@@ -224,7 +224,7 @@ int ssc_write_blkhdr(int fd, struct blk_header_info *i, off_t offset)
 	crc = crc32c(crc, &m->ondisk_sz, SSC_BLK_HDR_SIZE - sizeof(m->h_csum));
 	*(uint32_t *)m->h_csum = ~crc;
 
-	count = pwrite(fd, m, SSC_BLK_HDR_SIZE, offset);
+	count = pwrite64(fd, m, SSC_BLK_HDR_SIZE, offset);
 	if (count != SSC_BLK_HDR_SIZE)
 		return 1;
 

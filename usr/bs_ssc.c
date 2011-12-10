@@ -113,7 +113,7 @@ static int resp_rewind(struct scsi_lu *lu)
 	return skip_next_header(lu);
 }
 
-static unsigned long current_size(struct scsi_cmd *cmd)
+static uint64_t current_size(struct scsi_cmd *cmd)
 {
 	struct ssc_info *ssc = dtype_priv(cmd->dev);
 	return ssc->c_blk.curr;
@@ -179,8 +179,8 @@ static int append_blk(struct scsi_cmd *cmd, uint8_t *data,
 
 	/* Write any data */
 	if (size) {
-		ret = pwrite(fd, data, size,
-			     (off_t)curr->curr + SSC_BLK_HDR_SIZE);
+		ret = pwrite64(fd, data, size,
+			       curr->curr + SSC_BLK_HDR_SIZE);
 		if (ret != size) {
 			eprintf("Write of data failed: %m\n");
 			sense_data_build(cmd, MEDIUM_ERROR, ASC_WRITE_ERROR);
@@ -345,7 +345,7 @@ static int resp_var_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length,
 			goto out;
 	}
 
-	ret = pread(cmd->dev->fd, buf, length, h->curr + SSC_BLK_HDR_SIZE);
+	ret = pread64(cmd->dev->fd, buf, length, h->curr + SSC_BLK_HDR_SIZE);
 	if (ret != length) {
 		sense_data_build(cmd, MEDIUM_ERROR, ASC_READ_ERROR);
 		result = SAM_STAT_CHECK_CONDITION;
@@ -399,8 +399,8 @@ static int resp_fixed_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length,
 			goto out;
 		}
 
-		residue = pread(fd, buf, block_length,
-				h->curr + SSC_BLK_HDR_SIZE);
+		residue = pread64(fd, buf, block_length,
+				  h->curr + SSC_BLK_HDR_SIZE);
 		if (block_length != residue) {
 			eprintf("Could only read %d bytes, not %d\n",
 					(int)residue, block_length);
