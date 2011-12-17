@@ -259,7 +259,7 @@ static int ssc_new(int op, char *path, char *barcode, char *capacity,
 	uint8_t current_media[1024];
 	uint64_t size;
 
-	sscanf(capacity, "%llu", &size);
+	sscanf(capacity, "%" SCNu64, &size);
 	if (size == 0)
 		size = 8000;
 
