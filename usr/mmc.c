@@ -188,9 +188,15 @@ static int mmc_read_toc(int host_no, struct scsi_cmd *cmd)
 
 	switch (toc_format) {
 	case 0:	/* formatted toc */
-		if (toc_track != 1) {
+		if (toc_track != 0 && toc_track != 1) {
 			/* we only do single session data disks so only
-			   the first track (track 1) is valid */
+			   the first track (track 1) exists.
+			   Since this command returns the data for all 
+			   tracks equal to toc_track or higher,
+			   we must allow either track 0 or track 1
+			   as valid and both will return the data for
+			   track 1.
+			*/
 			scsi_set_in_resid_by_actual(cmd, 0);
 			sense_data_build(cmd, NOT_READY,
 					 ASC_INVALID_FIELD_IN_CDB);
