@@ -779,7 +779,7 @@ int main(int argc, char **argv)
 					  "allowed/supported\n", rc);
 				exit(EINVAL);
 			}
-			if (!path) {
+			if (!path && dev_type != TYPE_MMC) {
 				eprintf("'backing-store' option "
 						"is necessary\n");
 				exit(EINVAL);
