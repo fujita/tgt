@@ -139,6 +139,22 @@ static void update_vpd_83(struct scsi_lu *lu, void *id)
 	strncpy((char *)data + 4, id, SCSI_ID_LEN);
 }
 
+static void update_b0_opt_xfer_gran(struct scsi_lu *lu, int opt_xfer_gran)
+{
+	struct vpd *vpd_pg = lu->attrs.lu_vpd[PCODE_OFFSET(0xb0)];
+
+	/* 4 byte VPD header omitted from data buff */
+	put_unaligned_be16(opt_xfer_gran, vpd_pg->data + 2);
+}
+
+static void update_b0_opt_xfer_len(struct scsi_lu *lu, int opt_xfer_len)
+{
+	struct vpd *vpd_pg = lu->attrs.lu_vpd[PCODE_OFFSET(0xb0)];
+
+	/* 4 byte VPD header omitted from data buff */
+	put_unaligned_be32(opt_xfer_len, vpd_pg->data + 8);
+}
+
 int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 {
 	int len = 0, ret = SAM_STAT_CHECK_CONDITION;
@@ -1596,6 +1612,7 @@ enum {
 	Opt_scsi_id, Opt_scsi_sn,
 	Opt_vendor_id, Opt_product_id,
 	Opt_product_rev, Opt_sense_format,
+	Opt_optimal_xfer_gran, Opt_optimal_xfer_len,
 	Opt_removable, Opt_readonly, Opt_online,
 	Opt_mode_page,
 	Opt_path,
@@ -1610,6 +1627,8 @@ static match_table_t tokens = {
 	{Opt_product_id, "product_id=%s"},
 	{Opt_product_rev, "product_rev=%s"},
 	{Opt_sense_format, "sense_format=%s"},
+	{Opt_optimal_xfer_gran, "optimal_xfer_gran=%s"},
+	{Opt_optimal_xfer_len, "optimal_xfer_len=%s"},
 	{Opt_removable, "removable=%s"},
 	{Opt_readonly, "readonly=%s"},
 	{Opt_online, "online=%s"},
@@ -1679,6 +1698,14 @@ int lu_config(struct scsi_lu *lu, char *params, match_fn_t *fn)
 			match_strncpy(buf, &args[0], sizeof(buf));
 			attrs->sense_format = atoi(buf);
 			break;
+		case Opt_optimal_xfer_gran:
+			match_strncpy(buf, &args[0], sizeof(buf));
+			update_b0_opt_xfer_gran(lu, atoi(buf));
+			break;
+		case Opt_optimal_xfer_len:
+			match_strncpy(buf, &args[0], sizeof(buf));
+			update_b0_opt_xfer_len(lu, atoi(buf));
+			break;
 		case Opt_removable:
 			match_strncpy(buf, &args[0], sizeof(buf));
 			attrs->removable = atoi(buf);
@@ -1743,6 +1770,10 @@ int spc_lu_init(struct scsi_lu *lu)
 	lu_vpd[pg] = alloc_vpd(SCSI_ID_LEN + 4);
 	lu_vpd[pg]->vpd_update = update_vpd_83;
 	lu_vpd[pg]->vpd_update(lu, lu->attrs.scsi_id);
+
+	/* VPD page 0xb0 */
+	pg = PCODE_OFFSET(0xb0);
+	lu_vpd[pg] = alloc_vpd(BLOCK_LIMITS_VPD_LEN);
 
 	lu->attrs.removable = 0;
 	lu->attrs.readonly = 0;

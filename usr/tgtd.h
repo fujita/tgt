@@ -10,6 +10,7 @@
 #define VENDOR_ID_LEN		8
 #define PRODUCT_ID_LEN		16
 #define PRODUCT_REV_LEN		4
+#define BLOCK_LIMITS_VPD_LEN	0x3C
 
 #define PCODE_SHIFT		7
 #define PCODE_OFFSET(x) (x & ((1 << PCODE_SHIFT) - 1))
