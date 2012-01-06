@@ -1612,6 +1612,7 @@ enum {
 	Opt_scsi_id, Opt_scsi_sn,
 	Opt_vendor_id, Opt_product_id,
 	Opt_product_rev, Opt_sense_format,
+	Opt_lbppbe, Opt_la_lba,
 	Opt_optimal_xfer_gran, Opt_optimal_xfer_len,
 	Opt_removable, Opt_readonly, Opt_online,
 	Opt_mode_page,
@@ -1627,6 +1628,8 @@ static match_table_t tokens = {
 	{Opt_product_id, "product_id=%s"},
 	{Opt_product_rev, "product_rev=%s"},
 	{Opt_sense_format, "sense_format=%s"},
+	{Opt_lbppbe, "lbppbe=%s"},
+	{Opt_la_lba, "la_lba=%s"},
 	{Opt_optimal_xfer_gran, "optimal_xfer_gran=%s"},
 	{Opt_optimal_xfer_len, "optimal_xfer_len=%s"},
 	{Opt_removable, "removable=%s"},
@@ -1697,6 +1700,14 @@ int lu_config(struct scsi_lu *lu, char *params, match_fn_t *fn)
 		case Opt_sense_format:
 			match_strncpy(buf, &args[0], sizeof(buf));
 			attrs->sense_format = atoi(buf);
+			break;
+		case Opt_lbppbe:
+			match_strncpy(buf, &args[0], sizeof(buf));
+			attrs->lbppbe = atoi(buf);
+			break;
+		case Opt_la_lba:
+			match_strncpy(buf, &args[0], sizeof(buf));
+			attrs->la_lba = atoi(buf);
 			break;
 		case Opt_optimal_xfer_gran:
 			match_strncpy(buf, &args[0], sizeof(buf));

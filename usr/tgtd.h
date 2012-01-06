@@ -67,6 +67,9 @@ struct lu_phy_attr {
 	char readonly;          /* Read-Only media */
 	char online;		/* Logical Unit online */
 	char sense_format;	/* Descrptor format sense data supported */
+				/* For the following see READ CAPACITY (16) */
+	unsigned char lbppbe;	/* Logical blocks per physical block exponent */
+	uint16_t la_lba;	/* Lowest aligned LBA */
 
 	/* VPD pages 0x80 -> 0xff masked with 0x80*/
 	struct vpd *lu_vpd[1 << PCODE_SHIFT];
