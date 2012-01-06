@@ -409,9 +409,21 @@ sub add_params {
 		}
 	}
 
-	if ($param eq "scsi_id" || $param eq "scsi_sn" || $param eq "vendor_id" || $param eq "product_id" ||
-	    $param eq "product_rev" || $param eq "sense_format" || $param eq "removable" || $param eq "online" ||
-	    $param eq "path" || $param eq "mode_page" || $param eq "readonly") {
+	if ($param eq "scsi_id" ||
+	    $param eq "scsi_sn" ||
+	    $param eq "vendor_id" ||
+	    $param eq "product_id" ||
+	    $param eq "product_rev" ||
+	    $param eq "sense_format" ||
+	    $param eq "removable" ||
+	    $param eq "online" ||
+	    $param eq "path" ||
+	    $param eq "mode_page" ||
+	    $param eq "lbppbe" ||
+	    $param eq "la_lba" ||
+	    $param eq "optimal_xfer_gran" ||
+	    $param eq "optimal_xfer_len" ||
+	    $param eq "readonly") {
 		return("tgtadm -C $control_port --lld $driver --op update --mode logicalunit --tid $next_tid --lun=$lun --params $param=\"$param_value\"");
 	}
 	if ($param eq "params") {
@@ -544,6 +556,7 @@ sub add_backing_direct {
 			}
 			# Used only if lun is a direct-store
 			my $sg_inq;
+			my $sg_readcap;
 			my %direct_params;
 			if ($direct_store == 1) {
 				$sg_inq=`sg_inq $backing_store`;
@@ -568,6 +581,38 @@ sub add_backing_direct {
 						$direct_params{scsi_sn} = $4;
 					}
 				}
+
+				$sg_inq=`sg_inq -p 0xb0 $backing_store`;
+				if ($sg_inq=~m {
+					Optimal\ transfer\ length\ granularity:\s+?(\d+).*?\n
+					\s+Maximum\ transfer\ length:\s+?(\d+).*?\n
+					\s+Optimal\ transfer\ length:\s+?(\d+).*?\n
+					}xs ) {
+					if (not length $$target_options_ref{optimal_xfer_gran}) {
+						$direct_params{optimal_xfer_gran} = $1;
+					}
+					# $2 unused
+					if (not length $$target_options_ref{optimal_xfer_len}) {
+						$direct_params{optimal_xfer_len} = $3;
+					}
+				}
+
+				$sg_readcap=`sg_readcap -16 $backing_store`;
+				if ($sg_readcap=~ m {
+					Logical\ block\ length=(\d+).*?\n
+					\s+Logical\ blocks\ per\ physical\ block\ exponent=(\d+).*?\n
+					\s+Lowest\ aligned\ logical\ block\ address=(\d+).*?\n
+					}xs) {
+					if (not length $block_size) {
+						$block_size = $1;
+					}
+					if (not length $$target_options_ref{lbppbe}) {
+						$direct_params{lbppbe} = $2;
+					}
+					if (not length $$target_options_ref{la_lba}) {
+						$direct_params{la_lba} = $3;
+					}
+				}
 			}
 
 			# Add these parameters if they were not overwritten in the config file
@@ -581,7 +626,8 @@ sub add_backing_direct {
 				}
 			}
 			# These options can be fetched by sg_inq for direct-store
-			my @opts = ("vendor_id", "product_id", "product_rev", "scsi_sn");
+			my @opts = ("vendor_id", "product_id", "product_rev", "scsi_sn",
+				    "lbppbe", "la_lba", "optimal_xfer_gran", "optimal_xfer_len");
 			foreach my $single_opt (@opts) {
 				check_if_hash_array($$target_options_ref{$single_opt},$single_opt);
 				my $this_opt;
