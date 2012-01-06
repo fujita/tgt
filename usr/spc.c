@@ -1656,12 +1656,12 @@ int lu_config(struct scsi_lu *lu, char *params, match_fn_t *fn)
 		case Opt_scsi_id:
 			match_strncpy(attrs->scsi_id, &args[0],
 				      sizeof(attrs->scsi_id));
-			lu_vpd[3]->vpd_update(lu, attrs->scsi_id);
+			lu_vpd[PCODE_OFFSET(0x83)]->vpd_update(lu, attrs->scsi_id);
 			break;
 		case Opt_scsi_sn:
 			match_strncpy(attrs->scsi_sn, &args[0],
 				      sizeof(attrs->scsi_sn));
-			lu_vpd[0]->vpd_update(lu, attrs->scsi_sn);
+			lu_vpd[PCODE_OFFSET(0x80)]->vpd_update(lu, attrs->scsi_sn);
 			break;
 		case Opt_vendor_id:
 			match_strncpy(attrs->vendor_id, &args[0],
