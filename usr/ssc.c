@@ -51,6 +51,26 @@ static int ssc_mode_page_update(struct scsi_cmd *cmd, uint8_t *data,
 	return 1;
 }
 
+static int ssc_mode_sense(int host_no, struct scsi_cmd *cmd)
+{
+	int ret;
+	uint8_t *data, mode6;
+
+	ret = spc_mode_sense(host_no, cmd);
+
+	mode6 = (cmd->scb[0] == 0x1a);
+	data = scsi_get_in_buffer(cmd);
+
+	/* set the device to report BUFFERED MODE for writes */
+	if (mode6)
+		data[2] |= 0x10;
+	else
+		data[3] |= 0x10;
+
+
+	return ret;
+}
+
 static int ssc_mode_select(int host_no, struct scsi_cmd *cmd)
 {
 	return spc_mode_select(host_no, cmd, ssc_mode_page_update);
@@ -196,7 +216,7 @@ static struct device_type_template ssc_template = {
 
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_mode_sense,},
+		{ssc_mode_sense,},
 		{spc_start_stop,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
@@ -255,7 +275,7 @@ static struct device_type_template ssc_template = {
 
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_mode_sense,},
+		{ssc_mode_sense,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},

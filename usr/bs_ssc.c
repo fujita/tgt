@@ -189,7 +189,8 @@ static int append_blk(struct scsi_cmd *cmd, uint8_t *data,
 	}
 	/* Write new EOD blk header */
 
-	fsync(fd);
+	if (type == BLK_FILEMARK)
+		fsync(fd);
 
 	return SAM_STAT_GOOD;
 }
