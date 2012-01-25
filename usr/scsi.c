@@ -115,6 +115,7 @@ uint64_t scsi_rw_offset(uint8_t *scb)
 		off = ((scb[1] & 0x1f) << 16) + (scb[2] << 8) + scb[3];
 		break;
 	case READ_10:
+	case PRE_FETCH_10:
 	case WRITE_10:
 	case VERIFY:
 	case WRITE_VERIFY:
@@ -127,6 +128,7 @@ uint64_t scsi_rw_offset(uint8_t *scb)
 			(uint32_t)scb[4] << 8 | (uint32_t)scb[5];
 		break;
 	case READ_16:
+	case PRE_FETCH_16:
 	case WRITE_16:
 	case VERIFY_16:
 	case WRITE_VERIFY_16:
@@ -156,6 +158,7 @@ uint32_t scsi_rw_count(uint8_t *scb)
 			cnt = 256;
 		break;
 	case READ_10:
+	case PRE_FETCH_10:
 	case WRITE_10:
 	case VERIFY:
 	case WRITE_VERIFY:
@@ -170,6 +173,7 @@ uint32_t scsi_rw_count(uint8_t *scb)
 			(uint32_t)scb[8] << 8 | (uint32_t)scb[9];
 		break;
 	case READ_16:
+	case PRE_FETCH_16:
 	case WRITE_16:
 	case VERIFY_16:
 	case WRITE_VERIFY_16:

@@ -19,7 +19,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  */
-#define _XOPEN_SOURCE 500
+#define _XOPEN_SOURCE 600
 
 #include <errno.h>
 #include <fcntl.h>
@@ -111,6 +111,14 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 			      cmd->offset);
 
 		if (ret != length)
+			set_medium_error(&result, &key, &asc);
+		break;
+	case PRE_FETCH_10:
+	case PRE_FETCH_16:
+		ret = posix_fadvise(fd, cmd->offset, cmd->tl,
+				POSIX_FADV_WILLNEED);
+
+		if (ret != 0)
 			set_medium_error(&result, &key, &asc);
 		break;
 	default:

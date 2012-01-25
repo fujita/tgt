@@ -34,6 +34,7 @@ struct scsi_cmd {
 
 	uint64_t cmd_itn_id;
 	uint64_t offset;
+	uint32_t tl;
 	uint8_t *scb;
 	int scb_len;
 	uint8_t lun[8];

@@ -45,7 +45,7 @@
 #define SEARCH_EQUAL          0x31
 #define SEARCH_LOW            0x32
 #define SET_LIMITS            0x33
-#define PRE_FETCH             0x34
+#define PRE_FETCH_10          0x34
 #define READ_POSITION         0x34
 #define SYNCHRONIZE_CACHE     0x35
 #define LOCK_UNLOCK_CACHE     0x36
@@ -74,6 +74,7 @@
 #define WRITE_16              0x8a
 #define WRITE_VERIFY_16       0x8e
 #define VERIFY_16	      0x8f
+#define PRE_FETCH_16          0x90
 #define SYNCHRONIZE_CACHE_16  0x91
 #define SERVICE_ACTION_IN     0x9e
 #define	SAI_READ_CAPACITY_16  0x10

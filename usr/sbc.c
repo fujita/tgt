@@ -130,6 +130,8 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 		case WRITE_10:
 		case WRITE_12:
 		case WRITE_16:
+		case PRE_FETCH_10:
+		case PRE_FETCH_16:
 			key = DATA_PROTECT;
 			asc = ASC_WRITE_PROTECT;
 			goto sense;
@@ -149,6 +151,7 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 	}
 
 	cmd->offset = lba;
+	cmd->tl     = tl;
 
 	ret = cmd->dev->bst->bs_cmd_submit(cmd);
 	if (ret) {
@@ -407,7 +410,7 @@ static struct device_type_template sbc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{sbc_rw, NULL, PR_EA_FA|PR_EA_FN}, /*PRE_FETCH_10 */
 		{sbc_sync_cache, NULL, PR_WE_FA|PR_EA_FA|PR_WE_FN|PR_EA_FN},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
@@ -464,7 +467,7 @@ static struct device_type_template sbc_template = {
 		{spc_illegal_op,},
 
 		/* 0x90 */
-		{spc_illegal_op,},
+		{sbc_rw, NULL, PR_EA_FA|PR_EA_FN}, /*PRE_FETCH_16 */
 		{sbc_sync_cache, NULL, PR_WE_FA|PR_EA_FA|PR_WE_FN|PR_EA_FN},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
