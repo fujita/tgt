@@ -99,6 +99,48 @@ static int sbc_mode_sense(int host_no, struct scsi_cmd *cmd)
 	return ret;
 }
 
+static int sbc_format_unit(int host_no, struct scsi_cmd *cmd)
+{
+	unsigned char key = ILLEGAL_REQUEST;
+	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
+	int ret;
+
+	ret = device_reserved(cmd);
+	if (ret)
+		return SAM_STAT_RESERVATION_CONFLICT;
+
+	if (!cmd->dev->attrs.online) {
+		key = NOT_READY;
+		asc = ASC_MEDIUM_NOT_PRESENT;
+		goto sense;
+	}
+
+	if (cmd->dev->attrs.readonly) {
+		key = DATA_PROTECT;
+		asc = ASC_WRITE_PROTECT;
+		goto sense;
+	}
+
+	if (cmd->scb[1] & 0x80) {
+		/* we dont support format protection information */
+		goto sense;
+	}
+	if (cmd->scb[1] & 0x10) {
+		/* we dont support format data */
+		goto sense;
+	}
+	if (cmd->scb[1] & 0x07) {
+		/* defect list format must be 0 */
+		goto sense;
+	}
+
+	return SAM_STAT_GOOD;
+
+sense:
+	sense_data_build(cmd, key, asc);
+	return SAM_STAT_CHECK_CONDITION;
+}
+
 static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 {
 	int ret;
@@ -353,7 +395,7 @@ static struct device_type_template sbc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_request_sense,},
-		{spc_illegal_op,},
+		{sbc_format_unit,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
