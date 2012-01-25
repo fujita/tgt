@@ -13,6 +13,7 @@ extern int spc_request_sense(int host_no, struct scsi_cmd *cmd);
 extern int spc_prevent_allow_media_removal(int host_no, struct scsi_cmd *cmd);
 extern int spc_illegal_op(int host_no, struct scsi_cmd *cmd);
 extern int spc_lu_init(struct scsi_lu *lu);
+extern int spc_send_diagnostics(int host_no, struct scsi_cmd *cmd);
 
 typedef int (match_fn_t)(struct scsi_lu *lu, char *params);
 extern int lu_config(struct scsi_lu *lu, char *params, match_fn_t *);

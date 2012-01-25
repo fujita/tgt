@@ -219,7 +219,7 @@ static struct device_type_template ssc_template = {
 		{ssc_mode_sense,},
 		{spc_start_stop,},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{spc_send_diagnostics,},
 		{spc_prevent_allow_media_removal,},
 		{spc_illegal_op,},
 

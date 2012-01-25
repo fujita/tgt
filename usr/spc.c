@@ -746,6 +746,22 @@ find_service_action(struct service_action *service_action, uint32_t action)
 	return NULL;
 }
 
+int spc_send_diagnostics(int host_no, struct scsi_cmd *cmd)
+{
+	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
+	uint8_t key = ILLEGAL_REQUEST;
+
+	/* we only support SELF-TEST==1 */
+	if (!(cmd->scb[1] & 0x04))
+		goto sense;
+
+	return SAM_STAT_GOOD;
+sense:
+	scsi_set_in_resid_by_actual(cmd, 0);
+	sense_data_build(cmd, key, asc);
+	return SAM_STAT_CHECK_CONDITION;
+}
+
 /*
  * This is useful for the various commands using the SERVICE ACTION
  * format.

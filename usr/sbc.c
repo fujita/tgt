@@ -424,7 +424,7 @@ static struct device_type_template sbc_template = {
 		{sbc_mode_sense, NULL, PR_WE_FA|PR_EA_FA|PR_WE_FN|PR_EA_FN},
 		{spc_start_stop, NULL, PR_SPECIAL},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{spc_send_diagnostics,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 
