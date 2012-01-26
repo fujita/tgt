@@ -57,9 +57,19 @@ static int ssc_mode_sense(int host_no, struct scsi_cmd *cmd)
 	uint8_t *data, mode6;
 
 	ret = spc_mode_sense(host_no, cmd);
+	if (ret != SAM_STAT_GOOD)
+		return ret;
 
 	mode6 = (cmd->scb[0] == 0x1a);
 	data = scsi_get_in_buffer(cmd);
+
+	/* set write protect bit to 1 for readonly devices */
+	if (cmd->dev->attrs.readonly) {
+		if (mode6)
+			data[2] |= 0x80;
+		else
+			data[3] |= 0x80;
+	}
 
 	/* set the device to report BUFFERED MODE for writes */
 	if (mode6)
@@ -86,6 +96,19 @@ static int ssc_rw(int host_no, struct scsi_cmd *cmd)
 	if (ret)
 		return SAM_STAT_RESERVATION_CONFLICT;
 
+	if (cmd->dev->attrs.readonly) {
+		switch (cmd->scb[0]) {
+		case ERASE:
+		case SPACE:
+		case WRITE_6:
+		case WRITE_FILEMARKS:
+			key = DATA_PROTECT;
+			asc = ASC_WRITE_PROTECT;
+			goto sense;
+			break;
+		}
+	}
+
 	ret = cmd->dev->bst->bs_cmd_submit(cmd);
 	if (ret) {
 		key = HARDWARE_ERROR;
@@ -93,6 +116,7 @@ static int ssc_rw(int host_no, struct scsi_cmd *cmd)
 	} else
 		return SAM_STAT_GOOD;
 
+sense:
 	cmd->offset = 0;
 	scsi_set_in_resid_by_actual(cmd, 0);
 	scsi_set_out_resid_by_actual(cmd, 0);
