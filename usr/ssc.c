@@ -96,6 +96,12 @@ static int ssc_rw(int host_no, struct scsi_cmd *cmd)
 	if (ret)
 		return SAM_STAT_RESERVATION_CONFLICT;
 
+	if (cmd->dev->attrs.removable && !cmd->dev->attrs.online) {
+		key = NOT_READY;
+		asc = ASC_MEDIUM_NOT_PRESENT;
+		goto sense;
+	}
+
 	if (cmd->dev->attrs.readonly) {
 		switch (cmd->scb[0]) {
 		case ERASE:
