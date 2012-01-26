@@ -154,6 +154,12 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 	if (ret)
 		return SAM_STAT_RESERVATION_CONFLICT;
 
+	if (cmd->dev->attrs.removable && !cmd->dev->attrs.online) {
+		key = NOT_READY;
+		asc = ASC_MEDIUM_NOT_PRESENT;
+		goto sense;
+	}
+
 	switch (cmd->scb[0]) {
 	case READ_10:
 	case READ_12:
@@ -238,6 +244,12 @@ static int sbc_read_capacity(int host_no, struct scsi_cmd *cmd)
 	unsigned char key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_LUN_NOT_SUPPORTED;
 
+	if (cmd->dev->attrs.removable && !cmd->dev->attrs.online) {
+		key = NOT_READY;
+		asc = ASC_MEDIUM_NOT_PRESENT;
+		goto sense;
+	}
+
 	if (!(scb[8] & 0x1) && (scb[2] | scb[3] | scb[4] | scb[5])) {
 		asc = ASC_INVALID_FIELD_IN_CDB;
 		goto sense;
@@ -271,6 +283,12 @@ static int sbc_verify(int host_no, struct scsi_cmd *cmd)
 	int vprotect, bytchk, ret;
 	uint64_t lba;
 	uint32_t tl;
+
+	if (cmd->dev->attrs.removable && !cmd->dev->attrs.online) {
+		key = NOT_READY;
+		asc = ASC_MEDIUM_NOT_PRESENT;
+		goto sense;
+	}
 
 	vprotect = cmd->scb[1] & 0xe0;
 	if (vprotect) {
@@ -323,6 +341,14 @@ static int sbc_service_action(int host_no, struct scsi_cmd *cmd)
 	uint64_t size;
 	int len = 32;
 	int val;
+	unsigned char key = ILLEGAL_REQUEST;
+	uint16_t asc = ASC_INVALID_OP_CODE;
+
+	if (cmd->dev->attrs.removable && !cmd->dev->attrs.online) {
+		key = NOT_READY;
+		asc = ASC_MEDIUM_NOT_PRESENT;
+		goto sense;
+	}
 
 	if (cmd->scb[1] != SAI_READ_CAPACITY_16)
 		goto sense;
@@ -347,8 +373,9 @@ static int sbc_service_action(int host_no, struct scsi_cmd *cmd)
 overflow:
 	scsi_set_in_resid_by_actual(cmd, len);
 	return SAM_STAT_GOOD;
+
 sense:
-	sense_data_build(cmd, ILLEGAL_REQUEST, ASC_INVALID_OP_CODE);
+	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
 }
 
@@ -360,6 +387,12 @@ static int sbc_sync_cache(int host_no, struct scsi_cmd *cmd)
 
 	if (device_reserved(cmd))
 		return SAM_STAT_RESERVATION_CONFLICT;
+
+	if (cmd->dev->attrs.removable && !cmd->dev->attrs.online) {
+		key = NOT_READY;
+		asc = ASC_MEDIUM_NOT_PRESENT;
+		goto sense;
+	}
 
 	ret = cmd->dev->bst->bs_cmd_submit(cmd);
 	switch (ret) {
