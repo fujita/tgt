@@ -117,7 +117,7 @@ uint64_t scsi_rw_offset(uint8_t *scb)
 	case READ_10:
 	case PRE_FETCH_10:
 	case WRITE_10:
-	case VERIFY:
+	case VERIFY_10:
 	case WRITE_VERIFY:
 	case SYNCHRONIZE_CACHE:
 	case READ_12:
@@ -160,7 +160,7 @@ uint32_t scsi_rw_count(uint8_t *scb)
 	case READ_10:
 	case PRE_FETCH_10:
 	case WRITE_10:
-	case VERIFY:
+	case VERIFY_10:
 	case WRITE_VERIFY:
 	case SYNCHRONIZE_CACHE:
 		cnt = (uint16_t)scb[7] << 8 | (uint16_t)scb[8];
@@ -261,7 +261,7 @@ int scsi_is_io_opcode(unsigned char op)
 	case WRITE_6:
 	case READ_10:
 	case WRITE_10:
-	case VERIFY:
+	case VERIFY_10:
 	case WRITE_VERIFY:
 	case READ_12:
 	case WRITE_12:

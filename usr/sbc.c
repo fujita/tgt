@@ -265,7 +265,55 @@ sense:
 
 static int sbc_verify(int host_no, struct scsi_cmd *cmd)
 {
+	struct scsi_lu *lu = cmd->dev;
+	unsigned char key;
+	uint16_t asc;
+	int vprotect, bytchk, ret;
+	uint64_t lba;
+	uint32_t tl;
+
+	vprotect = cmd->scb[1] & 0xe0;
+	if (vprotect) {
+		/* we dont support formatting with protection information,
+		 * so all verify with vprotect!=0 is an error condition
+		 */
+		key = ILLEGAL_REQUEST;
+		asc = ASC_INVALID_FIELD_IN_CDB;
+		goto sense;
+	}
+
+	bytchk = cmd->scb[1] & 0x02;
+	if (!bytchk) {
+		/* no data compare with the media */
+		return SAM_STAT_GOOD;
+	}
+
+	lba = scsi_rw_offset(cmd->scb) << cmd->dev->blk_shift;
+	tl  = scsi_rw_count(cmd->scb) << cmd->dev->blk_shift;
+
+	/* Verify that we are not doing i/o beyond
+	   the end-of-lun */
+	if (tl && (lba + tl > lu->size)) {
+		key = ILLEGAL_REQUEST;
+		asc = ASC_LBA_OUT_OF_RANGE;
+		goto sense;
+	}
+
+	cmd->offset = lba;
+
+	ret = cmd->dev->bst->bs_cmd_submit(cmd);
+	if (ret) {
+		key = HARDWARE_ERROR;
+		asc = ASC_INTERNAL_TGT_FAILURE;
+		goto sense;
+	}
+
 	return SAM_STAT_GOOD;
+
+sense:
+	scsi_set_in_resid_by_actual(cmd, 0);
+	sense_data_build(cmd, key, asc);
+	return SAM_STAT_CHECK_CONDITION;
 }
 
 static int sbc_service_action(int host_no, struct scsi_cmd *cmd)
@@ -506,7 +554,7 @@ static struct device_type_template sbc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{sbc_verify, NULL, PR_EA_FA|PR_EA_FN},
 
 		/* 0x90 */
 		{sbc_rw, NULL, PR_EA_FA|PR_EA_FN}, /*PRE_FETCH_16 */
@@ -544,7 +592,7 @@ static struct device_type_template sbc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{sbc_verify, NULL, PR_EA_FA|PR_EA_FN},
 
 		[0xb0 ... 0xff] = {spc_illegal_op},
 	}

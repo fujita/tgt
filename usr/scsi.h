@@ -40,7 +40,7 @@
 #define SEEK_10               0x2b
 #define POSITION_TO_ELEMENT   0x2b
 #define WRITE_VERIFY          0x2e
-#define VERIFY                0x2f
+#define VERIFY_10             0x2f
 #define SEARCH_HIGH           0x30
 #define SEARCH_EQUAL          0x31
 #define SEARCH_LOW            0x32
@@ -229,6 +229,9 @@
 /* Data Protect */
 #define ASC_WRITE_PROTECT			0x2700
 #define ASC_MEDIUM_OVERWRITE_ATTEMPTED		0x300c
+
+/* Miscompare */
+#define ASC_MISCOMPARE_DURING_VERIFY_OPERATION  0x1d00
 
 
 /* PERSISTENT_RESERVE_IN service action codes */

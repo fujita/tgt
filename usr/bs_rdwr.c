@@ -62,6 +62,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 	int result = SAM_STAT_GOOD;
 	uint8_t key;
 	uint16_t asc;
+	char *tmpbuf;
 
 	ret = length = 0;
 	key = asc = 0;
@@ -120,6 +121,31 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 
 		if (ret != 0)
 			set_medium_error(&result, &key, &asc);
+		break;
+	case VERIFY_10:
+	case VERIFY_12:
+	case VERIFY_16:
+		length = scsi_get_out_length(cmd);
+
+		tmpbuf = malloc(length);
+		if (!tmpbuf) {
+			result = SAM_STAT_CHECK_CONDITION;
+			key = HARDWARE_ERROR;
+			asc = ASC_INTERNAL_TGT_FAILURE;
+			break;
+		}
+
+		ret = pread64(fd, tmpbuf, length, cmd->offset);
+
+		if (ret != length)
+			set_medium_error(&result, &key, &asc);
+		else if (memcmp(scsi_get_out_buffer(cmd), tmpbuf, length)) {
+			result = SAM_STAT_CHECK_CONDITION;
+			key = MISCOMPARE;
+			asc = ASC_MISCOMPARE_DURING_VERIFY_OPERATION;
+		}
+
+		free(tmpbuf);
 		break;
 	default:
 		break;
