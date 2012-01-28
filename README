@@ -25,14 +25,14 @@ tgt can emulate the following device types:
 - SBC: a virtual disk drive that can use a file to store the content.
 
 - SMC: a virtual media jukebox that can be controlled by the "mtx"
-tool (partially functional).
+tool.
 
 - MMC: a virtual DVD drive that can read DVD-ROM iso files and create
 burnable DVD+R. It can be combined with SMC to provide a fully
 operational DVD jukebox.
 
 - SSC: a virtual tape device (aka VTL) that can use a file to store
-the content (in progress).
+the content.
 
 - OSD: a virtual object-based storage device that can use a file to
 store the content (in progress).
