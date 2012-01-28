@@ -407,6 +407,16 @@ Slot types:
         </listitem>
       </varlistentry>
 
+      <varlistentry><term><option>clear_slot=&lt;1&gt;</option></term>
+        <listitem>
+          <para>
+	    This option is used to clear a storage element and remove any
+	    media that may be present. Once this command completes
+	    the storage element will show up as "Empty".
+          </para>
+        </listitem>
+      </varlistentry>
+
       <varlistentry><term><option>barcode=&lt;string&gt;</option></term>
         <listitem>
           <para>

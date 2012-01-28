@@ -672,6 +672,11 @@ static int config_slot(struct scsi_lu *lu, struct tmp_param *tmp)
 		s = slot_lookup(&smc->slots, tmp->element_type, tmp->address);
 		if (!s)
 			break;	// Slot not found..
+		if (tmp->clear_slot) {
+			set_slot_empty(s);
+			ret = TGTADM_SUCCESS;
+			break;
+		}
 		strncpy(s->barcode, tmp->barcode, sizeof(s->barcode));
 		set_slot_full(s, 0, NULL);
 		ret = TGTADM_SUCCESS;
@@ -724,6 +729,10 @@ static int __smc_lu_config(struct scsi_lu *lu, char *params)
 		case Opt_sides:
 			match_strncpy(buf, &args[0], sizeof(buf));
 			sv_param.sides = atoi(buf);
+			break;
+		case Opt_clear_slot:
+			match_strncpy(buf, &args[0], sizeof(buf));
+			sv_param.clear_slot = atoi(buf);
 			break;
 		case Opt_address:
 			match_strncpy(buf, &args[0], sizeof(buf));

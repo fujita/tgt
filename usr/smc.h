@@ -75,7 +75,7 @@ struct smc_info {
 
 enum {
 	Opt_element_type, Opt_start_address,
-	Opt_quantity, Opt_sides,
+	Opt_quantity, Opt_sides, Opt_clear_slot,
 	Opt_address, Opt_barcode,
 	Opt_tid, Opt_lun,
 	Opt_type, Opt_dump,
@@ -88,6 +88,7 @@ static match_table_t tokens = {
 	{Opt_start_address, "start_address=%s"},
 	{Opt_quantity, "quantity=%s"},
 	{Opt_sides, "sides=%s"},
+	{Opt_clear_slot, "clear_slot=%s"},
 	{Opt_address, "address=%s"},
 	{Opt_barcode, "barcode=%s"},
 	{Opt_tid, "tid=%s"},
@@ -116,6 +117,7 @@ struct tmp_param {
 	uint64_t lun;
 	char barcode[20];
 	int sides;
+	int clear_slot;
 } sv_param;
 
 #endif // _SMC_H_
