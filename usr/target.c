@@ -586,9 +586,9 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 			goto fail_lu_init;
 	}
 
-	if (backing && !path && !lu->attrs.removable) {
-		ret = TGTADM_INVALID_REQUEST;
-		goto fail_bs_init;
+	if (backing && !path) {
+		lu->attrs.removable = 1;
+		lu->attrs.online    = 0;
 	}
 
 	if (backing && path) {

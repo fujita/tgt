@@ -779,7 +779,8 @@ int main(int argc, char **argv)
 					  "allowed/supported\n", rc);
 				exit(EINVAL);
 			}
-			if (!path && dev_type != TYPE_MMC) {
+			if (!path && dev_type != TYPE_MMC
+			    && dev_type != TYPE_DISK) {
 				eprintf("'backing-store' option "
 						"is necessary\n");
 				exit(EINVAL);
