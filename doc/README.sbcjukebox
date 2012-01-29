@@ -17,6 +17,7 @@
 # SNAPDIR is where we keep the SMC media file as well as where all snapshots are
 #   kept. This must be the same filesystem as FILE
 # NUMSLOTS is how many old snapshots we want to keep.
+# READONLYSNAPS is whether or not the snapshot device is readonly or not
 
 # sbcjukebox.sh start
 #    to create the target and populate the storage elements.
@@ -35,7 +36,7 @@ TNAME="iqn.ronnie.test-snapshot"
 FILE="/data/RHEL6/RHEL6-1.img"
 SNAPDIR="${FILE}.snapshots"
 NUMSLOTS=8
-
+READONLYSNAPS="yes"
 
 
 [ -d "$SNAPDIR" ] || mkdir "$SNAPDIR"
@@ -90,6 +91,10 @@ start() {
 	# create the data transfer device
 	tgtadm --op new --mode logicalunit --tid $TID --lun 1 -Y disk
 	tgtadm --op update --mode logicalunit --tid $TID --lun 1 --params vendor_id=STGT,product_id=SNAPSHOT_SBC,product_rev=0010
+
+	[ "$READONLYSNAPS" != "yes" ] || {
+		tgtadm --op update --mode logicalunit --tid $TID --lun 1 --params readonly=1
+	}
 
 	# create backing store for SMC
 	[ -f "${SNAPDIR}/smc" ] || dd if=/dev/zero of="${SNAPDIR}/smc" bs=1k count=1
