@@ -51,6 +51,10 @@ struct vpd {
 	uint8_t data[0];
 };
 
+#define PREVENT_REMOVAL			0x01
+#define PREVENT_REMOVAL_PERSISTENT	0x02
+#define PREVENT_MASK			0x03
+
 struct lu_phy_attr {
 	char scsi_id[SCSI_ID_LEN + 1];
 	char scsi_sn[SCSI_SN_LEN + 1];
@@ -85,6 +89,7 @@ struct it_nexus_lu_info {
 	struct scsi_lu *lu;
 	struct list_head lu_info_siblings;
 	struct list_head pending_ua_sense_list;
+	int prevent; /* prevent removal on this itl nexus ? */
 };
 
 struct service_action {
@@ -275,6 +280,8 @@ extern void ua_sense_add_other_it_nexus(uint64_t itn_id, struct scsi_lu *lu,
 					uint16_t asc);
 extern void ua_sense_add_it_nexus(uint64_t itn_id, struct scsi_lu *lu,
 					uint16_t asc);
+
+extern int lu_prevent_removal(struct scsi_lu *lu);
 
 extern uint64_t scsi_get_devid(int lid, uint8_t *pdu);
 extern int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd);

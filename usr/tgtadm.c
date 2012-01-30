@@ -77,7 +77,9 @@ static const char * tgtadm_strerror(int err)
 		{ TGTADM_LUN_ACTIVE, "this logical unit is still active" },
 		{ TGTADM_UNSUPPORTED_OPERATION,
 		  "this operation isn't supported" },
-		{ TGTADM_UNKNOWN_PARAM, "unknown parameter" }
+		{ TGTADM_UNKNOWN_PARAM, "unknown parameter" },
+		{ TGTADM_PREVENT_REMOVAL,
+		  "this device has Prevent Removal set" }
 	};
 	int i;
 

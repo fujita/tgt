@@ -2294,18 +2294,12 @@ static int mmc_lu_online(struct scsi_lu *lu)
 	return 0;
 }
 
-static int mmc_lu_offline(struct scsi_lu *lu)
-{
-	lu->attrs.online = 0;
-	return 0;
-}
-
 static struct device_type_template mmc_template = {
 	.type		= TYPE_MMC,
 	.lu_init	= mmc_lu_init,
 	.lu_config	= spc_lu_config,
 	.lu_online	= mmc_lu_online,
-	.lu_offline	= mmc_lu_offline,
+	.lu_offline	= spc_lu_offline,
 	.lu_exit	= spc_lu_exit,
 	.ops		= {
 		{spc_test_unit,},
@@ -2342,7 +2336,7 @@ static struct device_type_template mmc_template = {
 		{spc_start_stop,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_start_stop,}, /* allow medium removal */
+		{spc_prevent_allow_media_removal,},
 		{spc_illegal_op,},
 
 		/* 0x20 */

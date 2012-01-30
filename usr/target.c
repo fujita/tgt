@@ -261,6 +261,23 @@ void ua_sense_add_it_nexus(uint64_t itn_id, struct scsi_lu *lu,
 	}
 }
 
+int lu_prevent_removal(struct scsi_lu *lu)
+{
+	struct it_nexus *itn;
+	struct it_nexus_lu_info *itn_lu;
+
+	list_for_each_entry(itn, &lu->tgt->it_nexus_list, nexus_siblings) {
+		list_for_each_entry(itn_lu, &itn->it_nexus_lu_info_list,
+				    lu_info_siblings) {
+			if (itn_lu->lu == lu) {
+				if (itn_lu->prevent & PREVENT_REMOVAL)
+					return 1;
+			}
+		}
+	}
+	return 0;
+}
+
 int it_nexus_create(int tid, uint64_t itn_id, int host_no, char *info)
 {
 	int ret;
@@ -375,10 +392,15 @@ int tgt_device_path_update(struct target *target, struct scsi_lu *lu, char *path
 	uint64_t size;
 
 	if (lu->path) {
+		int ret;
+
 		if (lu->attrs.online)
 			return TGTADM_INVALID_REQUEST;
 
-		lu->dev_type_template.lu_offline(lu);
+		ret = lu->dev_type_template.lu_offline(lu);
+		if (ret)
+			return ret;
+
 		lu->bst->bs_close(lu);
 		free(lu->path);
 		lu->fd = 0;
@@ -755,7 +777,10 @@ int dtd_load_unload(int tid, uint64_t lun, int load, char *file)
 
 	lu->size = 0;
 	lu->fd = 0;
-	lu->dev_type_template.lu_offline(lu);
+
+	err = lu->dev_type_template.lu_offline(lu);
+	if (err)
+		return err;
 
 	if (load) {
 		lu->path = strdup(file);
@@ -1798,6 +1823,7 @@ int tgt_target_show_all(char *buf, int rest)
 				 _TAB3 "Size: %s, Block size: %d\n"
 				 _TAB3 "Online: %s\n"
 				 _TAB3 "Removable media: %s\n"
+				 _TAB3 "Prevent removal: %s\n"
 				 _TAB3 "Readonly: %s\n"
 				 _TAB3 "Backing store type: %s\n"
 				 _TAB3 "Backing store path: %s\n"
@@ -1810,6 +1836,8 @@ int tgt_target_show_all(char *buf, int rest)
 				 1U << lu->blk_shift,
 				 lu->attrs.online ? "Yes" : "No",
 				 lu->attrs.removable ? "Yes" : "No",
+				 lu_prevent_removal(lu) ?
+					"Yes" : "No",
 				 lu->attrs.readonly ? "Yes" : "No",
 				 lu->bst ?
 					(lu->bst->bs_name ? : "Unknown") :

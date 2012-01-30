@@ -681,6 +681,53 @@ tgtadm --lld iscsi --op delete --mode conn --tid 1 --sid 2 --cid 0
   </refsect1>
 
 
+
+  <refsect1><title>Online/Offline Status</title>
+    <para>
+      Tgtd LUNs can be in online or offline status. LUNs that are Offline behave slightly different 
+      depending on the device type. Offline devices behave as if there is no media available and any
+      operations that access media will fail with an check-condition error.
+    </para>
+    <para>
+      Devices can not be set to Offline mode while there are "PREVENT ALLOW MEDIUM REMOVAL"
+      locks on the device. Similarly media in Online devices can not be software ejected while there are such locks on the device (the 'eject' command will fail).
+    </para>
+    <refsect2><title>Show Online/Offline status</title>
+      <para>
+	Finding the Online/Offline status of a LUN is done through the tgtd command. If "Prevent removal"
+	is "Yes" this indicates that an application holds a "prevent media removal" lock on the device.
+      </para>
+      <screen format="linespecific">
+tgtadm --lld iscsi --mode target --op show
+...
+        LUN: 2
+            Type: cd/dvd
+            SCSI ID: IET     00010002
+            SCSI SN: beaf12
+            Size: 3432 MB, Block size: 1
+            Online: Yes
+            Removable media: Yes
+            Prevent removal: Yes
+...
+      </screen>
+    </refsect2>
+    <refsect2><title>Changing a LUN to Offline</title>
+      <para>
+	A LUN is changed to Offline status using the tgtadm command.
+	When devices are set Offline these devices will behave as if there is no media
+	loaded into the drive.
+      </para>
+      <para>
+	Change a LUN to become offline. (no disk in the drive)
+      </para>
+      <screen format="linespecific">
+tgtadm --tid 1 --lun 2 --op update --mode logicalunit -P Online=No
+      </screen>
+
+    </refsect2>
+  </refsect1>
+
+
   <refsect1><title>iSNS PARAMETERS</title>
     <para>
       iSNS configuration for a target is by using the tgtadm command.

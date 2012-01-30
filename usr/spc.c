@@ -309,12 +309,36 @@ sense:
 
 int spc_start_stop(int host_no, struct scsi_cmd *cmd)
 {
+	uint8_t *scb = cmd->scb;
+	int start, loej;
+
 	scsi_set_in_resid_by_actual(cmd, 0);
 
 	if (device_reserved(cmd))
 		return SAM_STAT_RESERVATION_CONFLICT;
-	else
-		return SAM_STAT_GOOD;
+
+	loej  = scb[4] & 0x02;
+	start = scb[4] & 0x01;
+
+	if (loej == 1 && start == 0) {
+		if (lu_prevent_removal(cmd->dev)) {
+			if (cmd->dev->attrs.online) {
+				/*  online == media is present */
+				sense_data_build(cmd, ILLEGAL_REQUEST,
+					ASC_MEDIUM_REMOVAL_PREVENTED);
+			} else {
+				/* !online == media is not present */
+				sense_data_build(cmd, NOT_READY,
+				ASC_MEDIUM_REMOVAL_PREVENTED);
+			}
+			return SAM_STAT_CHECK_CONDITION;
+		}
+		spc_lu_offline(cmd->dev);
+	}
+	if (loej == 1 && start == 1)
+		spc_lu_online(cmd->dev);
+
+	return SAM_STAT_GOOD;
 }
 
 int spc_test_unit(int host_no, struct scsi_cmd *cmd)
@@ -335,12 +359,15 @@ int spc_test_unit(int host_no, struct scsi_cmd *cmd)
 
 int spc_prevent_allow_media_removal(int host_no, struct scsi_cmd *cmd)
 {
-	/* TODO: implement properly */
+	uint8_t *scb = cmd->scb;
+	struct it_nexus_lu_info *itn_lu_info = cmd->itn_lu_info;
 
 	if (device_reserved(cmd))
 		return SAM_STAT_RESERVATION_CONFLICT;
-	else
-		return SAM_STAT_GOOD;
+
+	itn_lu_info->prevent = scb[4] & PREVENT_MASK;
+
+	return SAM_STAT_GOOD;
 }
 
 int spc_mode_select(int host_no, struct scsi_cmd *cmd,
@@ -1665,6 +1692,9 @@ int spc_lu_online(struct scsi_lu *lu)
 
 int spc_lu_offline(struct scsi_lu *lu)
 {
+	if (lu_prevent_removal(lu))
+		return TGTADM_PREVENT_REMOVAL;
+
 	lu->attrs.online = 0;
 	return 0;
 }
@@ -1744,9 +1774,9 @@ int lu_config(struct scsi_lu *lu, char *params, match_fn_t *fn)
 		case Opt_online:
 			match_strncpy(buf, &args[0], sizeof(buf));
 			if (atoi(buf))
-				lu->dev_type_template.lu_online(lu);
+				err |= lu->dev_type_template.lu_online(lu);
 			else
-				lu->dev_type_template.lu_offline(lu);
+				err |= lu->dev_type_template.lu_offline(lu);
 			break;
 		case Opt_mode_page:
 			match_strncpy(buf, &args[0], sizeof(buf));

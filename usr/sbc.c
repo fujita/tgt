@@ -506,7 +506,7 @@ static struct device_type_template sbc_template = {
 		{spc_start_stop, NULL, PR_SPECIAL},
 		{spc_illegal_op,},
 		{spc_send_diagnostics,},
-		{spc_illegal_op,},
+		{spc_prevent_allow_media_removal,},
 		{spc_illegal_op,},
 
 		/* 0x20 */
