@@ -164,9 +164,13 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 	case READ_10:
 	case READ_12:
 	case READ_16:
+	case WRITE_10:
+	case WRITE_12:
+	case WRITE_16:
+		/* We only support protection information type 0 */
 		if (cmd->scb[1] & 0xe0) {
 			key = ILLEGAL_REQUEST;
-			asc = ASC_INVALID_OP_CODE;
+			asc = ASC_INVALID_FIELD_IN_CDB;
 			goto sense;
 		}
 		break;
@@ -292,9 +296,7 @@ static int sbc_verify(int host_no, struct scsi_cmd *cmd)
 
 	vprotect = cmd->scb[1] & 0xe0;
 	if (vprotect) {
-		/* we dont support formatting with protection information,
-		 * so all verify with vprotect!=0 is an error condition
-		 */
+		/* We only support protection information type 0 */
 		key = ILLEGAL_REQUEST;
 		asc = ASC_INVALID_FIELD_IN_CDB;
 		goto sense;
