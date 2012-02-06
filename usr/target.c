@@ -442,7 +442,9 @@ __device_lookup(int tid, uint64_t lun, struct target **t)
 	if (!lu)
 		return NULL;
 
-	*t = target;
+	if (t)
+		*t = target;
+
 	return lu;
 }
 
@@ -748,6 +750,30 @@ struct lu_phy_attr *lu_attr_lookup(int tid, uint64_t lun)
 }
 
 /**
+ * dtd_check_removable
+ * @tid:	Target ID
+ * @lun:	LUN
+ *
+ * check if a DT can have its media reoved or not
+ */
+int dtd_check_removable(int tid, uint64_t lun)
+{
+	struct scsi_lu *lu;
+
+	lu = __device_lookup(tid, lun, NULL);
+	if (!lu)
+		return TGTADM_NO_LUN;
+
+	if (lu_prevent_removal(lu))
+		return TGTADM_PREVENT_REMOVAL;
+
+	if (!lu->attrs.removable)
+		return TGTADM_INVALID_REQUEST;
+
+	return TGTADM_SUCCESS;
+}
+
+/**
  * dtd_load_unload  --  Load / unload media
  * @tid:	Target ID
  * @lun:	LUN
@@ -765,6 +791,9 @@ int dtd_load_unload(int tid, uint64_t lun, int load, char *file)
 	lu = __device_lookup(tid, lun, &target);
 	if (!lu)
 		return TGTADM_NO_LUN;
+
+	if (lu_prevent_removal(lu))
+		return TGTADM_PREVENT_REMOVAL;
 
 	if (!lu->attrs.removable)
 		return TGTADM_INVALID_REQUEST;

@@ -5,6 +5,7 @@
  * (C) 2004-2007 FUJITA Tomonori <tomof@acm.org>
  * (C) 2005-2007 Mike Christie <michaelc@cs.wisc.edu>
  * (C) 2007      Mark Harvey <markh794@gmail.com>
+ * (C) 2012      Ronnie Sahlberg <ronniesahlberg@gmail.com>
  *
  * SCSI target emulation code is based on Ardis's iSCSI implementation.
  *   http://www.ardistech.com/iscsi/
@@ -46,6 +47,11 @@
 #include "parser.h"
 #include "smc.h"
 #include "media.h"
+
+static int check_slot_removable(struct slot *s)
+{
+	return dtd_check_removable(s->drive_tid, s->drive_lun);
+}
 
 static int set_slot_full(struct slot *s, uint16_t src, char *path)
 {
@@ -442,6 +448,14 @@ static int smc_move_medium(int host_no, struct scsi_cmd *cmd)
 
 	if (invert && (s->sides == 1))	/* Use default INVALID FIELD IN CDB */
 		goto sense;
+
+	if (src_slot->element_type == ELEMENT_DATA_TRANSFER) {
+		if (check_slot_removable(src_slot)) {
+			key = ILLEGAL_REQUEST;
+			asc = ASC_MEDIUM_REMOVAL_PREVENTED;
+			goto sense;
+		}
+	}
 
 	memcpy(&dest_slot->barcode, &src_slot->barcode, sizeof(s->barcode));
 	if (dest_slot->element_type == ELEMENT_DATA_TRANSFER) {
