@@ -189,9 +189,6 @@ static int append_blk(struct scsi_cmd *cmd, uint8_t *data,
 	}
 	/* Write new EOD blk header */
 
-	if (type == BLK_FILEMARK)
-		fsync(fd);
-
 	return SAM_STAT_GOOD;
 }
 
@@ -466,6 +463,7 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 			append_blk(cmd, scsi_get_out_buffer(cmd), 0,
 					0, BLK_FILEMARK);
 
+		fsync(cmd->dev->fd);
 		break;
 
 	case READ_6:
