@@ -11,8 +11,10 @@ enum tgtadm_errno {
 	TGTADM_NO_LUN,
 	TGTADM_NO_SESSION,
 	TGTADM_NO_CONNECTION,
+	TGTADM_NO_BINDING,
 	TGTADM_TARGET_EXIST,
 	TGTADM_LUN_EXIST,
+	TGTADM_BINDING_EXIST,
 
 	TGTADM_ACL_EXIST,
 	TGTADM_ACL_NOEXIST,
@@ -29,5 +31,7 @@ enum tgtadm_errno {
 
 	TGTADM_PREVENT_REMOVAL,
 };
+
+typedef enum tgtadm_errno tgtadm_err;
 
 #endif

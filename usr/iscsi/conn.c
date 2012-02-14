@@ -216,7 +216,7 @@ int conn_take_fd(struct iscsi_connection *conn)
 }
 
 /* called by tgtadm */
-int conn_close_admin(uint32_t tid, uint64_t sid, uint32_t cid)
+tgtadm_err conn_close_admin(uint32_t tid, uint64_t sid, uint32_t cid)
 {
 	struct iscsi_target* target = NULL;
 	struct iscsi_session *session;

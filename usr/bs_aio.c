@@ -366,7 +366,7 @@ static void bs_aio_close(struct scsi_lu *lu)
 	close(lu->fd);
 }
 
-static int bs_aio_init(struct scsi_lu *lu)
+static tgtadm_err bs_aio_init(struct scsi_lu *lu)
 {
 	struct bs_aio_info *info = BS_AIO_I(lu);
 	int i;
@@ -379,7 +379,7 @@ static int bs_aio_init(struct scsi_lu *lu)
 	for (i=0; i < ARRAY_SIZE(info->iocb_arr); i++)
 		info->piocb_arr[i] = &info->iocb_arr[i];
 
-	return 0;
+	return TGTADM_SUCCESS;
 }
 
 static void bs_aio_exit(struct scsi_lu *lu)

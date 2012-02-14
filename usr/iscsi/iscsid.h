@@ -28,6 +28,7 @@
 #include "param.h"
 #include "log.h"
 #include "tgtd.h"
+#include "util.h"
 
 #include "iscsi_proto.h"
 #include "iscsi_if.h"
@@ -301,7 +302,7 @@ extern int conn_get(struct iscsi_connection *conn);
 extern struct iscsi_connection * conn_find(struct iscsi_session *session, uint32_t cid);
 extern int conn_take_fd(struct iscsi_connection *conn);
 extern void conn_add_to_session(struct iscsi_connection *conn, struct iscsi_session *session);
-extern int conn_close_admin(uint32_t tid, uint64_t sid, uint32_t cid);
+extern tgtadm_err conn_close_admin(uint32_t tid, uint64_t sid, uint32_t cid);
 
 /* iscsid.c */
 extern char *text_key_find(struct iscsi_connection *conn, char *searchKey);
@@ -327,22 +328,22 @@ extern void session_get(struct iscsi_session *session);
 extern void session_put(struct iscsi_session *session);
 
 /* target.c */
-struct iscsi_target * target_find_by_name(const char *name);
-struct iscsi_target * target_find_by_id(int tid);
+extern struct iscsi_target * target_find_by_name(const char *name);
+extern struct iscsi_target * target_find_by_id(int tid);
 extern void target_list_build(struct iscsi_connection *, char *, char *);
 extern int ip_acl(int tid, struct iscsi_connection *conn);
 extern int iqn_acl(int tid, struct iscsi_connection *conn);
 extern int iscsi_target_create(struct target *);
 extern void iscsi_target_destroy(int tid, int force);
-extern int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid,
-			     uint64_t lun, char *buf, int rest);
-int iscsi_target_update(int mode, int op, int tid, uint64_t sid, uint64_t lun,
-			uint32_t cid, char *name);
-int target_redirected(struct iscsi_target *target,
-	struct iscsi_connection *conn, char *buf, int *reason);
+extern tgtadm_err iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid,
+				    uint64_t lun, struct concat_buf *b);
+extern tgtadm_err iscsi_target_update(int mode, int op, int tid, uint64_t sid, uint64_t lun,
+				      uint32_t cid, char *name);
+extern int target_redirected(struct iscsi_target *target,
+			     struct iscsi_connection *conn, char *buf, int *reason);
 
 /* param.c */
-int param_index_by_name(char *name, struct iscsi_key *keys);
+extern int param_index_by_name(char *name, struct iscsi_key *keys);
 
 /* transport.c */
 extern int iscsi_init(int, char *);
@@ -351,19 +352,10 @@ extern void iscsi_exit(void);
 /* isns.c */
 extern int isns_init(void);
 extern void isns_exit(void);
-extern int isns_show(char *buf, int rest);
+extern int isns_show(struct concat_buf *b);
 extern int isns_update(char *params);
 extern int isns_scn_access(int tid, char *name);
 extern int isns_target_register(char *name);
 extern int isns_target_deregister(char *name);
-
-#define buffer_check(buf, total, len, rest)	\
-({						\
-	buf += len;				\
-	total += len;				\
-	rest -= len;				\
-	if (!rest)				\
-		break;				\
-})
 
 #endif	/* ISCSID_H */

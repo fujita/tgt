@@ -63,7 +63,9 @@ static const char * tgtadm_strerror(int err)
 		{ TGTADM_NO_LUN, "can't find the logical unit" },
 		{ TGTADM_NO_SESSION, "can't find the session" },
 		{ TGTADM_NO_CONNECTION, "can't find the connection" },
+		{ TGTADM_NO_BINDING, "can't find the binding" },
 		{ TGTADM_TARGET_EXIST, "this target already exists" },
+		{ TGTADM_BINDING_EXIST, "this binding already exists" },
 		{ TGTADM_LUN_EXIST, "this logical unit number already exists" },
 		{ TGTADM_ACL_EXIST, "this access control rule already exists" },
 		{ TGTADM_ACL_NOEXIST, "this access control rule does not exist" },
@@ -285,9 +287,11 @@ retry:
 	return 0;
 }
 
-static int ipc_mgmt_req(struct tgtadm_req *req)
+static int ipc_mgmt_req(struct tgtadm_req *req, struct concat_buf *b)
 {
-	int err, fd = 0;
+	int err, fd = 0, done = 0;
+
+	req->len = sizeof(*req) + b->size;
 
 	err = ipc_mgmt_connect(&fd);
 	if (err < 0) {
@@ -295,19 +299,31 @@ static int ipc_mgmt_req(struct tgtadm_req *req)
 		goto out;
 	}
 
-	err = write(fd, (char *) req, req->len);
-	if (err < 0) {
-		eprintf("can't send the request to the tgt daemon, %m\n");
+	err = write(fd, req, sizeof(*req));
+	if (err < 0 || err != sizeof(*req)) {
+		eprintf("failed to send request hdr to the tgt daemon, %m\n");
 		err = errno;
 		goto out;
 	}
 
-	dprintf("sent to tgtd %d\n", err);
+	while (done < b->size) {
+		err = concat_write(b, fd, done);
+		if (err > 0)
+			done += err;
+		else if (errno != EAGAIN) {
+			eprintf("failed to send request buf to the tgt daemon, %m\n");
+			err = errno;
+			goto out;
+		}
+	}
+
+	dprintf("sent to tgtd %d\n", req->len);
 
 	err = ipc_mgmt_rsp(fd, req);
 out:
 	if (fd > 0)
 		close(fd);
+	concat_buf_release(b);
 	return err;
 }
 
@@ -447,39 +463,28 @@ static int verify_mode_params(int argc, char **argv, char *allowed)
 int main(int argc, char **argv)
 {
 	int ch, longindex, rc;
-	int op, total, tid, rest, mode, dev_type, ac_dir;
+	int op, tid, mode, dev_type, ac_dir;
 	uint32_t cid, hostno;
 	uint64_t sid, lun, force;
-	char *name, *value, *path, *targetname, *params, *address, *iqnname, *targetOps;
+	char *name, *value, *path, *targetname, *address, *iqnname, *targetOps;
 	char *portalOps, *bstype;
 	char *bsoflags;
 	char *blocksize;
 	char *user, *password;
-	char *buf;
-	size_t bufsz = BUFSIZE + sizeof(struct tgtadm_req);
-	struct tgtadm_req *req;
+	struct tgtadm_req adm_req = {0}, *req = &adm_req;
+	struct concat_buf b;
 
 	op = tid = mode = -1;
-	total = cid = hostno = sid = 0;
+	cid = hostno = sid = 0;
 	lun = UINT64_MAX;
 
 	rc = 0;
 	dev_type = TYPE_DISK;
 	ac_dir = ACCOUNT_TYPE_INCOMING;
-	rest = BUFSIZE;
 	name = value = path = targetname = address = iqnname = NULL;
 	targetOps = portalOps = bstype = NULL;
 	bsoflags = blocksize = user = password = NULL;
 	force = 0;
-
-	buf = valloc(bufsz);
-	if (!buf) {
-		eprintf("%s\n",	tgtadm_strerror(TGTADM_NOMEM));
-		return ENOMEM;
-	}
-
-	memset(buf, 0, bufsz);
-	req = (struct tgtadm_req *) buf;
 
 	optind = 1;
 	while ((ch = getopt_long(argc, argv, short_options,
@@ -867,53 +872,47 @@ int main(int argc, char **argv)
 	req->ac_dir = ac_dir;
 	req->force = force;
 
-	params = buf + sizeof(*req);
+	concat_buf_init(&b);
 
 	if (name)
-		shprintf(total, params, rest, "%s=%s", name, value);
+		concat_printf(&b, "%s=%s", name, value);
 	if (path)
-		shprintf(total, params, rest, "%spath=%s",
-			 rest == BUFSIZE ? "" : ",", path);
+		concat_printf(&b, "%spath=%s", concat_delim(&b,","), path);
 
 	if (req->device_type == TYPE_TAPE)
-		shprintf(total, params, rest, "%sbstype=%s",
-			 rest == BUFSIZE ? "" : ",", "ssc");
+		concat_printf(&b, "%sbstype=%s", concat_delim(&b,","), "ssc");
 	else if (bstype)
-		shprintf(total, params, rest, "%sbstype=%s",
-			 rest == BUFSIZE ? "" : ",", bstype);
+		concat_printf(&b, "%sbstype=%s", concat_delim(&b,","), bstype);
 	if (bsoflags)
-		shprintf(total, params, rest, "%sbsoflags=%s",
-			 rest == BUFSIZE ? "" : ",", bsoflags);
+		concat_printf(&b, "%sbsoflags=%s", concat_delim(&b,","), bsoflags);
 	if (blocksize)
-		shprintf(total, params, rest, "%sblocksize=%s",
-			 rest == BUFSIZE ? "" : ",", blocksize);
+		concat_printf(&b, "%sblocksize=%s", concat_delim(&b,","), blocksize);
 	if (targetname)
-		shprintf(total, params, rest, "%stargetname=%s",
-			 rest == BUFSIZE ? "" : ",", targetname);
+		concat_printf(&b, "%stargetname=%s", concat_delim(&b,","), targetname);
 	if (address)
-		shprintf(total, params, rest, "%sinitiator-address=%s",
-			 rest == BUFSIZE ? "" : ",", address);
+		concat_printf(&b, "%sinitiator-address=%s", concat_delim(&b,","), address);
 	if (iqnname)
-		shprintf(total, params, rest, "%sinitiator-name=%s",
-			 rest == BUFSIZE ? "" : ",", iqnname);
+		concat_printf(&b, "%sinitiator-name=%s", concat_delim(&b,","), iqnname);
 	if (user)
-		shprintf(total, params, rest, "%suser=%s",
-			 rest == BUFSIZE ? "" : ",", user);
+		concat_printf(&b, "%suser=%s", concat_delim(&b,","), user);
 	if (password)
-		shprintf(total, params, rest, "%spassword=%s",
-			 rest == BUFSIZE ? "" : ",", password);
+		concat_printf(&b, "%spassword=%s", concat_delim(&b,","), password);
 	/* Trailing ',' makes parsing params in modules easier.. */
 	if (targetOps)
-		shprintf(total, params, rest, "%stargetOps %s,",
-			 rest == BUFSIZE ? "" : ",", targetOps);
+		concat_printf(&b, "%stargetOps %s,", concat_delim(&b,","), targetOps);
 	if (portalOps)
-		shprintf(total, params, rest, "%sportalOps %s,",
-			 rest == BUFSIZE ? "" : ",", portalOps);
+		concat_printf(&b, "%sportalOps %s,", concat_delim(&b,","), portalOps);
 
-	req->len = sizeof(*req) + total;
+	if (b.err) {
+		eprintf("BUFSIZE (%d bytes) isn't long enough\n", BUFSIZE);
+		return EINVAL;
+	}
 
-	return ipc_mgmt_req(req);
-overflow:
-	eprintf("BUFSIZE (%d bytes) isn't long enough\n", BUFSIZE);
-	return EINVAL;
+	rc = concat_buf_finish(&b);
+	if (rc) {
+		eprintf("failed to create request, errno:%d\n", rc);
+		exit(rc);
+	}
+
+	return ipc_mgmt_req(req, &b);
 }

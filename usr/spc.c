@@ -1552,9 +1552,10 @@ static struct mode_pg *alloc_mode_pg(uint8_t pcode, uint8_t subpcode,
 	return pg;
 }
 
-int add_mode_page(struct scsi_lu *lu, char *p)
+tgtadm_err add_mode_page(struct scsi_lu *lu, char *p)
 {
-	int i, tmp, ret = TGTADM_SUCCESS;
+	tgtadm_err adm_err = TGTADM_SUCCESS;
+	int i, tmp;
 	uint8_t pcode, subpcode, *data;
 	uint16_t size;
 	struct mode_pg *pg;
@@ -1578,7 +1579,7 @@ int add_mode_page(struct scsi_lu *lu, char *p)
 
 			pg = alloc_mode_pg(pcode, subpcode, size);
 			if (!pg) {
-				ret = TGTADM_NOMEM;
+				adm_err = TGTADM_NOMEM;
 				goto exit;
 			}
 
@@ -1603,12 +1604,12 @@ int add_mode_page(struct scsi_lu *lu, char *p)
 	}
 
 	if (i != size + 3) {
-		ret = TGTADM_INVALID_REQUEST;
+		adm_err = TGTADM_INVALID_REQUEST;
 		eprintf("Mode Page %d (0x%02x): param_count %d != "
 			"MODE PAGE size : %d\n", pcode, subpcode, i, size + 3);
 	}
 exit:
-	return ret;
+	return adm_err;
 }
 
 void dump_cdb(struct scsi_cmd *cmd)
@@ -1684,24 +1685,24 @@ static match_table_t tokens = {
 	{Opt_err, NULL},
 };
 
-int spc_lu_online(struct scsi_lu *lu)
+tgtadm_err spc_lu_online(struct scsi_lu *lu)
 {
 	lu->attrs.online = 1;
-	return 0;
+	return TGTADM_SUCCESS;
 }
 
-int spc_lu_offline(struct scsi_lu *lu)
+tgtadm_err spc_lu_offline(struct scsi_lu *lu)
 {
 	if (lu_prevent_removal(lu))
 		return TGTADM_PREVENT_REMOVAL;
 
 	lu->attrs.online = 0;
-	return 0;
+	return TGTADM_SUCCESS;
 }
 
-int lu_config(struct scsi_lu *lu, char *params, match_fn_t *fn)
+tgtadm_err lu_config(struct scsi_lu *lu, char *params, match_fn_t *fn)
 {
-	int err = TGTADM_SUCCESS;
+	tgtadm_err adm_err = TGTADM_SUCCESS;
 	char *p;
 	char buf[1024];
 	struct lu_phy_attr *attrs;
@@ -1774,26 +1775,26 @@ int lu_config(struct scsi_lu *lu, char *params, match_fn_t *fn)
 		case Opt_online:
 			match_strncpy(buf, &args[0], sizeof(buf));
 			if (atoi(buf))
-				err |= lu->dev_type_template.lu_online(lu);
+				adm_err = lu->dev_type_template.lu_online(lu);
 			else
-				err |= lu->dev_type_template.lu_offline(lu);
+				adm_err = lu->dev_type_template.lu_offline(lu);
 			break;
 		case Opt_mode_page:
 			match_strncpy(buf, &args[0], sizeof(buf));
-			err = add_mode_page(lu, buf);
+			adm_err = add_mode_page(lu, buf);
 			break;
 		case Opt_path:
 			match_strncpy(buf, &args[0], sizeof(buf));
-			err = tgt_device_path_update(lu->tgt, lu, buf);
+			adm_err = tgt_device_path_update(lu->tgt, lu, buf);
 			break;
 		default:
-			err |= fn ? fn(lu, p) : TGTADM_INVALID_REQUEST;
+			adm_err = fn ? fn(lu, p) : TGTADM_INVALID_REQUEST;
 		}
 	}
-	return err;
+	return adm_err;
 }
 
-int spc_lu_config(struct scsi_lu *lu, char *params)
+tgtadm_err spc_lu_config(struct scsi_lu *lu, char *params)
 {
 	return lu_config(lu, params, NULL);
 }
@@ -1819,18 +1820,24 @@ int spc_lu_init(struct scsi_lu *lu)
 	/* VPD page 0x80 */
 	pg = PCODE_OFFSET(0x80);
 	lu_vpd[pg] = alloc_vpd(SCSI_SN_LEN);
+	if (!lu_vpd[pg])
+		return -ENOMEM;
 	lu_vpd[pg]->vpd_update = update_vpd_80;
 	lu_vpd[pg]->vpd_update(lu, lu->attrs.scsi_sn);
 
 	/* VPD page 0x83 */
 	pg = PCODE_OFFSET(0x83);
 	lu_vpd[pg] = alloc_vpd(SCSI_ID_LEN + 4);
+	if (!lu_vpd[pg])
+		return -ENOMEM;
 	lu_vpd[pg]->vpd_update = update_vpd_83;
 	lu_vpd[pg]->vpd_update(lu, lu->attrs.scsi_id);
 
 	/* VPD page 0xb0 */
 	pg = PCODE_OFFSET(0xb0);
 	lu_vpd[pg] = alloc_vpd(BLOCK_LIMITS_VPD_LEN);
+	if (!lu_vpd[pg])
+		return -ENOMEM;
 
 	lu->attrs.removable = 0;
 	lu->attrs.readonly = 0;

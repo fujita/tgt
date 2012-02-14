@@ -155,16 +155,15 @@ static int ssc_read_block_limit(int host_no, struct scsi_cmd *cmd)
 	return SAM_STAT_GOOD;
 }
 
-static int ssc_lu_init(struct scsi_lu *lu)
+static tgtadm_err ssc_lu_init(struct scsi_lu *lu)
 {
 	uint8_t *data;
 	struct ssc_info *ssc;
 
 	ssc = zalloc(sizeof(struct ssc_info));
-	if (ssc)
-		dtype_priv(lu) = ssc;
-	else
+	if (!ssc)
 		return TGTADM_NOMEM;
+	dtype_priv(lu) = ssc;
 
 	if (spc_lu_init(lu))
 		return TGTADM_NOMEM;
@@ -204,7 +203,7 @@ static int ssc_lu_init(struct scsi_lu *lu)
 	/* Medium Configuration - Mandatory - SSC3 8.3.7 */
 	add_mode_page(lu, "0x1d:0:0x1e:1:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0"
 				":0:0:0:0:0:0:0:0:0:0:0:0:0");
-	return 0;
+	return TGTADM_SUCCESS;
 }
 
 static struct device_type_template ssc_template = {

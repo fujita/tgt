@@ -1,6 +1,8 @@
 #ifndef __DRIVER_H__
 #define __DRIVER_H__
 
+#include "tgtadm_error.h"
+
 enum tgt_driver_state {
 	DRIVER_REGD = 0, /* just registered */
 	DRIVER_INIT, /* initialized ok */
@@ -23,8 +25,8 @@ struct tgt_driver {
 
 	int (*lu_create)(struct scsi_lu *);
 
-	int (*update)(int, int, int ,uint64_t, uint64_t, uint32_t, char *);
-	int (*show)(int, int, uint64_t, uint32_t, uint64_t, char *, int);
+	tgtadm_err (*update)(int, int, int ,uint64_t, uint64_t, uint32_t, char *);
+	tgtadm_err (*show)(int, int, uint64_t, uint32_t, uint64_t, struct concat_buf *);
 
 	uint64_t (*scsi_get_lun)(uint8_t *);
 

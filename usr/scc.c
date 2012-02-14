@@ -36,7 +36,7 @@
 #include "tgtadm_error.h"
 #include "spc.h"
 
-static int scc_lu_init(struct scsi_lu *lu)
+static tgtadm_err scc_lu_init(struct scsi_lu *lu)
 {
 	if (spc_lu_init(lu))
 		return TGTADM_NOMEM;
@@ -49,7 +49,7 @@ static int scc_lu_init(struct scsi_lu *lu)
 
 	lu->dev_type_template.lu_online(lu);
 
-	return 0;
+	return TGTADM_SUCCESS;
 }
 
 static struct device_type_template scc_template = {

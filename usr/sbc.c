@@ -420,7 +420,7 @@ sense:
 	return SAM_STAT_CHECK_CONDITION;
 }
 
-static int sbc_lu_init(struct scsi_lu *lu)
+static tgtadm_err sbc_lu_init(struct scsi_lu *lu)
 {
 	uint64_t size;
 	uint8_t *data;
@@ -463,7 +463,7 @@ static int sbc_lu_init(struct scsi_lu *lu)
 	/* Informational Exceptions Control page */
 	add_mode_page(lu, "0x1c:0:10:8:0:0:0:0:0:0:0:0:0");
 
-	return 0;
+	return TGTADM_SUCCESS;
 }
 
 static struct device_type_template sbc_template = {

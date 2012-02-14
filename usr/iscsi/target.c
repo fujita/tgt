@@ -36,6 +36,7 @@
 #include "tgtadm.h"
 #include "tgtd.h"
 #include "target.h"
+#include "util.h"
 
 LIST_HEAD(iscsi_targets_list);
 
@@ -495,16 +496,17 @@ static int iscsi_session_param_update(struct iscsi_target* target, int idx, char
 	return 0;
 }
 
-int iscsi_target_update(int mode, int op, int tid, uint64_t sid, uint64_t lun,
-			uint32_t cid, char *name)
+tgtadm_err iscsi_target_update(int mode, int op, int tid, uint64_t sid, uint64_t lun,
+			       uint32_t cid, char *name)
 {
-	int idx, err = TGTADM_INVALID_REQUEST;
+	tgtadm_err adm_err = TGTADM_INVALID_REQUEST;
+	int idx, err;
 	char *str;
 	struct iscsi_target* target;
 
 	switch (mode) {
 	case MODE_SYSTEM:
-		err = isns_update(name);
+		adm_err = isns_update(name);
 		break;
 	case MODE_TARGET:
 		target = target_find_by_id(tid);
@@ -518,12 +520,12 @@ int iscsi_target_update(int mode, int op, int tid, uint64_t sid, uint64_t lun,
 		if (!strncmp(name, "RedirectAddress", 15)) {
 			snprintf(target->redirect_info.addr,
 				 sizeof(target->redirect_info.addr), "%s", str);
-			err = TGTADM_SUCCESS;
+			adm_err = TGTADM_SUCCESS;
 			break;
 		} else if (!strncmp(name, "RedirectPort", 12)) {
 			snprintf(target->redirect_info.port,
 				 sizeof(target->redirect_info.port), "%s", str);
-			err = TGTADM_SUCCESS;
+			adm_err = TGTADM_SUCCESS;
 			break;
 		} else if (!strncmp(name, "RedirectReason", 14)) {
 			if (!strncmp(str, "Temporary", 9)) {
@@ -533,58 +535,47 @@ int iscsi_target_update(int mode, int op, int tid, uint64_t sid, uint64_t lun,
 			} else if (!strncmp(str, "Permanent", 9)) {
 				target->redirect_info.reason =
 					ISCSI_LOGIN_STATUS_TGT_MOVED_PERM;
-				err = TGTADM_SUCCESS;
+				adm_err = TGTADM_SUCCESS;
 			} else
 				break;
 		} else if (!strncmp(name, "RedirectCallback", 16)) {
 			target->redirect_info.callback = strdup(str);
 			if (!target->redirect_info.callback) {
-				err = TGTADM_NOMEM;
+				adm_err = TGTADM_NOMEM;
 				break;
 			}
-			err = TGTADM_SUCCESS;
+			adm_err = TGTADM_SUCCESS;
 		}
 
 		idx = param_index_by_name(name, session_keys);
 		if (idx >= 0) {
 			err = iscsi_session_param_update(target, idx, str);
-			if (err < 0)
-				err = TGTADM_INVALID_REQUEST;
+			adm_err = !err ? TGTADM_SUCCESS : TGTADM_INVALID_REQUEST;
 		}
 		break;
 	case MODE_CONNECTION:
 		if (op == OP_DELETE)
-			err = conn_close_admin(tid, sid, cid);
+			adm_err = conn_close_admin(tid, sid, cid);
 		break;
 	default:
 		break;
 	}
-	return err;
+	return adm_err;
 }
 
-static int show_iscsi_param(char *buf, struct param *param, int rest)
+static int show_iscsi_param(struct param *param, struct concat_buf *b)
 {
-	int i, len, total;
-	char value[64];
 	struct iscsi_key *keys = session_keys;
+	int i;
+	char value[64];
 
-	for (i = total = 0; session_keys[i].name; i++) {
+	for (i = 0; session_keys[i].name; i++) {
 		param_val_to_str(keys, i, param[i].val, value);
-		len = snprintf(buf, rest, "%s=%s\n", keys[i].name, value);
-		buffer_check(buf, total, len, rest);
+		concat_printf(b, "%s=%s\n", keys[i].name, value);
 	}
 
-	return total;
+	return TGTADM_SUCCESS;
 }
-
-#define __buffer_check(buf, total, len, rest)	\
-({						\
-	buf += len;				\
-	total += len;				\
-	rest -= len;				\
-	if (!rest)				\
-		return total;			\
-})
 
 static struct iscsi_session *iscsi_target_find_session(
 	struct iscsi_target *target,
@@ -602,26 +593,21 @@ static struct iscsi_session *iscsi_target_find_session(
 }
 
 static int iscsi_target_show_session(struct iscsi_target *target, uint64_t sid,
-				     char *buf, int rest)
+				     struct concat_buf *b)
 {
-	int len = 0, total = 0;
 	struct iscsi_session *session;
 
 	session = iscsi_target_find_session(target, sid);
 
-	if (session) {
-		len = show_iscsi_param(buf, session->session_param, rest);
-		__buffer_check(buf, total, len, rest);
+	if (session)
+		show_iscsi_param(session->session_param, b);
 
-	}
-
-	return total;
+	return TGTADM_SUCCESS;
 }
 
 static int iscsi_target_show_stats(struct iscsi_target *target, uint64_t sid,
-				   char *buf, int rest)
+				   struct concat_buf *b)
 {
-	int len = 0, total = 0;
 	struct iscsi_session *session;
 	struct iscsi_connection *conn;
 
@@ -629,8 +615,7 @@ static int iscsi_target_show_stats(struct iscsi_target *target, uint64_t sid,
 
 	if (session) {
 		list_for_each_entry(conn, &session->conn_list, clist) {
-			len = snprintf(buf, rest,
-				       "rxdata_octets: %" PRIu64 "\n"
+			concat_printf(b, "rxdata_octets: %" PRIu64 "\n"
 				       "txdata_octets: %" PRIu64 "\n"
 				       "dataout_pdus:  %d\n"
 				       "datain_pdus:   %d\n"
@@ -642,30 +627,27 @@ static int iscsi_target_show_stats(struct iscsi_target *target, uint64_t sid,
 				       conn->stats.datain_pdus,
 				       conn->stats.scsicmd_pdus,
 				       conn->stats.scsirsp_pdus);
-			__buffer_check(buf, total, len, rest);
 		}
 	}
 
-	return total;
+	return TGTADM_SUCCESS;
 
 }
 
 static int iscsi_target_show_connections(struct iscsi_target *target,
 					 uint64_t sid,
-					 char *buf, int rest)
+					 struct concat_buf *b)
 {
 	struct iscsi_session *session;
 	struct iscsi_connection *conn;
 	char addr[128];
-	int len = 0, total = 0;
 
 	list_for_each_entry(session, &target->sessions_list, slist) {
 		list_for_each_entry(conn, &session->conn_list, clist) {
 			memset(addr, 0, sizeof(addr));
 			conn->tp->ep_show(conn, addr, sizeof(addr));
 
-
-			len = snprintf(buf, rest, "Session: %u\n"
+			concat_printf(b, "Session: %u\n"
 				_TAB1 "Connection: %u\n"
 				_TAB2 "Initiator: %s\n"
 				_TAB2 "%s\n",
@@ -673,16 +655,14 @@ static int iscsi_target_show_connections(struct iscsi_target *target,
 				conn->cid,
 				session->initiator,
 				addr);
-			__buffer_check(buf, total, len, rest);
 		}
 	}
-	return total;
+	return TGTADM_SUCCESS;
 }
 
 static int iscsi_target_show_portals(struct iscsi_target *target, uint64_t sid,
-				   char *buf, int rest)
+				     struct concat_buf *b)
 {
-	int len = 0, total = 0;
 	struct iscsi_portal *portal;
 
 	list_for_each_entry(portal, &iscsi_portals_list,
@@ -690,57 +670,42 @@ static int iscsi_target_show_portals(struct iscsi_target *target, uint64_t sid,
 		int is_ipv6;
 
 		is_ipv6 = strchr(portal->addr, ':') != NULL;
-		len = snprintf(buf, rest,
-			       "Portal: %s%s%s:%d,%d\n",
+		concat_printf(b, "Portal: %s%s%s:%d,%d\n",
 			       is_ipv6 ? "[" : "",
 			       portal->addr,
 			       is_ipv6 ? "]" : "",
 			       portal->port ? portal->port : ISCSI_LISTEN_PORT,
 			       portal->tpgt);
-		__buffer_check(buf, total, len, rest);
 	}
 
-	return total;
-
+	return TGTADM_SUCCESS;
 }
 
-static int show_redirect_info(struct iscsi_target* target, char *buf, int rest)
+static int show_redirect_info(struct iscsi_target* target, struct concat_buf *b)
 {
-	int len, total = 0;
+	concat_printf(b, "RedirectAddress=%s\n", target->redirect_info.addr);
+	concat_printf(b, "RedirectPort=%s\n", target->redirect_info.port);
+	if (target->redirect_info.reason == ISCSI_LOGIN_STATUS_TGT_MOVED_TEMP)
+		concat_printf(b, "RedirectReason=Temporary\n");
+	else if (target->redirect_info.reason == ISCSI_LOGIN_STATUS_TGT_MOVED_PERM)
+		concat_printf(b, "RedirectReason=Permanent\n");
+	else
+		concat_printf(b, "RedirectReason=Unknown\n");
 
-	len = snprintf(buf, rest, "RedirectAddress=%s\n", target->redirect_info.addr);
-	__buffer_check(buf, total, len, rest);
-	len = snprintf(buf, rest, "RedirectPort=%s\n", target->redirect_info.port);
-	__buffer_check(buf, total, len, rest);
-	if (target->redirect_info.reason == ISCSI_LOGIN_STATUS_TGT_MOVED_TEMP) {
-		len = snprintf(buf, rest, "RedirectReason=Temporary\n");
-		__buffer_check(buf, total, len, rest);
-	} else if (target->redirect_info.reason == ISCSI_LOGIN_STATUS_TGT_MOVED_PERM) {
-		len = snprintf(buf, rest, "RedirectReason=Permanent\n");
-		__buffer_check(buf, total, len, rest);
-	} else {
-		len = snprintf(buf, rest, "RedirectReason=Unknown\n");
-		__buffer_check(buf, total, len, rest);
-	}
-
-	return total;
+	return TGTADM_SUCCESS;
 }
 
-static int show_redirect_callback(struct iscsi_target *target, char *buf, int rest)
+static int show_redirect_callback(struct iscsi_target *target, struct concat_buf *b)
 {
-	int len, total = 0;
+	concat_printf(b, "RedirectCallback=%s\n", target->redirect_info.callback);
 
-	len = snprintf(buf, rest, "RedirectCallback=%s\n", target->redirect_info.callback);
-	__buffer_check(buf, total, len, rest);
-
-	return total;
+	return TGTADM_SUCCESS;
 }
 
-int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid, uint64_t lun,
-		      char *buf, int rest)
+tgtadm_err iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid, uint64_t lun,
+			     struct concat_buf *b)
 {
 	struct iscsi_target* target = NULL;
-	int len, total = 0;
 
 	if (mode != MODE_SYSTEM && mode != MODE_PORTAL) {
 	    target = target_find_by_id(tid);
@@ -750,36 +715,31 @@ int iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid, uint64_t lu
 
 	switch (mode) {
 	case MODE_SYSTEM:
-		total = isns_show(buf, rest);
+		isns_show(b);
 		break;
 	case MODE_TARGET:
 		if (target->redirect_info.callback)
-			len = show_redirect_callback(target, buf, rest);
+			show_redirect_callback(target, b);
 		else if (strlen(target->redirect_info.addr))
-			len = show_redirect_info(target, buf, rest);
+			show_redirect_info(target, b);
 		else
-			len = show_iscsi_param(buf, target->session_param, rest);
-		total += len;
+			show_iscsi_param(target->session_param, b);
 		break;
 	case MODE_SESSION:
-		len = iscsi_target_show_session(target, sid, buf, rest);
-		total += len;
+		iscsi_target_show_session(target, sid, b);
 		break;
 	case MODE_PORTAL:
-		len = iscsi_target_show_portals(target, sid, buf, rest);
-		total += len;
+		iscsi_target_show_portals(target, sid, b);
 		break;
 	case MODE_CONNECTION:
-		len = iscsi_target_show_connections(target, sid, buf, rest);
-		total += len;
+		iscsi_target_show_connections(target, sid, b);
 		break;
 	case MODE_STATS:
-		len = iscsi_target_show_stats(target, sid, buf, rest);
-		total += len;
+		iscsi_target_show_stats(target, sid, b);
 		break;
 	default:
 		break;
 	}
 
-	return total;
+	return TGTADM_SUCCESS;
 }

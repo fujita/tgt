@@ -400,7 +400,7 @@ static int init_sg_device(int fd)
 	return 0;
 }
 
-static int bs_sg_init(struct scsi_lu *lu)
+static tgtadm_err bs_sg_init(struct scsi_lu *lu)
 {
 	/*
 	 * Setup struct scsi_lu->cmd_perform() passthrough pointer
@@ -413,7 +413,7 @@ static int bs_sg_init(struct scsi_lu *lu)
 	 * usr/target.c:__cmd_done_passthrough().
 	 */
 	lu->cmd_done = &__cmd_done_passthrough;
-	return 0;
+	return TGTADM_SUCCESS;
 }
 
 static int bs_sg_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
@@ -461,12 +461,12 @@ static void bs_sg_close(struct scsi_lu *lu)
 	close(lu->fd);
 }
 
-static int bs_sg_lu_init(struct scsi_lu *lu)
+static tgtadm_err bs_sg_lu_init(struct scsi_lu *lu)
 {
 	if (spc_lu_init(lu))
 		return TGTADM_NOMEM;
 
-	return 0;
+	return TGTADM_SUCCESS;
 }
 
 static struct backingstore_template sg_bst = {

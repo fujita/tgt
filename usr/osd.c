@@ -38,7 +38,7 @@ static int osd_varlen_cdb(int host_no, struct scsi_cmd *cmd)
  * XXX: missing support for b0 and b1, in page 0 and in inquiry code.
  * Figure out how to make spc_inquiry handle extra mode pages.
  */
-static int osd_lu_init(struct scsi_lu *lu)
+static tgtadm_err osd_lu_init(struct scsi_lu *lu)
 {
 	if (spc_lu_init(lu))
 		return TGTADM_NOMEM;
@@ -49,7 +49,7 @@ static int osd_lu_init(struct scsi_lu *lu)
 	lu->attrs.version_desc[1] = 0x0960; /* iSCSI */
 	lu->attrs.version_desc[2] = 0x0300; /* SPC-3 */
 
-	return 0;
+	return TGTADM_SUCCESS;
 }
 
 static struct device_type_template osd_template = {

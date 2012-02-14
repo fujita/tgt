@@ -24,9 +24,9 @@
 #include <inttypes.h>
 
 #include "list.h"
+#include "util.h"
 #include "tgtd.h"
 #include "driver.h"
-#include "util.h"
 
 #define MAX_NR_DRIVERS	32
 

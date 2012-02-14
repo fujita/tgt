@@ -386,10 +386,11 @@ static void tgt_cmd_queue_init(struct tgt_cmd_queue *q)
 	INIT_LIST_HEAD(&q->queue);
 }
 
-int tgt_device_path_update(struct target *target, struct scsi_lu *lu, char *path)
+tgtadm_err tgt_device_path_update(struct target *target, struct scsi_lu *lu, char *path)
 {
-	int err, dev_fd;
+	int dev_fd;
 	uint64_t size;
+	int err;
 
 	if (lu->path) {
 		int ret;
@@ -423,9 +424,7 @@ int tgt_device_path_update(struct target *target, struct scsi_lu *lu, char *path
 	lu->addr = 0;
 	lu->size = size;
 	lu->path = path;
-	lu->dev_type_template.lu_online(lu);
-
-	return 0;
+	return lu->dev_type_template.lu_online(lu);
 }
 
 static struct scsi_lu *
@@ -462,12 +461,13 @@ static match_table_t device_tokens = {
 
 static void __cmd_done(struct target *, struct scsi_cmd *);
 
-int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
+tgtadm_err tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 		      int backing)
 {
 	char *p, *path = NULL, *bstype = NULL;
 	char *bsoflags = NULL, *blocksize = NULL;
-	int ret = 0, lu_bsoflags = 0;
+	int lu_bsoflags = 0;
+	tgtadm_err adm_err = TGTADM_SUCCESS;
 	struct target *target;
 	struct scsi_lu *lu, *pos;
 	struct device_type_template *t;
@@ -504,14 +504,14 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 
 	target = target_lookup(tid);
 	if (!target) {
-		ret = TGTADM_NO_TARGET;
+		adm_err = TGTADM_NO_TARGET;
 		goto out;
 	}
 
 	lu = device_lookup(target, lun);
 	if (lu) {
 		eprintf("device %" PRIu64 " already exists\n", lun);
-		ret = TGTADM_LUN_EXIST;
+		adm_err = TGTADM_LUN_EXIST;
 		goto out;
 	}
 
@@ -521,7 +521,7 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 			bst = get_backingstore_template(bstype);
 			if (!bst) {
 				eprintf("failed to find bstype, %s\n", bstype);
-				ret = TGTADM_INVALID_REQUEST;
+				adm_err = TGTADM_INVALID_REQUEST;
 				goto out;
 			}
 		}
@@ -531,14 +531,14 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	if ((!strncmp(bst->bs_name, "bsg", 3) ||
 	     !strncmp(bst->bs_name, "sg", 2)) &&
 	    dev_type != TYPE_PT) {
-		ret = TGTADM_INVALID_REQUEST;
+		adm_err = TGTADM_INVALID_REQUEST;
 		goto out;
 	}
 
 	if (bsoflags) {
 		lu_bsoflags = str_to_open_flags(bsoflags);
 		if (lu_bsoflags == -1) {
-			ret = TGTADM_INVALID_REQUEST;
+			adm_err = TGTADM_INVALID_REQUEST;
 			goto out;
 		}
 	}
@@ -548,20 +548,20 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 			open_flags_to_str(strflags,
 			(bst->bs_oflags_supported & lu_bsoflags) ^ lu_bsoflags),
 			bst->bs_name);
-		ret = TGTADM_INVALID_REQUEST;
+		adm_err = TGTADM_INVALID_REQUEST;
 		goto out;
 	}
 
 	t = device_type_lookup(dev_type);
 	if (!t) {
 		eprintf("Unknown device type %d\n", dev_type);
-		ret = TGTADM_INVALID_REQUEST;
+		adm_err = TGTADM_INVALID_REQUEST;
 		goto out;
 	}
 
 	lu = zalloc(sizeof(*lu) + bst->bs_datasize);
 	if (!lu) {
-		ret = TGTADM_NOMEM;
+		adm_err = TGTADM_NOMEM;
 		goto out;
 	}
 
@@ -599,14 +599,14 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	}
 
 	if (lu->dev_type_template.lu_init) {
-		ret = lu->dev_type_template.lu_init(lu);
-		if (ret)
+		adm_err = lu->dev_type_template.lu_init(lu);
+		if (adm_err)
 			goto fail_lu_init;
 	}
 
 	if (lu->bst->bs_init) {
-		ret = lu->bst->bs_init(lu);
-		if (ret)
+		adm_err = lu->bst->bs_init(lu);
+		if (adm_err)
 			goto fail_lu_init;
 	}
 
@@ -616,8 +616,8 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	}
 
 	if (backing && path) {
-		ret = tgt_device_path_update(target, lu, path);
-		if (ret)
+		adm_err = tgt_device_path_update(target, lu, path);
+		if (adm_err)
 			goto fail_bs_init;
 	}
 
@@ -645,8 +645,10 @@ int tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 		list_for_each_entry(itn_lu, &itn->it_nexus_lu_info_list,
 				    lu_info_siblings) {
 
-			ret = ua_sense_add(itn_lu,
-					   ASC_REPORTED_LUNS_DATA_HAS_CHANGED);
+			if (ua_sense_add(itn_lu, ASC_REPORTED_LUNS_DATA_HAS_CHANGED)) {
+				adm_err = TGTADM_NOMEM;
+				goto fail_bs_init;
+			}
 		}
 	}
 
@@ -663,7 +665,8 @@ out:
 		free(path);
 	if (bsoflags)
 		free(bsoflags);
-	return ret;
+	return adm_err;
+
 fail_bs_init:
 	if (lu->bst->bs_exit)
 		lu->bst->bs_exit(lu);
@@ -672,7 +675,7 @@ fail_lu_init:
 	goto out;
 }
 
-int tgt_device_destroy(int tid, uint64_t lun, int force)
+tgtadm_err tgt_device_destroy(int tid, uint64_t lun, int force)
 {
 	struct target *target;
 	struct scsi_lu *lu;
@@ -735,7 +738,7 @@ int tgt_device_destroy(int tid, uint64_t lun, int force)
 		}
 	}
 
-	return 0;
+	return TGTADM_SUCCESS;
 }
 
 struct lu_phy_attr *lu_attr_lookup(int tid, uint64_t lun)
@@ -782,11 +785,11 @@ int dtd_check_removable(int tid, uint64_t lun)
  *
  * load/unload media from the DATA TRANSFER DEVICE.
  */
-int dtd_load_unload(int tid, uint64_t lun, int load, char *file)
+tgtadm_err dtd_load_unload(int tid, uint64_t lun, int load, char *file)
 {
 	struct target *target;
 	struct scsi_lu *lu;
-	int err = TGTADM_SUCCESS;
+	tgtadm_err adm_err = TGTADM_SUCCESS;
 
 	lu = __device_lookup(tid, lun, &target);
 	if (!lu)
@@ -807,9 +810,9 @@ int dtd_load_unload(int tid, uint64_t lun, int load, char *file)
 	lu->size = 0;
 	lu->fd = 0;
 
-	err = lu->dev_type_template.lu_offline(lu);
-	if (err)
-		return err;
+	adm_err = lu->dev_type_template.lu_offline(lu);
+	if (adm_err)
+		return adm_err;
 
 	if (load) {
 		lu->path = strdup(file);
@@ -821,9 +824,9 @@ int dtd_load_unload(int tid, uint64_t lun, int load, char *file)
 			lu->path = NULL;
 			return TGTADM_UNSUPPORTED_OPERATION;
 		}
-		lu->dev_type_template.lu_online(lu);
+		adm_err = lu->dev_type_template.lu_online(lu);
 	}
-	return err;
+	return adm_err;
 }
 
 int device_reserve(struct scsi_cmd *cmd)
@@ -876,9 +879,9 @@ int device_reserved(struct scsi_cmd *cmd)
 	return -EBUSY;
 }
 
-int tgt_device_update(int tid, uint64_t dev_id, char *params)
+tgtadm_err tgt_device_update(int tid, uint64_t dev_id, char *params)
 {
-	int err = TGTADM_INVALID_REQUEST;
+	tgtadm_err adm_err = TGTADM_INVALID_REQUEST;
 	struct target *target;
 	struct scsi_lu *lu;
 
@@ -893,9 +896,9 @@ int tgt_device_update(int tid, uint64_t dev_id, char *params)
 	}
 
 	if (lu->dev_type_template.lu_config)
-		err = lu->dev_type_template.lu_config(lu, params);
+		adm_err = lu->dev_type_template.lu_config(lu, params);
 
-	return err;
+	return adm_err;
 }
 
 static int cmd_enabled(struct tgt_cmd_queue *q, struct scsi_cmd *cmd)
@@ -1349,7 +1352,7 @@ found:
 	return 0;
 }
 
-int account_add(char *user, char *password)
+tgtadm_err account_add(char *user, char *password)
 {
 	int aid;
 	struct account_entry *ac;
@@ -1385,7 +1388,7 @@ free_account:
 	return TGTADM_NOMEM;
 }
 
-static int __inaccount_bind(struct target *target, int aid)
+static tgtadm_err __inaccount_bind(struct target *target, int aid)
 {
 	int i;
 
@@ -1421,14 +1424,15 @@ static int __inaccount_bind(struct target *target, int aid)
 		target->account.max_inaccount = new_max;
 	}
 
-	return 0;
+	return TGTADM_SUCCESS;
 }
 
-int account_ctl(int tid, int type, char *user, int bind)
+tgtadm_err account_ctl(int tid, int type, char *user, int bind)
 {
+	tgtadm_err adm_err = 0;
 	struct target *target;
 	struct account_entry *ac;
-	int i, err = 0;
+	int i;
 
 	if (tid == GLOBAL_TID)
 		target = &global_target;
@@ -1443,10 +1447,10 @@ int account_ctl(int tid, int type, char *user, int bind)
 
 	if (bind) {
 		if (type == ACCOUNT_TYPE_INCOMING)
-			err = __inaccount_bind(target, ac->aid);
+			adm_err = __inaccount_bind(target, ac->aid);
 		else {
 			if (target->account.out_aid)
-				err = TGTADM_OUTACCOUNT_EXIST;
+				adm_err = TGTADM_OUTACCOUNT_EXIST;
 			else
 				target->account.out_aid = ac->aid;
 		}
@@ -1460,17 +1464,17 @@ int account_ctl(int tid, int type, char *user, int bind)
 				}
 
 			if (i == target->account.max_inaccount)
-				err = TGTADM_NO_USER;
+				adm_err = TGTADM_NO_USER;
 		} else
 			if (target->account.out_aid == ac->aid)
 				target->account.out_aid = 0;
 			else
-				err = TGTADM_NO_USER;
+				adm_err = TGTADM_NO_USER;
 
-	return err;
+	return adm_err;
 }
 
-int account_del(char *user)
+tgtadm_err account_del(char *user)
 {
 	struct account_entry *ac;
 	struct target *target;
@@ -1491,7 +1495,7 @@ int account_del(char *user)
 	free(ac->user);
 	free(ac->password);
 	free(ac);
-	return 0;
+	return TGTADM_SUCCESS;
 }
 
 int account_available(int tid, int dir)
@@ -1511,7 +1515,7 @@ int account_available(int tid, int dir)
 		return target->account.out_aid;
 }
 
-int acl_add(int tid, char *address)
+tgtadm_err acl_add(int tid, char *address)
 {
 	char *str;
 	struct target *target;
@@ -1538,14 +1542,14 @@ int acl_add(int tid, char *address)
 	acl->address = str;
 	list_add_tail(&acl->aclent_list, &target->acl_list);
 
-	return 0;
+	return TGTADM_SUCCESS;
 }
 
-int acl_del(int tid, char *address)
+tgtadm_err acl_del(int tid, char *address)
 {
 	struct target *target;
 	struct acl_entry *acl, *tmp;
-	int err = TGTADM_ACL_NOEXIST;
+	tgtadm_err adm_err = TGTADM_ACL_NOEXIST;
 
 	target = target_lookup(tid);
 	if (!target)
@@ -1556,11 +1560,11 @@ int acl_del(int tid, char *address)
 			list_del(&acl->aclent_list);
 			free(acl->address);
 			free(acl);
-			err = 0;
+			adm_err = TGTADM_SUCCESS;
 			break;
 		}
 	}
-	return err;
+	return adm_err;
 }
 
 char *acl_get(int tid, int idx)
@@ -1663,7 +1667,7 @@ struct bound_host {
 	struct list_head bhost_siblings;
 };
 
-int tgt_bind_host_to_target(int tid, int host_no)
+tgtadm_err tgt_bind_host_to_target(int tid, int host_no)
 {
 	struct target *target;
 	struct bound_host *bhost;
@@ -1671,19 +1675,19 @@ int tgt_bind_host_to_target(int tid, int host_no)
 	target = target_lookup(tid);
 	if (!target) {
 		eprintf("can't find a target %d\n", tid);
-		return -ENOENT;
+		return TGTADM_NO_TARGET;
 	}
 
 	list_for_each_entry(bhost, &bound_host_list, bhost_siblings) {
 		if (bhost->host_no == host_no) {
 			eprintf("already bound %d\n", host_no);
-			return -EINVAL;
+			return TGTADM_BINDING_EXIST;
 		}
 	}
 
 	bhost = malloc(sizeof(*bhost));
 	if (!bhost)
-		return -ENOMEM;
+		return TGTADM_NOMEM;
 
 	bhost->host_no = host_no;
 	bhost->target = target;
@@ -1692,10 +1696,10 @@ int tgt_bind_host_to_target(int tid, int host_no)
 
 	dprintf("bound the scsi host %d to the target %d\n", host_no, tid);
 
-	return 0;
+	return TGTADM_SUCCESS;
 }
 
-int tgt_unbind_host_to_target(int tid, int host_no)
+tgtadm_err tgt_unbind_host_to_target(int tid, int host_no)
 {
 	struct bound_host *bhost;
 
@@ -1703,14 +1707,14 @@ int tgt_unbind_host_to_target(int tid, int host_no)
 		if (bhost->host_no == host_no) {
 			if (!list_empty(&bhost->target->it_nexus_list)) {
 				eprintf("the target has IT_nexus\n");
-				return -EBUSY;
+				return TGTADM_TARGET_ACTIVE;
 			}
 			list_del(&bhost->bhost_siblings);
 			free(bhost);
-			return 0;
+			return TGTADM_SUCCESS;
 		}
 	}
-	return -ENOENT;
+	return TGTADM_NO_BINDING;
 }
 
 enum scsi_target_state tgt_get_target_state(int tid)
@@ -1745,10 +1749,11 @@ static char *target_state_name(enum scsi_target_state state)
 	return name;
 }
 
-int tgt_set_target_state(int tid, char *str)
+tgtadm_err tgt_set_target_state(int tid, char *str)
 {
-	int i, err = TGTADM_INVALID_REQUEST;
+	tgtadm_err adm_err = TGTADM_INVALID_REQUEST;
 	struct target *target;
+	int i;
 
 	target = target_lookup(tid);
 	if (!target)
@@ -1757,12 +1762,12 @@ int tgt_set_target_state(int tid, char *str)
 	for (i = 0; i < ARRAY_SIZE(target_state); i++) {
 		if (!strcmp(target_state[i].name, str)) {
 			target->target_state = target_state[i].value;
-			err = 0;
+			adm_err = TGTADM_SUCCESS;
 			break;
 		}
 	}
 
-	return err;
+	return adm_err;
 }
 
 static char *print_disksize(uint64_t size)
@@ -1812,9 +1817,8 @@ static char *print_type(int type)
 	return name;
 }
 
-int tgt_target_show_all(char *buf, int rest)
+tgtadm_err tgt_target_show_all(struct concat_buf *b)
 {
-	int total = 0, max = rest;
 	char strflags[128];
 	struct target *target;
 	struct scsi_lu *lu;
@@ -1823,8 +1827,7 @@ int tgt_target_show_all(char *buf, int rest)
 	struct it_nexus *nexus;
 
 	list_for_each_entry(target, &target_list, target_siblings) {
-		shprintf(total, buf, rest,
-			 "Target %d: %s\n"
+		concat_printf(b, "Target %d: %s\n"
 			 _TAB1 "System information:\n"
 			 _TAB2 "Driver: %s\n"
 			 _TAB2 "State: %s\n",
@@ -1833,18 +1836,18 @@ int tgt_target_show_all(char *buf, int rest)
 			 tgt_drivers[target->lid]->name,
 			 target_state_name(target->target_state));
 
-		shprintf(total, buf, rest, _TAB1 "I_T nexus information:\n");
+		concat_printf(b, _TAB1 "I_T nexus information:\n");
 
 		list_for_each_entry(nexus, &target->it_nexus_list, nexus_siblings) {
-			shprintf(total, buf, rest, _TAB2 "I_T nexus: %" PRIu64 "\n",
-				 nexus->itn_id);
+			concat_printf(b, _TAB2 "I_T nexus: %" PRIu64 "\n",
+				      nexus->itn_id);
 			if (nexus->info)
-				shprintf(total, buf, rest, "%s", nexus->info);
+				concat_printf(b, "%s", nexus->info);
 		}
 
-		shprintf(total, buf, rest, _TAB1 "LUN information:\n");
+		concat_printf(b, _TAB1 "LUN information:\n");
 		list_for_each_entry(lu, &target->device_list, device_siblings)
-			shprintf(total, buf, rest,
+			concat_printf(b,
 				 _TAB2 "LUN: %" PRIu64 "\n"
   				 _TAB3 "Type: %s\n"
 				 _TAB3 "SCSI ID: %s\n"
@@ -1878,32 +1881,28 @@ int tgt_target_show_all(char *buf, int rest)
 		    !strcmp(tgt_drivers[target->lid]->name, "iser")) {
 			int i, aid;
 
-			shprintf(total, buf, rest, _TAB1
-				 "Account information:\n");
+			concat_printf(b, _TAB1 "Account information:\n");
 			for (i = 0; i < target->account.nr_inaccount; i++) {
 				aid = target->account.in_aids[i];
-				shprintf(total, buf, rest, _TAB2 "%s\n",
-					 __account_lookup_id(aid)->user);
+				concat_printf(b, _TAB2 "%s\n",
+					      __account_lookup_id(aid)->user);
 			}
 			if (target->account.out_aid) {
 				aid = target->account.out_aid;
-				shprintf(total, buf, rest,
-					 _TAB2 "%s (outgoing)\n",
+				concat_printf(b, _TAB2 "%s (outgoing)\n",
 					 __account_lookup_id(aid)->user);
 			}
 		}
 
-		shprintf(total, buf, rest, _TAB1 "ACL information:\n");
+		concat_printf(b, _TAB1 "ACL information:\n");
 		list_for_each_entry(acl, &target->acl_list, aclent_list)
-			shprintf(total, buf, rest, _TAB2 "%s\n", acl->address);
+			concat_printf(b, _TAB2 "%s\n", acl->address);
 
 		list_for_each_entry(iqn_acl, &target->iqn_acl_list, iqn_aclent_list)
-			shprintf(total, buf, rest, _TAB2 "%s\n", iqn_acl->name);
+			concat_printf(b, _TAB2 "%s\n", iqn_acl->name);
 
 	}
-	return total;
-overflow:
-	return max;
+	return TGTADM_SUCCESS;
 }
 
 char *tgt_targetname(int tid)
@@ -1919,7 +1918,7 @@ char *tgt_targetname(int tid)
 
 #define DEFAULT_NR_ACCOUNT 16
 
-int tgt_target_create(int lld, int tid, char *args)
+tgtadm_err tgt_target_create(int lld, int tid, char *args)
 {
 	struct target *target, *pos;
 	char *p, *q, *targetname = NULL;
@@ -2002,16 +2001,16 @@ int tgt_target_create(int lld, int tid, char *args)
 
 	dprintf("Succeed to create a new target %d\n", tid);
 
-	return 0;
+	return TGTADM_SUCCESS;
 }
 
-int tgt_target_destroy(int lld_no, int tid, int force)
+tgtadm_err tgt_target_destroy(int lld_no, int tid, int force)
 {
-	int ret;
 	struct target *target;
 	struct acl_entry *acl, *tmp;
 	struct iqn_acl_entry *iqn_acl, *tmp1;
 	struct scsi_lu *lu;
+	tgtadm_err adm_err;
 
 	target = target_lookup(tid);
 	if (!target)
@@ -2026,9 +2025,9 @@ int tgt_target_destroy(int lld_no, int tid, int force)
 		/* we remove lun0 last */
 		lu = list_entry(target->device_list.prev, struct scsi_lu,
 				device_siblings);
-		ret = tgt_device_destroy(tid, lu->lun, 1);
-		if (ret)
-			return ret;
+		adm_err = tgt_device_destroy(tid, lu->lun, 1);
+		if (adm_err != TGTADM_SUCCESS)
+			return adm_err;
 	}
 
 	if (tgt_drivers[lld_no]->target_destroy)
@@ -2052,10 +2051,10 @@ int tgt_target_destroy(int lld_no, int tid, int force)
 	free(target->name);
 	free(target);
 
-	return 0;
+	return TGTADM_SUCCESS;
 }
 
-int tgt_portal_create(int lld, char *args)
+tgtadm_err tgt_portal_create(int lld, char *args)
 {
 	char *portals = NULL;
 
@@ -2077,10 +2076,10 @@ int tgt_portal_create(int lld, char *args)
 
 	dprintf("succeed to create new portals %s\n", portals);
 
-	return 0;
+	return TGTADM_SUCCESS;
 }
 
-int tgt_portal_destroy(int lld, char *args)
+tgtadm_err tgt_portal_destroy(int lld, char *args)
 {
 	char *portals = NULL;
 
@@ -2102,23 +2101,20 @@ int tgt_portal_destroy(int lld, char *args)
 
 	dprintf("succeed to destroy portals %s\n", portals);
 
-	return 0;
+	return TGTADM_SUCCESS;
 }
 
-int account_show(char *buf, int rest)
+tgtadm_err account_show(struct concat_buf *b)
 {
-	int total = 0, max = rest;
 	struct account_entry *ac;
 
 	if (!list_empty(&account_list))
-		shprintf(total, buf, rest, "Account list:\n");
+		concat_printf(b, "Account list:\n");
 
 	list_for_each_entry(ac, &account_list, account_siblings)
-		shprintf(total, buf, rest, _TAB1 "%s\n", ac->user);
+		concat_printf(b, _TAB1 "%s\n", ac->user);
 
-	return total;
-overflow:
-	return max;
+	return TGTADM_SUCCESS;
 }
 
 static struct {
@@ -2159,9 +2155,8 @@ int system_set_state(char *str)
 	return err;
 }
 
-int system_show(int mode, char *buf, int rest)
+tgtadm_err system_show(int mode, struct concat_buf *b)
 {
-	int total = 0, max = rest;
 	struct backingstore_template *bst;
 	struct device_type_template *devt;
 	int i;
@@ -2169,53 +2164,47 @@ int system_show(int mode, char *buf, int rest)
 
 	/* FIXME: too hacky */
 	if (mode != MODE_SYSTEM)
-		return 0;
+		return TGTADM_SUCCESS;
 
-	shprintf(total, buf, rest, "System:\n");
-	shprintf(total, buf, rest, _TAB1 "State: %s\n",
-		 system_state_name(sys_state));
+	concat_printf(b, "System:\n");
+	concat_printf(b, _TAB1 "State: %s\n", system_state_name(sys_state));
+	concat_printf(b, _TAB1 "debug: %s\n", is_debug ? "on" : "off");
 
-	shprintf(total, buf, rest, "LLDs:\n");
+	concat_printf(b, "LLDs:\n");
 	for (i = 0; tgt_drivers[i]; i++) {
-		shprintf(total, buf, rest, _TAB1 "%s: %s\n",
-			 tgt_drivers[i]->name,
-			 driver_state_name(tgt_drivers[i]));
+		concat_printf(b, _TAB1 "%s: %s\n", tgt_drivers[i]->name,
+			      driver_state_name(tgt_drivers[i]));
 	}
 
-	shprintf(total, buf, rest, "Backing stores:\n");
+	concat_printf(b, "Backing stores:\n");
 	list_for_each_entry(bst, &bst_list, backingstore_siblings) {
 		if (!bst->bs_oflags_supported)
-			shprintf(total, buf, rest, _TAB1 "%s\n", bst->bs_name);
+			concat_printf(b, _TAB1 "%s\n", bst->bs_name);
 		else
-			shprintf(total, buf, rest, _TAB1 "%s (bsoflags %s)\n",
-				 bst->bs_name,
-				 open_flags_to_str(strflags, bst->bs_oflags_supported));
+			concat_printf(b, _TAB1 "%s (bsoflags %s)\n", bst->bs_name,
+				      open_flags_to_str(strflags, bst->bs_oflags_supported));
 	}
 
-	shprintf(total, buf, rest, "Device types:\n");
+	concat_printf(b, "Device types:\n");
 	list_for_each_entry(devt, &device_type_list, device_type_siblings)
-		shprintf(total, buf, rest, _TAB1 "%s\n", print_type(devt->type));
+		concat_printf(b, _TAB1 "%s\n", print_type(devt->type));
 
 	if (global_target.account.nr_inaccount) {
 		int i, aid;
-		shprintf(total, buf, rest,
-			 "Account information:\n");
+		concat_printf(b, _TAB1 "%s\n", "Account information:\n");
 		for (i = 0; i < global_target.account.nr_inaccount; i++) {
 			aid = global_target.account.in_aids[i];
-			shprintf(total, buf, rest, _TAB1 "%s\n",
-				 __account_lookup_id(aid)->user);
+			concat_printf(b, _TAB1 "%s\n",
+				      __account_lookup_id(aid)->user);
 		}
 		if (global_target.account.out_aid) {
 			aid = global_target.account.out_aid;
-			shprintf(total, buf, rest,
-				 _TAB1 "%s (outgoing)\n",
-				 __account_lookup_id(aid)->user);
+			concat_printf(b, _TAB1 "%s (outgoing)\n",
+				      __account_lookup_id(aid)->user);
 		}
 	}
 
-	return total;
-overflow:
-	return max;
+	return TGTADM_SUCCESS;
 }
 
 int is_system_available(void)

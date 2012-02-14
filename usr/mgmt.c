@@ -44,208 +44,229 @@
 enum mgmt_task_state {
 	MTASK_STATE_HDR_RECV,
 	MTASK_STATE_PDU_RECV,
-	MTASK_STATE_RSP_SEND,
+	MTASK_STATE_HDR_SEND,
+	MTASK_STATE_PDU_SEND,
 };
 
 struct mgmt_task {
 	enum mgmt_task_state mtask_state;
 	int retry;
 	int done;
-	char *buf;
-	int bsize;
 	struct tgtadm_req req;
+	char *req_buf;
+	int req_bsize;
 	struct tgtadm_rsp rsp;
+	struct concat_buf rsp_concat;
 /* 	struct tgt_work work; */
 };
+
+#define MAX_MGT_BUFSIZE	(8*1024) /* limit incoming mgmt request data size */
 
 static int ipc_fd;
 char mgmt_path[256];
 
-static void set_show_results(struct tgtadm_rsp *rsp, int *err)
+static struct mgmt_task *mtask_alloc(void);
+static void mtask_free(struct mgmt_task *mtask);
+
+static tgtadm_err errno2tgtadm(int err)
 {
-	if (*err < 0)
-		rsp->err = -*err;
-	else {
-		rsp->err = 0;
-		rsp->len = *err + sizeof(*rsp);
-		*err = 0;
-	}
+	if (err >= 0)
+		return TGTADM_SUCCESS;
+	else if (err == -ENOMEM)
+		return TGTADM_NOMEM;
+	else
+		return TGTADM_UNKNOWN_ERR;
 }
 
-static int target_mgmt(int lld_no, struct mgmt_task *mtask)
+static void set_mtask_result(struct mgmt_task *mtask, tgtadm_err adm_err)
+{
+	if (adm_err == TGTADM_SUCCESS && mtask->rsp_concat.err)
+		adm_err = errno2tgtadm(mtask->rsp_concat.err);
+
+	mtask->rsp.len = sizeof(mtask->rsp);
+	if (adm_err == TGTADM_SUCCESS) {
+		mtask->rsp.len += mtask->rsp_concat.size;
+		mtask->rsp.err = 0;
+	}
+	else
+		mtask->rsp.err = (uint32_t)adm_err;
+}
+
+static tgtadm_err target_mgmt(int lld_no, struct mgmt_task *mtask)
 {
 	struct tgtadm_req *req = &mtask->req;
-	struct tgtadm_rsp *rsp = &mtask->rsp;
-	int err = TGTADM_INVALID_REQUEST;
+	tgtadm_err adm_err = TGTADM_INVALID_REQUEST;
 
 	switch (req->op) {
 	case OP_NEW:
-		err = tgt_target_create(lld_no, req->tid, mtask->buf);
+		adm_err = tgt_target_create(lld_no, req->tid, mtask->req_buf);
 		break;
 	case OP_DELETE:
-		err = tgt_target_destroy(lld_no, req->tid, req->force);
+		adm_err = tgt_target_destroy(lld_no, req->tid, req->force);
 		break;
 	case OP_BIND:
 		/* FIXME */
 		if (req->len == sizeof(*req))
-			err = tgt_bind_host_to_target(req->tid, req->host_no);
+			adm_err = tgt_bind_host_to_target(req->tid, req->host_no);
 		else {
 			char *p;
 
-			p = strstr(mtask->buf, "initiator-address=");
-			if (p)
-				err = acl_add(req->tid, p + strlen("initiator-address="));
+			p = strstr(mtask->req_buf, "initiator-address=");
+			if (p) {
+				p += strlen("initiator-address=");
+				adm_err = acl_add(req->tid, p);
+				if (adm_err != TGTADM_SUCCESS) {
+					eprintf("Failed to bind by address: %s\n", p);
+					break;
+				}
+			}
 
-			p = strstr(mtask->buf, "initiator-name=");
-			if (p)
-				err = iqn_acl_add(req->tid, p + strlen("initiator-name="));
+			p = strstr(mtask->req_buf, "initiator-name=");
+			if (p) {
+				p += strlen("initiator-name=");
+				adm_err = iqn_acl_add(req->tid, p);
+				if (adm_err != TGTADM_SUCCESS) {
+					eprintf("Failed to bind by name: %s\n", p);
+					break;
+				}
+			}
 		}
 		break;
 	case OP_UNBIND:
 		if (req->len == sizeof(*req))
-			err = tgt_unbind_host_to_target(req->tid, req->host_no);
+			adm_err = tgt_unbind_host_to_target(req->tid, req->host_no);
 		else {
 			char *p;
 
-			p = strstr(mtask->buf, "initiator-address=");
+			p = strstr(mtask->req_buf, "initiator-address=");
 			if (p) {
-				err = acl_del(req->tid, p + strlen("initiator-address="));
+				p += strlen("initiator-address=");
+				adm_err = acl_del(req->tid, p);
+				if (adm_err != TGTADM_SUCCESS) {
+					eprintf("Failed to unbind by address: %s\n", p);
+					break;
+				}
 			}
 
-			p = strstr(mtask->buf, "initiator-name=");
+			p = strstr(mtask->req_buf, "initiator-name=");
 			if (p) {
-				err = iqn_acl_del(req->tid, p + strlen("initiator-name="));
+				p += strlen("initiator-name=");
+				adm_err = iqn_acl_del(req->tid, p + strlen("initiator-name="));
+				if (adm_err != TGTADM_SUCCESS) {
+					eprintf("Failed to unbind by name: %s\n", p);
+					break;
+				}
 			}
 		}
 		break;
 	case OP_UPDATE:
 	{
 		char *p;
-		err = TGTADM_UNSUPPORTED_OPERATION;
+		adm_err = TGTADM_UNSUPPORTED_OPERATION;
 
-		p = strchr(mtask->buf, '=');
+		p = strchr(mtask->req_buf, '=');
 		if (!p)
 			break;
 		*p++ = '\0';
 
-		if (!strcmp(mtask->buf, "state"))
-			err = tgt_set_target_state(req->tid, p);
-		else if (tgt_drivers[lld_no]->update)
-			err = tgt_drivers[lld_no]->update(req->mode, req->op, req->tid,
+		if (!strcmp(mtask->req_buf, "state")) {
+			adm_err = tgt_set_target_state(req->tid, p);
+		} else if (tgt_drivers[lld_no]->update)
+			adm_err = tgt_drivers[lld_no]->update(req->mode, req->op, req->tid,
 							  req->sid, req->lun,
-							  req->cid, mtask->buf);
+							  req->cid, mtask->req_buf);
 		break;
 	}
 	case OP_SHOW:
-		if (req->tid < 0) {
-			retry:
-			err = tgt_target_show_all(mtask->buf, mtask->bsize);
-			if (err == mtask->bsize) {
-				char *p;
-				mtask->bsize <<= 1;
-				p = realloc(mtask->buf, mtask->bsize);
-				if (p) {
-					mtask->buf = p;
-					goto retry;
-				} else {
-					eprintf("out of memory\n");
-					err = TGTADM_NOMEM;
-				}
-			}
-		} else if (tgt_drivers[lld_no]->show)
-			err = tgt_drivers[lld_no]->show(req->mode,
+	{
+		concat_buf_init(&mtask->rsp_concat);
+		if (req->tid < 0)
+			adm_err = tgt_target_show_all(&mtask->rsp_concat);
+		else if (tgt_drivers[lld_no]->show)
+			adm_err = tgt_drivers[lld_no]->show(req->mode,
 							req->tid,
 							req->sid,
 							req->cid, req->lun,
-							mtask->buf, mtask->bsize);
+							&mtask->rsp_concat);
+		concat_buf_finish(&mtask->rsp_concat);
 		break;
+	}
 	default:
 		break;
 	}
 
-	if (req->op == OP_SHOW)
-		set_show_results(rsp, &err);
-	else {
-		rsp->err = err;
-		rsp->len = sizeof(*rsp);
-	}
-	return err;
+	set_mtask_result(mtask, adm_err);
+	return adm_err;
 }
 
-static int portal_mgmt(int lld_no, struct mgmt_task *mtask,
-		       struct tgtadm_req *req,
-		       struct tgtadm_rsp *rsp)
+static tgtadm_err portal_mgmt(int lld_no, struct mgmt_task *mtask)
 {
-	int err = TGTADM_INVALID_REQUEST;
+	struct tgtadm_req *req = &mtask->req;
+	tgtadm_err adm_err = TGTADM_INVALID_REQUEST;
 
 	switch (req->op) {
 	case OP_SHOW:
 		if (tgt_drivers[lld_no]->show) {
-			err = tgt_drivers[lld_no]->show(req->mode,
+			concat_buf_init(&mtask->rsp_concat);
+			adm_err = tgt_drivers[lld_no]->show(req->mode,
 							req->tid, req->sid,
 							req->cid, req->lun,
-							mtask->buf,
-							mtask->bsize);
-
-			set_show_results(rsp, &err);
-			return err;
+							&mtask->rsp_concat);
+			concat_buf_finish(&mtask->rsp_concat);
 		}
 		break;
 	case OP_NEW:
-		err = tgt_portal_create(lld_no, mtask->buf);
+		adm_err = tgt_portal_create(lld_no, mtask->req_buf);
 		break;
 	case OP_DELETE:
-		err = tgt_portal_destroy(lld_no, mtask->buf);
+		adm_err = tgt_portal_destroy(lld_no, mtask->req_buf);
 		break;
 	default:
 		break;
 	}
 
-	rsp->err = err;
-	rsp->len = sizeof(*rsp);
-
-	return err;
+	set_mtask_result(mtask, adm_err);
+	return adm_err;
 }
 
-static int device_mgmt(int lld_no, struct tgtadm_req *req, char *params,
-		       struct tgtadm_rsp *rsp, int *rlen)
+static tgtadm_err device_mgmt(int lld_no, struct mgmt_task *mtask)
 {
-	int err = TGTADM_UNSUPPORTED_OPERATION;
+	struct tgtadm_req *req = &mtask->req;
+	char *params = mtask->req_buf;
+	tgtadm_err adm_err = TGTADM_UNSUPPORTED_OPERATION;
 
 	switch (req->op) {
 	case OP_NEW:
-		err = tgt_device_create(req->tid, req->device_type, req->lun,
-					params, 1);
+		eprintf("sz:%d params:%s\n",mtask->req_bsize,params);
+		adm_err = tgt_device_create(req->tid, req->device_type, req->lun,
+					    params, 1);
 		break;
 	case OP_DELETE:
-		err = tgt_device_destroy(req->tid, req->lun, 0);
+		adm_err = tgt_device_destroy(req->tid, req->lun, 0);
 		break;
 	case OP_UPDATE:
-		err = tgt_device_update(req->tid, req->lun, params);
+		adm_err = tgt_device_update(req->tid, req->lun, params);
 		break;
 	default:
 		break;
 	}
 
-	rsp->err = err;
-	rsp->len = sizeof(*rsp);
-
-	return err;
+	set_mtask_result(mtask, adm_err);
+	return adm_err;
 }
 
-static int account_mgmt(int lld_no,  struct mgmt_task *mtask)
+static tgtadm_err account_mgmt(int lld_no,  struct mgmt_task *mtask)
 {
 	struct tgtadm_req *req = &mtask->req;
-	struct tgtadm_rsp *rsp = &mtask->rsp;
-	int err = TGTADM_UNSUPPORTED_OPERATION;
 	char *user, *password;
+	tgtadm_err adm_err = TGTADM_UNSUPPORTED_OPERATION;
 
 	switch (req->op) {
 	case OP_NEW:
 	case OP_DELETE:
 	case OP_BIND:
 	case OP_UNBIND:
-		user = strstr(mtask->buf, "user=");
+		user = strstr(mtask->req_buf, "user=");
 		if (!user)
 			goto out;
 		user += 5;
@@ -258,130 +279,109 @@ static int account_mgmt(int lld_no,  struct mgmt_task *mtask)
 			*password++ = '\0';
 			password += strlen("password=");
 
-			err = account_add(user, password);
+			adm_err = account_add(user, password);
 		} else {
 			if (req->op == OP_DELETE) {
-				err = account_del(user);
+				adm_err = account_del(user);
 			} else
-				err = account_ctl(req->tid, req->ac_dir,
-						  user, req->op == OP_BIND);
+				adm_err = account_ctl(req->tid, req->ac_dir,
+						      user, req->op == OP_BIND);
 		}
 		break;
 	case OP_SHOW:
-	retry:
-		err = account_show(mtask->buf, mtask->bsize);
-		if (err == mtask->bsize) {
-			char *p;
-			mtask->bsize <<= 1;
-			p = realloc(mtask->buf, mtask->bsize);
-			if (p) {
-				mtask->buf = p;
-				goto retry;
-			} else
-				err = TGTADM_NOMEM;
-		}
+		concat_buf_init(&mtask->rsp_concat);
+		adm_err = account_show(&mtask->rsp_concat);
+		concat_buf_finish(&mtask->rsp_concat);
 		break;
 	default:
 		break;
 	}
 out:
-	if (req->op == OP_SHOW)
-		set_show_results(rsp, &err);
-	else {
-		rsp->err = err;
-		rsp->len = sizeof(*rsp);
-	}
-	return err;
+	set_mtask_result(mtask, adm_err);
+	return adm_err;
 }
 
-static int sys_mgmt(int lld_no, struct mgmt_task *mtask)
+static tgtadm_err sys_mgmt(int lld_no, struct mgmt_task *mtask)
 {
 	struct tgtadm_req *req = &mtask->req;
-	struct tgtadm_rsp *rsp = &mtask->rsp;
-	int err = TGTADM_INVALID_REQUEST, len = mtask->bsize;
+	tgtadm_err adm_err = TGTADM_INVALID_REQUEST;
 
 	switch (req->op) {
 	case OP_UPDATE:
-		if (!strncmp(mtask->buf, "debug=", 6)) {
-			if (!strncmp(mtask->buf+6, "on", 2)) {
+		if (!strncmp(mtask->req_buf, "debug=", 6)) {
+			if (!strncmp(mtask->req_buf+6, "on", 2)) {
 				is_debug = 1;
-				err = 0;
-			} else if (!strncmp(mtask->buf+6, "off", 3)) {
+				adm_err = TGTADM_SUCCESS;
+			} else if (!strncmp(mtask->req_buf+6, "off", 3)) {
 				is_debug = 0;
-				err = 0;
+				adm_err = TGTADM_SUCCESS;
 			}
-			if (!err)
+			if (adm_err == TGTADM_SUCCESS)
 				eprintf("set debug to: %d\n", is_debug);
 		} else if (tgt_drivers[lld_no]->update)
-			err = tgt_drivers[lld_no]->update(req->mode, req->op,
+			adm_err = tgt_drivers[lld_no]->update(req->mode, req->op,
 							  req->tid,
 							  req->sid, req->lun,
-							  req->cid, mtask->buf);
+							  req->cid, mtask->req_buf);
 
-		rsp->err = err;
-		rsp->len = sizeof(*rsp);
 		break;
 	case OP_SHOW:
-		err = system_show(req->mode, mtask->buf, len);
-		if (err >= 0 && tgt_drivers[lld_no]->show) {
-			err += tgt_drivers[lld_no]->show(req->mode,
-							 req->tid, req->sid,
-							 req->cid, req->lun,
-							 mtask->buf + err, len - err);
-		}
-		set_show_results(rsp, &err);
+		concat_buf_init(&mtask->rsp_concat);
+		adm_err = system_show(req->mode, &mtask->rsp_concat);
+		if (tgt_drivers[lld_no]->show)
+			adm_err = tgt_drivers[lld_no]->show(req->mode,
+							req->tid, req->sid,
+							req->cid, req->lun,
+							&mtask->rsp_concat);
+		concat_buf_finish(&mtask->rsp_concat);
 		break;
 	case OP_DELETE:
 		if (is_system_inactive())
-			err = 0;
-
-		rsp->err = err;
-		rsp->len = sizeof(*rsp);
+			adm_err = TGTADM_SUCCESS;
 		break;
 	default:
 		break;
 	}
 
-	return err;
+	set_mtask_result(mtask, adm_err);
+	return adm_err;
 }
 
-static int connection_mgmt(int lld_no, struct mgmt_task *mtask,
-			   struct tgtadm_req *req,
-			   struct tgtadm_rsp *rsp)
+static tgtadm_err connection_mgmt(int lld_no, struct mgmt_task *mtask)
 {
-	int err = TGTADM_INVALID_REQUEST;
+	struct tgtadm_req *req = &mtask->req;
+	tgtadm_err adm_err = TGTADM_INVALID_REQUEST;
 
 	switch (req->op) {
 	case OP_SHOW:
 		if (tgt_drivers[lld_no]->show) {
-			err = tgt_drivers[lld_no]->show(req->mode,
-							req->tid, req->sid,
-							req->cid, req->lun,
-							mtask->buf,
-							mtask->bsize);
-			set_show_results(rsp, &err);
-			return err;
+			concat_buf_init(&mtask->rsp_concat);
+			adm_err = tgt_drivers[lld_no]->show(req->mode,
+							    req->tid, req->sid,
+							    req->cid, req->lun,
+							    &mtask->rsp_concat);
+			concat_buf_finish(&mtask->rsp_concat);
+			break;
 		}
 		break;
 	default:
 		if (tgt_drivers[lld_no]->update)
-			err = tgt_drivers[lld_no]->update(req->mode, req->op,
-							  req->tid,
-							  req->sid, req->lun,
-							  req->cid, mtask->buf);
-		rsp->err = err;
-		rsp->len = sizeof(*rsp);
+			adm_err = tgt_drivers[lld_no]->update(req->mode, req->op,
+							      req->tid,
+							      req->sid, req->lun,
+							      req->cid, mtask->req_buf);
 		break;
 	}
 
-	return err;
+	set_mtask_result(mtask, adm_err);
+	return adm_err;
 }
 
-static int tgt_mgmt(struct mgmt_task *mtask)
+static tgtadm_err mtask_execute(struct mgmt_task *mtask)
 {
 	struct tgtadm_req *req = &mtask->req;
-	struct tgtadm_rsp *rsp = &mtask->rsp;
-	int lld_no, err = TGTADM_INVALID_REQUEST, len = mtask->bsize;
+	int lld_no;
+	tgtadm_err adm_err = TGTADM_INVALID_REQUEST;
 
 	if (!strlen(req->lld))
 		lld_no = 0;
@@ -393,51 +393,48 @@ static int tgt_mgmt(struct mgmt_task *mtask)
 			else
 				eprintf("driver %s is in state: %s\n",
 					req->lld, driver_state_name(tgt_drivers[lld_no]));
-			rsp->err = TGTADM_NO_DRIVER;
-			rsp->len = sizeof(*rsp);
+			set_mtask_result(mtask, TGTADM_NO_DRIVER);
 			return 0;
 		}
 	}
 
 	dprintf("%d %d %d %d %d %" PRIx64 " %" PRIx64 " %s %d\n",
 		req->len, lld_no, req->mode, req->op,
-		req->tid, req->sid, req->lun, mtask->buf, getpid());
+		req->tid, req->sid, req->lun, mtask->req_buf, getpid());
 
 	switch (req->mode) {
 	case MODE_SYSTEM:
-		err = sys_mgmt(lld_no, mtask);
+		adm_err = sys_mgmt(lld_no, mtask);
 		break;
 	case MODE_TARGET:
-		err = target_mgmt(lld_no, mtask);
+		adm_err = target_mgmt(lld_no, mtask);
 		break;
 	case MODE_PORTAL:
-		err = portal_mgmt(lld_no, mtask, req, rsp);
+		adm_err = portal_mgmt(lld_no, mtask);
 		break;
 	case MODE_DEVICE:
-		err = device_mgmt(lld_no, req, mtask->buf, rsp, &len);
+		adm_err = device_mgmt(lld_no, mtask);
 		break;
 	case MODE_ACCOUNT:
-		err = account_mgmt(lld_no, mtask);
+		adm_err = account_mgmt(lld_no, mtask);
 		break;
 	case MODE_CONNECTION:
-		err = connection_mgmt(lld_no, mtask, req, rsp);
+		adm_err = connection_mgmt(lld_no, mtask);
 		break;
 	default:
 		if (req->op == OP_SHOW && tgt_drivers[lld_no]->show) {
-			err = tgt_drivers[lld_no]->show(req->mode,
-							req->tid, req->sid,
-							req->cid, req->lun,
-							mtask->buf, len);
-
-			set_show_results(rsp, &err);
-		} else {
-			rsp->err = err;
-			rsp->len = sizeof(*rsp);
+			concat_buf_init(&mtask->rsp_concat);
+			adm_err = tgt_drivers[lld_no]->show(req->mode,
+							    req->tid, req->sid,
+							    req->cid, req->lun,
+							    &mtask->rsp_concat);
+			concat_buf_finish(&mtask->rsp_concat);
 		}
 		break;
 	}
 
-	return err;
+	set_mtask_result(mtask, adm_err);
+	return adm_err;
 }
 
 static int ipc_accept(int accept_fd)
@@ -472,7 +469,49 @@ static int ipc_perm(int fd)
 	return 0;
 }
 
-static void mtask_handler(int fd, int events, void *data)
+static struct mgmt_task *mtask_alloc(void)
+{
+	struct mgmt_task *mtask;
+
+	mtask = zalloc(sizeof(*mtask));
+	if (!mtask) {
+		eprintf("can't allocate mtask\n");
+		return NULL;
+	}
+	mtask->mtask_state = MTASK_STATE_HDR_RECV;
+
+	dprintf("mtask:%p\n", mtask);
+	return mtask;
+}
+
+static void mtask_free(struct mgmt_task *mtask)
+{
+	dprintf("mtask:%p\n", mtask);
+
+	if (mtask->req_buf)
+		free(mtask->req_buf);
+	concat_buf_release(&mtask->rsp_concat);
+	free(mtask);
+}
+
+static int mtask_received(struct mgmt_task *mtask, int fd)
+{
+	tgtadm_err adm_err;
+	int err;
+
+	adm_err = mtask_execute(mtask);
+	if (adm_err != TGTADM_SUCCESS)
+		eprintf("mgmt task processing failed, err: %d\n", adm_err);
+
+	mtask->mtask_state = MTASK_STATE_HDR_SEND;
+	mtask->done = 0;
+	err = tgt_event_modify(fd, EPOLLOUT);
+	if (err)
+		eprintf("failed to modify mgmt task event out\n");
+	return err;
+}
+
+static void mtask_recv_send_handler(int fd, int events, void *data)
 {
 	int err, len;
 	char *p;
@@ -487,24 +526,28 @@ static void mtask_handler(int fd, int events, void *data)
 		if (err > 0) {
 			mtask->done += err;
 			if (mtask->done == sizeof(*req)) {
-				if (req->len == sizeof(*req)) {
-					tgt_mgmt(mtask);
-					mtask->mtask_state =
-						MTASK_STATE_RSP_SEND;
-					if (tgt_event_modify(fd, EPOLLOUT))
-						eprintf("failed to modify\n");
-
-					mtask->done = 0;
+				mtask->req_bsize = req->len - sizeof(*req);
+				if (!mtask->req_bsize) {
+					err = mtask_received(mtask, fd);
+					if (err)
+						goto out;
 				} else {
 					/* the pdu exists */
-					mtask->done = 0;
-					mtask->mtask_state =
-						MTASK_STATE_PDU_RECV;
-
-					if (mtask->bsize < req->len) {
-						eprintf("FIXME: %d\n", req->len);
+					if (mtask->req_bsize > MAX_MGT_BUFSIZE) {
+						eprintf("mtask buffer len: %d too large\n",
+							mtask->req_bsize);
+						mtask->req_bsize = 0;
 						goto out;
 					}
+					mtask->req_buf = zalloc(mtask->req_bsize);
+					if (!mtask->req_buf) {
+						eprintf("can't allocate mtask buffer len: %d\n",
+							mtask->req_bsize);
+						mtask->req_bsize = 0;
+						goto out;
+					}
+					mtask->mtask_state = MTASK_STATE_PDU_RECV;
+					mtask->done = 0;
 				}
 			}
 		} else
@@ -513,47 +556,53 @@ static void mtask_handler(int fd, int events, void *data)
 
 		break;
 	case MTASK_STATE_PDU_RECV:
-		len = req->len - (sizeof(*req) + mtask->done);
-		err = read(fd, mtask->buf + mtask->done, len);
+		len = mtask->req_bsize - mtask->done;
+		err = read(fd, mtask->req_buf + mtask->done, len);
 		if (err > 0) {
 			mtask->done += err;
-			if (mtask->done == req->len - (sizeof(*req))) {
-				tgt_mgmt(mtask);
-				mtask->mtask_state = MTASK_STATE_RSP_SEND;
-				if (tgt_event_modify(fd, EPOLLOUT))
-					eprintf("failed to modify\n");
-
-				mtask->done = 0;
+			if (mtask->done == mtask->req_bsize) {
+				err = mtask_received(mtask, fd);
+				if (err)
+					goto out;
 			}
 		} else
 			if (errno != EAGAIN)
 				goto out;
 
 		break;
-	case MTASK_STATE_RSP_SEND:
-		if (mtask->done < sizeof(*rsp)) {
-			p = (char *)rsp + mtask->done;
-			len = sizeof(*rsp) - mtask->done;
-		} else {
-			p = mtask->buf + (mtask->done - sizeof(*rsp));
-			len = rsp->len - mtask->done;
-		}
+	case MTASK_STATE_HDR_SEND:
+		p = (char *)rsp + mtask->done;
+		len = sizeof(*rsp) - mtask->done;
 
 		err = write(fd, p, len);
 		if (err > 0) {
 			mtask->done += err;
+			if (mtask->done == sizeof(*rsp)) {
+				if (rsp->len == sizeof(*rsp))
+					goto out;
+				mtask->done = 0;
+				mtask->mtask_state = MTASK_STATE_PDU_SEND;
+			}
+		} else
+			if (errno != EAGAIN)
+				goto out;
 
+		break;
+	case MTASK_STATE_PDU_SEND:
+		err = concat_write(&mtask->rsp_concat, fd, mtask->done);
+		if (err > 0) {
+			mtask->done += err;
 			if (mtask->done == rsp->len) {
 				if (req->mode == MODE_SYSTEM &&
 				    req->op == OP_DELETE &&
 				    !rsp->err)
 					system_active = 0;
-
 				goto out;
 			}
 		} else
 			if (errno != EAGAIN)
 				goto out;
+
 		break;
 	default:
 		eprintf("unknown state %d\n", mtask->mtask_state);
@@ -562,12 +611,9 @@ static void mtask_handler(int fd, int events, void *data)
 	return;
 out:
 	tgt_event_del(fd);
-	free(mtask->buf);
-	free(mtask);
 	close(fd);
+	mtask_free(mtask);
 }
-
-#define BUFSIZE 1024
 
 static void mgmt_event_handler(int accept_fd, int events, void *data)
 {
@@ -592,26 +638,14 @@ static void mgmt_event_handler(int accept_fd, int events, void *data)
 		goto out;
 	}
 
-	mtask = zalloc(sizeof(*mtask));
-	if (!mtask) {
-		eprintf("can't allocate mtask\n");
+	mtask = mtask_alloc();
+	if (!mtask)
 		goto out;
-	}
 
-	mtask->buf = zalloc(BUFSIZE);
-	if (!mtask->buf) {
-		eprintf("can't allocate mtask buffer\n");
-		free(mtask);
-		goto out;
-	}
-
-	mtask->bsize = BUFSIZE;
-	mtask->mtask_state = MTASK_STATE_HDR_RECV;
-	err = tgt_event_add(fd, EPOLLIN, mtask_handler, mtask);
+	err = tgt_event_add(fd, EPOLLIN, mtask_recv_send_handler, mtask);
 	if (err) {
 		eprintf("failed to add a socket to epoll %d\n", fd);
-		free(mtask->buf);
-		free(mtask);
+		mtask_free(mtask);
 		goto out;
 	}
 

@@ -1068,20 +1068,16 @@ void isns_exit(void)
 	free(rxbuf);
 }
 
-int isns_show(char *buf, int rest)
+int isns_show(struct concat_buf *b)
 {
-	int total = 0, max = rest;
+	concat_printf(b, "iSNS:\n");
+	concat_printf(b, _TAB1 "iSNS=%s\n", use_isns ? "On" : "Off");
+	concat_printf(b, _TAB1 "iSNSServerIP=%s\n", isns_addr);
+	concat_printf(b, _TAB1 "iSNSServerPort=%d\n", isns_port);
+	concat_printf(b, _TAB1 "iSNSAccessControl=%s\n",
+		      use_isns_ac ? "On" : "Off");
 
-	shprintf(total, buf, rest, "iSNS:\n");
-	shprintf(total, buf, rest, _TAB1 "iSNS=%s\n",
-		 use_isns ? "On" : "Off");
-	shprintf(total, buf, rest, _TAB1 "iSNSServerIP=%s\n", isns_addr);
-	shprintf(total, buf, rest, _TAB1 "iSNSServerPort=%d\n", isns_port);
-	shprintf(total, buf, rest, _TAB1 "iSNSAccessControl=%s\n",
-		 use_isns_ac ? "On" : "Off");
-	return total;
-overflow:
-	return max;
+	return TGTADM_SUCCESS;
 }
 
 enum {
