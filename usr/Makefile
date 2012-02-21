@@ -40,7 +40,7 @@ LIBS += -lpthread
 
 PROGRAMS += tgtd tgtadm tgtimg
 TGTD_OBJS += tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o \
-		parser.o spc.o sbc.o mmc.o osd.o scc.o smc.o \
+		concat_buf.o parser.o spc.o sbc.o mmc.o osd.o scc.o smc.o \
 		ssc.o bs_ssc.o libssc.o \
 		bs_null.o bs_sg.o bs.o libcrc32c.o
 
@@ -54,7 +54,7 @@ tgtd: $(TGTD_OBJS)
 
 -include $(TGTD_DEP)
 
-TGTADM_OBJS = tgtadm.o
+TGTADM_OBJS = tgtadm.o concat_buf.o
 TGTADM_DEP = $(TGTADM_OBJS:.o=.d)
 
 tgtadm: $(TGTADM_OBJS)

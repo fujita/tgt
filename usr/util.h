@@ -152,69 +152,11 @@ struct concat_buf {
 	int size;
 };
 
-static inline void concat_buf_init(struct concat_buf *b)
-{
-	b->streamf = open_memstream(&b->buf, (size_t *)&b->size);
-	b->err = b->streamf ? 0 : errno;
-	b->used = 0;
-}
-
-static inline int concat_printf(struct concat_buf *b, const char *format, ...)
-{
-	va_list args;
-	int nprinted;
-
-	if (!b->err) {
-		va_start(args, format);
-		nprinted = vfprintf(b->streamf, format, args);
-		if (nprinted >= 0)
-			b->used += nprinted;
-		else {
-			b->err = nprinted;
-			fclose(b->streamf);
-			b->streamf = NULL;
-		}
-		va_end(args);
-	}
-	return b->err;
-}
-
-static inline const char *concat_delim(struct concat_buf *b, const char *delim)
-{
-	return !b->used ? "" : delim;
-}
-
-static inline int concat_buf_finish(struct concat_buf *b)
-{
-	if (b->streamf) {
-		fclose(b->streamf);
-		b->streamf = NULL;
-		if (b->size)
-			b->size ++; /* account for trailing NULL char */
-	}
-	return b->err;
-}
-
-static inline int concat_write(struct concat_buf *b, int fd, int offset)
-{
-	concat_buf_finish(b);
-
-	if (b->err)
-		return b->err;
-
-	if (b->size - offset > 0)
-		return write(fd, b->buf + offset, b->size - offset);
-	else
-		return 0;
-}
-
-static inline void concat_buf_release(struct concat_buf *b)
-{
-	concat_buf_finish(b);
-	if (b->buf) {
-		free(b->buf);
-		memset(b, 0, sizeof(*b));
-	}
-}
+void concat_buf_init(struct concat_buf *b);
+int concat_printf(struct concat_buf *b, const char *format, ...);
+const char *concat_delim(struct concat_buf *b, const char *delim);
+int concat_buf_finish(struct concat_buf *b);
+int concat_write(struct concat_buf *b, int fd, int offset);
+void concat_buf_release(struct concat_buf *b);
 
 #endif
