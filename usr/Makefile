@@ -54,15 +54,21 @@ tgtd: $(TGTD_OBJS)
 
 -include $(TGTD_DEP)
 
-tgtadm: tgtadm.o
+TGTADM_OBJS = tgtadm.o
+TGTADM_DEP = $(TGTADM_OBJS:.o=.d)
+
+tgtadm: $(TGTADM_OBJS)
 	$(CC) $^ -o $@
 
--include tgtadm.d
+-include $(TGTADM_DEP)
 
-tgtimg: tgtimg.o libssc.o libcrc32c.o
+TGTIMG_OBJS = tgtimg.o libssc.o libcrc32c.o
+TGTIMG_DEP = $(TGTIMG_OBJS:.o=.d)
+
+tgtimg: $(TGTIMG_OBJS)
 	$(CC) $^ -o $@
 
--include tgtimg.d libssc.d
+-include $(TGTIMG_DEP)
 
 %.o: %.c
 	$(CC) -c $(CFLAGS) $*.c -o $*.o
