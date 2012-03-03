@@ -102,6 +102,10 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 		} else
 			set_medium_error(&result, &key, &asc);
 
+		if ((cmd->scb[0] != WRITE_6) && (cmd->scb[1] & 0x10))
+			posix_fadvise(fd, cmd->offset, length,
+				      POSIX_FADV_NOREUSE);
+
 		break;
 	case READ_6:
 	case READ_10:
@@ -113,6 +117,11 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 
 		if (ret != length)
 			set_medium_error(&result, &key, &asc);
+
+		if ((cmd->scb[0] != READ_6) && (cmd->scb[1] & 0x10))
+			posix_fadvise(fd, cmd->offset, length,
+				      POSIX_FADV_NOREUSE);
+
 		break;
 	case PRE_FETCH_10:
 	case PRE_FETCH_16:
@@ -144,6 +153,10 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 			key = MISCOMPARE;
 			asc = ASC_MISCOMPARE_DURING_VERIFY_OPERATION;
 		}
+
+		if (cmd->scb[1] & 0x10)
+			posix_fadvise(fd, cmd->offset, length,
+				      POSIX_FADV_NOREUSE);
 
 		free(tmpbuf);
 		break;
