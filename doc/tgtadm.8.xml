@@ -572,12 +572,9 @@ tgtadm --op update --mode target --tid 1 -n DataDigest -v None
     <para>
       CHAP authentication is supported to require authentication before
       an initiator is allowed to log in and access devices.
-      TGTD supports setting CHAP for normal log in sessions only, not
-      for discovery sessions. Discovery sessions are always possible
-      without authentication.
     </para>
     <para>
-      CHAP authentication is set on the target level.
+      CHAP main-phase authentication is set on the target level.
       To set up CHAP authentication we first need to create an account
       and its associated password, then we bind the account to one or more
       targets.

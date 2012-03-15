@@ -142,6 +142,24 @@
         </listitem>
       </varlistentry>
 
+      <varlistentry><term><option>incomingdiscoveryuser &lt;user&gt; &lt;userpassword&gt;</option></term>
+        <listitem>
+          <para>
+	    Define iscsi incoming discovery authentication setting. If no
+	    value is given, no authentication is performed.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry><term><option>outgoingdiscoveryuser &lt;user&gt; &lt;userpassword&gt;</option></term>
+        <listitem>
+          <para>
+	    Define iscsi outgoing discovery authentication setting. If no
+	    value is given, no authentication is performed.
+          </para>
+        </listitem>
+      </varlistentry>
+
     </variablelist>
 
   </refsect1>
