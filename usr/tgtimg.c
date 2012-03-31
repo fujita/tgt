@@ -263,7 +263,7 @@ static int ssc_new(int op, char *path, char *barcode, char *capacity,
 	if (size == 0)
 		size = 8000;
 
-	memset(h, 0, sizeof(h));
+	memset(h, 0, sizeof(*h));
 	h->blk_type = BLK_BOT;
 	h->blk_num = 0;
 	h->blk_sz = size;
@@ -320,7 +320,7 @@ static int ssc_new(int op, char *path, char *barcode, char *capacity,
 		exit(1);
 	}
 
-	memset(h, 0, sizeof(h));
+	memset(h, 0, sizeof(*h));
 	h->blk_type = BLK_EOD;
 	h->blk_num = 1;
 	h->prev = 0;
