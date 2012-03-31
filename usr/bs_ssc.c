@@ -568,7 +568,7 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 		int len = scsi_get_in_length(cmd);
 
 		dprintf("Size of in_buffer = %d\n", len);
-		dprintf("Sizeof(buf): %Zd\n", sizeof(buf));
+		dprintf("Sizeof(buf): %zd\n", sizeof(buf));
 		dprintf("service action: 0x%02x\n", service_action);
 
 		if (service_action == 0) {	/* Short form - block ID */
