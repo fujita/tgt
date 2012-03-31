@@ -21,6 +21,7 @@
 		<arg choice="opt">-s --size &lt;size&gt;</arg>
 		<arg choice="opt">-t --type &lt;media-type&gt;</arg>
 		<arg choice="opt">-f --file &lt;path&gt;</arg>
+		<arg choice="opt">-T --thin-provisioning</arg>
 	</cmdsynopsis>
 	<cmdsynopsis>
 		<command>tgtimg --help</command>
@@ -122,6 +123,27 @@ Supported media types for tape devices are :
         <listitem>
           <para>
 	    The filename of the image file.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry><term><option>-T, --thin-provisioning</option></term>
+        <listitem>
+          <para>
+	    This argument makes the allocation of the image format use
+	    thin-provisioning. This means that the file created will be a
+	    sparse file that will allocate blocks from the filesystem on demand.
+          </para>
+          <para>
+	    Be careful when using thin-provisioning. If the filesystem
+	    fills up a iSCSI write to a thin-provisioned LUN
+	    can fail. Initiators generally do not handle "out of space" errors
+	    gracefully.
+          </para>
+          <para>
+	    Thin-provisioning uses FALLOC_FL_PUNCH_HOLE which is only available
+	    on some linux filesystems. Thin-provisioning can only be used for
+	    DISK images.
           </para>
         </listitem>
       </varlistentry>

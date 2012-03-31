@@ -1,5 +1,5 @@
 /*
- *	Create blank media files for bs_tape backing store
+ *	Create media files for TGTD devices
  *
  * Copyright (C) 2008 Mark Harvey markh794@gmail.com
  *
@@ -38,6 +38,7 @@
 #include "ssc.h"
 #include "libssc.h"
 #include "scsi.h"
+#include "util.h"
 
 #define NO_LOGGING
 #include "log.h"
@@ -59,6 +60,7 @@ struct option const long_options[] = {
 	{"size", required_argument, NULL, 's'},
 	{"type", required_argument, NULL, 't'},
 	{"file", required_argument, NULL, 'f'},
+	{"thin-provisioning", no_argument, NULL, 'T'},
 	{NULL, 0, NULL, 0},
 };
 
@@ -71,7 +73,7 @@ static void usage(int status)
 		printf("\
 Linux SCSI Target Framework Image File Utility, version %s\n\
 \n\
-  --op new --device-type tape --barcode=[code] --size=[size] --type=[type] --file=[path]\n\
+  --op new --device-type tape --barcode=[code] --size=[size] --type=[type] --file=[path] [--thin-provisioning]\n\
 			create a new tape image file.\n\
 			[code] is a string of chars.\n\
 			[size] is media size(in megabytes).\n\
@@ -83,6 +85,7 @@ Linux SCSI Target Framework Image File Utility, version %s\n\
   --op show --device-type tape --file=[path]\n\
 			dump the tape image file contents.\n\
 			[path] is the tape image file\n\
+  --thin-provisioning   create a sparse file for the media\n\
   --help                display this help and exit\n\
 \n\
 Report bugs to <stgt@vger.kernel.org>.\n", TGT_VERSION);
@@ -414,7 +417,7 @@ static int mmc_ops(int op, char *path, char *media_type)
 	return 0;
 }
 
-static int sbc_new(int op, char *path, char *capacity, char *media_type)
+static int sbc_new(int op, char *path, char *capacity, char *media_type, int thin)
 {
 	int fd;
 
@@ -438,9 +441,21 @@ static int sbc_new(int op, char *path, char *capacity, char *media_type)
 			perror("Failed creating file");
 			exit(2);
 		}
-		if (posix_fallocate(fd, 0, size*1024*1024LL) == -1) {
-			perror("posix_fallocate failed.");
-			exit(3);
+		if (thin) {
+			if (ftruncate(fd, size*1024*1024LL) != 0) {
+				perror("Failed to set file size");
+				exit(6);
+			}
+			if (unmap_file_region(fd, 0, size*1024*1024LL) != 0) {
+				perror("Thin provisioning not available on"
+					" this file");
+				exit(5);
+			}
+		} else {
+			if (posix_fallocate(fd, 0, size*1024*1024LL) == -1) {
+				perror("posix_fallocate failed.");
+				exit(3);
+			}
 		}
 
 		free(buf);
@@ -456,7 +471,7 @@ static int sbc_new(int op, char *path, char *capacity, char *media_type)
 	return 0;
 }
 
-static int sbc_ops(int op, char *path, char *capacity, char *media_type)
+static int sbc_ops(int op, char *path, char *capacity, char *media_type, int thin)
 {
 	if (op == OP_NEW) {
 		if (!media_type) {
@@ -471,7 +486,7 @@ static int sbc_ops(int op, char *path, char *capacity, char *media_type)
 			eprintf("Missing the capacity param\n");
 			usage(1);
 		}
-		return sbc_new(op, path, capacity, media_type);
+		return sbc_new(op, path, capacity, media_type, thin);
 	} else {
 		eprintf("unknown the operation type\n");
 		usage(1);
@@ -489,6 +504,7 @@ int main(int argc, char **argv)
 	int dev_type = TYPE_TAPE;
 	int op = -1;
 	char *path = NULL;
+	int thin = 0;
 
 	while ((ch = getopt_long(argc, argv, short_options,
 				 long_options, &longindex)) >= 0) {
@@ -513,6 +529,9 @@ int main(int argc, char **argv)
 			break;
 		case 'h':
 			usage(0);
+			break;
+		case 'T':
+			thin = 1;
 			break;
 		default:
 			eprintf("unrecognized option '%s'\n", optarg);
@@ -543,7 +562,7 @@ int main(int argc, char **argv)
 		mmc_ops(op, path, media_type);
 		break;
 	case TYPE_DISK:
-		sbc_ops(op, path, media_capacity, media_type);
+		sbc_ops(op, path, media_capacity, media_type, thin);
 		break;
 	default:
 		eprintf("unsupported the device type operation\n");

@@ -5,6 +5,7 @@
 #include <endian.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/falloc.h>
 #include <signal.h>
 #include <syscall.h>
 #include <unistd.h>
@@ -158,5 +159,20 @@ const char *concat_delim(struct concat_buf *b, const char *delim);
 int concat_buf_finish(struct concat_buf *b);
 int concat_write(struct concat_buf *b, int fd, int offset);
 void concat_buf_release(struct concat_buf *b);
+
+
+/* If we have recent enough glibc to support PUNCH HOLE we try to unmap
+ * the region.
+ */
+static inline int unmap_file_region(int fd, off_t offset, off_t length)
+{
+#ifdef FALLOC_FL_PUNCH_HOLE
+	if (fallocate(fd, FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE,
+			offset, length) == 0)
+		return 0; 
+#endif
+	return -1;
+}
+
 
 #endif
