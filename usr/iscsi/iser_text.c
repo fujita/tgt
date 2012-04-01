@@ -284,7 +284,7 @@ static void iser_login_oper_scan(struct iscsi_connection *iscsi_conn,
 			}
 
 			err = param_check_val(session_keys, idx, &val);
-			err = param_set_val(session_keys, iscsi_conn->session_param, idx, &val);
+			param_set_val(session_keys, iscsi_conn->session_param, idx, &val);
 
 			switch (iscsi_conn->session_param[idx].state) {
 			case KEY_STATE_START:
@@ -854,4 +854,3 @@ int iser_text_exec(struct iscsi_connection *iscsi_conn,
 
 	return 0;
 }
-

@@ -345,9 +345,9 @@ static void text_scan_login(struct iscsi_connection *conn)
 			    conn->session_type == SESSION_DISCOVERY)
 				conn->session_param[idx].val = val;
 			else
-				err = param_set_val(session_keys,
-						    conn->session_param,
-						    idx, &val);
+				param_set_val(session_keys,
+					      conn->session_param,
+					      idx, &val);
 
 			switch (conn->session_param[idx].state) {
 			case KEY_STATE_START:

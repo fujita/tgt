@@ -34,7 +34,7 @@ struct iscsi_key_ops {
 	int (*val_to_str)(unsigned int, char *);
 	int (*str_to_val)(char *, unsigned int *);
 	int (*check_val)(struct iscsi_key *, unsigned int *);
-	int (*set_val)(struct param *, int, unsigned int *);
+	void (*set_val)(struct param *, int, unsigned int *);
 };
 
 struct iscsi_key {
@@ -52,6 +52,6 @@ extern int param_index_by_name(char *, struct iscsi_key *);
 extern int param_val_to_str(struct iscsi_key *, int, unsigned int, char *);
 extern int param_str_to_val(struct iscsi_key *, int, char *, unsigned int *);
 extern int param_check_val(struct iscsi_key *, int, unsigned int *);
-extern int param_set_val(struct iscsi_key *, struct param *, int, unsigned int *);
+extern void param_set_val(struct iscsi_key *, struct param *, int, unsigned int *);
 
 #endif
