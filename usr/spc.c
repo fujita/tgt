@@ -262,7 +262,7 @@ int spc_report_luns(int host_no, struct scsi_cmd *cmd)
 	struct scsi_lu *lu;
 	struct list_head *dev_list = &cmd->c_target->device_list;
 	uint64_t lun, *data;
-	int idx, alen, oalen, nr_luns;
+	int idx, alen, nr_luns;
 	unsigned char key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 	uint8_t *scb = cmd->scb;
@@ -279,8 +279,6 @@ int spc_report_luns(int host_no, struct scsi_cmd *cmd)
 	memset(data, 0, alen);
 
 	alen &= ~(8 - 1);
-	oalen = alen;
-
 	alen -= 8;
 	idx = 1;
 	nr_luns = 0;
@@ -720,15 +718,12 @@ static int report_opcodes_all(struct scsi_cmd *cmd, int rctd,
 int spc_report_supported_opcodes(int host_no, struct scsi_cmd *cmd)
 {
 	uint8_t reporting_options;
-	uint8_t requested_opcode;
 	uint16_t requested_service_action;
 	uint32_t alloc_len;
 	int rctd;
 	int ret = SAM_STAT_GOOD;
 
 	reporting_options = cmd->scb[2] & 0x07;
-
-	requested_opcode = cmd->scb[3];
 
 	requested_service_action = cmd->scb[4];
 	requested_service_action <<= 8;
@@ -1097,8 +1092,6 @@ static int spc_pr_reserve(int host_no, struct scsi_cmd *cmd)
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 	uint8_t key = ILLEGAL_REQUEST;
 	uint8_t pr_scope, pr_type;
-	uint8_t *buf;
-	uint64_t res_key, sa_res_key;
 	int ret;
 	struct registration *reg, *holder;
 
@@ -1108,11 +1101,6 @@ static int spc_pr_reserve(int host_no, struct scsi_cmd *cmd)
 
 	pr_scope = (cmd->scb[2] & 0xf0) >> 4;
 	pr_type = cmd->scb[2] & 0x0f;
-
-	buf = scsi_get_out_buffer(cmd);
-
-	res_key = get_unaligned_be64(buf);
-	sa_res_key = get_unaligned_be64(buf + 8);
 
 	switch (pr_type) {
 	case PR_TYPE_WRITE_EXCLUSIVE:
@@ -1162,7 +1150,7 @@ static int spc_pr_release(int host_no, struct scsi_cmd *cmd)
 	uint8_t key = ILLEGAL_REQUEST;
 	uint8_t pr_scope, pr_type;
 	uint8_t *buf;
-	uint64_t res_key, sa_res_key;
+	uint64_t res_key;
 	int ret;
 	struct registration *reg, *holder, *sibling;
 
@@ -1176,7 +1164,6 @@ static int spc_pr_release(int host_no, struct scsi_cmd *cmd)
 	buf = scsi_get_out_buffer(cmd);
 
 	res_key = get_unaligned_be64(buf);
-	sa_res_key = get_unaligned_be64(buf + 8);
 
 	reg = lookup_registration_by_nexus(cmd->dev, cmd->it_nexus);
 	if (!reg)
@@ -1233,7 +1220,7 @@ static int spc_pr_clear(int host_no, struct scsi_cmd *cmd)
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 	uint8_t key = ILLEGAL_REQUEST;
 	uint8_t *buf;
-	uint64_t res_key, sa_res_key;
+	uint64_t res_key;
 	int ret;
 	struct registration *reg, *holder, *sibling, *n;
 
@@ -1244,7 +1231,6 @@ static int spc_pr_clear(int host_no, struct scsi_cmd *cmd)
 	buf = scsi_get_out_buffer(cmd);
 
 	res_key = get_unaligned_be64(buf);
-	sa_res_key = get_unaligned_be64(buf + 8);
 
 	reg = lookup_registration_by_nexus(cmd->dev, cmd->it_nexus);
 	if (!reg)
@@ -1282,7 +1268,7 @@ static int spc_pr_preempt(int host_no, struct scsi_cmd *cmd)
 {
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 	uint8_t key = ILLEGAL_REQUEST;
-	int ret, abort;
+	int ret;
 	int res_released = 0, remove_all_reg = 0;
 	uint64_t res_key, sa_res_key;
 	uint8_t pr_scope, pr_type;
@@ -1292,8 +1278,6 @@ static int spc_pr_preempt(int host_no, struct scsi_cmd *cmd)
 	ret = check_pr_out_basic_parameter(cmd);
 	if (ret)
 		goto sense;
-
-	abort = ((cmd->scb[1] & 0x1f) == PR_OUT_PREEMPT_AND_ABORT);
 
 	pr_scope = (cmd->scb[2] & 0xf0) >> 4;
 	pr_type = cmd->scb[2] & 0x0f;
@@ -1375,7 +1359,6 @@ static int spc_pr_register_and_move(int host_no, struct scsi_cmd *cmd)
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 	uint8_t key = ILLEGAL_REQUEST;
 	char *buf;
-	uint8_t pr_scope, pr_type;
 	uint8_t unreg;
 	uint64_t res_key, sa_res_key;
 	uint32_t addlen, idlen;
@@ -1383,9 +1366,6 @@ static int spc_pr_register_and_move(int host_no, struct scsi_cmd *cmd)
 	uint16_t len = 24;
 	int (*id)(int, uint64_t, char *, int);
 	char tpid[300]; /* large enough? */
-
-	pr_scope = (cmd->scb[2] & 0xf0) >> 4;
-	pr_type = cmd->scb[2] & 0x0f;
 
 	if (get_unaligned_be16(cmd->scb + 7) < len)
 		goto sense;
