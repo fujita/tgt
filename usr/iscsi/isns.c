@@ -578,6 +578,8 @@ static int recv_hdr(int fd, struct isns_io *rx, struct isns_hdr *hdr)
 	flags = ntohs(hdr->flags);						\
 	transaction = ntohs(hdr->transaction);					\
 	sequence = ntohs(hdr->sequence);					\
+	dprintf("got a header %x %u %x %u %u\n", function, length, flags,	\
+		transaction, sequence);						\
 }
 
 static int recv_pdu(int fd, struct isns_io *rx, struct isns_hdr *hdr)
@@ -591,8 +593,6 @@ static int recv_pdu(int fd, struct isns_io *rx, struct isns_hdr *hdr)
 
 	/* Now we got a complete header */
 	get_hdr_param(hdr, function, length, flags, transaction, sequence);
-	dprintf("got a header %x %u %x %u %u\n", function, length, flags,
-		transaction, sequence);
 
 	if (length + sizeof(*hdr) > BUFSIZE) {
 		eprintf("FIXME we cannot handle this yet %u!\n", length);
@@ -774,7 +774,6 @@ static void isns_handle(int fd, int events, void *data)
 	int err;
 	struct isns_io *rx = &isns_rx;
 	struct isns_hdr *hdr = (struct isns_hdr *) rx->buf;
-	uint32_t result;
 	uint16_t function, length, flags, transaction, sequence;
 	char *name = NULL;
 
@@ -790,7 +789,6 @@ static void isns_handle(int fd, int events, void *data)
 	}
 
 	get_hdr_param(hdr, function, length, flags, transaction, sequence);
-	result = ntohl((uint32_t) hdr->pdu[0]);
 
 	switch (function) {
 	case ISNS_FUNC_DEV_ATTR_REG_RSP:
