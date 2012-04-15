@@ -141,6 +141,60 @@ sense:
 	return SAM_STAT_CHECK_CONDITION;
 }
 
+static int sbc_unmap(int host_no, struct scsi_cmd *cmd)
+{
+	int ret;
+	unsigned char key = ILLEGAL_REQUEST;
+	uint16_t asc = ASC_LUN_NOT_SUPPORTED;
+	struct scsi_lu *lu = cmd->dev;
+	int anchor;
+
+	ret = device_reserved(cmd);
+	if (ret)
+		return SAM_STAT_RESERVATION_CONFLICT;
+
+	/* We dont support anchored blocks */
+	anchor = cmd->scb[1] & 0x01;
+	if (anchor) {
+		key = ILLEGAL_REQUEST;
+		asc = ASC_INVALID_FIELD_IN_CDB;
+		goto sense;
+	}
+
+	if (!lu->attrs.thinprovisioning) {
+		key = ILLEGAL_REQUEST;
+		asc = ASC_INVALID_OP_CODE;
+		goto sense;
+	}
+
+	if (lu->attrs.removable && !lu->attrs.online) {
+		key = NOT_READY;
+		asc = ASC_MEDIUM_NOT_PRESENT;
+		goto sense;
+	}
+
+	if (lu->attrs.readonly) {
+		key = DATA_PROTECT;
+		asc = ASC_WRITE_PROTECT;
+		goto sense;
+	}
+
+	ret = cmd->dev->bst->bs_cmd_submit(cmd);
+	if (ret) {
+		key = HARDWARE_ERROR;
+		asc = ASC_INTERNAL_TGT_FAILURE;
+		goto sense;
+	}
+
+sense:
+	cmd->offset = 0;
+	scsi_set_in_resid_by_actual(cmd, 0);
+	scsi_set_out_resid_by_actual(cmd, 0);
+
+	sense_data_build(cmd, key, asc);
+	return SAM_STAT_CHECK_CONDITION;
+}
+
 static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 {
 	int ret;
@@ -370,6 +424,8 @@ static int sbc_service_action(int host_no, struct scsi_cmd *cmd)
 	data[2] = __cpu_to_be32(1UL << bshift);
 
 	val = (cmd->dev->attrs.lbppbe << 16) | cmd->dev->attrs.la_lba;
+	if (cmd->dev->attrs.thinprovisioning)
+		val |= (3 << 14); /* set LBPME and LBPRZ */
 	data[3] = __cpu_to_be32(val);
 
 overflow:
@@ -549,7 +605,24 @@ static struct device_type_template sbc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 
-		[0x40 ... 0x4f] = {spc_illegal_op,},
+		/* 0x40 */
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{sbc_unmap,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
+		{spc_illegal_op,},
 
 		/* 0x50 */
 		{spc_illegal_op,},

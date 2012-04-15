@@ -27,6 +27,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <linux/fs.h>
@@ -159,6 +161,58 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 				      POSIX_FADV_NOREUSE);
 
 		free(tmpbuf);
+		break;
+	case UNMAP:
+		if (!cmd->dev->attrs.thinprovisioning) {
+			result = SAM_STAT_CHECK_CONDITION;
+			key = ILLEGAL_REQUEST;
+			asc = ASC_INVALID_FIELD_IN_CDB;
+			break;
+		}
+
+		length = scsi_get_out_length(cmd);
+		tmpbuf = scsi_get_out_buffer(cmd);
+
+		if (length < 8)
+			break;
+
+		length -= 8;
+		tmpbuf += 8;
+
+		while (length >= 16) {
+			uint64_t offset;
+			uint64_t len;
+
+			offset = get_unaligned_be64(&tmpbuf[0]);
+			offset = offset << cmd->dev->blk_shift;
+
+			len = get_unaligned_be32(&tmpbuf[8]);
+			len = len << cmd->dev->blk_shift;
+
+			if (offset + len > cmd->dev->size) {
+				eprintf("UNMAP beyond EOF\n");
+				result = SAM_STAT_CHECK_CONDITION;
+				key = ILLEGAL_REQUEST;
+				asc = ASC_LBA_OUT_OF_RANGE;
+				break;
+			}
+
+			if (len > 0) {
+				if (unmap_file_region(fd, offset, len) != 0) {
+					eprintf("Failed to punch hole for"
+						" UNMAP at offset:%" PRIu64
+						" length:%" PRIu64 "\n",
+						offset, len);
+					result = SAM_STAT_CHECK_CONDITION;
+					key = HARDWARE_ERROR;
+					asc = ASC_INTERNAL_TGT_FAILURE;
+					break;
+				}
+			}
+
+			length -= 16;
+			tmpbuf += 16;
+		}
 		break;
 	default:
 		break;

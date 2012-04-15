@@ -139,6 +139,24 @@ static void update_vpd_83(struct scsi_lu *lu, void *id)
 	strncpy((char *)data + 4, id, SCSI_ID_LEN);
 }
 
+static void update_vpd_b2(struct scsi_lu *lu, void *id)
+{
+	struct vpd *vpd_pg = lu->attrs.lu_vpd[PCODE_OFFSET(0xb2)];
+	uint8_t	*data = vpd_pg->data;
+
+	if (lu->attrs.thinprovisioning) {
+		data[0] = 0;		/* threshold exponent */
+		data[1] = 0x84;		/* LBPU LBPRZ */
+		data[2] = 0x02;		/* provisioning type */
+		data[3] = 0;
+	} else {
+		data[0] = 0;
+		data[1] = 0;
+		data[2] = 0;
+		data[3] = 0;
+	}
+}
+
 static void update_b0_opt_xfer_gran(struct scsi_lu *lu, int opt_xfer_gran)
 {
 	struct vpd *vpd_pg = lu->attrs.lu_vpd[PCODE_OFFSET(0xb0)];
@@ -1641,7 +1659,7 @@ enum {
 	Opt_removable, Opt_readonly, Opt_online,
 	Opt_mode_page,
 	Opt_path,
-	Opt_bsoflags,
+	Opt_bsoflags, Opt_thinprovisioning,
 	Opt_err,
 };
 
@@ -1662,6 +1680,7 @@ static match_table_t tokens = {
 	{Opt_mode_page, "mode_page=%s"},
 	{Opt_path, "path=%s"},
 	{Opt_bsoflags, "bsoflags=%s"},
+	{Opt_thinprovisioning, "thin_provisioning=%s"},
 	{Opt_err, NULL},
 };
 
@@ -1752,6 +1771,12 @@ tgtadm_err lu_config(struct scsi_lu *lu, char *params, match_fn_t *fn)
 			match_strncpy(buf, &args[0], sizeof(buf));
 			attrs->readonly = atoi(buf);
 			break;
+		case Opt_thinprovisioning:
+			match_strncpy(buf, &args[0], sizeof(buf));
+			attrs->thinprovisioning = atoi(buf);
+			/* update the provisioning vpd page */
+			lu_vpd[PCODE_OFFSET(0xb2)]->vpd_update(lu, NULL);
+			break;
 		case Opt_online:
 			match_strncpy(buf, &args[0], sizeof(buf));
 			if (atoi(buf))
@@ -1787,6 +1812,10 @@ int spc_lu_init(struct scsi_lu *lu)
 
 	lu->attrs.device_type = lu->dev_type_template.type;
 	lu->attrs.qualifier = 0x0;
+	lu->attrs.thinprovisioning = 0;
+	lu->attrs.removable = 0;
+	lu->attrs.readonly = 0;
+	lu->attrs.sense_format = 0;
 
 	snprintf(lu->attrs.vendor_id, sizeof(lu->attrs.vendor_id),
 		 "%-16s", VENDOR_ID);
@@ -1819,9 +1848,15 @@ int spc_lu_init(struct scsi_lu *lu)
 	if (!lu_vpd[pg])
 		return -ENOMEM;
 
-	lu->attrs.removable = 0;
-	lu->attrs.readonly = 0;
-	lu->attrs.sense_format = 0;
+	/* VPD page 0xb2 LOGICAL BLOCK PROVISIONING*/
+	pg = PCODE_OFFSET(0xb2);
+	lu_vpd[pg] = alloc_vpd(LBP_VPD_LEN);
+	if (!lu_vpd[pg])
+		return -ENOMEM;
+	lu_vpd[pg]->vpd_update = update_vpd_b2;
+	lu_vpd[pg]->vpd_update(lu, NULL);
+
+
 	lu->dev_type_template.lu_offline(lu);
 
 	return 0;

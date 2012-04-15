@@ -14,6 +14,7 @@ struct concat_buf;
 #define PRODUCT_ID_LEN		16
 #define PRODUCT_REV_LEN		4
 #define BLOCK_LIMITS_VPD_LEN	0x3C
+#define LBP_VPD_LEN		4
 
 #define PCODE_SHIFT		7
 #define PCODE_OFFSET(x) (x & ((1 << PCODE_SHIFT) - 1))
@@ -72,6 +73,7 @@ struct lu_phy_attr {
 	char qualifier;		/* Peripheral Qualifier */
 	char removable;		/* Removable media */
 	char readonly;          /* Read-Only media */
+	char thinprovisioning;  /* Use thin-provisioning for this LUN */
 	char online;		/* Logical Unit online */
 	char sense_format;	/* Descrptor format sense data supported */
 				/* For the following see READ CAPACITY (16) */

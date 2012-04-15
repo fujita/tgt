@@ -352,6 +352,31 @@ tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 1 \
          --params readonly=1
       </screen>
 
+      <varlistentry><term><option>thin_provisioning=&lt;0|1&gt;</option></term>
+        <listitem>
+          <para>
+	    This controls the provisioning for the LUN. A thin-provisioned
+	    LUN is represented as a sparse file.
+	    TGTD supports provisioning type 2 for sparse files.
+	    When initiators use the SCSI UNMAP command TGTD will release
+	    the affected areas back to the filesystem using 
+	    FALLOC_FL_PUNCH_HOLE.
+          </para>
+          <para>
+	    This parameter only applies to DISK devices.
+          </para>
+          <para>
+	    Thin-provisioning only works for LUNs stored on filesystems
+	    that support FALLOC_FL_PUNCH_HOLE.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <screen format="linespecific">
+tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 1 \
+         --params thin_provisioning=1
+      </screen>
+
     </variablelist>
   </refsect1>
 
