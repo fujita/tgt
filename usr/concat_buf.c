@@ -74,13 +74,17 @@ int concat_write(struct concat_buf *b, int fd, int offset)
 {
 	concat_buf_finish(b);
 
-	if (b->err)
-		return b->err;
+	if (b->err) {
+		errno = b->err;
+		return -1;
+	}
 
 	if (b->size - offset > 0)
 		return write(fd, b->buf + offset, b->size - offset);
-	else
-		return 0;
+	else {
+		errno = EINVAL;
+		return -1;
+	}
 }
 
 void concat_buf_release(struct concat_buf *b)

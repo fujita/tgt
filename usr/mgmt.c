@@ -590,9 +590,9 @@ static void mtask_recv_send_handler(int fd, int events, void *data)
 		break;
 	case MTASK_STATE_PDU_SEND:
 		err = concat_write(&mtask->rsp_concat, fd, mtask->done);
-		if (err > 0) {
+		if (err >= 0) {
 			mtask->done += err;
-			if (mtask->done == rsp->len) {
+			if (mtask->done == (rsp->len - sizeof(*rsp))) {
 				if (req->mode == MODE_SYSTEM &&
 				    req->op == OP_DELETE &&
 				    !rsp->err)
