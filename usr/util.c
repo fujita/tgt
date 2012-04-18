@@ -82,7 +82,7 @@ int chrdev_open(char *modname, char *devpath, uint8_t minor, int *fd)
 	return 0;
 }
 
-int backed_file_open(char *path, int oflag, uint64_t *size)
+int backed_file_open(char *path, int oflag, uint64_t *size, uint32_t *blksize)
 {
 	int fd, err;
 	struct stat64 st;
@@ -99,9 +99,11 @@ int backed_file_open(char *path, int oflag, uint64_t *size)
 		goto close_fd;
 	}
 
-	if (S_ISREG(st.st_mode))
+	if (S_ISREG(st.st_mode)) {
 		*size = st.st_size;
-	else if (S_ISBLK(st.st_mode)) {
+		if (blksize)
+			*blksize = st.st_blksize;
+	} else if (S_ISBLK(st.st_mode)) {
 		err = ioctl(fd, BLKGETSIZE64, size);
 		if (err < 0) {
 			eprintf("Cannot get size, %m\n");

@@ -304,6 +304,7 @@ static int bs_aio_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 {
 	struct bs_aio_info *info = BS_AIO_I(lu);
 	int ret, afd;
+	uint32_t blksize = 0;
 
 	info->iodepth = AIO_MAX_IODEPTH;
 	eprintf("create aio context for tgt:%d lun:%"PRId64 ", max iodepth:%d\n",
@@ -331,13 +332,14 @@ static int bs_aio_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 
 	eprintf("open %s, RW, O_DIRECT for tgt:%d lun:%"PRId64 "\n",
 		path, info->lu->tgt->tid, info->lu->lun);
-	*fd = backed_file_open(path, O_RDWR|O_LARGEFILE|O_DIRECT, size);
+	*fd = backed_file_open(path, O_RDWR|O_LARGEFILE|O_DIRECT, size,
+				&blksize);
 	/* If we get access denied, try opening the file in readonly mode */
 	if (*fd == -1 && (errno == EACCES || errno == EROFS)) {
 		eprintf("open %s, READONLY, O_DIRECT for tgt:%d lun:%"PRId64 "\n",
 			path, info->lu->tgt->tid, info->lu->lun);
 		*fd = backed_file_open(path, O_RDONLY|O_LARGEFILE|O_DIRECT,
-				       size);
+				       size, &blksize);
 		lu->attrs.readonly = 1;
 	}
 	if (*fd < 0) {
@@ -346,11 +348,14 @@ static int bs_aio_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 		ret = *fd;
 		goto remove_tgt_evt;
 	}
-	else {
-		eprintf("%s opened successfully for tgt:%d lun:%"PRId64 "\n",
-			path, info->lu->tgt->tid, info->lu->lun);
-		return 0;
-	}
+
+	eprintf("%s opened successfully for tgt:%d lun:%"PRId64 "\n",
+		path, info->lu->tgt->tid, info->lu->lun);
+
+	if (!lu->attrs.no_auto_lbppbe)
+		update_lbppbe(lu, blksize);
+
+	return 0;
 
 remove_tgt_evt:
 	tgt_event_del(afd);

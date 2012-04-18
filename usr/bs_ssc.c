@@ -619,7 +619,7 @@ static int bs_ssc_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 
 	ssc = dtype_priv(lu);
 
-	*fd = backed_file_open(path, O_RDWR | O_LARGEFILE, size);
+	*fd = backed_file_open(path, O_RDWR | O_LARGEFILE, size, NULL);
 	if (*fd < 0) {
 		eprintf("Could not open %s %m\n", path);
 		return *fd;

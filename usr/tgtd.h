@@ -78,6 +78,8 @@ struct lu_phy_attr {
 	char sense_format;	/* Descrptor format sense data supported */
 				/* For the following see READ CAPACITY (16) */
 	unsigned char lbppbe;	/* Logical blocks per physical block exponent */
+	char no_auto_lbppbe;    /* Do not update it automatically when the
+				   backing file changes */
 	uint16_t la_lba;	/* Lowest aligned LBA */
 
 	/* VPD pages 0x80 -> 0xff masked with 0x80*/
@@ -348,4 +350,7 @@ struct event_data {
 int call_program(const char *cmd,
 		    void (*callback)(void *data, int result), void *data,
 		    char *output, int op_len, int flags);
+
+void update_lbppbe(struct scsi_lu *lu, int blksize);
+
 #endif

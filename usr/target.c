@@ -2209,6 +2209,15 @@ tgtadm_err system_show(int mode, struct concat_buf *b)
 	return TGTADM_SUCCESS;
 }
 
+void update_lbppbe(struct scsi_lu *lu, int blksize)
+{
+	lu->attrs.lbppbe = 0;
+	while (blksize > (1U << lu->blk_shift)) {
+		lu->attrs.lbppbe++;
+		blksize >>= 1;
+	}
+}
+
 int is_system_available(void)
 {
 	return (sys_state == TGT_SYSTEM_READY);

@@ -336,7 +336,12 @@
 	<listitem>
 	  <para>
 	    Specify the Logical blocks per physical block
-	    exponent. This is an internal option that should not be
+	    exponent. By default TGTD will set the lbppbe to automatically
+	    match the underlying filesystem. Use this parameter to override
+	    that setting.
+	  </para>
+	  <para>
+	    This is an internal option that should not be
 	    set directly.
 	  </para>
 	</listitem>

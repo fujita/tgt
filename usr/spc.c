@@ -1750,6 +1750,7 @@ tgtadm_err lu_config(struct scsi_lu *lu, char *params, match_fn_t *fn)
 		case Opt_lbppbe:
 			match_strncpy(buf, &args[0], sizeof(buf));
 			attrs->lbppbe = atoi(buf);
+			attrs->no_auto_lbppbe = 1;
 			break;
 		case Opt_la_lba:
 			match_strncpy(buf, &args[0], sizeof(buf));

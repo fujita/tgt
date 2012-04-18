@@ -62,7 +62,8 @@
 
 extern int get_blk_shift(unsigned int size);
 extern int chrdev_open(char *modname, char *devpath, uint8_t minor, int *fd);
-extern int backed_file_open(char *path, int oflag, uint64_t *size);
+extern int backed_file_open(char *path, int oflag, uint64_t *size,
+				uint32_t *blksize);
 extern int set_non_blocking(int fd);
 extern int str_to_open_flags(char *buf);
 extern char *open_flags_to_str(char *dest, int flags);

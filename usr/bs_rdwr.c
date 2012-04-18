@@ -231,15 +231,21 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 
 static int bs_rdwr_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 {
-	*fd = backed_file_open(path, O_RDWR|O_LARGEFILE|lu->bsoflags, size);
+	uint32_t blksize = 0;
+
+	*fd = backed_file_open(path, O_RDWR|O_LARGEFILE|lu->bsoflags, size,
+				&blksize);
 	/* If we get access denied, try opening the file in readonly mode */
 	if (*fd == -1 && (errno == EACCES || errno == EROFS)) {
 		*fd = backed_file_open(path, O_RDONLY|O_LARGEFILE|lu->bsoflags,
-				       size);
+				       size, &blksize);
 		lu->attrs.readonly = 1;
 	}
 	if (*fd < 0)
 		return *fd;
+
+	if (!lu->attrs.no_auto_lbppbe)
+		update_lbppbe(lu, blksize);
 
 	return 0;
 }
