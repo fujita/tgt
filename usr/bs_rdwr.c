@@ -65,6 +65,8 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 	uint8_t key;
 	uint16_t asc;
 	char *tmpbuf;
+	uint64_t offset = cmd->offset;
+	uint32_t tl     = cmd->tl;
 
 	ret = length = 0;
 	key = asc = 0;
@@ -89,7 +91,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 	case WRITE_16:
 		length = scsi_get_out_length(cmd);
 		ret = pwrite64(fd, scsi_get_out_buffer(cmd), length,
-			       cmd->offset);
+			       offset);
 		if (ret == length) {
 			/*
 			 * it would be better not to access to pg
@@ -105,7 +107,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 			set_medium_error(&result, &key, &asc);
 
 		if ((cmd->scb[0] != WRITE_6) && (cmd->scb[1] & 0x10))
-			posix_fadvise(fd, cmd->offset, length,
+			posix_fadvise(fd, offset, length,
 				      POSIX_FADV_NOREUSE);
 
 		break;
@@ -115,19 +117,19 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 	case READ_16:
 		length = scsi_get_in_length(cmd);
 		ret = pread64(fd, scsi_get_in_buffer(cmd), length,
-			      cmd->offset);
+			      offset);
 
 		if (ret != length)
 			set_medium_error(&result, &key, &asc);
 
 		if ((cmd->scb[0] != READ_6) && (cmd->scb[1] & 0x10))
-			posix_fadvise(fd, cmd->offset, length,
+			posix_fadvise(fd, offset, length,
 				      POSIX_FADV_NOREUSE);
 
 		break;
 	case PRE_FETCH_10:
 	case PRE_FETCH_16:
-		ret = posix_fadvise(fd, cmd->offset, cmd->tl,
+		ret = posix_fadvise(fd, offset, cmd->tl,
 				POSIX_FADV_WILLNEED);
 
 		if (ret != 0)
@@ -146,7 +148,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 			break;
 		}
 
-		ret = pread64(fd, tmpbuf, length, cmd->offset);
+		ret = pread64(fd, tmpbuf, length, offset);
 
 		if (ret != length)
 			set_medium_error(&result, &key, &asc);
@@ -157,7 +159,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 		}
 
 		if (cmd->scb[1] & 0x10)
-			posix_fadvise(fd, cmd->offset, length,
+			posix_fadvise(fd, offset, length,
 				      POSIX_FADV_NOREUSE);
 
 		free(tmpbuf);
@@ -180,16 +182,13 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 		tmpbuf += 8;
 
 		while (length >= 16) {
-			uint64_t offset;
-			uint64_t len;
-
 			offset = get_unaligned_be64(&tmpbuf[0]);
 			offset = offset << cmd->dev->blk_shift;
 
-			len = get_unaligned_be32(&tmpbuf[8]);
-			len = len << cmd->dev->blk_shift;
+			tl = get_unaligned_be32(&tmpbuf[8]);
+			tl = tl << cmd->dev->blk_shift;
 
-			if (offset + len > cmd->dev->size) {
+			if (offset + tl > cmd->dev->size) {
 				eprintf("UNMAP beyond EOF\n");
 				result = SAM_STAT_CHECK_CONDITION;
 				key = ILLEGAL_REQUEST;
@@ -197,12 +196,12 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 				break;
 			}
 
-			if (len > 0) {
-				if (unmap_file_region(fd, offset, len) != 0) {
+			if (tl > 0) {
+				if (unmap_file_region(fd, offset, tl) != 0) {
 					eprintf("Failed to punch hole for"
 						" UNMAP at offset:%" PRIu64
-						" length:%" PRIu64 "\n",
-						offset, len);
+						" length:%d\n",
+						offset, tl);
 					result = SAM_STAT_CHECK_CONDITION;
 					key = HARDWARE_ERROR;
 					asc = ASC_INTERNAL_TGT_FAILURE;
@@ -224,7 +223,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 
 	if (result != SAM_STAT_GOOD) {
 		eprintf("io error %p %x %d %d %" PRIu64 ", %m\n",
-			cmd, cmd->scb[0], ret, length, cmd->offset);
+			cmd, cmd->scb[0], ret, length, offset);
 		sense_data_build(cmd, key, asc);
 	}
 }
