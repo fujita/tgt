@@ -146,7 +146,7 @@ static void update_vpd_b2(struct scsi_lu *lu, void *id)
 
 	if (lu->attrs.thinprovisioning) {
 		data[0] = 0;		/* threshold exponent */
-		data[1] = 0x84;		/* LBPU LBPRZ */
+		data[1] = 0xe4;		/* LBPU LBPWS(10) LBPRZ */
 		data[2] = 0x02;		/* provisioning type */
 		data[3] = 0;
 	} else {

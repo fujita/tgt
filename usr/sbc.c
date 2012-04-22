@@ -230,6 +230,20 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 		break;
 	case WRITE_SAME:
 	case WRITE_SAME_16:
+		/* We dont support resource-provisioning so
+		 * ANCHOR bit == 1 is an error.
+		 */
+		if (cmd->scb[1] & 0x10) {
+			key = ILLEGAL_REQUEST;
+			asc = ASC_INVALID_FIELD_IN_CDB;
+			goto sense;
+		}
+		/* We only support unmap for thin provisioned LUNS */
+		if (cmd->scb[1] & 0x08 && !lu->attrs.thinprovisioning) {
+			key = ILLEGAL_REQUEST;
+			asc = ASC_INVALID_FIELD_IN_CDB;
+			goto sense;
+		}
 		/* We only support protection information type 0 */
 		if (cmd->scb[1] & 0xe0) {
 			key = ILLEGAL_REQUEST;

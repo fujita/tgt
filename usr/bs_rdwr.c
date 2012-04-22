@@ -114,6 +114,19 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 		break;
 	case WRITE_SAME:
 	case WRITE_SAME_16:
+		/* WRITE_SAME used to punch hole in file */
+		if (cmd->scb[1] & 0x08) {
+			ret = unmap_file_region(fd, offset, tl);
+			if (ret != 0) {
+				eprintf("Failed to punch hole for WRITE_SAME"
+					" command\n");
+				result = SAM_STAT_CHECK_CONDITION;
+				key = HARDWARE_ERROR;
+				asc = ASC_INTERNAL_TGT_FAILURE;
+				break;
+			}
+			break;
+		}
 		while (tl > 0) {
 			blocksize = 1 << cmd->dev->blk_shift;
 			tmpbuf = scsi_get_out_buffer(cmd);
