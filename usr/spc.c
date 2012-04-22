@@ -157,6 +157,25 @@ static void update_vpd_b2(struct scsi_lu *lu, void *id)
 	}
 }
 
+static void update_vpd_b0(struct scsi_lu *lu, void *id)
+{
+	struct vpd *vpd_pg = lu->attrs.lu_vpd[PCODE_OFFSET(0xb0)];
+
+	/* maximum compare and write length : 64kb */
+	vpd_pg->data[1] = 128;
+
+	if (lu->attrs.thinprovisioning) {
+		/* maximum unmap lba count : maximum*/
+		put_unaligned_be32(0xffffffff, vpd_pg->data + 16);
+
+		/* maximum unmap block descriptor count : maximum*/
+		put_unaligned_be32(0xffffffff, vpd_pg->data + 20);
+	} else {
+		put_unaligned_be32(0, vpd_pg->data + 16);
+		put_unaligned_be32(0, vpd_pg->data + 20);
+	}
+}
+
 static void update_b0_opt_xfer_gran(struct scsi_lu *lu, int opt_xfer_gran)
 {
 	struct vpd *vpd_pg = lu->attrs.lu_vpd[PCODE_OFFSET(0xb0)];
@@ -1776,6 +1795,7 @@ tgtadm_err lu_config(struct scsi_lu *lu, char *params, match_fn_t *fn)
 			match_strncpy(buf, &args[0], sizeof(buf));
 			attrs->thinprovisioning = atoi(buf);
 			/* update the provisioning vpd page */
+			lu_vpd[PCODE_OFFSET(0xb0)]->vpd_update(lu, NULL);
 			lu_vpd[PCODE_OFFSET(0xb2)]->vpd_update(lu, NULL);
 			break;
 		case Opt_online:
@@ -1848,6 +1868,8 @@ int spc_lu_init(struct scsi_lu *lu)
 	lu_vpd[pg] = alloc_vpd(BLOCK_LIMITS_VPD_LEN);
 	if (!lu_vpd[pg])
 		return -ENOMEM;
+	lu_vpd[pg]->vpd_update = update_vpd_b0;
+	lu_vpd[pg]->vpd_update(lu, NULL);
 
 	/* VPD page 0xb2 LOGICAL BLOCK PROVISIONING*/
 	pg = PCODE_OFFSET(0xb2);
