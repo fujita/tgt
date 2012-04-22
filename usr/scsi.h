@@ -77,6 +77,7 @@
 #define VERIFY_16	      0x8f
 #define PRE_FETCH_16          0x90
 #define SYNCHRONIZE_CACHE_16  0x91
+#define WRITE_SAME_16         0x93
 #define SERVICE_ACTION_IN     0x9e
 #define	SAI_READ_CAPACITY_16  0x10
 #define REPORT_LUNS           0xa0

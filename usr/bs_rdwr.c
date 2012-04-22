@@ -113,6 +113,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 
 		break;
 	case WRITE_SAME:
+	case WRITE_SAME_16:
 		while (tl > 0) {
 			blocksize = 1 << cmd->dev->blk_shift;
 			tmpbuf = scsi_get_out_buffer(cmd);

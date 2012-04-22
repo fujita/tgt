@@ -229,6 +229,7 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 		}
 		break;
 	case WRITE_SAME:
+	case WRITE_SAME_16:
 		/* We only support protection information type 0 */
 		if (cmd->scb[1] & 0xe0) {
 			key = ILLEGAL_REQUEST;
@@ -251,6 +252,7 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 		case WRITE_12:
 		case WRITE_16:
 		case WRITE_SAME:
+		case WRITE_SAME_16:
 		case PRE_FETCH_10:
 		case PRE_FETCH_16:
 			key = DATA_PROTECT;
@@ -683,7 +685,7 @@ static struct device_type_template sbc_template = {
 		{sbc_rw, NULL, PR_EA_FA|PR_EA_FN}, /*PRE_FETCH_16 */
 		{sbc_sync_cache, NULL, PR_WE_FA|PR_EA_FA|PR_WE_FN|PR_EA_FN},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{sbc_rw,},		/* WRITE_SAME_16 */
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
