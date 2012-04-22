@@ -119,6 +119,7 @@ uint64_t scsi_rw_offset(uint8_t *scb)
 	case WRITE_10:
 	case VERIFY_10:
 	case WRITE_VERIFY:
+	case WRITE_SAME:
 	case SYNCHRONIZE_CACHE:
 	case READ_12:
 	case WRITE_12:
@@ -162,6 +163,7 @@ uint32_t scsi_rw_count(uint8_t *scb)
 	case WRITE_10:
 	case VERIFY_10:
 	case WRITE_VERIFY:
+	case WRITE_SAME:
 	case SYNCHRONIZE_CACHE:
 		cnt = (uint16_t)scb[7] << 8 | (uint16_t)scb[8];
 		break;

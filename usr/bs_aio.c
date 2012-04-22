@@ -206,6 +206,10 @@ static int bs_aio_cmd_submit(struct scsi_cmd *cmd)
 	case READ_16:
 		break;
 
+	case WRITE_SAME:
+		eprintf("WRITE_SAME not yet supported for AIO backend.\n");
+		return -1;
+
 	case SYNCHRONIZE_CACHE:
 	case SYNCHRONIZE_CACHE_16:
 	default:

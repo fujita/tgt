@@ -65,6 +65,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 	uint8_t key;
 	uint16_t asc;
 	char *tmpbuf;
+	size_t blocksize;
 	uint64_t offset = cmd->offset;
 	uint32_t tl     = cmd->tl;
 
@@ -110,6 +111,29 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 			posix_fadvise(fd, offset, length,
 				      POSIX_FADV_NOREUSE);
 
+		break;
+	case WRITE_SAME:
+		while (tl > 0) {
+			blocksize = 1 << cmd->dev->blk_shift;
+			tmpbuf = scsi_get_out_buffer(cmd);
+
+			switch(cmd->scb[1] & 0x06) {
+			case 0x02: /* PBDATA==0 LBDATA==1 */
+				put_unaligned_be32(offset, tmpbuf);
+				break;
+			case 0x04: /* PBDATA==1 LBDATA==0 */
+				/* physical sector format */
+				put_unaligned_be64(offset, tmpbuf);
+				break;
+			}
+
+			ret = pwrite64(fd, tmpbuf, blocksize, offset);
+			if (ret != blocksize)
+				set_medium_error(&result, &key, &asc);
+
+			offset += blocksize;
+			tl     -= blocksize;
+		}
 		break;
 	case READ_6:
 	case READ_10:

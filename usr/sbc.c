@@ -228,6 +228,20 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 			goto sense;
 		}
 		break;
+	case WRITE_SAME:
+		/* We only support protection information type 0 */
+		if (cmd->scb[1] & 0xe0) {
+			key = ILLEGAL_REQUEST;
+			asc = ASC_INVALID_FIELD_IN_CDB;
+			goto sense;
+		}
+		/* LBDATA and PBDATA can not both be set */
+		if ((cmd->scb[1] & 0x06) == 0x06) {
+			key = ILLEGAL_REQUEST;
+			asc = ASC_INVALID_FIELD_IN_CDB;
+			goto sense;
+		}
+		break;
 	}
 
 	if (lu->attrs.readonly) {
@@ -236,6 +250,7 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 		case WRITE_10:
 		case WRITE_12:
 		case WRITE_16:
+		case WRITE_SAME:
 		case PRE_FETCH_10:
 		case PRE_FETCH_16:
 			key = DATA_PROTECT;
@@ -607,7 +622,7 @@ static struct device_type_template sbc_template = {
 
 		/* 0x40 */
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{sbc_rw,},		/* WRITE_SAME10 */
 		{sbc_unmap,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
