@@ -341,6 +341,10 @@ static void text_scan_login(struct iscsi_connection *conn)
 			}
 
 			err = param_check_val(session_keys, idx, &val);
+			if (err) {
+				text_key_add_reject(conn, key);
+				continue;
+			}
 			if (idx == ISCSI_PARAM_MAX_XMIT_DLENGTH &&
 			    conn->session_type == SESSION_DISCOVERY)
 				conn->session_param[idx].val = val;
@@ -454,6 +458,7 @@ static void login_start(struct iscsi_connection *conn)
 	}
 	conn->initiator = strdup(name);
 	alias = text_key_find(conn, "InitiatorAlias");
+
 	session_type = text_key_find(conn, "SessionType");
 	target_name = text_key_find(conn, "TargetName");
 

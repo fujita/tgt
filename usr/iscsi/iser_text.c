@@ -284,6 +284,11 @@ static void iser_login_oper_scan(struct iscsi_connection *iscsi_conn,
 			}
 
 			err = param_check_val(session_keys, idx, &val);
+			if (err) {
+				iser_text_key_add_reject(iscsi_conn, tx_pdu, key);
+				continue;
+			}
+
 			param_set_val(session_keys, iscsi_conn->session_param, idx, &val);
 
 			switch (iscsi_conn->session_param[idx].state) {
