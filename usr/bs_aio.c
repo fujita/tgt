@@ -265,10 +265,13 @@ static void bs_aio_get_completions(int fd, int events, void *data)
 {
 	struct bs_aio_info *info = data;
 	int i, ret;
-	uint64_t ncomplete, nevents;
+	/* read from eventfd returns 8-byte int, fails with the error EINVAL
+	   if the size of the supplied buffer is less than 8 bytes */
+	uint64_t evts_complete;
+	unsigned int ncomplete, nevents;
 
 retry_read:
-	ret = read(info->evt_fd, &ncomplete, sizeof(ncomplete));
+	ret = read(info->evt_fd, &evts_complete, sizeof(evts_complete));
 	if (unlikely(ret < 0)) {
 		eprintf("failed to read AIO completions, %m\n");
 		if (errno == EAGAIN || errno == EINTR)
@@ -276,9 +279,10 @@ retry_read:
 
 		return;
 	}
+	ncomplete = (unsigned int) evts_complete;
 
 	while (ncomplete) {
-		nevents = min_t(long, ncomplete, ARRAY_SIZE(info->io_evts));
+		nevents = min_t(unsigned int, ncomplete, ARRAY_SIZE(info->io_evts));
 retry_getevts:
 		ret = io_getevents(info->ctx, 1, nevents, info->io_evts, NULL);
 		if (likely(ret > 0)) {
@@ -290,7 +294,7 @@ retry_getevts:
 			eprintf("io_getevents failed, err:%d\n", -ret);
 			return;
 		}
-		dprintf("got %ld ioevents out of %ld, pending %d\n",
+		dprintf("got %d ioevents out of %d, pending %d\n",
 			nevents, ncomplete, info->npending);
 
 		for (i = 0; i < nevents; i++)
