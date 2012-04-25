@@ -470,12 +470,14 @@ sense:
 
 static int sbc_sync_cache(int host_no, struct scsi_cmd *cmd)
 {
-	int ret, len;
+	int ret;
 	uint8_t key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_LUN_NOT_SUPPORTED;
 
 	if (device_reserved(cmd))
 		return SAM_STAT_RESERVATION_CONFLICT;
+
+	scsi_set_in_resid_by_actual(cmd, 0);
 
 	if (cmd->dev->attrs.removable && !cmd->dev->attrs.online) {
 		key = NOT_READY;
@@ -497,12 +499,10 @@ static int sbc_sync_cache(int host_no, struct scsi_cmd *cmd)
 		asc = ASC_INTERNAL_TGT_FAILURE;
 		goto sense;
 	default:
-		len = 0;
 		return SAM_STAT_GOOD;
 	}
 
 sense:
-	scsi_set_in_resid_by_actual(cmd, 0);
 	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
 }
