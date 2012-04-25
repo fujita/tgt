@@ -301,19 +301,27 @@ static void bs_sg_cmd_complete(int fd, int events, void *data)
 static int get_bsg_major(char *path)
 {
 	FILE *devfd;
-	char majorno[8];
+	int majorno, n;
 	char dev[64];
 	char tmp[16];
 
 	sscanf(path, "/dev/bsg/%s", tmp);
 	sprintf(dev, "/sys/class/bsg/%s/dev", tmp);
 	devfd = fopen(dev, "r");
-	if (!devfd)
+	if (!devfd) {
+		eprintf("%s open failed errno: %d\n", dev, errno);
 		return -1;
-	fscanf(devfd, "%s:", majorno);
+	}
+	n = fscanf(devfd, "%d:", &majorno);
 	fclose(devfd);
-
-	return atoi(majorno);
+	if (n != 1) {
+		if (n < 0)
+			eprintf("reading major from %s failed errno: %d\n", dev, errno);
+		else
+			eprintf("reading major from %s failed: invalid input\n", dev);
+		return -1;
+	}
+	return majorno;
 }
 
 static int chk_sg_device(char *path)
