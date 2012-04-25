@@ -76,6 +76,8 @@ void conn_exit(struct iscsi_connection *conn)
 	free(conn->req_buffer);
 	free(conn->rsp_buffer);
 	free(conn->initiator);
+	if (conn->initiator_alias)
+		free(conn->initiator_alias);
 
 	if (session)
 		session_put(session);

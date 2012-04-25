@@ -457,7 +457,10 @@ static void login_start(struct iscsi_connection *conn)
 		return;
 	}
 	conn->initiator = strdup(name);
+
 	alias = text_key_find(conn, "InitiatorAlias");
+	if (alias)
+		conn->initiator_alias = strdup(alias);
 
 	session_type = text_key_find(conn, "SessionType");
 	target_name = text_key_find(conn, "TargetName");

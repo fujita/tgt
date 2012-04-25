@@ -95,9 +95,19 @@ int session_create(struct iscsi_connection *conn)
 		return -ENOMEM;
 	}
 
+	if (conn->initiator_alias) {
+		session->initiator_alias = strdup(conn->initiator_alias);
+		if (!session->initiator_alias) {
+			free(session);
+			return -ENOMEM;
+		}
+	}
+
 	session->info = zalloc(1024);
 	if (!session->info) {
 		free(session->initiator);
+		if (session->initiator_alias)
+			free(session->initiator_alias);
 		free(session);
 		return -ENOMEM;
 	}
@@ -105,9 +115,11 @@ int session_create(struct iscsi_connection *conn)
 	memset(addr, 0, sizeof(addr));
 	conn->tp->ep_show(conn, addr, sizeof(addr));
 
-	snprintf(session->info, 1024, _TAB3 "Initiator: %s\n"
+	snprintf(session->info, 1024, _TAB3 "Initiator: %s alias: %s\n"
 		 _TAB3 "Connection: %u\n"
-		 _TAB4 "%s\n", session->initiator, conn->cid, addr);
+		 _TAB4 "%s\n", session->initiator,
+		session->initiator_alias ? session->initiator_alias : "none",
+		conn->cid, addr);
 
 	err = it_nexus_create(target->tid, tsih, 0, session->info);
 	if (err) {

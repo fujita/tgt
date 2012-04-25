@@ -439,7 +439,11 @@ static void iser_login_start(struct iscsi_connection *iscsi_conn,
 		return;
 	}
 	iscsi_conn->initiator = strdup(name);
+
 	alias = iser_text_key_find(req_data, req_datasize, "InitiatorAlias");
+	if (alias)
+		iscsi_conn->initiator_alias = strdup(alias);
+
 	session_type = iser_text_key_find(req_data, req_datasize, "SessionType");
 	target_name = iser_text_key_find(req_data, req_datasize, "TargetName");
 

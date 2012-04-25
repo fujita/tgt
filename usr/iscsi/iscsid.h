@@ -74,6 +74,7 @@ struct iscsi_session {
 	struct list_head hlist;
 
 	char *initiator;
+	char *initiator_alias;
 	struct iscsi_target *target;
 	uint8_t isid[6];
 	uint16_t tsih;
@@ -150,6 +151,7 @@ struct iscsi_connection {
 	struct param session_param[ISCSI_PARAM_MAX];
 
 	char *initiator;
+	char *initiator_alias;
 	uint8_t isid[6];
 	uint16_t tsih;
 	uint16_t cid;
