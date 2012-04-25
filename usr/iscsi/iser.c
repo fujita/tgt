@@ -1044,14 +1044,16 @@ static void iser_free_ff_resources(struct iser_conn *conn)
 int iser_login_complete(struct iscsi_connection *iscsi_conn)
 {
 	struct iser_conn *conn = ISER_CONN(iscsi_conn);
-	unsigned int irdsl, trdsl, outst_pdu, hdrsz;
+	unsigned int trdsl;
+	/* unsigned int irdsl; */
+	unsigned int outst_pdu, hdrsz;
 	int err = -1;
 
 	dprintf("entry\n");
 
 	/* one more send, then done; login resources are left until then */
 	iser_conn_login_phase_set(conn, LOGIN_PHASE_LAST_SEND);
-	irdsl = iscsi_conn->session_param[ISCSI_PARAM_INITIATOR_RDSL].val;
+	/* irdsl = iscsi_conn->session_param[ISCSI_PARAM_INITIATOR_RDSL].val; */
 	trdsl = iscsi_conn->session_param[ISCSI_PARAM_TARGET_RDSL].val;
 
 	/* ToDo: outstanding pdus num */
