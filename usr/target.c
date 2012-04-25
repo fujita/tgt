@@ -735,6 +735,9 @@ tgtadm_err tgt_device_destroy(int tid, uint64_t lun, int force)
 
 			ret = ua_sense_add(itn_lu,
 					   ASC_REPORTED_LUNS_DATA_HAS_CHANGED);
+			if (ret)
+				eprintf("fail to add ua %" PRIu64 " %" PRIu64 "\n",
+					lun, itn->itn_id);
 		}
 	}
 
