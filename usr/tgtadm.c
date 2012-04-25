@@ -501,22 +501,22 @@ int main(int argc, char **argv)
 			mode = str_to_mode(optarg);
 			break;
 		case 't':
-			rc = str_to_int(optarg, tid, 0, INT_MAX);
+			rc = str_to_int_ge(optarg, tid, 0);
 			if (rc)
 				bad_optarg(rc, ch, optarg);
 			break;
 		case 's':
-			rc = str_to_int(optarg, sid, 0, ULLONG_MAX);
+			rc = str_to_int(optarg, sid);
 			if (rc)
 				bad_optarg(rc, ch, optarg);
 			break;
 		case 'c':
-			rc = str_to_int(optarg, cid, 0, UINT_MAX);
+			rc = str_to_int(optarg, cid);
 			if (rc)
 				bad_optarg(rc, ch, optarg);
 			break;
 		case 'l':
-			rc = str_to_int(optarg, lun, 0, ULLONG_MAX);
+			rc = str_to_int(optarg, lun);
 			if (rc)
 				bad_optarg(rc, ch, optarg);
 			break;
@@ -554,7 +554,7 @@ int main(int argc, char **argv)
 			hostno = bus_to_host(optarg);
 			break;
 		case 'H':
-			rc = str_to_int(optarg, hostno, 0, UINT_MAX);
+			rc = str_to_int_ge(optarg, hostno, 0);
 			if (rc)
 				bad_optarg(rc, ch, optarg);
 			break;
@@ -577,7 +577,7 @@ int main(int argc, char **argv)
 			ac_dir = ACCOUNT_TYPE_OUTGOING;
 			break;
 		case 'C':
-			rc = str_to_int(optarg, control_port, 0, USHRT_MAX);
+			rc = str_to_int_gt(optarg, control_port, 0);
 			if (rc)
 				bad_optarg(rc, ch, optarg);
 			break;
