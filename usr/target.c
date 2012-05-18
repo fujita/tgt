@@ -760,9 +760,9 @@ struct lu_phy_attr *lu_attr_lookup(int tid, uint64_t lun)
  * @tid:	Target ID
  * @lun:	LUN
  *
- * check if a DT can have its media reoved or not
+ * check if a DT can have its media removed or not
  */
-int dtd_check_removable(int tid, uint64_t lun)
+tgtadm_err dtd_check_removable(int tid, uint64_t lun)
 {
 	struct scsi_lu *lu;
 

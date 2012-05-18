@@ -325,7 +325,7 @@ extern int device_type_register(struct device_type_template *);
 
 extern struct lu_phy_attr *lu_attr_lookup(int tid, uint64_t lun);
 extern tgtadm_err dtd_load_unload(int tid, uint64_t lun, int load, char *file);
-extern int dtd_check_removable(int tid, uint64_t lun);
+extern tgtadm_err dtd_check_removable(int tid, uint64_t lun);
 
 extern int register_backingstore_template(struct backingstore_template *bst);
 extern struct backingstore_template *get_backingstore_template(const char *name);

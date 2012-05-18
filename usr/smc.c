@@ -50,7 +50,8 @@
 
 static int check_slot_removable(struct slot *s)
 {
-	return dtd_check_removable(s->drive_tid, s->drive_lun);
+	tgtadm_err adm_err = dtd_check_removable(s->drive_tid, s->drive_lun);
+	return (adm_err == TGTADM_SUCCESS ? 0 : -EINVAL);
 }
 
 static int set_slot_full(struct slot *s, uint16_t src, char *path)
