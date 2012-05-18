@@ -354,8 +354,8 @@ extern void iscsi_exit(void);
 /* isns.c */
 extern int isns_init(void);
 extern void isns_exit(void);
-extern int isns_show(struct concat_buf *b);
-extern int isns_update(char *params);
+extern tgtadm_err isns_show(struct concat_buf *b);
+extern tgtadm_err isns_update(char *params);
 extern int isns_scn_access(int tid, char *name);
 extern int isns_target_register(char *name);
 extern int isns_target_deregister(char *name);

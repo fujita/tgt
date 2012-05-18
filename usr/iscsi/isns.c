@@ -1066,7 +1066,7 @@ void isns_exit(void)
 	free(rxbuf);
 }
 
-int isns_show(struct concat_buf *b)
+tgtadm_err isns_show(struct concat_buf *b)
 {
 	concat_printf(b, "iSNS:\n");
 	concat_printf(b, _TAB1 "iSNS=%s\n", use_isns ? "On" : "Off");
@@ -1091,9 +1091,9 @@ static match_table_t tokens = {
 	{Opt_err, NULL},
 };
 
-int isns_update(char *params)
+tgtadm_err isns_update(char *params)
 {
-	int ret = 0;
+    tgtadm_err adm_err = TGTADM_SUCCESS;
 	char *p;
 
 	while ((p = strsep(&params, ",")) != NULL) {
@@ -1113,7 +1113,7 @@ int isns_update(char *params)
 			else if (!strcmp(tmp, "Off"))
 				isns = 0;
 			else {
-				ret = TGTADM_INVALID_REQUEST;
+				adm_err = TGTADM_INVALID_REQUEST;
 				break;
 			}
 			if (use_isns == isns)
@@ -1128,7 +1128,7 @@ int isns_update(char *params)
 			break;
 		case Opt_port:
 			if (match_int(&args[0], &isns_port))
-				ret = TGTADM_INVALID_REQUEST;
+				adm_err = TGTADM_INVALID_REQUEST;
 			break;
 		case Opt_ac:
 			match_strncpy(tmp, &args[0], sizeof(tmp));
@@ -1139,9 +1139,9 @@ int isns_update(char *params)
 			system_set_state(tmp);
 			break;
 		default:
-			ret = TGTADM_INVALID_REQUEST;
+			adm_err = TGTADM_INVALID_REQUEST;
 		}
 	}
 
-	return ret;
+	return adm_err;
 }
