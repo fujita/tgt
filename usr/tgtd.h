@@ -307,8 +307,8 @@ extern tgtadm_err acl_add(int tid, char *address);
 extern tgtadm_err acl_del(int tid, char *address);
 extern char *acl_get(int tid, int idx);
 
-extern int iqn_acl_add(int tid, char *name);
-extern int iqn_acl_del(int tid, char *name);
+extern tgtadm_err iqn_acl_add(int tid, char *name);
+extern tgtadm_err iqn_acl_del(int tid, char *name);
 extern char *iqn_acl_get(int tid, int idx);
 
 extern int account_lookup(int tid, int type, char *user, int ulen, char *password, int plen);

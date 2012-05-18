@@ -1588,7 +1588,7 @@ char *acl_get(int tid, int idx)
 	return NULL;
 }
 
-int iqn_acl_add(int tid, char *name)
+tgtadm_err iqn_acl_add(int tid, char *name)
 {
 	char *str;
 	struct target *target;
@@ -1615,14 +1615,14 @@ int iqn_acl_add(int tid, char *name)
 	iqn_acl->name = str;
 	list_add_tail(&iqn_acl->iqn_aclent_list, &target->iqn_acl_list);
 
-	return 0;
+	return TGTADM_SUCCESS;
 }
 
-int iqn_acl_del(int tid, char *name)
+tgtadm_err iqn_acl_del(int tid, char *name)
 {
 	struct target *target;
 	struct iqn_acl_entry *iqn_acl, *tmp;
-	int err = TGTADM_ACL_NOEXIST;
+	tgtadm_err adm_err = TGTADM_ACL_NOEXIST;
 
 	target = target_lookup(tid);
 	if (!target)
@@ -1633,11 +1633,11 @@ int iqn_acl_del(int tid, char *name)
 			list_del(&iqn_acl->iqn_aclent_list);
 			free(iqn_acl->name);
 			free(iqn_acl);
-			err = 0;
+			adm_err = TGTADM_SUCCESS;
 			break;
 		}
 	}
-	return err;
+	return adm_err;
 }
 
 char *iqn_acl_get(int tid, int idx)
