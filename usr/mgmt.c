@@ -195,7 +195,6 @@ static tgtadm_err target_mgmt(int lld_no, struct mgmt_task *mtask)
 		break;
 	}
 
-	set_mtask_result(mtask, adm_err);
 	return adm_err;
 }
 
@@ -225,7 +224,6 @@ static tgtadm_err portal_mgmt(int lld_no, struct mgmt_task *mtask)
 		break;
 	}
 
-	set_mtask_result(mtask, adm_err);
 	return adm_err;
 }
 
@@ -251,7 +249,6 @@ static tgtadm_err device_mgmt(int lld_no, struct mgmt_task *mtask)
 		break;
 	}
 
-	set_mtask_result(mtask, adm_err);
 	return adm_err;
 }
 
@@ -268,13 +265,13 @@ static tgtadm_err account_mgmt(int lld_no,  struct mgmt_task *mtask)
 	case OP_UNBIND:
 		user = strstr(mtask->req_buf, "user=");
 		if (!user)
-			goto out;
+			return TGTADM_INVALID_REQUEST;
 		user += 5;
 
 		if (req->op == OP_NEW) {
 			password = strchr(user, ',');
 			if (!password)
-				goto out;
+				return TGTADM_INVALID_REQUEST;
 
 			*password++ = '\0';
 			password += strlen("password=");
@@ -296,8 +293,7 @@ static tgtadm_err account_mgmt(int lld_no,  struct mgmt_task *mtask)
 	default:
 		break;
 	}
-out:
-	set_mtask_result(mtask, adm_err);
+
 	return adm_err;
 }
 
@@ -343,7 +339,6 @@ static tgtadm_err sys_mgmt(int lld_no, struct mgmt_task *mtask)
 		break;
 	}
 
-	set_mtask_result(mtask, adm_err);
 	return adm_err;
 }
 
@@ -373,7 +368,6 @@ static tgtadm_err connection_mgmt(int lld_no, struct mgmt_task *mtask)
 		break;
 	}
 
-	set_mtask_result(mtask, adm_err);
 	return adm_err;
 }
 
@@ -393,8 +387,7 @@ static tgtadm_err mtask_execute(struct mgmt_task *mtask)
 			else
 				eprintf("driver %s is in state: %s\n",
 					req->lld, driver_state_name(tgt_drivers[lld_no]));
-			set_mtask_result(mtask, TGTADM_NO_DRIVER);
-			return 0;
+			return TGTADM_NO_DRIVER;
 		}
 	}
 
@@ -429,11 +422,11 @@ static tgtadm_err mtask_execute(struct mgmt_task *mtask)
 							    req->cid, req->lun,
 							    &mtask->rsp_concat);
 			concat_buf_finish(&mtask->rsp_concat);
-		}
+		} else
+			eprintf("unsupported mode: %d\n", req->mode);
 		break;
 	}
 
-	set_mtask_result(mtask, adm_err);
 	return adm_err;
 }
 
@@ -500,9 +493,9 @@ static int mtask_received(struct mgmt_task *mtask, int fd)
 	int err;
 
 	adm_err = mtask_execute(mtask);
-	if (adm_err != TGTADM_SUCCESS)
-		eprintf("mgmt task processing failed, err: %d\n", adm_err);
+	set_mtask_result(mtask, adm_err);
 
+	/* whatever the result of mtask execution, a response is sent */
 	mtask->mtask_state = MTASK_STATE_HDR_SEND;
 	mtask->done = 0;
 	err = tgt_event_modify(fd, EPOLLOUT);
