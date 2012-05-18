@@ -543,7 +543,7 @@ static void smc_lu_exit(struct scsi_lu *lu)
 	free(smc);
 }
 
-static int slot_insert(struct list_head *head, int element_type, int address)
+static tgtadm_err slot_insert(struct list_head *head, int element_type, int address)
 {
 	struct slot *s;
 
@@ -559,7 +559,13 @@ static int slot_insert(struct list_head *head, int element_type, int address)
 
 	list_add_tail(&s->slot_siblings, head);
 
-	return 0;
+	return TGTADM_SUCCESS;
+}
+
+static void slot_remove(struct slot *s)
+{
+	list_del(&s->slot_siblings);
+	free(s);
 }
 
 /**
@@ -658,9 +664,18 @@ static tgtadm_err add_slt(struct scsi_lu *lu, struct tmp_param *tmp)
 			goto dont_do_slots;
 
 		adm_err = TGTADM_SUCCESS;
-		for(i = tmp->start_addr; i < (tmp->start_addr + tmp->quantity); i++)
-			if (slot_insert(&smc->slots, tmp->element_type, i))
-				adm_err = TGTADM_INVALID_REQUEST;
+		for (i = tmp->start_addr; i < (tmp->start_addr + tmp->quantity); i++) {
+			adm_err = slot_insert(&smc->slots, tmp->element_type, i);
+			if (adm_err != TGTADM_SUCCESS) {
+				int j;
+				/* remove all slots added before error */
+				for (j = tmp->start_addr; j < i; j++) {
+					s = slot_lookup(&smc->slots, tmp->element_type, j);
+					slot_remove(s);
+				}
+				break;
+			}
+		}
 	}
 
 dont_do_slots:
