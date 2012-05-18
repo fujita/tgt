@@ -243,7 +243,7 @@ extern tgtadm_err tgt_target_create(int lld, int tid, char *args);
 extern tgtadm_err tgt_target_destroy(int lld, int tid, int force);
 extern char *tgt_targetname(int tid);
 extern tgtadm_err tgt_target_show_all(struct concat_buf *b);
-int system_set_state(char *str);
+tgtadm_err system_set_state(char *str);
 tgtadm_err system_show(int mode, struct concat_buf *b);
 int is_system_available(void);
 int is_system_inactive(void);

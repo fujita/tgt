@@ -1136,7 +1136,7 @@ tgtadm_err isns_update(char *params)
 			break;
 		case Opt_state:
 			match_strncpy(tmp, &args[0], sizeof(tmp));
-			system_set_state(tmp);
+			adm_err = system_set_state(tmp);
 			break;
 		default:
 			adm_err = TGTADM_INVALID_REQUEST;

@@ -2146,18 +2146,19 @@ static char *system_state_name(enum tgt_system_state state)
 
 static enum tgt_system_state sys_state = TGT_SYSTEM_READY;
 
-int system_set_state(char *str)
+tgtadm_err system_set_state(char *str)
 {
-	int i, err = TGTADM_INVALID_REQUEST;
+	tgtadm_err adm_err = TGTADM_INVALID_REQUEST;
+	int i;
 
 	for (i = 0; i < ARRAY_SIZE(target_state); i++) {
 		if (!strcmp(system_state[i].name, str)) {
 			sys_state = system_state[i].value;
-			err = 0;
+			adm_err = TGTADM_SUCCESS;
 			break;
 		}
 	}
-	return err;
+	return adm_err;
 }
 
 tgtadm_err system_show(int mode, struct concat_buf *b)
