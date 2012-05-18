@@ -563,7 +563,7 @@ tgtadm_err iscsi_target_update(int mode, int op, int tid, uint64_t sid, uint64_t
 	return adm_err;
 }
 
-static int show_iscsi_param(struct param *param, struct concat_buf *b)
+static tgtadm_err show_iscsi_param(struct param *param, struct concat_buf *b)
 {
 	struct iscsi_key *keys = session_keys;
 	int i;
@@ -592,22 +592,23 @@ static struct iscsi_session *iscsi_target_find_session(
 
 }
 
-static int iscsi_target_show_session(struct iscsi_target *target, uint64_t sid,
-				     struct concat_buf *b)
+static tgtadm_err iscsi_target_show_session(struct iscsi_target *target, uint64_t sid,
+					    struct concat_buf *b)
 {
+	tgtadm_err adm_err = TGTADM_SUCCESS;
 	struct iscsi_session *session;
 
 	session = iscsi_target_find_session(target, sid);
-
 	if (session)
-		show_iscsi_param(session->session_param, b);
+		adm_err = show_iscsi_param(session->session_param, b);
 
-	return TGTADM_SUCCESS;
+	return adm_err;
 }
 
-static int iscsi_target_show_stats(struct iscsi_target *target, uint64_t sid,
-				   struct concat_buf *b)
+static tgtadm_err iscsi_target_show_stats(struct iscsi_target *target, uint64_t sid,
+					  struct concat_buf *b)
 {
+	tgtadm_err adm_err = TGTADM_SUCCESS;
 	struct iscsi_session *session;
 	struct iscsi_connection *conn;
 
@@ -629,15 +630,14 @@ static int iscsi_target_show_stats(struct iscsi_target *target, uint64_t sid,
 				       conn->stats.scsirsp_pdus);
 		}
 	}
-
-	return TGTADM_SUCCESS;
-
+	return adm_err;
 }
 
-static int iscsi_target_show_connections(struct iscsi_target *target,
-					 uint64_t sid,
-					 struct concat_buf *b)
+static tgtadm_err iscsi_target_show_connections(struct iscsi_target *target,
+						uint64_t sid,
+						struct concat_buf *b)
 {
+	tgtadm_err adm_err = TGTADM_SUCCESS;
 	struct iscsi_session *session;
 	struct iscsi_connection *conn;
 	char addr[128];
@@ -657,12 +657,13 @@ static int iscsi_target_show_connections(struct iscsi_target *target,
 				addr);
 		}
 	}
-	return TGTADM_SUCCESS;
+	return adm_err;
 }
 
-static int iscsi_target_show_portals(struct iscsi_target *target, uint64_t sid,
-				     struct concat_buf *b)
+static tgtadm_err iscsi_target_show_portals(struct iscsi_target *target, uint64_t sid,
+					    struct concat_buf *b)
 {
+	tgtadm_err adm_err = TGTADM_SUCCESS;
 	struct iscsi_portal *portal;
 
 	list_for_each_entry(portal, &iscsi_portals_list,
@@ -678,11 +679,13 @@ static int iscsi_target_show_portals(struct iscsi_target *target, uint64_t sid,
 			       portal->tpgt);
 	}
 
-	return TGTADM_SUCCESS;
+	return adm_err;
 }
 
-static int show_redirect_info(struct iscsi_target* target, struct concat_buf *b)
+static tgtadm_err show_redirect_info(struct iscsi_target *target, struct concat_buf *b)
 {
+	tgtadm_err adm_err = TGTADM_SUCCESS;
+
 	concat_printf(b, "RedirectAddress=%s\n", target->redirect_info.addr);
 	concat_printf(b, "RedirectPort=%s\n", target->redirect_info.port);
 	if (target->redirect_info.reason == ISCSI_LOGIN_STATUS_TGT_MOVED_TEMP)
@@ -692,10 +695,10 @@ static int show_redirect_info(struct iscsi_target* target, struct concat_buf *b)
 	else
 		concat_printf(b, "RedirectReason=Unknown\n");
 
-	return TGTADM_SUCCESS;
+	return adm_err;
 }
 
-static int show_redirect_callback(struct iscsi_target *target, struct concat_buf *b)
+static tgtadm_err show_redirect_callback(struct iscsi_target *target, struct concat_buf *b)
 {
 	concat_printf(b, "RedirectCallback=%s\n", target->redirect_info.callback);
 
@@ -706,40 +709,41 @@ tgtadm_err iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid, uint
 			     struct concat_buf *b)
 {
 	struct iscsi_target* target = NULL;
+	tgtadm_err adm_err = TGTADM_INVALID_REQUEST;
 
 	if (mode != MODE_SYSTEM && mode != MODE_PORTAL) {
 	    target = target_find_by_id(tid);
 	    if (!target)
-		    return -TGTADM_NO_TARGET;
+		    return TGTADM_NO_TARGET;
 	}
 
 	switch (mode) {
 	case MODE_SYSTEM:
-		isns_show(b);
+		adm_err = isns_show(b);
 		break;
 	case MODE_TARGET:
 		if (target->redirect_info.callback)
-			show_redirect_callback(target, b);
+			adm_err = show_redirect_callback(target, b);
 		else if (strlen(target->redirect_info.addr))
-			show_redirect_info(target, b);
+			adm_err = show_redirect_info(target, b);
 		else
-			show_iscsi_param(target->session_param, b);
+			adm_err = show_iscsi_param(target->session_param, b);
 		break;
 	case MODE_SESSION:
-		iscsi_target_show_session(target, sid, b);
+		adm_err = iscsi_target_show_session(target, sid, b);
 		break;
 	case MODE_PORTAL:
-		iscsi_target_show_portals(target, sid, b);
+		adm_err = iscsi_target_show_portals(target, sid, b);
 		break;
 	case MODE_CONNECTION:
-		iscsi_target_show_connections(target, sid, b);
+		adm_err = iscsi_target_show_connections(target, sid, b);
 		break;
 	case MODE_STATS:
-		iscsi_target_show_stats(target, sid, b);
+		adm_err = iscsi_target_show_stats(target, sid, b);
 		break;
 	default:
 		break;
 	}
 
-	return TGTADM_SUCCESS;
+	return adm_err;
 }
