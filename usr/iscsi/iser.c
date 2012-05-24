@@ -82,6 +82,7 @@ char *iser_portal_addr;
 
 #define MAX_POLL_WC 32
 
+#define DEFAULT_POOL_SIZE_MB    1024
 #define ISER_MAX_QUEUE_CMD      128     /* iSCSI cmd window size */
 
 #define MASK_BY_BIT(b)  	((1UL << b) - 1)
@@ -94,13 +95,9 @@ struct iscsi_sense_data {
 	uint8_t data[0];
 } __packed;
 
-/*
- * Number of allocatable data buffers, each of this size.  Do at least 128
- * for linux iser.  The membuf size is rounded up at initialization time
- * to the hardware page size so that allocations for direct IO devices are
- * aligned.
- */
-static int membuf_num = 16 * ISER_MAX_QUEUE_CMD;
+static size_t buf_pool_sz_mb = DEFAULT_POOL_SIZE_MB;
+
+static int membuf_num;
 static size_t membuf_size = RDMA_TRANSFER_SIZE;
 
 static int iser_conn_get(struct iser_conn *conn);
@@ -618,8 +615,12 @@ static int iser_init_rdma_buf_pool(struct iser_device *dev)
 	int shmid;
 	int i;
 
+	/* The membuf size is rounded up at initialization time to the hardware
+	   page size so that allocations for direct IO devices are aligned. */
 	membuf_size = roundup(membuf_size, pagesize);
-	pool_size = membuf_num * membuf_size;
+	pool_size = buf_pool_sz_mb * 1024 * 1024;
+	membuf_num = pool_size / membuf_size;
+	pool_size = membuf_num * membuf_size; /* reflect possible round-down */
 	pool_buf = iser_alloc_pool(pool_size, &shmid);
 	if (!pool_buf) {
 		eprintf("malloc rdma pool sz:%zu failed\n", pool_size);
@@ -3441,6 +3442,7 @@ static const char *lld_param_port = "port";
 static const char *lld_param_nop = "nop";
 static const char *lld_param_on = "on";
 static const char *lld_param_off = "off";
+static const char *lld_param_pool_sz_mb = "pool_sz_mb";
 
 static int iser_param_parser(char *p)
 {
@@ -3473,6 +3475,12 @@ static int iser_param_parser(char *p)
 				err = -EINVAL;
 				break;
 			}
+		} else if (!strncmp(p, lld_param_pool_sz_mb,
+				    strlen(lld_param_pool_sz_mb))) {
+			q = p + strlen(lld_param_pool_sz_mb) + 1;
+			buf_pool_sz_mb = atoi(q);
+			if (buf_pool_sz_mb < 128)
+				buf_pool_sz_mb = 128;
 		} else {
 			dprintf("unsupported param:%s\n", p);
 			err = -EINVAL;
