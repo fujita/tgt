@@ -32,6 +32,8 @@
 #include <sys/epoll.h>
 #include <infiniband/verbs.h>
 #include <rdma/rdma_cma.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
 
 #include "util.h"
 #include "iscsid.h"
@@ -559,16 +561,66 @@ static inline void iser_set_rsp_stat_sn(struct iscsi_session *session,
 	}
 }
 
+static uint8_t* iser_alloc_pool(size_t pool_size, int *shmid)
+{
+	int shmemid;
+	uint8_t *buf;
+
+	/* allocate memory */
+	shmemid = shmget(IPC_PRIVATE, pool_size,
+			SHM_HUGETLB | IPC_CREAT | SHM_R | SHM_W);
+
+	if (shmemid < 0) {
+		eprintf("shmget rdma pool sz:%zu failed\n", pool_size);
+		goto failed_huge_page;
+	}
+
+	/* get pointer to allocated memory */
+	buf = shmat(shmemid, NULL, 0);
+
+	if (buf == (void*)-1) {
+		eprintf("Shared memory attach failure (errno=%d %m)", errno);
+		shmctl(shmemid, IPC_RMID, NULL);
+		goto failed_huge_page;
+	}
+
+	/* mark 'to be destroyed' when process detaches from shmem segment
+	   this will clear the HugePage resources even if process if killed not nicely.
+	   From checking shmctl man page it is unlikely that it will fail here. */
+	if (shmctl(shmemid, IPC_RMID, NULL)) {
+		eprintf("Shared memory contrl mark 'to be destroyed' failed (errno=%d %m)", errno);
+	}
+
+	dprintf("Allocated huge page sz:%zu\n", pool_size);
+	*shmid = shmemid;
+	return buf;
+
+ failed_huge_page:
+	*shmid = -1;
+	return valloc(pool_size);
+}
+
+static void iser_free_pool(uint8_t *pool_buf, int shmid) {
+	if (shmid >= 0) {
+		if (shmdt(pool_buf) != 0) {
+			eprintf("shmem detach failure (errno=%d %m)", errno);
+		}
+	} else {
+		free(pool_buf);
+	}
+}
+
 static int iser_init_rdma_buf_pool(struct iser_device *dev)
 {
 	uint8_t *pool_buf, *list_buf;
 	size_t pool_size, list_size;
 	struct iser_membuf *rdma_buf;
+	int shmid;
 	int i;
 
 	membuf_size = roundup(membuf_size, pagesize);
 	pool_size = membuf_num * membuf_size;
-	pool_buf = valloc(pool_size);
+	pool_buf = iser_alloc_pool(pool_size, &shmid);
 	if (!pool_buf) {
 		eprintf("malloc rdma pool sz:%zu failed\n", pool_size);
 		return -ENOMEM;
@@ -578,7 +630,7 @@ static int iser_init_rdma_buf_pool(struct iser_device *dev)
 	list_buf = malloc(list_size);
 	if (!list_buf) {
 		eprintf("malloc list_buf sz:%zu failed\n", list_size);
-		free(pool_buf);
+		iser_free_pool(pool_buf, shmid);
 		return -ENOMEM;
 	}
 
@@ -587,13 +639,14 @@ static int iser_init_rdma_buf_pool(struct iser_device *dev)
 				    IBV_ACCESS_LOCAL_WRITE);
 	if (!dev->membuf_mr) {
 		eprintf("ibv_reg_mr failed, %m\n");
-		free(pool_buf);
+		iser_free_pool(pool_buf, shmid);
 		free(list_buf);
 		return -1;
 	}
 	dprintf("pool buf:%p list:%p mr:%p lkey:0x%x\n",
 		pool_buf, list_buf, dev->membuf_mr, dev->membuf_mr->lkey);
 
+	dev->rdma_hugetbl_shmid = shmid;
 	dev->membuf_regbuf = pool_buf;
 	dev->membuf_listbuf = list_buf;
 	INIT_LIST_HEAD(&dev->membuf_free);

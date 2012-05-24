@@ -252,6 +252,9 @@ struct iser_device {
 	struct ibv_mr *membuf_mr;
 	int waiting_for_mem;
 
+	/* shared memory identifier */
+	int rdma_hugetbl_shmid;
+
 	struct event_data poll_sched;
 
 	/* free and allocated membuf entries */
