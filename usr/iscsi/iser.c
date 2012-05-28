@@ -84,6 +84,7 @@ char *iser_portal_addr;
 
 #define DEFAULT_POOL_SIZE_MB    1024
 #define ISER_MAX_QUEUE_CMD      128     /* iSCSI cmd window size */
+#define MAX_CQ_ENTRIES          (128 * 1024)
 
 #define MASK_BY_BIT(b)  	((1UL << b) - 1)
 #define ALIGN_TO_BIT(x, b)      ((((unsigned long)x) + MASK_BY_BIT(b)) & \
@@ -3266,7 +3267,7 @@ static int iser_device_init(struct iser_device *dev)
 		eprintf("ibv_query_device failed, %m\n");
 		goto out;
 	}
-	cqe_num = dev->device_attr.max_cqe;
+	cqe_num = min(dev->device_attr.max_cqe, MAX_CQ_ENTRIES);
 	dprintf("max %d CQEs\n", cqe_num);
 
 	err = -1;
