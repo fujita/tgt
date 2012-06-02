@@ -302,10 +302,18 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 
 	/* Verify that we are not doing i/o beyond
 	   the end-of-lun */
-	if (tl && (lba + tl > lu->size)) {
-		key = ILLEGAL_REQUEST;
-		asc = ASC_LBA_OUT_OF_RANGE;
-		goto sense;
+	if (tl) {
+	        if (lba + tl > lu->size) {
+			key = ILLEGAL_REQUEST;
+			asc = ASC_LBA_OUT_OF_RANGE;
+			goto sense;
+		}
+	} else {
+	        if (lba >= lu->size) {
+			key = ILLEGAL_REQUEST;
+			asc = ASC_LBA_OUT_OF_RANGE;
+			goto sense;
+		}
 	}
 
 	cmd->offset = lba;
