@@ -353,4 +353,8 @@ int call_program(const char *cmd,
 
 void update_lbppbe(struct scsi_lu *lu, int blksize);
 
+struct service_action *
+find_service_action(struct service_action *service_action,
+		    uint32_t action);
+
 #endif

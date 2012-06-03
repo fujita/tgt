@@ -794,7 +794,7 @@ struct service_action maint_in_service_actions[] = {
 	{0, NULL}
 };
 
-static struct service_action *
+struct service_action *
 find_service_action(struct service_action *service_action, uint32_t action)
 {
 	while (service_action->cmd_perform) {

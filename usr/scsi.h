@@ -80,6 +80,7 @@
 #define WRITE_SAME_16         0x93
 #define SERVICE_ACTION_IN     0x9e
 #define	SAI_READ_CAPACITY_16  0x10
+#define	SAI_GET_LBA_STATUS    0x12
 #define REPORT_LUNS           0xa0
 #define MOVE_MEDIUM           0xa5
 #define EXCHANGE_MEDIUM       0xa6

@@ -23,6 +23,9 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  */
+#define _FILE_OFFSET_BITS 64
+#define __USE_GNU
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,6 +33,7 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <linux/fs.h>
+#include <sys/types.h>
 
 #include "list.h"
 #include "util.h"
@@ -44,6 +48,23 @@
 #define DEFAULT_BLK_SHIFT 9
 
 static unsigned int blk_shift = DEFAULT_BLK_SHIFT;
+
+static off_t find_next_data(struct scsi_lu *dev, off_t offset)
+{
+#ifdef SEEK_DATA
+	return lseek64(dev->fd, offset, SEEK_DATA);
+#else
+	return offset;
+#endif
+}
+static off_t find_next_hole(struct scsi_lu *dev, off_t offset)
+{
+#ifdef SEEK_HOLE
+	return lseek64(dev->fd, offset, SEEK_HOLE);
+#else
+	return dev->size;
+#endif
+}
 
 static int sbc_mode_page_update(struct scsi_cmd *cmd, uint8_t *data, int *changed)
 {
@@ -421,7 +442,7 @@ sense:
 	return SAM_STAT_CHECK_CONDITION;
 }
 
-static int sbc_service_action(int host_no, struct scsi_cmd *cmd)
+static int sbc_readcapacity16(int host_no, struct scsi_cmd *cmd)
 {
 	uint32_t *data;
 	unsigned int bshift;
@@ -436,9 +457,6 @@ static int sbc_service_action(int host_no, struct scsi_cmd *cmd)
 		asc = ASC_MEDIUM_NOT_PRESENT;
 		goto sense;
 	}
-
-	if (cmd->scb[1] != SAI_READ_CAPACITY_16)
-		goto sense;
 
 	if (scsi_get_in_length(cmd) < 12)
 		goto overflow;
@@ -466,6 +484,106 @@ overflow:
 sense:
 	sense_data_build(cmd, key, asc);
 	return SAM_STAT_CHECK_CONDITION;
+}
+
+static int sbc_getlbastatus(int host_no, struct scsi_cmd *cmd)
+{
+	int len = 32;
+	uint64_t offset;
+	uint32_t pdl;
+	int type;
+	unsigned char *buf;
+	unsigned char key = ILLEGAL_REQUEST;
+	uint16_t asc = ASC_INVALID_OP_CODE;
+
+	if (cmd->dev->attrs.removable && !cmd->dev->attrs.online) {
+		key = NOT_READY;
+		asc = ASC_MEDIUM_NOT_PRESENT;
+		goto sense;
+	}
+
+	if (scsi_get_in_length(cmd) < 24)
+		goto overflow;
+
+	len = scsi_get_in_length(cmd);
+	buf = scsi_get_in_buffer(cmd);
+	memset(buf, 0, len);
+
+	offset = get_unaligned_be64(&cmd->scb[2]) << cmd->dev->blk_shift;
+	if (offset >= cmd->dev->size) {
+		key = ILLEGAL_REQUEST;
+		asc = ASC_LBA_OUT_OF_RANGE;
+		goto sense;
+	}
+
+	pdl = 4;
+	put_unaligned_be32(pdl, &buf[0]);
+
+	type = 0;
+	while (len >= 4 + pdl + 16) {
+		off_t next_offset;
+
+		put_unaligned_be32(pdl + 16, &buf[0]);
+
+		if (offset >= cmd->dev->size)
+			break;
+
+		next_offset = (type == 0) ?
+			find_next_hole(cmd->dev, offset) :
+			find_next_data(cmd->dev, offset);
+		if (next_offset == offset) {
+			type = 1 - type;
+			continue;
+		}
+
+		put_unaligned_be64(offset >> cmd->dev->blk_shift,
+				   &buf[4 + pdl +  0]);
+		put_unaligned_be32((next_offset - offset)
+				   >> cmd->dev->blk_shift,
+				   &buf[4 + pdl +  8]);
+		buf[4 + pdl + 12] = type;
+
+		pdl += 16;
+		type = 1 - type;
+		offset = next_offset;
+	}
+	len = 4 + pdl;
+
+overflow:
+	scsi_set_in_resid_by_actual(cmd, len);
+	return SAM_STAT_GOOD;
+
+sense:
+	sense_data_build(cmd, key, asc);
+	return SAM_STAT_CHECK_CONDITION;
+}
+
+struct service_action sbc_service_actions[] = {
+	{SAI_READ_CAPACITY_16, sbc_readcapacity16},
+	{SAI_GET_LBA_STATUS,   sbc_getlbastatus},
+	{0, NULL}
+};
+
+
+static int sbc_service_action(int host_no, struct scsi_cmd *cmd)
+{
+	uint8_t action;
+	unsigned char op = cmd->scb[0];
+	struct service_action *service_action, *actions;
+
+	action = cmd->scb[1] & 0x1f;
+	actions = cmd->dev->dev_type_template.ops[op].service_actions;
+
+	service_action = find_service_action(actions, action);
+
+	if (!service_action) {
+		scsi_set_in_resid_by_actual(cmd, 0);
+		sense_data_build(cmd, ILLEGAL_REQUEST,
+				ASC_INVALID_FIELD_IN_CDB);
+		return SAM_STAT_CHECK_CONDITION;
+	}
+
+	return service_action->cmd_perform(host_no, cmd);
 }
 
 static int sbc_sync_cache(int host_no, struct scsi_cmd *cmd)
@@ -711,7 +829,7 @@ static struct device_type_template sbc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{sbc_service_action,},
+		{sbc_service_action, sbc_service_actions,},
 		{spc_illegal_op,},
 
 		/* 0xA0 */
