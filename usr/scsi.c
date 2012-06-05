@@ -43,6 +43,8 @@ static unsigned char scsi_command_size[8] = {6, 10, 10, 12, 16, 12, 10, 10};
 #define COMMAND_SIZE(opcode) scsi_command_size[((opcode) >> 5) & 7]
 #define CDB_SIZE(cmd) (((((cmd)->scb[0] >> 5) & 7) < 6) ? \
 				COMMAND_SIZE((cmd)->scb[0]) : (cmd)->scb_len)
+#define CDB_CONTROL(cmd) (((cmd)->scb[0] == 0x7f) ? (cmd)->scb[1] \
+			  : (cmd)->scb[CDB_SIZE((cmd))-1])
 
 int get_scsi_command_size(unsigned char op)
 {
@@ -199,7 +201,7 @@ int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd)
 	unsigned char op = cmd->scb[0];
 	struct it_nexus_lu_info *itn_lu;
 
-	if (cmd->scb[CDB_SIZE(cmd) - 1] & ((1U << 0) | (1U << 2))) {
+	if (CDB_CONTROL(cmd) & ((1U << 0) | (1U << 2))) {
 		/*
 		 * We don't support a linked command. SAM-3 say that
 		 * it's optional. It's obsolete in SAM-4.
