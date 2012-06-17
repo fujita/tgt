@@ -297,27 +297,28 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 		}
 	}
 
-	lba = scsi_rw_offset(cmd->scb) << cmd->dev->blk_shift;
-	tl  = scsi_rw_count(cmd->scb) << cmd->dev->blk_shift;
+	lba = scsi_rw_offset(cmd->scb);
+	tl  = scsi_rw_count(cmd->scb);
 
 	/* Verify that we are not doing i/o beyond
 	   the end-of-lun */
 	if (tl) {
-	        if (lba + tl > lu->size) {
+		if (lba + tl < lba ||
+		    lba + tl > lu->size >> cmd->dev->blk_shift) {
 			key = ILLEGAL_REQUEST;
 			asc = ASC_LBA_OUT_OF_RANGE;
 			goto sense;
 		}
 	} else {
-	        if (lba >= lu->size) {
+	        if (lba >= lu->size >> cmd->dev->blk_shift) {
 			key = ILLEGAL_REQUEST;
 			asc = ASC_LBA_OUT_OF_RANGE;
 			goto sense;
 		}
 	}
 
-	cmd->offset = lba;
-	cmd->tl     = tl;
+	cmd->offset = lba << cmd->dev->blk_shift;
+	cmd->tl     = tl  << cmd->dev->blk_shift;
 
 	ret = cmd->dev->bst->bs_cmd_submit(cmd);
 	if (ret) {
