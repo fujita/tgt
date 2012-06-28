@@ -585,13 +585,8 @@ static void mtask_recv_send_handler(int fd, int events, void *data)
 		err = concat_write(&mtask->rsp_concat, fd, mtask->done);
 		if (err >= 0) {
 			mtask->done += err;
-			if (mtask->done == (rsp->len - sizeof(*rsp))) {
-				if (req->mode == MODE_SYSTEM &&
-				    req->op == OP_DELETE &&
-				    !rsp->err)
-					system_active = 0;
+			if (mtask->done == (rsp->len - sizeof(*rsp)))
 				goto out;
-			}
 		} else
 			if (errno != EAGAIN)
 				goto out;
@@ -603,6 +598,8 @@ static void mtask_recv_send_handler(int fd, int events, void *data)
 
 	return;
 out:
+	if (req->mode == MODE_SYSTEM && req->op == OP_DELETE && !rsp->err)
+		system_active = 0;
 	tgt_event_del(fd);
 	close(fd);
 	mtask_free(mtask);
