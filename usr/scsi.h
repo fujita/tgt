@@ -72,6 +72,7 @@
 #define PERSISTENT_RESERVE_OUT 0x5f
 #define VARLEN_CDB            0x7f
 #define READ_16               0x88
+#define COMPARE_AND_WRITE     0x89
 #define WRITE_16              0x8a
 #define WRITE_VERIFY_16       0x8e
 #define VERIFY_16	      0x8f

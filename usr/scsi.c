@@ -137,6 +137,7 @@ uint64_t scsi_rw_offset(uint8_t *scb)
 	case WRITE_VERIFY_16:
 	case WRITE_SAME_16:
 	case SYNCHRONIZE_CACHE_16:
+	case COMPARE_AND_WRITE:
 		off = (uint64_t)scb[2] << 56 | (uint64_t)scb[3] << 48 |
 			(uint64_t)scb[4] << 40 | (uint64_t)scb[5] << 32 |
 			(uint64_t)scb[6] << 24 | (uint64_t)scb[7] << 16 |
@@ -186,6 +187,9 @@ uint32_t scsi_rw_count(uint8_t *scb)
 	case SYNCHRONIZE_CACHE_16:
 		cnt = (uint32_t)scb[10] << 24 | (uint32_t)scb[11] << 16 |
 			(uint32_t)scb[12] << 8 | (uint32_t)scb[13];
+		break;
+	case COMPARE_AND_WRITE:
+		cnt = (uint32_t)scb[13];
 		break;
 	default:
 		cnt = 0;
@@ -277,6 +281,7 @@ int scsi_is_io_opcode(unsigned char op)
 	case WRITE_16:
 	case VERIFY_16:
 	case WRITE_VERIFY_16:
+	case COMPARE_AND_WRITE:
 		ret = 1;
 		break;
 	default:
@@ -299,6 +304,7 @@ enum data_direction scsi_data_dir_opcode(unsigned char op)
 	case WRITE_VERIFY:
 	case WRITE_VERIFY_12:
 	case WRITE_VERIFY_16:
+	case COMPARE_AND_WRITE:
 		dir = DATA_WRITE;
 		break;
 	default:

@@ -75,6 +75,35 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 
 	switch (cmd->scb[0])
 	{
+	case COMPARE_AND_WRITE:
+		length = scsi_get_out_length(cmd);
+
+		tmpbuf = malloc(length);
+		if (!tmpbuf) {
+			result = SAM_STAT_CHECK_CONDITION;
+			key = HARDWARE_ERROR;
+			asc = ASC_INTERNAL_TGT_FAILURE;
+			break;
+		}
+
+		ret = pread64(fd, tmpbuf, length, offset);
+
+		if (ret != length)
+			set_medium_error(&result, &key, &asc);
+		else if (memcmp(scsi_get_out_buffer(cmd), tmpbuf, length)) {
+			result = SAM_STAT_CHECK_CONDITION;
+			key = MISCOMPARE;
+			asc = ASC_MISCOMPARE_DURING_VERIFY_OPERATION;
+		}
+
+		if (cmd->scb[1] & 0x10)
+			posix_fadvise(fd, offset, length,
+				      POSIX_FADV_NOREUSE);
+
+		free(tmpbuf);
+
+		goto write;
+		break;
 	case SYNCHRONIZE_CACHE:
 	case SYNCHRONIZE_CACHE_16:
 		/* TODO */
@@ -95,6 +124,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 	case WRITE_10:
 	case WRITE_12:
 	case WRITE_16:
+write:
 		length = scsi_get_out_length(cmd);
 		ret = pwrite64(fd, scsi_get_out_buffer(cmd), length,
 			       offset);
