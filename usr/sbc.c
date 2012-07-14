@@ -242,6 +242,7 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 	case WRITE_10:
 	case WRITE_12:
 	case WRITE_16:
+	case ORWRITE_16:
 	case WRITE_VERIFY:
 	case WRITE_VERIFY_12:
 	case WRITE_VERIFY_16:
@@ -290,6 +291,7 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 		case WRITE_10:
 		case WRITE_12:
 		case WRITE_16:
+		case ORWRITE_16:
 		case WRITE_VERIFY:
 		case WRITE_VERIFY_12:
 		case WRITE_VERIFY_16:
@@ -833,7 +835,7 @@ static struct device_type_template sbc_template = {
 		{sbc_rw, NULL, PR_EA_FA|PR_EA_FN},
 		{sbc_rw, NULL, PR_EA_FA|PR_EA_FN},
 		{sbc_rw, NULL, PR_WE_FA|PR_EA_FA|PR_WE_FN|PR_EA_FN},
-		{spc_illegal_op,},
+		{sbc_rw, NULL, PR_EA_FA|PR_EA_FN},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{sbc_rw, NULL, PR_EA_FA|PR_EA_FN},

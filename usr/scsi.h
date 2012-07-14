@@ -74,6 +74,7 @@
 #define READ_16               0x88
 #define COMPARE_AND_WRITE     0x89
 #define WRITE_16              0x8a
+#define ORWRITE_16            0x8b
 #define WRITE_VERIFY_16       0x8e
 #define VERIFY_16	      0x8f
 #define PRE_FETCH_16          0x90

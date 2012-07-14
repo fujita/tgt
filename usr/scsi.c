@@ -133,6 +133,7 @@ uint64_t scsi_rw_offset(uint8_t *scb)
 	case READ_16:
 	case PRE_FETCH_16:
 	case WRITE_16:
+	case ORWRITE_16:
 	case VERIFY_16:
 	case WRITE_VERIFY_16:
 	case WRITE_SAME_16:
@@ -181,6 +182,7 @@ uint32_t scsi_rw_count(uint8_t *scb)
 	case READ_16:
 	case PRE_FETCH_16:
 	case WRITE_16:
+	case ORWRITE_16:
 	case VERIFY_16:
 	case WRITE_VERIFY_16:
 	case WRITE_SAME_16:
@@ -279,6 +281,7 @@ int scsi_is_io_opcode(unsigned char op)
 	case WRITE_VERIFY_12:
 	case READ_16:
 	case WRITE_16:
+	case ORWRITE_16:
 	case VERIFY_16:
 	case WRITE_VERIFY_16:
 	case COMPARE_AND_WRITE:
@@ -301,6 +304,7 @@ enum data_direction scsi_data_dir_opcode(unsigned char op)
 	case WRITE_10:
 	case WRITE_12:
 	case WRITE_16:
+	case ORWRITE_16:
 	case WRITE_VERIFY:
 	case WRITE_VERIFY_12:
 	case WRITE_VERIFY_16:
