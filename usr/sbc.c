@@ -242,6 +242,9 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 	case WRITE_10:
 	case WRITE_12:
 	case WRITE_16:
+	case WRITE_VERIFY:
+	case WRITE_VERIFY_12:
+	case WRITE_VERIFY_16:
 		/* We only support protection information type 0 */
 		if (cmd->scb[1] & 0xe0) {
 			key = ILLEGAL_REQUEST;
@@ -286,6 +289,9 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 		case WRITE_10:
 		case WRITE_12:
 		case WRITE_16:
+		case WRITE_VERIFY:
+		case WRITE_VERIFY_12:
+		case WRITE_VERIFY_16:
 		case WRITE_SAME:
 		case WRITE_SAME_16:
 		case PRE_FETCH_10:
@@ -750,7 +756,7 @@ static struct device_type_template sbc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{sbc_rw, NULL, PR_EA_FA|PR_EA_FN},
 		{sbc_verify, NULL, PR_EA_FA|PR_EA_FN},
 
 		/* 0x30 */
@@ -828,7 +834,7 @@ static struct device_type_template sbc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{sbc_rw, NULL, PR_EA_FA|PR_EA_FN},
 		{sbc_verify, NULL, PR_EA_FA|PR_EA_FN},
 
 		/* 0x90 */
@@ -866,7 +872,7 @@ static struct device_type_template sbc_template = {
 		{spc_illegal_op,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{sbc_rw, NULL, PR_EA_FA|PR_EA_FN},
 		{sbc_verify, NULL, PR_EA_FA|PR_EA_FN},
 
 		[0xb0 ... 0xff] = {spc_illegal_op},

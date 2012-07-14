@@ -294,9 +294,11 @@ enum data_direction scsi_data_dir_opcode(unsigned char op)
 	switch (op) {
 	case WRITE_6:
 	case WRITE_10:
-	case WRITE_VERIFY:
 	case WRITE_12:
 	case WRITE_16:
+	case WRITE_VERIFY:
+	case WRITE_VERIFY_12:
+	case WRITE_VERIFY_16:
 		dir = DATA_WRITE;
 		break;
 	default:

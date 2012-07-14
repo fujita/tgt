@@ -68,6 +68,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 	size_t blocksize;
 	uint64_t offset = cmd->offset;
 	uint32_t tl     = cmd->tl;
+	int do_verify = 0;
 
 	ret = length = 0;
 	key = asc = 0;
@@ -86,6 +87,10 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 		} else
 			bs_sync_sync_range(cmd, length, &result, &key, &asc);
 		break;
+	case WRITE_VERIFY:
+	case WRITE_VERIFY_12:
+	case WRITE_VERIFY_16:
+		do_verify = 1;
 	case WRITE_6:
 	case WRITE_10:
 	case WRITE_12:
@@ -110,7 +115,8 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 		if ((cmd->scb[0] != WRITE_6) && (cmd->scb[1] & 0x10))
 			posix_fadvise(fd, offset, length,
 				      POSIX_FADV_NOREUSE);
-
+		if (do_verify)
+			goto verify;
 		break;
 	case WRITE_SAME:
 	case WRITE_SAME_16:
@@ -176,6 +182,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 	case VERIFY_10:
 	case VERIFY_12:
 	case VERIFY_16:
+verify:
 		length = scsi_get_out_length(cmd);
 
 		tmpbuf = malloc(length);
