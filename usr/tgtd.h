@@ -92,9 +92,31 @@ struct ua_sense {
 	int ua_sense_len;
 };
 
+struct lu_stat {
+	uint64_t rd_subm_bytes;
+	uint64_t rd_done_bytes;
+
+	uint64_t wr_subm_bytes;
+	uint64_t wr_done_bytes;
+
+	uint32_t rd_subm_cmds;
+	uint32_t rd_done_cmds;
+
+	uint32_t wr_subm_cmds;
+	uint32_t wr_done_cmds;
+
+	uint32_t bidir_subm_cmds;
+	uint32_t bidir_done_cmds;
+
+	uint32_t err_num;
+};
+
 struct it_nexus_lu_info {
 	struct scsi_lu *lu;
-	struct list_head lu_info_siblings;
+	uint64_t itn_id;
+	struct lu_stat stat;
+	struct list_head itn_itl_info_siblings;
+	struct list_head lu_itl_info_siblings;
 	struct list_head pending_ua_sense_list;
 	int prevent; /* prevent removal on this itl nexus ? */
 };
@@ -173,6 +195,8 @@ struct scsi_lu {
 
 	/* the list of devices belonging to a target */
 	struct list_head device_siblings;
+
+	struct list_head lu_itl_info_list;
 
 	struct tgt_cmd_queue cmd_queue;
 
@@ -280,6 +304,7 @@ extern enum mgmt_req_result target_mgmt_request(int tid, uint64_t itn_id,
 						uint8_t *lun, uint64_t tag,
 						int host_no);
 
+extern struct it_nexus *it_nexus_lookup(int tid, uint64_t itn_id);
 extern void target_cmd_io_done(struct scsi_cmd *cmd, int result);
 extern int ua_sense_del(struct scsi_cmd *cmd, int del);
 extern void ua_sense_clear(struct it_nexus_lu_info *itn_lu, uint16_t asc);

@@ -207,6 +207,18 @@ int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd)
 	unsigned char op = cmd->scb[0];
 	struct it_nexus_lu_info *itn_lu;
 
+	if (scsi_get_data_dir(cmd) == DATA_WRITE) {
+		cmd->itn_lu_info->stat.wr_subm_bytes += scsi_get_out_length(cmd);
+		cmd->itn_lu_info->stat.wr_subm_cmds++;
+	} else if (scsi_get_data_dir(cmd) == DATA_READ) {
+		cmd->itn_lu_info->stat.rd_subm_bytes += scsi_get_in_length(cmd);
+		cmd->itn_lu_info->stat.rd_subm_cmds++;
+	} else if (scsi_get_data_dir(cmd) == DATA_BIDIRECTIONAL) {
+		cmd->itn_lu_info->stat.wr_subm_bytes += scsi_get_out_length(cmd);
+		cmd->itn_lu_info->stat.rd_subm_bytes += scsi_get_in_length(cmd);
+		cmd->itn_lu_info->stat.bidir_subm_cmds++;
+	}
+
 	if (CDB_CONTROL(cmd) & ((1U << 0) | (1U << 2))) {
 		/*
 		 * We don't support a linked command. SAM-3 say that
@@ -241,8 +253,8 @@ int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd)
 		break;
 	case REPORT_LUNS:
 		list_for_each_entry(itn_lu,
-				    &cmd->it_nexus->it_nexus_lu_info_list,
-				    lu_info_siblings)
+				    &cmd->it_nexus->itn_itl_info_list,
+				    itn_itl_info_siblings)
 			ua_sense_clear(itn_lu,
 				       ASC_REPORTED_LUNS_DATA_HAS_CHANGED);
 		break;

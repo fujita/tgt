@@ -81,7 +81,7 @@ static int target_name_lookup(char *name)
 	return 0;
 }
 
-static struct it_nexus *it_nexus_lookup(int tid, uint64_t itn_id)
+struct it_nexus *it_nexus_lookup(int tid, uint64_t itn_id)
 {
 	struct target *target;
 	struct it_nexus *itn;
@@ -196,14 +196,15 @@ static void it_nexus_del_lu_info(struct it_nexus *itn)
 {
 	struct it_nexus_lu_info *itn_lu;
 
-	while(!list_empty(&itn->it_nexus_lu_info_list)) {
-		itn_lu = list_first_entry(&itn->it_nexus_lu_info_list,
+	while (!list_empty(&itn->itn_itl_info_list)) {
+		itn_lu = list_first_entry(&itn->itn_itl_info_list,
 					  struct it_nexus_lu_info,
-					  lu_info_siblings);
+					  itn_itl_info_siblings);
 
 		ua_sense_pending_del(itn_lu);
 
-		list_del(&itn_lu->lu_info_siblings);
+		list_del(&itn_lu->itn_itl_info_siblings);
+		list_del(&itn_lu->lu_itl_info_siblings);
 		free(itn_lu);
 	}
 }
@@ -220,8 +221,8 @@ void ua_sense_add_other_it_nexus(uint64_t itn_id, struct scsi_lu *lu,
 		if (itn->itn_id == itn_id)
 			continue;
 
-		list_for_each_entry(itn_lu, &itn->it_nexus_lu_info_list,
-				    lu_info_siblings) {
+		list_for_each_entry(itn_lu, &itn->itn_itl_info_list,
+				    itn_itl_info_siblings) {
 
 			if (itn_lu->lu != lu)
 				continue;
@@ -244,8 +245,8 @@ void ua_sense_add_it_nexus(uint64_t itn_id, struct scsi_lu *lu,
 	list_for_each_entry(itn, &lu->tgt->it_nexus_list, nexus_siblings) {
 
 		if (itn->itn_id == itn_id) {
-			list_for_each_entry(itn_lu, &itn->it_nexus_lu_info_list,
-					    lu_info_siblings) {
+			list_for_each_entry(itn_lu, &itn->itn_itl_info_list,
+					    itn_itl_info_siblings) {
 
 				if (itn_lu->lu == lu) {
 					ret = ua_sense_add(itn_lu, asc);
@@ -267,8 +268,8 @@ int lu_prevent_removal(struct scsi_lu *lu)
 	struct it_nexus_lu_info *itn_lu;
 
 	list_for_each_entry(itn, &lu->tgt->it_nexus_list, nexus_siblings) {
-		list_for_each_entry(itn_lu, &itn->it_nexus_lu_info_list,
-				    lu_info_siblings) {
+		list_for_each_entry(itn_lu, &itn->itn_itl_info_list,
+				    itn_itl_info_siblings) {
 			if (itn_lu->lu == lu) {
 				if (itn_lu->prevent & PREVENT_REMOVAL)
 					return 1;
@@ -306,7 +307,7 @@ int it_nexus_create(int tid, uint64_t itn_id, int host_no, char *info)
 	itn->host_no = host_no;
 	itn->nexus_target = target;
 	itn->info = info;
-	INIT_LIST_HEAD(&itn->it_nexus_lu_info_list);
+	INIT_LIST_HEAD(&itn->itn_itl_info_list);
 	gettimeofday(&tv, NULL);
 	itn->ctime = tv.tv_sec;
 
@@ -315,14 +316,18 @@ int it_nexus_create(int tid, uint64_t itn_id, int host_no, char *info)
 		if (!itn_lu)
 			goto out;
 		itn_lu->lu = lu;
+		itn_lu->itn_id = itn_id;
 		INIT_LIST_HEAD(&itn_lu->pending_ua_sense_list);
 
 		ret = ua_sense_add(itn_lu, ASC_POWERON_RESET);
 		if (ret)
 			goto out;
 
-		list_add(&itn_lu->lu_info_siblings,
-			 &itn->it_nexus_lu_info_list);
+		list_add_tail(&itn_lu->lu_itl_info_siblings,
+			      &lu->lu_itl_info_list);
+
+		list_add(&itn_lu->itn_itl_info_siblings,
+			 &itn->itn_itl_info_list);
 	}
 
 	INIT_LIST_HEAD(&itn->cmd_list);
@@ -472,7 +477,7 @@ tgtadm_err tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	struct scsi_lu *lu, *pos;
 	struct device_type_template *t;
 	struct backingstore_template *bst;
-	struct it_nexus_lu_info *itn_lu;
+	struct it_nexus_lu_info *itn_lu, *itn_lu_pos;
 	struct it_nexus *itn;
 	char strflags[128];
 
@@ -573,6 +578,7 @@ tgtadm_err tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 
 	tgt_cmd_queue_init(&lu->cmd_queue);
 	INIT_LIST_HEAD(&lu->registration_list);
+	INIT_LIST_HEAD(&lu->lu_itl_info_list);
 	lu->prgeneration = 0;
 	lu->pr_holder = NULL;
 
@@ -635,21 +641,24 @@ tgtadm_err tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 		if (!itn_lu)
 			break;
 		itn_lu->lu = lu;
+		itn_lu->itn_id = itn->itn_id;
 		INIT_LIST_HEAD(&itn_lu->pending_ua_sense_list);
 
-		list_add(&itn_lu->lu_info_siblings,
-			 &itn->it_nexus_lu_info_list);
-	}
+		/* signal LUNs info change thru all existing LUNs in the nexus */
+		list_for_each_entry(itn_lu_pos, &itn->itn_itl_info_list,
+				    itn_itl_info_siblings) {
 
-	list_for_each_entry(itn, &target->it_nexus_list, nexus_siblings) {
-		list_for_each_entry(itn_lu, &itn->it_nexus_lu_info_list,
-				    lu_info_siblings) {
-
-			if (ua_sense_add(itn_lu, ASC_REPORTED_LUNS_DATA_HAS_CHANGED)) {
+			if (ua_sense_add(itn_lu_pos, ASC_REPORTED_LUNS_DATA_HAS_CHANGED)) {
 				adm_err = TGTADM_NOMEM;
 				goto fail_bs_init;
 			}
 		}
+
+		list_add_tail(&itn_lu->lu_itl_info_siblings,
+			      &lu->lu_itl_info_list);
+
+		list_add(&itn_lu->itn_itl_info_siblings,
+			 &itn->itn_itl_info_list);
 	}
 
 	if (backing && !path)
@@ -711,8 +720,8 @@ tgtadm_err tgt_device_destroy(int tid, uint64_t lun, int force)
 		lu->bst->bs_exit(lu);
 
 	list_for_each_entry(itn, &target->it_nexus_list, nexus_siblings) {
-		list_for_each_entry_safe(itn_lu, next, &itn->it_nexus_lu_info_list,
-					 lu_info_siblings) {
+		list_for_each_entry_safe(itn_lu, next, &itn->itn_itl_info_list,
+					 itn_itl_info_siblings) {
 			if (itn_lu->lu == lu) {
 				ua_sense_pending_del(itn_lu);
 				break;
@@ -730,8 +739,8 @@ tgtadm_err tgt_device_destroy(int tid, uint64_t lun, int force)
 	free(lu);
 
 	list_for_each_entry(itn, &target->it_nexus_list, nexus_siblings) {
-		list_for_each_entry(itn_lu, &itn->it_nexus_lu_info_list,
-				    lu_info_siblings) {
+		list_for_each_entry(itn_lu, &itn->itn_itl_info_list,
+				    itn_itl_info_siblings) {
 
 			ret = ua_sense_add(itn_lu,
 					   ASC_REPORTED_LUNS_DATA_HAS_CHANGED);
@@ -951,8 +960,8 @@ static struct it_nexus_lu_info *it_nexus_lu_info_lookup(struct it_nexus *itn,
 {
 	struct it_nexus_lu_info *itn_lu;
 
-	list_for_each_entry(itn_lu, &itn->it_nexus_lu_info_list,
-			    lu_info_siblings) {
+	list_for_each_entry(itn_lu, &itn->itn_itl_info_list,
+			    itn_itl_info_siblings) {
 		if (itn_lu->lu->lun == lun)
 			return itn_lu;
 	}
@@ -1061,6 +1070,20 @@ int target_cmd_perform_passthrough(int tid, struct scsi_cmd *cmd)
 void target_cmd_io_done(struct scsi_cmd *cmd, int result)
 {
 	scsi_set_result(cmd, result);
+	if (scsi_get_data_dir(cmd) == DATA_WRITE) {
+		cmd->itn_lu_info->stat.wr_done_bytes += scsi_get_out_length(cmd);
+		cmd->itn_lu_info->stat.wr_done_cmds++;
+	} else if (scsi_get_data_dir(cmd) == DATA_READ) {
+		cmd->itn_lu_info->stat.rd_done_bytes += scsi_get_in_length(cmd);
+		cmd->itn_lu_info->stat.rd_done_cmds++;
+	} else if (scsi_get_data_dir(cmd) == DATA_BIDIRECTIONAL) {
+		cmd->itn_lu_info->stat.wr_done_bytes += scsi_get_out_length(cmd);
+		cmd->itn_lu_info->stat.rd_done_bytes += scsi_get_in_length(cmd);
+		cmd->itn_lu_info->stat.bidir_done_cmds++;
+	}
+	if (result != SAM_STAT_GOOD)
+		cmd->itn_lu_info->stat.err_num++;
+
 	tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->cmd_itn_id,
 							result, cmd);
 	return;
@@ -1241,8 +1264,8 @@ enum mgmt_req_result target_mgmt_request(int tid, uint64_t itn_id,
 			send = 0;
 
 		list_for_each_entry(itn, &target->it_nexus_list, nexus_siblings) {
-			list_for_each_entry(itn_lu, &itn->it_nexus_lu_info_list,
-					    lu_info_siblings) {
+			list_for_each_entry(itn_lu, &itn->itn_itl_info_list,
+					    itn_itl_info_siblings) {
 				if (itn_lu->lu->lun == lun) {
 					if (itn->itn_id == itn_id)
 						asc = ASC_POWERON_RESET;
@@ -1263,8 +1286,8 @@ enum mgmt_req_result target_mgmt_request(int tid, uint64_t itn_id,
 			send = 0;
 
 		list_for_each_entry(itn, &target->it_nexus_list, nexus_siblings) {
-			list_for_each_entry(itn_lu, &itn->it_nexus_lu_info_list,
-					    lu_info_siblings) {
+			list_for_each_entry(itn_lu, &itn->itn_itl_info_list,
+					    itn_itl_info_siblings) {
 				if (itn_lu->lu->lun == lun) {
 					ua_sense_add(itn_lu, ASC_POWERON_RESET);
 					break;
