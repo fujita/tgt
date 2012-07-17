@@ -182,15 +182,15 @@ static int sbc_unmap(int host_no, struct scsi_cmd *cmd)
 		goto sense;
 	}
 
-	if (!lu->attrs.thinprovisioning) {
-		key = ILLEGAL_REQUEST;
-		asc = ASC_INVALID_OP_CODE;
-		goto sense;
-	}
-
 	if (lu->attrs.removable && !lu->attrs.online) {
 		key = NOT_READY;
 		asc = ASC_MEDIUM_NOT_PRESENT;
+		goto sense;
+	}
+
+	if (!lu->attrs.thinprovisioning) {
+		key = ILLEGAL_REQUEST;
+		asc = ASC_INVALID_OP_CODE;
 		goto sense;
 	}
 
