@@ -244,3 +244,29 @@ tgtadm_err conn_close_admin(uint32_t tid, uint64_t sid, uint32_t cid)
 
 	return sess_found ? TGTADM_NO_CONNECTION : TGTADM_NO_SESSION;
 }
+
+void iscsi_update_conn_stats_rx(struct iscsi_connection *conn, int size, int opcode)
+{
+	conn->stats.rxdata_octets += (uint64_t)size;
+
+	if (unlikely(opcode < 0))
+		return;
+
+	if (opcode == ISCSI_OP_SCSI_CMD)
+		conn->stats.scsicmd_pdus++;
+	else if (opcode == ISCSI_OP_SCSI_DATA_OUT)
+		conn->stats.dataout_pdus++;
+}
+
+void iscsi_update_conn_stats_tx(struct iscsi_connection *conn, int size, int opcode)
+{
+	conn->stats.txdata_octets += (uint64_t)size;
+
+	if (unlikely(opcode < 0))
+		return;
+
+	if (opcode == ISCSI_OP_SCSI_DATA_IN)
+		conn->stats.datain_pdus++;
+	else if (opcode == ISCSI_OP_SCSI_CMD_RSP)
+		conn->stats.scsirsp_pdus++;
+}

@@ -2406,7 +2406,6 @@ static int iser_scsi_cmd_rx(struct iser_task *task)
 			task->unsol_remains = 0;
 			task->rdma_rd_sz = 0;
 			task->rdma_rd_remains = 0;
-
 		} else {
 			scsi_set_data_dir(&task->scmd, DATA_NONE);
 			task->out_len = 0;
@@ -2717,6 +2716,8 @@ static int iser_parse_req_headers(struct iser_task *task)
 	struct iser_conn *conn = task->conn;
 	struct iser_hdr *iser_hdr = task->pdu.iser_hdr;
 	struct iscsi_hdr *iscsi_hdr = task->pdu.bhs;
+	unsigned pdu_dlength = ntoh24(iscsi_hdr->dlength);
+	unsigned pdu_len = pdu_dlength + sizeof(struct iscsi_hdr);
 	int err = -1;
 
 	switch (iser_hdr->flags & 0xF0) {
@@ -2754,12 +2755,14 @@ static int iser_parse_req_headers(struct iser_task *task)
 
 	task->pdu.ahssize = iscsi_hdr->hlength * 4;
 	task->pdu.membuf.addr += task->pdu.ahssize;
-	task->pdu.membuf.size = ntoh24(iscsi_hdr->dlength);
+	pdu_len += task->pdu.ahssize;
+	task->pdu.membuf.size = pdu_dlength;
 	task->pdu.membuf.rdma = 0;
 
 	task->tag = iscsi_hdr->itt;
 	task->cmd_sn = be32_to_cpu(iscsi_hdr->statsn);
 	conn->h.exp_stat_sn = be32_to_cpu(iscsi_hdr->exp_statsn);
+	iscsi_update_conn_stats_rx(&conn->h, pdu_len, task->opcode);
 
 	return err;
 }
@@ -2884,9 +2887,11 @@ static void iser_tx_complete_handler(struct iser_work_req *txd)
 {
 	struct iser_task *task = txd->task;
 	struct iser_conn *conn = task->conn;
+	int opcode = task->pdu.bhs->opcode & ISCSI_OPCODE_MASK;
 
-	dprintf("conn:%p task:%p tag:0x%04"PRIx64 "\n",
-		&conn->h, task, task->tag);
+	iscsi_update_conn_stats_tx(&conn->h, txd->sge.length, opcode);
+	dprintf("conn:%p task:%p tag:0x%04"PRIx64 " opcode:0x%x\n",
+		&conn->h, task, task->tag, opcode);
 	iser_conn_put(conn);
 
 	list_del(&task->tx_list); /* remove from conn->sent_list */
@@ -2909,6 +2914,7 @@ static void iser_rdma_wr_complete_handler(struct iser_work_req *rdmad)
 	struct iser_task *task = rdmad->task;
 	struct iser_conn *conn = task->conn;
 
+	iscsi_update_conn_stats_tx(&conn->h, rdmad->sge.length, ISCSI_OP_SCSI_DATA_IN);
 	dprintf("conn:%p task:%p tag:0x%04"PRIx64 "\n",
 		&conn->h, task, task->tag);
 	iser_conn_put(conn);
@@ -2922,6 +2928,7 @@ static void iser_rdma_rd_complete_handler(struct iser_work_req *rdmad)
 	struct iser_task *task = rdmad->task;
 	struct iser_conn *conn = task->conn;
 
+	iscsi_update_conn_stats_rx(&conn->h, rdmad->sge.length, ISCSI_OP_SCSI_DATA_OUT);
 	task->rdma_rd_remains -= rdmad->sge.length;
 	dprintf("conn:%p task:%p tag:0x%04"PRIx64 ", rems rdma:%d unsol:%d\n",
 		&conn->h, task, task->tag, task->rdma_rd_remains,

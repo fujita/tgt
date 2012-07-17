@@ -1942,7 +1942,7 @@ nodata:
 
 static int do_recv(struct iscsi_connection *conn, int next_state)
 {
-	int ret;
+	int ret, opcode;
 
 	ret = conn->tp->ep_read(conn, conn->rx_buffer, conn->rx_size);
 	if (!ret) {
@@ -1955,20 +1955,12 @@ static int do_recv(struct iscsi_connection *conn, int next_state)
 			return -EIO;
 	}
 
-	conn->stats.rxdata_octets += ret;
 	conn->rx_size -= ret;
 	conn->rx_buffer += ret;
 
-	if (conn->rx_iostate == IOSTATE_RX_BHS) {
-		switch (conn->req.bhs.opcode & ISCSI_OPCODE_MASK) {
-		case ISCSI_OP_SCSI_CMD:
-			conn->stats.scsicmd_pdus++;
-			break;
-		case ISCSI_OP_SCSI_DATA_OUT:
-			conn->stats.dataout_pdus++;
-		}
-	}
-
+	opcode = (conn->rx_iostate == IOSTATE_RX_BHS) ?
+		(conn->req.bhs.opcode & ISCSI_OPCODE_MASK) : -1;
+	iscsi_update_conn_stats_rx(conn, ret, opcode);
 
 	if (!conn->rx_size)
 		conn->rx_iostate = next_state;
@@ -2140,7 +2132,7 @@ again:
 
 static int do_send(struct iscsi_connection *conn, int next_state)
 {
-	int ret;
+	int ret, opcode;
 again:
 	ret = conn->tp->ep_write_begin(conn, conn->tx_buffer, conn->tx_size);
 	if (ret < 0) {
@@ -2152,20 +2144,12 @@ again:
 		return -EIO;
 	}
 
-	conn->stats.txdata_octets += ret;
 	conn->tx_size -= ret;
 	conn->tx_buffer += ret;
 
-	if (conn->tx_iostate == IOSTATE_TX_BHS) {
-		switch (conn->rsp.bhs.opcode) {
-		case ISCSI_OP_SCSI_DATA_IN:
-			conn->stats.datain_pdus++;
-			break;
-		case ISCSI_OP_SCSI_CMD_RSP:
-			conn->stats.scsirsp_pdus++;
-			break;
-		}
-	}
+	opcode = (conn->tx_iostate == IOSTATE_TX_BHS) ?
+			(conn->req.bhs.opcode & ISCSI_OPCODE_MASK) : -1;
+	iscsi_update_conn_stats_tx(conn, ret, opcode);
 
 	if (conn->tx_size)
 		goto again;
