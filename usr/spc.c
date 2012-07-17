@@ -345,17 +345,21 @@ sense:
 int spc_start_stop(int host_no, struct scsi_cmd *cmd)
 {
 	uint8_t *scb = cmd->scb;
-	int start, loej;
+	int start, loej, pwrcnd;
 
 	scsi_set_in_resid_by_actual(cmd, 0);
 
 	if (device_reserved(cmd))
 		return SAM_STAT_RESERVATION_CONFLICT;
 
-	loej  = scb[4] & 0x02;
-	start = scb[4] & 0x01;
+	pwrcnd = scb[4] & 0xf0;
+	if (pwrcnd)
+		return SAM_STAT_GOOD;
 
-	if (loej == 1 && start == 0) {
+	loej   = scb[4] & 0x02;
+	start  = scb[4] & 0x01;
+
+	if (loej && !start && cmd->dev->attrs.removable) {
 		if (lu_prevent_removal(cmd->dev)) {
 			if (cmd->dev->attrs.online) {
 				/*  online == media is present */
@@ -370,7 +374,7 @@ int spc_start_stop(int host_no, struct scsi_cmd *cmd)
 		}
 		spc_lu_offline(cmd->dev);
 	}
-	if (loej == 1 && start == 1)
+	if (loej && start && cmd->dev->attrs.removable)
 		spc_lu_online(cmd->dev);
 
 	return SAM_STAT_GOOD;
