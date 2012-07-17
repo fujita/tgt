@@ -605,34 +605,6 @@ static tgtadm_err iscsi_target_show_session(struct iscsi_target *target, uint64_
 	return adm_err;
 }
 
-static tgtadm_err iscsi_target_show_stats(struct iscsi_target *target, uint64_t sid,
-					  struct concat_buf *b)
-{
-	tgtadm_err adm_err = TGTADM_SUCCESS;
-	struct iscsi_session *session;
-	struct iscsi_connection *conn;
-
-	session = iscsi_target_find_session(target, sid);
-
-	if (session) {
-		list_for_each_entry(conn, &session->conn_list, clist) {
-			concat_printf(b, "rxdata_octets: %" PRIu64 "\n"
-				       "txdata_octets: %" PRIu64 "\n"
-				       "dataout_pdus:  %d\n"
-				       "datain_pdus:   %d\n"
-				       "scsicmd_pdus:  %d\n"
-				       "scsirsp_pdus:  %d\n",
-				       conn->stats.rxdata_octets,
-				       conn->stats.txdata_octets,
-				       conn->stats.dataout_pdus,
-				       conn->stats.datain_pdus,
-				       conn->stats.scsicmd_pdus,
-				       conn->stats.scsirsp_pdus);
-		}
-	}
-	return adm_err;
-}
-
 static tgtadm_err iscsi_target_show_connections(struct iscsi_target *target,
 						uint64_t sid,
 						struct concat_buf *b)
@@ -738,8 +710,140 @@ tgtadm_err iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid, uint
 	case MODE_CONNECTION:
 		adm_err = iscsi_target_show_connections(target, sid, b);
 		break;
-	case MODE_STATS:
-		adm_err = iscsi_target_show_stats(target, sid, b);
+	default:
+		break;
+	}
+
+	return adm_err;
+}
+
+static void _stat_iscsi_conn_hdr(struct concat_buf *b)
+{
+	concat_printf(b,
+		"sid cid rxdata_octets txdata_octets dataout_pdus datain_pdus cmd_pdus rsp_pdus\n");
+}
+
+static void _stat_iscsi_conn(struct iscsi_connection *conn, struct concat_buf *b)
+{
+	concat_printf(b, "%3d %3d"
+		      " %13" PRIu64
+		      " %13" PRIu64
+		      " %12" PRIu32
+		      " %11" PRIu32
+		      " %8" PRIu32
+		      " %8" PRIu32 "\n",
+		      (unsigned int)conn->session->tsih,
+		      (unsigned int)conn->cid,
+		      conn->stats.rxdata_octets,
+		      conn->stats.txdata_octets,
+		      conn->stats.dataout_pdus,
+		      conn->stats.datain_pdus,
+		      conn->stats.scsicmd_pdus,
+		      conn->stats.scsirsp_pdus);
+}
+
+static tgtadm_err _stat_iscsi_session(struct iscsi_session *session,
+				      uint64_t lun, int filter_lun,
+				      struct concat_buf *b)
+{
+	struct iscsi_target *target = session->target;
+	uint64_t itn_id = session->tsih;
+	int tid = target->tid;	/* global target id */
+	struct it_nexus *itn;
+	struct it_nexus_lu_info *itn_lu;
+	struct scsi_lu *lu;
+	struct iscsi_connection *conn;
+
+	dprintf("tsih:%d lun:%" PRIu64 " filter_lun:%d\n",
+		(unsigned int)session->tsih, lun, filter_lun);
+
+	itn = it_nexus_lookup(tid, itn_id);
+	if (!itn) {
+		eprintf("invalid nexus %d %" PRIx64 "\n", tid, itn_id);
+		return TGTADM_NO_SESSION;
+	}
+
+	tgt_stat_header(b);
+	list_for_each_entry(itn_lu, &itn->itn_itl_info_list, itn_itl_info_siblings) {
+		lu = itn_lu->lu;
+		tgt_stat_line(tid, lu->lun, session->tsih, &itn_lu->stat, b);
+	}
+
+	if (!list_empty(&session->conn_list)) {
+		concat_printf(b, "\n");
+		_stat_iscsi_conn_hdr(b);
+	}
+	list_for_each_entry(conn, &session->conn_list, clist) {
+		_stat_iscsi_conn(conn, b);
+	}
+
+	return TGTADM_SUCCESS;
+}
+
+static tgtadm_err iscsi_stat_connection(uint64_t sid, uint32_t cid, struct concat_buf *b)
+{
+	struct iscsi_session *session;
+	struct iscsi_connection *conn;
+
+	dprintf("sid:%" PRIu64 "cid:%" PRIu32 "\n", sid, cid);
+
+	session = session_lookup_by_tsih((uint16_t)sid);
+	if (!session)
+		return TGTADM_NO_SESSION;
+
+	conn = conn_find(session, cid);
+	if (!conn)
+		return TGTADM_NO_CONNECTION;
+
+	_stat_iscsi_conn_hdr(b);
+	_stat_iscsi_conn(conn, b);
+
+	return TGTADM_SUCCESS;
+}
+
+static tgtadm_err iscsi_stat_session_by_sid(uint64_t sid, struct concat_buf *b)
+{
+	struct iscsi_session *session;
+
+	dprintf("sid:%" PRIu64 "\n", sid);
+
+	session = session_lookup_by_tsih((uint16_t)sid);
+	if (session)
+		return _stat_iscsi_session(session, 0, 0, b);
+	else
+		return TGTADM_NO_SESSION;
+}
+
+static tgtadm_err iscsi_stat_device_by_id(uint64_t lun, uint64_t sid, struct concat_buf *b)
+{
+	struct iscsi_session *session;
+
+	dprintf("lun:%" PRIu64 " sid:%" PRIu64 "\n", lun, sid);
+
+	session = session_lookup_by_tsih((uint16_t)sid);
+	if (session)
+		return _stat_iscsi_session(session, lun, 1, b);
+	else
+		return TGTADM_NO_SESSION;
+}
+
+tgtadm_err iscsi_stat(int mode, int tid, uint64_t sid, uint32_t cid, uint64_t lun,
+		      struct concat_buf *b)
+{
+	tgtadm_err adm_err = TGTADM_INVALID_REQUEST;
+
+	dprintf("mode:%d tid:%d sid:%" PRIu64 " cid:%" PRIu32 " lun:%" PRIx64 "\n",
+		mode, tid, sid, cid, lun);
+
+	switch (mode) {
+	case MODE_DEVICE:
+		adm_err = iscsi_stat_device_by_id(lun, sid, b);
+		break;
+	case MODE_SESSION:
+		adm_err = iscsi_stat_session_by_sid(sid, b);
+		break;
+	case MODE_CONNECTION:
+		adm_err = iscsi_stat_connection(sid, cid, b);
 		break;
 	default:
 		break;
@@ -747,3 +851,4 @@ tgtadm_err iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid, uint
 
 	return adm_err;
 }
+

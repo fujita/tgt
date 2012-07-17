@@ -336,6 +336,15 @@ extern tgtadm_err iqn_acl_add(int tid, char *name);
 extern tgtadm_err iqn_acl_del(int tid, char *name);
 extern char *iqn_acl_get(int tid, int idx);
 
+extern void tgt_stat_header(struct concat_buf *b);
+extern void tgt_stat_line(int tid, uint64_t lun, uint64_t sid, struct lu_stat *stat, struct concat_buf *b);
+extern void tgt_stat_device(struct target *target, struct scsi_lu *lu, struct concat_buf *b);
+
+extern tgtadm_err tgt_stat_device_by_id(int tid, uint64_t dev_id, struct concat_buf *b);
+extern tgtadm_err tgt_stat_target(struct target *target, struct concat_buf *b);
+extern tgtadm_err tgt_stat_target_by_id(int tid, struct concat_buf *b);
+extern tgtadm_err tgt_stat_system(struct concat_buf *b);
+
 extern int account_lookup(int tid, int type, char *user, int ulen, char *password, int plen);
 extern tgtadm_err account_add(char *user, char *password);
 extern tgtadm_err account_del(char *user);

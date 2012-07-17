@@ -27,6 +27,7 @@ struct tgt_driver {
 
 	tgtadm_err (*update)(int, int, int ,uint64_t, uint64_t, uint32_t, char *);
 	tgtadm_err (*show)(int, int, uint64_t, uint32_t, uint64_t, struct concat_buf *);
+	tgtadm_err (*stat)(int, int, uint64_t, uint32_t, uint64_t, struct concat_buf *);
 
 	uint64_t (*scsi_get_lun)(uint8_t *);
 

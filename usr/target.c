@@ -913,6 +913,103 @@ tgtadm_err tgt_device_update(int tid, uint64_t dev_id, char *params)
 	return adm_err;
 }
 
+void tgt_stat_header(struct concat_buf *b)
+{
+	concat_printf(b,
+		"tgt lun sid "
+		"rd_subm(bytes,cmds) rd_done(bytes,cmds) "
+		"wr_subm(bytes,cmds) wr_done(bytes,cmds) "
+		"errs\n");
+}
+
+void tgt_stat_line(int tid, uint64_t lun, uint64_t sid, struct lu_stat *stat,
+		   struct concat_buf *b)
+{
+	concat_printf(b,
+		"%3d %3" PRIu64 " %3" PRIu64 " "
+		"%12" PRIu64 " %6" PRIu32 " "
+		"%12" PRIu64 " %6" PRIu32 " "
+		"%12" PRIu64 " %6" PRIu32 " "
+		"%12" PRIu64 " %6" PRIu32 " "
+		"%4" PRIu32 "\n",
+		tid, lun, sid,
+		stat->rd_subm_bytes, stat->rd_subm_cmds,
+		stat->rd_done_bytes, stat->rd_done_cmds,
+		stat->wr_subm_bytes, stat->wr_subm_cmds,
+		stat->wr_done_bytes, stat->wr_done_cmds,
+		stat->err_num);
+}
+
+void tgt_stat_device(struct target *target, struct scsi_lu *lu, struct concat_buf *b)
+{
+	struct it_nexus_lu_info *itn_lu;
+
+	list_for_each_entry(itn_lu, &lu->lu_itl_info_list, lu_itl_info_siblings) {
+		tgt_stat_line(target->tid, lu->lun, itn_lu->itn_id, &itn_lu->stat, b);
+	}
+}
+
+tgtadm_err tgt_stat_device_by_id(int tid, uint64_t dev_id, struct concat_buf *b)
+{
+	struct target *target;
+	struct scsi_lu *lu;
+	tgtadm_err adm_err = TGTADM_SUCCESS;
+
+	target = target_lookup(tid);
+	if (!target)
+		return TGTADM_NO_TARGET;
+
+	lu = device_lookup(target, dev_id);
+	if (!lu) {
+		eprintf("device %" PRIu64 " not found\n", dev_id);
+		return TGTADM_NO_LUN;
+	}
+
+	tgt_stat_header(b);
+	tgt_stat_device(target, lu, b);
+
+	return adm_err;
+}
+
+tgtadm_err tgt_stat_target(struct target *target, struct concat_buf *b)
+{
+	struct scsi_lu *lu;
+	tgtadm_err adm_err = TGTADM_SUCCESS;
+
+	list_for_each_entry(lu, &target->device_list, device_siblings)
+		tgt_stat_device(target, lu, b);
+
+	return adm_err;
+}
+
+tgtadm_err tgt_stat_target_by_id(int tid, struct concat_buf *b)
+{
+	struct target *target;
+	tgtadm_err adm_err = TGTADM_SUCCESS;
+
+	target = target_lookup(tid);
+	if (!target)
+		return TGTADM_NO_TARGET;
+
+	tgt_stat_header(b);
+	adm_err = tgt_stat_target(target, b);
+
+	return adm_err;
+}
+
+tgtadm_err tgt_stat_system(struct concat_buf *b)
+{
+	struct target *target;
+	tgtadm_err adm_err = TGTADM_SUCCESS;
+
+	tgt_stat_header(b);
+
+	list_for_each_entry(target, &target_list, target_siblings)
+		adm_err = tgt_stat_target(target, b);
+
+	return adm_err;
+}
+
 static int cmd_enabled(struct tgt_cmd_queue *q, struct scsi_cmd *cmd)
 {
 	int enabled = 0;

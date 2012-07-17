@@ -339,6 +339,8 @@ extern int iscsi_target_create(struct target *);
 extern void iscsi_target_destroy(int tid, int force);
 extern tgtadm_err iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid,
 				    uint64_t lun, struct concat_buf *b);
+extern tgtadm_err iscsi_stat(int mode, int tid, uint64_t sid, uint32_t cid,
+			     uint64_t lun, struct concat_buf *b);
 extern tgtadm_err iscsi_target_update(int mode, int op, int tid, uint64_t sid, uint64_t lun,
 				      uint32_t cid, char *name);
 extern int target_redirected(struct iscsi_target *target,

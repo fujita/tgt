@@ -15,6 +15,7 @@ enum tgtadm_op {
 	OP_BIND,
 	OP_UNBIND,
 	OP_UPDATE,
+	OP_STATS,
 };
 
 enum tgtadm_mode {
@@ -26,7 +27,6 @@ enum tgtadm_mode {
 	MODE_SESSION,
 	MODE_CONNECTION,
 	MODE_ACCOUNT,
-	MODE_STATS,
 };
 
 enum tgtadm_account_dir {

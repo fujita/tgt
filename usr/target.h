@@ -57,7 +57,7 @@ struct it_nexus {
 	/* dirty hack for IBMVIO */
 	int host_no;
 
-	struct list_head it_nexus_lu_info_list;
+	struct list_head itn_itl_info_list;
 
 	/* only used for show operation */
 	char *info;

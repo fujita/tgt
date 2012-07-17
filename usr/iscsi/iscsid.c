@@ -2467,6 +2467,7 @@ static struct tgt_driver iscsi = {
 
 	.update			= iscsi_target_update,
 	.show			= iscsi_target_show,
+	.stat			= iscsi_stat,
 	.cmd_end_notify		= iscsi_scsi_cmd_done,
 	.mgmt_end_notify	= iscsi_tm_done,
 	.transportid		= iscsi_transportid,

@@ -3514,6 +3514,7 @@ static struct tgt_driver iser = {
 
 	.update 		= iscsi_target_update,
 	.show 			= iscsi_target_show,
+	.stat                   = iscsi_stat,
 	.cmd_end_notify 	= iser_scsi_cmd_done,
 	.mgmt_end_notify	= iser_tm_done,
 	.transportid    	= iscsi_transportid,

@@ -405,8 +405,6 @@ static int str_to_mode(char *str)
 		return MODE_CONNECTION;
 	else if (!strcmp("account", str))
 		return MODE_ACCOUNT;
-	else if (!strcmp("stats", str))
-		return MODE_STATS;
 	else {
 		eprintf("unknown mode: %s\n", str);
 		exit(1);
@@ -427,6 +425,8 @@ static int str_to_op(char *str)
 		return OP_SHOW;
 	else if (!strcmp("update", str))
 		return OP_UPDATE;
+	else if (!strcmp("stat", str))
+		return OP_STATS;
 	else {
 		eprintf("unknown operation: %s\n", str);
 		exit(1);
@@ -627,6 +627,7 @@ int main(int argc, char **argv)
 			break;
 		case OP_SHOW:
 		case OP_DELETE:
+		case OP_STATS:
 			break;
 		default:
 			eprintf("option %d not supported in system mode\n", op);
@@ -662,6 +663,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		case OP_SHOW:
+		case OP_STATS:
 			rc = verify_mode_params(argc, argv, "LmotC");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
@@ -794,6 +796,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		case OP_DELETE:
+		case OP_STATS:
 			rc = verify_mode_params(argc, argv, "LmotlC");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
