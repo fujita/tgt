@@ -203,6 +203,16 @@ Possible backend types are:
         </listitem>
       </varlistentry>
 
+      <varlistentry><term><option>--lld &lt;driver&gt; --op start --mode lld</option></term>
+        <listitem>
+          <para>
+	    Start the specified lld without restarting the tgtd process.
+            Can be used to initialize lld driver in case required modules were loaded
+            after tgtd was already executed.
+          </para>
+        </listitem>
+      </varlistentry>
+
       <varlistentry><term><option>--help</option></term>
         <listitem>
           <para>
