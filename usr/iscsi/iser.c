@@ -670,6 +670,24 @@ static int iser_init_rdma_buf_pool(struct iser_device *dev)
 	return 0;
 }
 
+static void iser_destroy_rdma_buf_pool(struct iser_device *dev)
+{
+        int err;
+
+	assert(list_empty(&dev->membuf_alloc));
+
+	err = ibv_dereg_mr(dev->membuf_mr);
+	if (err)
+		eprintf("ibv_dereg_mr failed: (errno=%d %m)\n", errno);
+
+	iser_free_pool(dev->membuf_regbuf, dev->rdma_hugetbl_shmid);
+	free(dev->membuf_listbuf);
+
+	dev->membuf_mr = NULL;
+	dev->membuf_regbuf = NULL;
+	dev->membuf_listbuf = NULL;
+}
+
 static struct iser_membuf *iser_dev_alloc_rdma_buf(struct iser_device *dev)
 {
 	struct iser_membuf *rdma_buf;
@@ -3319,6 +3337,31 @@ out:
 	return err;
 }
 
+static void iser_device_release(struct iser_device *dev)
+{
+	int err;
+
+	list_del(&dev->list);
+
+	tgt_event_del(dev->ibv_ctxt->async_fd);
+	tgt_event_del(dev->cq_channel->fd);
+	tgt_remove_sched_event(&dev->poll_sched);
+
+	err = ibv_destroy_cq(dev->cq);
+	if (err)
+		eprintf("ibv_destroy_cq failed: (errno=%d %m)\n", errno);
+
+	err = ibv_destroy_comp_channel(dev->cq_channel);
+	if (err)
+		eprintf("ibv_destroy_comp_channel failed: (errno=%d %m)\n", errno);
+
+	iser_destroy_rdma_buf_pool(dev);
+
+	err = ibv_dealloc_pd(dev->pd);
+	if (err)
+		eprintf("ibv_dealloc_pd failed: (errno=%d %m)\n", errno);
+}
+
 /*
  * Init entire iscsi transport.  Begin listening for connections.
  */
@@ -3378,6 +3421,27 @@ static int iser_ib_init(void)
 	return err;
 }
 
+static void iser_ib_release(void)
+{
+	int err;
+	struct iser_device *dev, *tdev;
+
+	assert(list_empty(&iser_conn_list));
+
+	list_for_each_entry_safe(dev, tdev, &iser_dev_list, list) {
+	        iser_device_release(dev);
+		free(dev);
+	}
+
+	tgt_event_del(cma_listen_id->channel->fd);
+
+	err = rdma_destroy_id(cma_listen_id);
+	if (err)
+		eprintf("rdma_destroy_id failed: (errno=%d %m)\n", errno);
+
+	rdma_destroy_event_channel(rdma_evt_channel);
+}
+
 static int iser_send_nop = 1;
 static struct tgt_work nop_work;
 
@@ -3425,6 +3489,8 @@ static void iser_exit(void)
 {
 	if (iser_send_nop)
 		del_work(&nop_work);
+
+	iser_ib_release();
 }
 
 static int iser_target_create(struct target *t)
