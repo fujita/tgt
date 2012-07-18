@@ -552,12 +552,6 @@ int main(int argc, char **argv)
 
 	spare_args = optind < argc ? argv[optind] : NULL;
 
-	nr_lld = lld_init(spare_args);
-	if (!nr_lld) {
-		fprintf(stderr, "No available low level driver!\n");
-		exit(1);
-	}
-
 	err = ipc_init();
 	if (err)
 		exit(1);
@@ -565,15 +559,21 @@ int main(int argc, char **argv)
 	if (is_daemon && daemon(0,0))
 		exit(1);
 
+	err = log_init(program_name, LOG_SPACE_SIZE, is_daemon, is_debug);
+	if (err)
+		exit(1);
+
+	nr_lld = lld_init(spare_args);
+	if (!nr_lld) {
+		fprintf(stderr, "No available low level driver!\n");
+		exit(1);
+	}
+
 	err = oom_adjust();
 	if (err)
 		exit(1);
 
 	err = nr_file_adjust();
-	if (err)
-		exit(1);
-
-	err = log_init(program_name, LOG_SPACE_SIZE, is_daemon, is_debug);
 	if (err)
 		exit(1);
 
