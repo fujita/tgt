@@ -77,6 +77,7 @@ static const char * tgtadm_strerror(int err)
 		  "this target already has an outgoing account" },
 		{ TGTADM_TARGET_ACTIVE, "this target is still active" },
 		{ TGTADM_LUN_ACTIVE, "this logical unit is still active" },
+		{ TGTADM_DRIVER_ACTIVE, "this driver is busy" },
 		{ TGTADM_UNSUPPORTED_OPERATION,
 		  "this operation isn't supported" },
 		{ TGTADM_UNKNOWN_PARAM, "unknown parameter" },

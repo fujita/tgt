@@ -456,7 +456,7 @@ static tgtadm_err lld_mgmt(int lld_no, struct mgmt_task *mtask)
 				}
 				adm_err = TGTADM_SUCCESS;
 			} else
-				adm_err = TGTADM_TARGET_ACTIVE;
+				adm_err = TGTADM_DRIVER_ACTIVE;
 		} else
 			adm_err = TGTADM_SUCCESS;
 		break;
