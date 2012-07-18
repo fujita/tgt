@@ -179,6 +179,8 @@ Linux SCSI Target Framework Administration Utility, version %s\n\
   --lld <driver> --mode account --op unbind --tid <id> --user <name>\n\
                         delete the specific account having <name> from specific\n\
                         target.\n\
+  --lld <driver> --mode lld --op start\n\
+                        Start the specified lld without restarting the tgtd process.\n\
   --control-port <port> use control port <port>\n\
   --help                display this help and exit\n\
 \n\
