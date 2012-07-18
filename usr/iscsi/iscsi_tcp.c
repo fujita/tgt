@@ -318,14 +318,11 @@ static int iscsi_tcp_init(void)
 
 static void iscsi_tcp_exit(void)
 {
-	int i;
+	struct iscsi_portal *portal, *ptmp;
 
-	for (i = 0; i < ARRAY_SIZE(listen_fds); i++) {
-		if (!listen_fds[i])
-			break;
-
-		tgt_event_del(listen_fds[i]);
-		close(listen_fds[i]);
+	list_for_each_entry_safe(portal, ptmp, &iscsi_portals_list,
+			    iscsi_portal_siblings) {
+		iscsi_delete_portal(portal->addr, portal->port);
 	}
 }
 
