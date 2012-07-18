@@ -427,6 +427,8 @@ static int lld_init(char *args)
 				tgt_drivers[i]->drv_state = DRIVER_ERR;
 				continue;
 			}
+
+			INIT_LIST_HEAD(&tgt_drivers[i]->target_list);
 			tgt_drivers[i]->drv_state = DRIVER_INIT;
 		}
 		nr++;

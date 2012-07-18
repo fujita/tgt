@@ -37,6 +37,8 @@ struct tgt_driver {
 	int (*transportid)(int, uint64_t, char *, int);
 
 	const char *default_bst;
+
+	struct list_head target_list;
 };
 
 extern struct tgt_driver *tgt_drivers[];

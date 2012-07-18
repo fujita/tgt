@@ -2126,6 +2126,8 @@ tgtadm_err tgt_target_create(int lld, int tid, char *args)
 	if (tgt_drivers[lld]->target_create)
 		tgt_drivers[lld]->target_create(target);
 
+	list_add_tail(&target->lld_siblings, &tgt_drivers[lld]->target_list);
+
 	dprintf("Succeed to create a new target %d\n", tid);
 
 	return TGTADM_SUCCESS;
@@ -2173,6 +2175,8 @@ tgtadm_err tgt_target_destroy(int lld_no, int tid, int force)
 		free(iqn_acl->name);
 		free(iqn_acl);
 	}
+
+	list_del(&target->lld_siblings);
 
 	free(target->account.in_aids);
 	free(target->name);

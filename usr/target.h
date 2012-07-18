@@ -41,6 +41,8 @@ struct target {
 	struct list_head iqn_acl_list;
 
 	struct tgt_account account;
+
+	struct list_head lld_siblings;
 };
 
 struct it_nexus {
