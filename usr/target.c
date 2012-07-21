@@ -1386,6 +1386,7 @@ enum mgmt_req_result target_mgmt_request(int tid, uint64_t itn_id,
 			list_for_each_entry(itn_lu, &itn->itn_itl_info_list,
 					    itn_itl_info_siblings) {
 				if (itn_lu->lu->lun == lun) {
+					itn_lu->prevent = 0;
 					ua_sense_add(itn_lu, ASC_POWERON_RESET);
 					break;
 				}
