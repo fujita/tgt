@@ -405,6 +405,8 @@ static int str_to_mode(char *str)
 		return MODE_CONNECTION;
 	else if (!strcmp("account", str))
 		return MODE_ACCOUNT;
+	else if (!strcmp("lld", str))
+		return MODE_LLD;
 	else {
 		eprintf("unknown mode: %s\n", str);
 		exit(1);
@@ -427,6 +429,10 @@ static int str_to_op(char *str)
 		return OP_UPDATE;
 	else if (!strcmp("stat", str))
 		return OP_STATS;
+	else if (!strcmp("start", str))
+		return OP_START;
+	else if (!strcmp("stop", str))
+		return OP_STOP;
 	else {
 		eprintf("unknown operation: %s\n", str);
 		exit(1);
@@ -859,6 +865,25 @@ int main(int argc, char **argv)
 		default:
 			eprintf("option %d not supported in "
 					"portal mode\n", op);
+			exit(EINVAL);
+			break;
+		}
+	}
+
+	if (mode == MODE_LLD) {
+		switch (op) {
+		case OP_START:
+		case OP_STOP:
+		case OP_SHOW:
+			rc = verify_mode_params(argc, argv, "LmoC");
+			if (rc) {
+				eprintf("system mode: option '-%c' is not "
+					"allowed/supported\n", rc);
+				exit(EINVAL);
+			}
+			break;
+		default:
+			eprintf("option %d not supported in lld mode\n", op);
 			exit(EINVAL);
 			break;
 		}

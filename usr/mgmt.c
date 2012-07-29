@@ -432,6 +432,46 @@ static tgtadm_err connection_mgmt(int lld_no, struct mgmt_task *mtask)
 	return adm_err;
 }
 
+static tgtadm_err lld_mgmt(int lld_no, struct mgmt_task *mtask)
+{
+	struct tgtadm_req *req = &mtask->req;
+	tgtadm_err adm_err = TGTADM_INVALID_REQUEST;
+
+	switch (req->op) {
+	case OP_START:
+		if (tgt_drivers[lld_no]->drv_state != DRIVER_INIT) {
+			if (!lld_init_one(lld_no))
+				adm_err = TGTADM_SUCCESS;
+			else
+				adm_err = TGTADM_UNKNOWN_ERR;
+		} else
+			adm_err = TGTADM_SUCCESS;
+		break;
+	case OP_STOP:
+		if (tgt_drivers[lld_no]->drv_state == DRIVER_INIT) {
+			if (list_empty(&tgt_drivers[lld_no]->target_list)) {
+				if (tgt_drivers[lld_no]->exit) {
+					tgt_drivers[lld_no]->exit();
+					tgt_drivers[lld_no]->drv_state = DRIVER_EXIT;
+				}
+				adm_err = TGTADM_SUCCESS;
+			} else
+				adm_err = TGTADM_TARGET_ACTIVE;
+		} else
+			adm_err = TGTADM_SUCCESS;
+		break;
+	case OP_SHOW:
+		concat_buf_init(&mtask->rsp_concat);
+		adm_err = lld_show(&mtask->rsp_concat);
+		concat_buf_finish(&mtask->rsp_concat);
+		break;
+	default:
+		break;
+	}
+
+	return adm_err;
+}
+
 static tgtadm_err mtask_execute(struct mgmt_task *mtask)
 {
 	struct tgtadm_req *req = &mtask->req;
@@ -442,7 +482,10 @@ static tgtadm_err mtask_execute(struct mgmt_task *mtask)
 		lld_no = 0;
 	else {
 		lld_no = get_driver_index(req->lld);
-		if (lld_no < 0 || tgt_drivers[lld_no]->drv_state != DRIVER_INIT) {
+		if (lld_no < 0 ||
+		   (tgt_drivers[lld_no]->drv_state != DRIVER_INIT &&
+		    req->mode != MODE_LLD))
+		{
 			if (lld_no < 0)
 				eprintf("can't find the driver %s\n", req->lld);
 			else
@@ -477,6 +520,9 @@ static tgtadm_err mtask_execute(struct mgmt_task *mtask)
 		break;
 	case MODE_CONNECTION:
 		adm_err = connection_mgmt(lld_no, mtask);
+		break;
+	case MODE_LLD:
+		adm_err = lld_mgmt(lld_no, mtask);
 		break;
 	default:
 		if (req->op == OP_SHOW && tgt_drivers[lld_no]->show) {

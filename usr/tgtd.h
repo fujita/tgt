@@ -270,6 +270,7 @@ extern char *tgt_targetname(int tid);
 extern tgtadm_err tgt_target_show_all(struct concat_buf *b);
 tgtadm_err system_set_state(char *str);
 tgtadm_err system_show(int mode, struct concat_buf *b);
+tgtadm_err lld_show(struct concat_buf *b);
 int is_system_available(void);
 int is_system_inactive(void);
 
@@ -364,6 +365,8 @@ extern tgtadm_err dtd_check_removable(int tid, uint64_t lun);
 
 extern int register_backingstore_template(struct backingstore_template *bst);
 extern struct backingstore_template *get_backingstore_template(const char *name);
+
+extern int lld_init_one(int lld_index);
 
 extern int setup_param(char *name, int (*parser)(char *));
 

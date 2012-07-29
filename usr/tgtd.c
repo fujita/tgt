@@ -62,6 +62,7 @@ static struct option const long_options[] =
 };
 
 static char *short_options = "fC:d:t:Vh";
+static char *spare_args;
 
 static void usage(int status)
 {
@@ -416,22 +417,29 @@ retry:
 		goto retry;
 }
 
-static int lld_init(char *args)
+int lld_init_one(int lld_index)
 {
-	int i, err, nr;
+	int err;
+
+	if (tgt_drivers[lld_index]->init) {
+		err = tgt_drivers[lld_index]->init(lld_index, spare_args);
+		if (err) {
+			tgt_drivers[lld_index]->drv_state = DRIVER_ERR;
+			return err;
+		}
+		INIT_LIST_HEAD(&tgt_drivers[lld_index]->target_list);
+		tgt_drivers[lld_index]->drv_state = DRIVER_INIT;
+	}
+	return 0;
+}
+
+static int lld_init(void)
+{
+	int i, nr;
 
 	for (i = nr = 0; tgt_drivers[i]; i++) {
-		if (tgt_drivers[i]->init) {
-			err = tgt_drivers[i]->init(i, args);
-			if (err) {
-				tgt_drivers[i]->drv_state = DRIVER_ERR;
-				continue;
-			}
-
-			INIT_LIST_HEAD(&tgt_drivers[i]->target_list);
-			tgt_drivers[i]->drv_state = DRIVER_INIT;
-		}
-		nr++;
+		if (!lld_init_one(i))
+			nr++;
 	}
 	return nr;
 }
@@ -489,7 +497,6 @@ int main(int argc, char **argv)
 {
 	struct sigaction sa_old;
 	struct sigaction sa_new;
-	char *spare_args;
 	int err, ch, longindex, nr_lld = 0;
 	int is_daemon = 1, is_debug = 0;
 	int ret;
@@ -565,7 +572,7 @@ int main(int argc, char **argv)
 	if (err)
 		exit(1);
 
-	nr_lld = lld_init(spare_args);
+	nr_lld = lld_init();
 	if (!nr_lld) {
 		fprintf(stderr, "No available low level driver!\n");
 		exit(1);

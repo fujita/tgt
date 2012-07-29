@@ -2339,6 +2339,23 @@ tgtadm_err system_show(int mode, struct concat_buf *b)
 	return TGTADM_SUCCESS;
 }
 
+tgtadm_err lld_show(struct concat_buf *b)
+{
+	struct target *target;
+	int i;
+
+	concat_printf(b, "LLDs:\n");
+	for (i = 0; tgt_drivers[i]; i++) {
+		concat_printf(b, _TAB1 "%s: %s\n", tgt_drivers[i]->name,
+				  driver_state_name(tgt_drivers[i]));
+		list_for_each_entry(target, &tgt_drivers[i]->target_list, lld_siblings) {
+			concat_printf(b, _TAB2 "Target %d: %s\n", target->tid, target->name);
+		}
+	}
+
+	return TGTADM_SUCCESS;
+}
+
 void update_lbppbe(struct scsi_lu *lu, int blksize)
 {
 	lu->attrs.lbppbe = 0;
