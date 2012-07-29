@@ -514,7 +514,9 @@ static tgtadm_err smc_lu_init(struct scsi_lu *lu)
 	/* Vendor uniq - However most apps seem to call for mode page 0*/
 	add_mode_page(lu, "0:0:0");
 	/* Control page */
-	add_mode_page(lu, "10:0:10:2:0:0:0:0:0:0:0:2:0");
+	add_mode_page(lu, "0x0a:0:10:2:0:0:0:0:0:0:0:2:0");
+	/* Control Extensions mode page:  TCMOS:1 */
+	add_mode_page(lu, "0x0a:1:0x1c:0x04:0x00:0x00");
 	/* Power Condition */
 	add_mode_page(lu, "0x1a:0:10:8:0:0:0:0:0:0:0:0:0");
 	/* Informational Exceptions Control page */
@@ -625,7 +627,7 @@ static tgtadm_err add_slt(struct scsi_lu *lu, struct tmp_param *tmp)
 	int qnty_save;
 	int i;
 
-	pg = lu->mode_pgs[0x1d];
+	pg = find_mode_page(lu, 0x1d, 0);
 	if (!pg) {
 		dprintf("Failed to find Element Address Assignment mode pg\n");
 		return TGTADM_UNKNOWN_ERR;
@@ -692,7 +694,7 @@ static tgtadm_err config_slot(struct scsi_lu *lu, struct tmp_param *tmp)
 	switch(tmp->element_type) {
 	case ELEMENT_MEDIUM_TRANSPORT:
 		/* If medium has more than one side, set the 'rotate' bit */
-		m = lu->mode_pgs[0x1e];
+		m = find_mode_page(lu, 0x1e, 0);
 		if (m) {
 			m->mode_data[0] = (tmp->sides > 1) ? 1 : 0;
 			adm_err = TGTADM_SUCCESS;

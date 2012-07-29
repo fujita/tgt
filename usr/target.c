@@ -579,6 +579,7 @@ tgtadm_err tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	tgt_cmd_queue_init(&lu->cmd_queue);
 	INIT_LIST_HEAD(&lu->registration_list);
 	INIT_LIST_HEAD(&lu->lu_itl_info_list);
+	INIT_LIST_HEAD(&lu->mode_pages);
 	lu->prgeneration = 0;
 	lu->pr_holder = NULL;
 

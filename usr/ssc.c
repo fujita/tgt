@@ -193,7 +193,9 @@ static tgtadm_err ssc_lu_init(struct scsi_lu *lu)
 	/* Disconnect page - Mandatory - SPC-4 */
 	add_mode_page(lu, "2:0:14:0x80:0x80:0:0xa:0:0:0:0:0:0:0:0:0:0");
 	/* Control page - Mandatory - SPC-4 */
-	add_mode_page(lu, "10:0:10:2:0:0:0:0:0:0:0:2:0");
+	add_mode_page(lu, "0x0a:0:10:2:0:0:0:0:0:0:0:2:0");
+	/* Control Extensions mode page:  TCMOS:1 */
+	add_mode_page(lu, "0x0a:1:0x1c:0x04:0x00:0x00");
 	/* Data Compression - Mandatory - SSC3 8.3.2 */
 	add_mode_page(lu, "15:0:14:0:0:0:0:0:0:0:0:0:0:0:0:0:0");
 	/* Device Configuration - Mandatory - SSC3 8.3.3 */

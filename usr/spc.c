@@ -480,7 +480,7 @@ int spc_mode_select(int host_no, struct scsi_cmd *cmd,
 
 		pcode = data[offset] & 0x3f;
 
-		pg = cmd->dev->mode_pgs[pcode];
+		pg = find_mode_page(cmd->dev, pcode, 0);
 		if (!pg)
 			goto sense;
 
@@ -525,10 +525,22 @@ sense:
 	return SAM_STAT_CHECK_CONDITION;
 }
 
-int set_mode_page_changeable_mask(struct scsi_lu *lu, uint8_t pcode,
-				  uint8_t *mask)
+struct mode_pg *find_mode_page(struct scsi_lu *lu, uint8_t pcode,
+			       uint8_t subpcode)
 {
-	struct mode_pg *pg = lu->mode_pgs[pcode];
+	struct mode_pg *pg;
+
+	list_for_each_entry(pg, &lu->mode_pages, mode_pg_siblings) {
+		if (pg->pcode == pcode && pg->subpcode == subpcode)
+			return pg;
+	}
+	return NULL;
+}
+
+int set_mode_page_changeable_mask(struct scsi_lu *lu, uint8_t pcode,
+				  uint8_t subpcode, uint8_t *mask)
+{
+	struct mode_pg *pg = find_mode_page(lu, pcode, subpcode);
 
 	if (pg) {
 		memcpy(pg->mode_data + pg->pcode_size, mask, pg->pcode_size);
@@ -551,18 +563,26 @@ static int build_mode_page(uint8_t *data, struct mode_pg *pg,
 			   uint8_t pc, uint16_t *alloc_len)
 {
 	uint8_t *p;
-	int len;
+	int len, hdr_size = 2;
 	uint8_t *mode_data;
 
 	len = pg->pcode_size;
 	if (*alloc_len >= 2) {
-		data[0] = pg->pcode;
-		data[1] = len;
+		if (!pg->subpcode) {
+			data[0] = pg->pcode;
+			data[1] = len;
+		} else {
+			data[0] = pg->pcode | 0x40;
+			data[1] = pg->subpcode;
+			data[2] = len >> 8;
+			data[3] = len & 0xff;
+			hdr_size = 4;
+		}
 	}
-	*alloc_len -= min_t(uint16_t, *alloc_len, 2);
+	*alloc_len -= min_t(uint16_t, *alloc_len, hdr_size);
 
-	p = &data[2];
-	len += 2;
+	p = &data[hdr_size];
+	len += hdr_size;
 	if (*alloc_len >= pg->pcode_size) {
 		if (pc == 1)
 			mode_data = pg->mode_data + pg->pcode_size;
@@ -599,10 +619,6 @@ int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 	pctrl = (scb[2] & 0xc0) >> 6;
 	subpcode = scb[3];
 
-	/* Currently not implemented */
-	if (subpcode)
-		goto sense;
-
 	if (pctrl == 3) {
 		asc = ASC_SAVING_PARMS_UNSUP;
 		goto sense;
@@ -633,15 +649,14 @@ int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 	}
 
 	if (pcode == 0x3f) {
-		int i;
-		for (i = 0; i < ARRAY_SIZE(cmd->dev->mode_pgs); i++) {
-			pg = cmd->dev->mode_pgs[i];
-			if (pg)
-				len += build_mode_page(data + len, pg, pctrl,
-						       &alloc_len);
+		list_for_each_entry(pg,
+				    &cmd->dev->mode_pages,
+				    mode_pg_siblings) {
+			len += build_mode_page(data + len, pg, pctrl,
+					       &alloc_len);
 		}
 	} else {
-		pg = cmd->dev->mode_pgs[pcode];
+		pg = find_mode_page(cmd->dev, pcode, subpcode);
 		if (!pg)
 			goto sense;
 		len += build_mode_page(data + len, pg, pctrl, &alloc_len);
@@ -1595,8 +1610,11 @@ tgtadm_err add_mode_page(struct scsi_lu *lu, char *p)
 		case 2:
 			size = strtol(p, NULL, 0);
 
-			if (lu->mode_pgs[pcode])
-				free(lu->mode_pgs[pcode]);
+			pg = find_mode_page(lu, pcode, subpcode);
+			if (pg) {
+				list_del(&pg->mode_pg_siblings);
+				free(pg);
+			}
 
 			pg = alloc_mode_pg(pcode, subpcode, size);
 			if (!pg) {
@@ -1604,7 +1622,7 @@ tgtadm_err add_mode_page(struct scsi_lu *lu, char *p)
 				goto exit;
 			}
 
-			lu->mode_pgs[pcode] = pg;
+			list_add_tail(&pg->mode_pg_siblings, &lu->mode_pages);
 			data = pg->mode_data;
 			break;
 		default:
@@ -1898,7 +1916,12 @@ void spc_lu_exit(struct scsi_lu *lu)
 		if (lu_vpd[i])
 			free(lu_vpd[i]);
 
-	for (i = 0; i < ARRAY_SIZE(lu->mode_pgs); i++)
-		if (lu->mode_pgs[i])
-			free(lu->mode_pgs[i]);
+	while (!list_empty(&lu->mode_pages)) {
+		struct mode_pg *pg;
+		pg = list_first_entry(&lu->mode_pages,
+				       struct mode_pg,
+				       mode_pg_siblings);
+		list_del(&pg->mode_pg_siblings);
+		free(pg);
+	}
 }

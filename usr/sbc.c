@@ -69,8 +69,13 @@ static off_t find_next_hole(struct scsi_lu *dev, off_t offset)
 static int sbc_mode_page_update(struct scsi_cmd *cmd, uint8_t *data, int *changed)
 {
 	uint8_t pcode = data[0] & 0x3f;
-	struct mode_pg *pg = cmd->dev->mode_pgs[pcode];
+	uint8_t subpcode = data[1];
+	struct mode_pg *pg;
 	uint8_t old;
+
+	pg = find_mode_page(cmd->dev, pcode, subpcode);
+	if (pg == NULL)
+		return 1;
 
 	eprintf("%x %x\n", pg->mode_data[0], data[2]);
 
@@ -688,11 +693,15 @@ static tgtadm_err sbc_lu_init(struct scsi_lu *lu)
 		memset(mask, 0, sizeof(mask));
 		mask[0] = 0x4;
 
-		set_mode_page_changeable_mask(lu, 8, mask);
+		set_mode_page_changeable_mask(lu, 8, 0, mask);
 	}
 
 	/* Control page */
-	add_mode_page(lu, "10:0:10:2:0x10:0:0:0:0:0:0:2:0");
+	add_mode_page(lu, "0x0a:0:10:2:0x10:0:0:0:0:0:0:2:0");
+
+	/* Control Extensions mode page:  TCMOS:1 */
+	add_mode_page(lu, "0x0a:1:0x1c:0x04:0x00:0x00");
+
 	/* Informational Exceptions Control page */
 	add_mode_page(lu, "0x1c:0:10:8:0:0:0:0:0:0:0:0:0");
 

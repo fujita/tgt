@@ -168,6 +168,7 @@ struct backingstore_template {
 };
 
 struct mode_pg {
+	struct list_head mode_pg_siblings;
 	uint8_t pcode;		/* Page code */
 	uint8_t subpcode;	/* Sub page code */
 	int16_t pcode_size;	/* Size of page code data. */
@@ -210,7 +211,7 @@ struct scsi_lu {
 	struct target *tgt;
 
 	uint8_t	mode_block_descriptor[BLOCK_DESCRIPTOR_LEN];
-	struct mode_pg *mode_pgs[0x3f];
+	struct list_head mode_pages;
 
 	struct lu_phy_attr attrs;
 

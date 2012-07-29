@@ -38,6 +38,7 @@
 #include "util.h"
 #include "tgtd.h"
 #include "scsi.h"
+#include "spc.h"
 #include "bs_thread.h"
 
 static void set_medium_error(int *result, uint8_t *key, uint16_t *asc)
@@ -156,12 +157,19 @@ write:
 		ret = pwrite64(fd, scsi_get_out_buffer(cmd), length,
 			       offset);
 		if (ret == length) {
+			struct mode_pg *pg;
+
 			/*
 			 * it would be better not to access to pg
 			 * directy.
 			 */
-			struct mode_pg *pg = cmd->dev->mode_pgs[0x8];
-
+			pg = find_mode_page(cmd->dev, 0x08, 0);
+			if (pg == NULL) {
+				result = SAM_STAT_CHECK_CONDITION;
+				key = ILLEGAL_REQUEST;
+				asc = ASC_INVALID_FIELD_IN_CDB;
+				break;
+			}
 			if (((cmd->scb[0] != WRITE_6) && (cmd->scb[1] & 0x8)) ||
 			    !(pg->mode_data[0] & 0x04))
 				bs_sync_sync_range(cmd, length, &result, &key,

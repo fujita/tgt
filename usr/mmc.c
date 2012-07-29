@@ -2243,7 +2243,9 @@ static tgtadm_err mmc_lu_init(struct scsi_lu *lu)
 	/* Caching Page */
 	add_mode_page(lu, "8:0:10:0:0:0:0:0:0:0:0:0:0");
 	/* Control page */
-	add_mode_page(lu, "10:0:10:2:0:0:0:0:0:0:0:2:0");
+	add_mode_page(lu, "0x0a:0:10:2:0:0:0:0:0:0:0:2:0");
+	/* Control Extensions mode page:  TCMOS:1 */
+	add_mode_page(lu, "0x0a:1:0x1c:0x04:0x00:0x00");
 	/* Power Condition */
 	add_mode_page(lu, "0x1a:0:10:8:0:0:0:0:0:0:0:0:0");
 	/* Informational Exceptions Control page */

@@ -23,7 +23,9 @@ extern void dump_cdb(struct scsi_cmd *cmd);
 extern int spc_mode_sense(int host_no, struct scsi_cmd *cmd);
 extern tgtadm_err add_mode_page(struct scsi_lu *lu, char *params);
 extern int set_mode_page_changeable_mask(struct scsi_lu *lu, uint8_t pcode,
-					 uint8_t *mask);
+					 uint8_t subpcode, uint8_t *mask);
+extern struct mode_pg *find_mode_page(struct scsi_lu *lu,
+				      uint8_t pcode, uint8_t subpcode);
 extern int spc_mode_select(int host_no, struct scsi_cmd *cmd,
 			   int (*update)(struct scsi_cmd *, uint8_t *, int *));
 extern struct vpd *alloc_vpd(uint16_t size);
