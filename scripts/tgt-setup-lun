@@ -3,6 +3,7 @@
 # LUN assignment script
 #
 # Copyright (C) 2007 Erez Zilber <erezz@voltaire.com>
+# Copyright (C) 2012 Roi Dayan <roid@mellanox.com>
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as
@@ -23,11 +24,12 @@ usage()
 {
 	name=$(basename $0);
 	echo "usage:";
-	echo -e "\t$name -n tgt_name -d dev -b bs_name -t transport [initiator_IP1 initiator_IP2 ...]";
+	echo -e "\t$name -n tgt_name -d dev -b bs_name -t transport -C control_port [initiator_IP1 initiator_IP2 ...]";
 	echo "defaults:";
 	echo -e "\tbacking store: rdwr";
 	echo -e "\ttransport: iscsi";
 	echo -e "\tinitiator: ALL";
+	echo -e "\tcontrol port: -";
 	echo "examples:";
 	echo -e "\t$name -n tgt-1 -d /dev/sdb1 192.168.1.2";
 	echo -e "\t$name -n tgt-2 -d /tmp/null -b null -t iser";
@@ -62,7 +64,7 @@ verify_params()
 
 find_vacant_tgt_id()
 {
-	id_list=$(tgtadm --lld $lld_name --op show --mode target | grep Target | cut -d" " -f2 | sed s/://)
+	id_list=$($TGTADM --lld $lld_name --op show --mode target | grep Target | cut -d" " -f2 | sed s/://)
 
 	next_vacant_id=1
 
@@ -84,7 +86,7 @@ find_vacant_lun()
 	next_vacant_lun=0
 	tmp_file=/tmp/target_list.txt
 
-	tgtadm --lld $lld_name --op show --mode target > $tmp_file
+	$TGTADM --lld $lld_name --op show --mode target > $tmp_file
 
 	while read line; do
 		# Check if we finished going over this target
@@ -125,7 +127,7 @@ err_exit()
 	fi
 
 	echo "Deleting new target, tid=$tid"
-	tgtadm --lld $lld_name --op delete --mode target --tid $tid
+	$TGTADM --lld $lld_name --op delete --mode target --tid $tid
 	res=$?
 
 	if [ $res -ne 0 ]; then
@@ -137,7 +139,7 @@ err_exit()
 
 check_if_tgt_exists()
 {
-	tgt_list=$(tgtadm --lld $lld_name --op show --mode target | grep Target | cut -d" " -f3)
+	tgt_list=$($TGTADM --lld $lld_name --op show --mode target | grep Target | cut -d" " -f3)
 
 	for curr_tgt in $tgt_list; do
 		if [ $tgt_name = $curr_tgt ]; then
@@ -153,9 +155,11 @@ if [ $# -eq 0 ]; then
 	exit 1
 fi
 
+TGTADM="tgtadm"
 lld_name="iscsi"
+control_port=""
 
-while getopts "d:n:b:t:h:" opt
+while getopts "d:n:b:t:h:C:" opt
 do
 	case ${opt} in
 	d)
@@ -166,6 +170,8 @@ do
 		bs_type=$OPTARG;;
 	t)
 		lld_name=$OPTARG;;
+        C)
+                control_port=$OPTARG;;
 	h*)
 		usage
 		exit 1
@@ -186,6 +192,11 @@ if [ $tgtd_count -lt 1 ]; then
 	exit 1
 fi
 
+if [ -n "$control_port" ]; then
+    echo "Control port: $control_port"
+    TGTADM="$TGTADM -C $control_port"
+fi
+
 echo "Using transport: $lld_name"
 
 if ! [[ $tgt_name =~ ^iqn ]]; then
@@ -200,7 +211,7 @@ if [ $? -eq 1 ]; then
 	if [ $add_lun != "yes" ]; then
 		exit 1
 	fi
-	tid=$(tgtadm --lld $lld_name --op show --mode target | grep $tgt_name | cut -d" " -f2)
+	tid=$($TGTADM --lld $lld_name --op show --mode target | grep $tgt_name | cut -d" " -f2)
 	tid=${tid%:}
 	new_tgt=0
 else
@@ -209,7 +220,7 @@ else
 
 	# Create the new target
 	echo "Creating new target (name=$tgt_name, tid=$tid)"
-	tgtadm --lld $lld_name --op new --mode target --tid $tid -T $tgt_name
+	$TGTADM --lld $lld_name --op new --mode target --tid $tid -T $tgt_name
 	res=$?
 
 	if [ $res -ne 0 ]; then
@@ -228,7 +239,7 @@ if [ $bs_type ]; then
 	echo "Setting backing store type: $bs_type"
 	bs_opt="-E $bs_type"
 fi
-tgtadm --lld $lld_name --op new --mode logicalunit --tid $tid --lun $lun -b $dev $bs_opt
+$TGTADM --lld $lld_name --op new --mode logicalunit --tid $tid --lun $lun -b $dev $bs_opt
 res=$?
 
 if [ $res -ne 0 ]; then
@@ -241,7 +252,7 @@ if test "$initiators" ; then
 	# Allow access only for specific initiators
 	echo "Accepting connections only from $initiators"
 	for initiator in $initiators; do
-		tgtadm --lld $lld_name --op bind --mode target --tid $tid -I $initiator
+		$TGTADM --lld $lld_name --op bind --mode target --tid $tid -I $initiator
 		res=$?
 
 		if [ $res -ne 0 ]; then
@@ -251,7 +262,7 @@ if test "$initiators" ; then
 else
 	# Allow access for everyone
 	echo "Accepting connections from all initiators"
-	tgtadm --lld $lld_name --op bind --mode target --tid $tid -I ALL
+	$TGTADM --lld $lld_name --op bind --mode target --tid $tid -I ALL
 	res=$?
 
 	if [ $res -ne 0 ]; then

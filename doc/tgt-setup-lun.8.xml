@@ -21,6 +21,7 @@
     <arg choice="plain">-n &lt;targetname&gt;</arg>
     <arg choice="opt">-b &lt;bsname&gt;</arg>
     <arg choice="opt">-t &lt;transport&gt;</arg>
+    <arg choice="opt">-C &lt;control_port&gt;</arg>
     <arg choice="opt" rep="repeat">initiator_IP</arg>
     <arg choice="opt">-h</arg>
   </cmdsynopsis>
