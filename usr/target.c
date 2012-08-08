@@ -1368,7 +1368,7 @@ enum mgmt_req_result target_mgmt_request(int tid, uint64_t itn_id,
 					if (itn->itn_id == itn_id)
 						asc = ASC_POWERON_RESET;
 					else
-						asc = ASC_COMMANDS_CLEARED_BY_ANOTHOR_INI;
+						asc = ASC_CMDS_CLEARED_BY_ANOTHER_INI;
 
 					asc = ua_sense_add(itn_lu, asc);
 					break;
