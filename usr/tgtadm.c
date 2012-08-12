@@ -46,10 +46,10 @@
 
 #define BUFSIZE 4096
 
-static char program_name[] = "tgtadm";
+static const char program_name[] = "tgtadm";
 static int debug;
 
-static const char * tgtadm_strerror(int err)
+static const char *tgtadm_strerror(int err)
 {
 	static const struct {
 		enum tgtadm_errno err;
@@ -66,9 +66,12 @@ static const char * tgtadm_strerror(int err)
 		{ TGTADM_NO_BINDING, "can't find the binding" },
 		{ TGTADM_TARGET_EXIST, "this target already exists" },
 		{ TGTADM_BINDING_EXIST, "this binding already exists" },
-		{ TGTADM_LUN_EXIST, "this logical unit number already exists" },
-		{ TGTADM_ACL_EXIST, "this access control rule already exists" },
-		{ TGTADM_ACL_NOEXIST, "this access control rule does not exist" },
+		{ TGTADM_LUN_EXIST,
+		  "this logical unit number already exists" },
+		{ TGTADM_ACL_EXIST,
+		  "this access control rule already exists" },
+		{ TGTADM_ACL_NOEXIST,
+		  "this access control rule does not exist" },
 		{ TGTADM_USER_EXIST, "this account already exists" },
 		{ TGTADM_NO_USER, "can't find the account" },
 		{ TGTADM_TOO_MANY_USER, "too many accounts" },
@@ -76,7 +79,8 @@ static const char * tgtadm_strerror(int err)
 		{ TGTADM_OUTACCOUNT_EXIST,
 		  "this target already has an outgoing account" },
 		{ TGTADM_TARGET_ACTIVE, "this target is still active" },
-		{ TGTADM_LUN_ACTIVE, "this logical unit is still active" },
+		{ TGTADM_LUN_ACTIVE,
+		  "this logical unit is still active" },
 		{ TGTADM_DRIVER_ACTIVE, "this driver is busy" },
 		{ TGTADM_UNSUPPORTED_OPERATION,
 		  "this operation isn't supported" },
@@ -125,69 +129,70 @@ struct option const long_options[] = {
 	{NULL, 0, NULL, 0},
 };
 
-static char *short_options = "dhVL:o:m:t:s:c:l:n:v:b:E:f:y:T:I:Q:u:p:H:F:P:B:Y:O:C:";
+static char *short_options =
+		"dhVL:o:m:t:s:c:l:n:v:b:E:f:y:T:I:Q:u:p:H:F:P:B:Y:O:C:";
 
 static void usage(int status)
 {
-	if (status != 0)
-		fprintf(stderr, "Try `%s --help' for more information.\n", program_name);
-	else {
-		printf("Usage: %s [OPTION]\n", program_name);
-		printf("\
-Linux SCSI Target Framework Administration Utility, version %s\n\
-\n\
-  --lld <driver> --mode target --op new --tid <id> --targetname <name>\n\
-                        add a new target with <id> and <name>. <id> must not be zero.\n\
-  --lld <driver> --mode target --op delete [--force] --tid <id>\n\
-			delete the specific target with <id>.\n\
-			With force option, the specific target is deleted \n\
-			even if there is an activity.\n\
-  --lld <driver> --mode target --op show\n\
-                        show all the targets.\n\
-  --lld <driver> --mode target --op show --tid <id>\n\
-                        show the specific target's parameters.\n\
-  --lld <driver> --mode target --op update --tid <id> --name <param> --value <value>\n\
-                        change the target parameters of the specific\n\
-                        target with <id>.\n\
-  --lld <driver> --mode target --op bind --tid <id> --initiator-address <address>\n\
-  --lld <driver> --mode target --op bind --tid <id> --initiator-name <name>\n\
-                        enable the target to accept the specific initiators.\n\
-  --lld <driver> --mode target --op unbind --tid <id> --initiator-address <address>\n\
-  --lld <driver> --mode target --op unbind --tid <id> --initiator-name <name>\n\
-                        disable the specific permitted initiators.\n\
-  --lld <driver> --mode logicalunit --op new --tid <id> --lun <lun> \\\n\
-                        --backing-store <path> --bstype <type> --bsoflags <options>\n\
-                        add a new logical unit with <lun> to the specific\n\
-                        target with <id>. The logical unit is offered\n\
-                        to the initiators. <path> must be block device files\n\
-                        (including LVM and RAID devices) or regular files.\n\
-                        bstype option is optional.\n\
-                        bsoflags supported options are sync and direct\n\
-                        (sync:direct for both).\n\
-  --lld <driver> --mode logicalunit --op delete --tid <id> --lun <lun>\n\
-                        delete the specific logical unit with <lun> that\n\
-                        the target with <id> has.\n\
-  --lld <driver> --mode account --op new --user <name> --password <pass>\n\
-                        add a new account with <name> and <pass>.\n\
-  --lld <driver> --mode account --op delete --user <name>\n\
-                        delete the specific account having <name>.\n\
-  --lld <driver> --mode account --op bind --tid <id> --user <name> [--outgoing]\n\
-                        add the specific account having <name> to\n\
-                        the specific target with <id>.\n\
-                        <user> could be <IncomingUser> or <OutgoingUser>.\n\
-                        If you use --outgoing option, the account will\n\
-                        be added as an outgoing account.\n\
-  --lld <driver> --mode account --op unbind --tid <id> --user <name>\n\
-                        delete the specific account having <name> from specific\n\
-                        target.\n\
-  --lld <driver> --mode lld --op start\n\
-                        Start the specified lld without restarting the tgtd process.\n\
-  --control-port <port> use control port <port>\n\
-  --help                display this help and exit\n\
-\n\
-Report bugs to <stgt@vger.kernel.org>.\n", TGT_VERSION);
+	if (status != 0) {
+		fprintf(stderr, "Try `%s --help' for more information.\n",
+			program_name);
+		exit(EINVAL);
 	}
-	exit(status == 0 ? 0 : EINVAL);
+
+	printf("Linux SCSI Target administration utility, version %s\n\n"
+		"Usage: %s [OPTION]\n"
+		"--lld <driver> --mode target --op new --tid <id> --targetname <name>\n"
+		"\tadd a new target with <id> and <name>. <id> must not be zero.\n"
+		"--lld <driver> --mode target --op delete [--force] --tid <id>\n"
+		"\tdelete the specific target with <id>.\n"
+		"\tWith force option, the specific target is deleted\n"
+		"\teven if there is an activity.\n"
+		"--lld <driver> --mode target --op show\n"
+		"\tshow all the targets.\n"
+		"--lld <driver> --mode target --op show --tid <id>\n"
+		"\tshow the specific target's parameters.\n"
+		"--lld <driver> --mode target --op update --tid <id> --name <param> --value <value>\n"
+		"\tchange the target parameters of the target with <id>.\n"
+		"--lld <driver> --mode target --op bind --tid <id> --initiator-address <address>\n"
+		"--lld <driver> --mode target --op bind --tid <id> --initiator-name <name>\n"
+		"\tenable the target to accept the specific initiators.\n"
+		"--lld <driver> --mode target --op unbind --tid <id> --initiator-address <address>\n"
+		"--lld <driver> --mode target --op unbind --tid <id> --initiator-name <name>\n"
+		"\tdisable the specific permitted initiators.\n"
+		"--lld <driver> --mode logicalunit --op new --tid <id> --lun <lun>\n"
+		"  --backing-store <path> --bstype <type> --bsoflags <options>\n"
+		"\tadd a new logical unit with <lun> to the specific\n"
+		"\ttarget with <id>. The logical unit is offered\n"
+		"\tto the initiators. <path> must be block device files\n"
+		"\t(including LVM and RAID devices) or regular files.\n"
+		"\tbstype option is optional.\n"
+		"\tbsoflags supported options are sync and direct\n"
+		"\t(sync:direct for both).\n"
+		"--lld <driver> --mode logicalunit --op delete --tid <id> --lun <lun>\n"
+		"\tdelete the specific logical unit with <lun> that\n"
+		"\tthe target with <id> has.\n"
+		"--lld <driver> --mode account --op new --user <name> --password <pass>\n"
+		"\tadd a new account with <name> and <pass>.\n"
+		"--lld <driver> --mode account --op delete --user <name>\n"
+		"\tdelete the specific account having <name>.\n"
+		"--lld <driver> --mode account --op bind --tid <id> --user <name> [--outgoing]\n"
+		"\tadd the specific account having <name> to\n"
+		"\tthe specific target with <id>.\n"
+		"\t<user> could be <IncomingUser> or <OutgoingUser>.\n"
+		"\tIf you use --outgoing option, the account will\n"
+		"\tbe added as an outgoing account.\n"
+		"--lld <driver> --mode account --op unbind --tid <id> --user <name>\n"
+		"\tdelete the specific account having <name> from specific\n"
+		"\ttarget.\n"
+		"--lld <driver> --mode lld --op start\n"
+		"\tStart the specified lld without restarting the tgtd process.\n"
+		"--control-port <port> use control port <port>\n"
+		"--help\n"
+		"\tdisplay this help and exit\n\n"
+		"Report bugs to <stgt@vger.kernel.org>.\n",
+		TGT_VERSION, program_name);
+	exit(0);
 }
 
 static void version(void)
@@ -197,7 +202,7 @@ static void version(void)
 }
 
 /* default port to use for the mgmt channel */
-static short int control_port = 0;
+static short int control_port;
 
 static int ipc_mgmt_connect(int *fd)
 {
@@ -298,13 +303,13 @@ static int ipc_mgmt_req(struct tgtadm_req *req, struct concat_buf *b)
 
 	err = ipc_mgmt_connect(&fd);
 	if (err < 0) {
-		eprintf("can't connect to the tgt daemon, %m\n");
+		eprintf("can't connect to tgt daemon, %m\n");
 		goto out;
 	}
 
 	err = write(fd, req, sizeof(*req));
 	if (err < 0 || err != sizeof(*req)) {
-		eprintf("failed to send request hdr to the tgt daemon, %m\n");
+		eprintf("failed to send request hdr to tgt daemon, %m\n");
 		err = errno;
 		goto out;
 	}
@@ -314,7 +319,8 @@ static int ipc_mgmt_req(struct tgtadm_req *req, struct concat_buf *b)
 		if (err > 0)
 			done += err;
 		else if (errno != EAGAIN) {
-			eprintf("failed to send request buf to the tgt daemon, %m\n");
+			eprintf("failed to send request buf to "
+				"tgt daemon, %m\n");
 			err = errno;
 			goto out;
 		}
@@ -445,9 +451,11 @@ static int str_to_op(char *str)
 static void bad_optarg(int ret, int ch, char *optarg)
 {
 	if (ret == ERANGE)
-		fprintf(stderr, "-%c argument value '%s' out of range\n", ch, optarg);
+		fprintf(stderr, "-%c argument value '%s' out of range\n",
+			ch, optarg);
 	else
-		fprintf(stderr, "-%c argument value '%s' invalid\n", ch, optarg);
+		fprintf(stderr, "-%c argument value '%s' invalid\n",
+			ch, optarg);
 	usage(ret);
 }
 
@@ -655,11 +663,12 @@ int main(int argc, char **argv)
 			rc = verify_mode_params(argc, argv, "LmotTC");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
-					  "allowed/supported\n", rc);
+					"allowed/supported\n", rc);
 				exit(EINVAL);
 			}
 			if (!targetname) {
-				eprintf("creating a new target requires name\n");
+				eprintf("creating new target requires "
+					"a name, use --targetname\n");
 				exit(EINVAL);
 			}
 			break;
@@ -667,7 +676,7 @@ int main(int argc, char **argv)
 			rc = verify_mode_params(argc, argv, "LmotCF");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
-					  "allowed/supported\n", rc);
+					"allowed/supported\n", rc);
 				exit(EINVAL);
 			}
 			break;
@@ -676,7 +685,7 @@ int main(int argc, char **argv)
 			rc = verify_mode_params(argc, argv, "LmotC");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
-					  "allowed/supported\n", rc);
+					"allowed/supported\n", rc);
 				exit(EINVAL);
 			}
 			break;
@@ -720,12 +729,13 @@ int main(int argc, char **argv)
 		case OP_NEW:
 			rc = verify_mode_params(argc, argv, "LmoupfC");
 			if (rc) {
-				eprintf("logicalunit mode: option '-%c' is not "
-					  "allowed/supported\n", rc);
+				eprintf("logicalunit mode: option '-%c' is "
+					"not allowed/supported\n", rc);
 				exit(EINVAL);
 			}
 			if (!user || !password) {
-				eprintf("'user' and 'password' options is necessary\n");
+				eprintf("'user' and 'password' options "
+					"are required\n");
 				exit(EINVAL);
 			}
 			break;
@@ -733,7 +743,7 @@ int main(int argc, char **argv)
 			rc = verify_mode_params(argc, argv, "LmoC");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
-					  "allowed/supported\n", rc);
+					"allowed/supported\n", rc);
 				exit(EINVAL);
 			}
 			break;
@@ -741,7 +751,7 @@ int main(int argc, char **argv)
 			rc = verify_mode_params(argc, argv, "LmouC");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
-					  "allowed/supported\n", rc);
+					"allowed/supported\n", rc);
 				exit(EINVAL);
 			}
 			break;
@@ -749,7 +759,7 @@ int main(int argc, char **argv)
 			rc = verify_mode_params(argc, argv, "LmotuOC");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
-					  "allowed/supported\n", rc);
+					"allowed/supported\n", rc);
 				exit(EINVAL);
 			}
 			if (!user) {
@@ -763,7 +773,7 @@ int main(int argc, char **argv)
 			rc = verify_mode_params(argc, argv, "LmotuOC");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
-					  "allowed/supported\n", rc);
+					"allowed/supported\n", rc);
 				exit(EINVAL);
 			}
 			if (!user) {
@@ -774,7 +784,8 @@ int main(int argc, char **argv)
 				tid = GLOBAL_TID;
 			break;
 		default:
-			eprintf("option %d not supported in account mode\n", op);
+			eprintf("option %d not supported in account mode\n",
+				op);
 			exit(EINVAL);
 			break;
 		}
@@ -824,7 +835,7 @@ int main(int argc, char **argv)
 			break;
 		default:
 			eprintf("option %d not supported in "
-					"logicalunit mode\n", op);
+				"logicalunit mode\n", op);
 			exit(EINVAL);
 			break;
 		}
@@ -909,31 +920,42 @@ int main(int argc, char **argv)
 	if (name)
 		concat_printf(&b, "%s=%s", name, value);
 	if (path)
-		concat_printf(&b, "%spath=%s", concat_delim(&b,","), path);
+		concat_printf(&b, "%spath=%s", concat_delim(&b, ","), path);
 
 	if (req->device_type == TYPE_TAPE)
-		concat_printf(&b, "%sbstype=%s", concat_delim(&b,","), "ssc");
+		concat_printf(&b, "%sbstype=%s", concat_delim(&b, ","),
+			      "ssc");
 	else if (bstype)
-		concat_printf(&b, "%sbstype=%s", concat_delim(&b,","), bstype);
+		concat_printf(&b, "%sbstype=%s", concat_delim(&b, ","),
+			      bstype);
 	if (bsoflags)
-		concat_printf(&b, "%sbsoflags=%s", concat_delim(&b,","), bsoflags);
+		concat_printf(&b, "%sbsoflags=%s", concat_delim(&b, ","),
+			      bsoflags);
 	if (blocksize)
-		concat_printf(&b, "%sblocksize=%s", concat_delim(&b,","), blocksize);
+		concat_printf(&b, "%sblocksize=%s", concat_delim(&b, ","),
+			      blocksize);
 	if (targetname)
-		concat_printf(&b, "%stargetname=%s", concat_delim(&b,","), targetname);
+		concat_printf(&b, "%stargetname=%s", concat_delim(&b, ","),
+			      targetname);
 	if (address)
-		concat_printf(&b, "%sinitiator-address=%s", concat_delim(&b,","), address);
+		concat_printf(&b, "%sinitiator-address=%s",
+			      concat_delim(&b, ","), address);
 	if (iqnname)
-		concat_printf(&b, "%sinitiator-name=%s", concat_delim(&b,","), iqnname);
+		concat_printf(&b, "%sinitiator-name=%s", concat_delim(&b, ","),
+			      iqnname);
 	if (user)
-		concat_printf(&b, "%suser=%s", concat_delim(&b,","), user);
+		concat_printf(&b, "%suser=%s", concat_delim(&b, ","),
+			      user);
 	if (password)
-		concat_printf(&b, "%spassword=%s", concat_delim(&b,","), password);
+		concat_printf(&b, "%spassword=%s", concat_delim(&b, ","),
+			      password);
 	/* Trailing ',' makes parsing params in modules easier.. */
 	if (targetOps)
-		concat_printf(&b, "%stargetOps %s,", concat_delim(&b,","), targetOps);
+		concat_printf(&b, "%stargetOps %s,", concat_delim(&b, ","),
+			      targetOps);
 	if (portalOps)
-		concat_printf(&b, "%sportalOps %s,", concat_delim(&b,","), portalOps);
+		concat_printf(&b, "%sportalOps %s,", concat_delim(&b, ","),
+			      portalOps);
 
 	if (b.err) {
 		eprintf("BUFSIZE (%d bytes) isn't long enough\n", BUFSIZE);
