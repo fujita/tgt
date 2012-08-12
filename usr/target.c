@@ -229,8 +229,8 @@ void ua_sense_add_other_it_nexus(uint64_t itn_id, struct scsi_lu *lu,
 
 			ret = ua_sense_add(itn_lu, asc);
 			if (ret)
-				eprintf("fail to add ua %" PRIu64 " %" PRIu64 "\n",
-					lu->lun, itn_id);
+				eprintf("fail to add ua %" PRIu64
+					" %" PRIu64 "\n", lu->lun, itn_id);
 		}
 	}
 }
@@ -354,8 +354,10 @@ int it_nexus_destroy(int tid, uint64_t itn_id)
 	if (!list_empty(&itn->cmd_list))
 		return -EBUSY;
 
-	list_for_each_entry(lu, &itn->nexus_target->device_list, device_siblings)
+	list_for_each_entry(lu, &itn->nexus_target->device_list,
+			    device_siblings) {
 		device_release(tid, itn_id, lu->lun, 0);
+	}
 
 	it_nexus_del_lu_info(itn);
 
@@ -391,7 +393,8 @@ static void tgt_cmd_queue_init(struct tgt_cmd_queue *q)
 	INIT_LIST_HEAD(&q->queue);
 }
 
-tgtadm_err tgt_device_path_update(struct target *target, struct scsi_lu *lu, char *path)
+tgtadm_err tgt_device_path_update(struct target *target, struct scsi_lu *lu,
+				  char *path)
 {
 	int dev_fd;
 	uint64_t size;
@@ -548,7 +551,8 @@ tgtadm_err tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 		}
 	}
 
-	if (lu_bsoflags && ((bst->bs_oflags_supported & lu_bsoflags) != lu_bsoflags)) {
+	if (lu_bsoflags &&
+	    ((bst->bs_oflags_supported & lu_bsoflags) != lu_bsoflags)) {
 		eprintf("bsoflags %s not supported by backing store %s\n",
 			open_flags_to_str(strflags,
 			(bst->bs_oflags_supported & lu_bsoflags) ^ lu_bsoflags),
@@ -599,9 +603,10 @@ tgtadm_err tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 			lu->blk_shift = bshift;
 		else {
 			if (bsize > 0)
-				eprintf("%u is invalid block size\n", bsize);
+				eprintf("invalid block size: %u\n", bsize);
 			else
-				eprintf("%s is invalid block size\n", blocksize);
+				eprintf("invalid block size string: %s\n",
+					blocksize);
 		}
 	}
 
@@ -645,11 +650,14 @@ tgtadm_err tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 		itn_lu->itn_id = itn->itn_id;
 		INIT_LIST_HEAD(&itn_lu->pending_ua_sense_list);
 
-		/* signal LUNs info change thru all existing LUNs in the nexus */
+		/* signal LUNs info change thru all LUNs in the nexus */
 		list_for_each_entry(itn_lu_pos, &itn->itn_itl_info_list,
 				    itn_itl_info_siblings) {
+			int ret;
 
-			if (ua_sense_add(itn_lu_pos, ASC_REPORTED_LUNS_DATA_HAS_CHANGED)) {
+			ret = ua_sense_add(itn_lu_pos,
+					   ASC_REPORTED_LUNS_DATA_HAS_CHANGED);
+			if (ret) {
 				adm_err = TGTADM_NOMEM;
 				goto fail_bs_init;
 			}
@@ -746,8 +754,8 @@ tgtadm_err tgt_device_destroy(int tid, uint64_t lun, int force)
 			ret = ua_sense_add(itn_lu,
 					   ASC_REPORTED_LUNS_DATA_HAS_CHANGED);
 			if (ret)
-				eprintf("fail to add ua %" PRIu64 " %" PRIu64 "\n",
-					lun, itn->itn_id);
+				eprintf("fail to add ua %" PRIu64
+					" %" PRIu64 "\n", lun, itn->itn_id);
 		}
 	}
 
@@ -941,12 +949,15 @@ void tgt_stat_line(int tid, uint64_t lun, uint64_t sid, struct lu_stat *stat,
 		stat->err_num);
 }
 
-void tgt_stat_device(struct target *target, struct scsi_lu *lu, struct concat_buf *b)
+void tgt_stat_device(struct target *target, struct scsi_lu *lu,
+		     struct concat_buf *b)
 {
 	struct it_nexus_lu_info *itn_lu;
 
-	list_for_each_entry(itn_lu, &lu->lu_itl_info_list, lu_itl_info_siblings) {
-		tgt_stat_line(target->tid, lu->lun, itn_lu->itn_id, &itn_lu->stat, b);
+	list_for_each_entry(itn_lu, &lu->lu_itl_info_list,
+			    lu_itl_info_siblings) {
+		tgt_stat_line(target->tid, lu->lun, itn_lu->itn_id,
+			      &itn_lu->stat, b);
 	}
 }
 
@@ -1017,7 +1028,8 @@ static int cmd_enabled(struct tgt_cmd_queue *q, struct scsi_cmd *cmd)
 
 	if (cmd->attribute != MSG_SIMPLE_TAG)
 		dprintf("non simple attribute %" PRIx64 " %x %" PRIu64 " %d\n",
-			cmd->tag, cmd->attribute, cmd->dev ? cmd->dev->lun : UINT64_MAX,
+			cmd->tag, cmd->attribute,
+			cmd->dev ? cmd->dev->lun : UINT64_MAX,
 			q->active_cmd);
 
 	switch (cmd->attribute) {
@@ -1114,7 +1126,8 @@ int target_cmd_perform(int tid, struct scsi_cmd *cmd)
 	cmd_hlist_insert(cmd->it_nexus, cmd);
 
 	enabled = cmd_enabled(q, cmd);
-	dprintf("%p %x %" PRIx64 " %d\n", cmd, cmd->scb[0], cmd->dev_id, enabled);
+	dprintf("%p %x %" PRIx64 " %d\n", cmd, cmd->scb[0], cmd->dev_id,
+		enabled);
 
 	if (enabled) {
 		result = scsi_cmd_perform(cmd->it_nexus->host_no, cmd);
@@ -1148,7 +1161,7 @@ int target_cmd_perform_passthrough(int tid, struct scsi_cmd *cmd)
 {
 	int result;
 
-	dprintf("%p %x %" PRIx64 " PT \n", cmd, cmd->scb[0], cmd->dev_id);
+	dprintf("%p %x %" PRIx64 " PT\n", cmd, cmd->scb[0], cmd->dev_id);
 
 	result = cmd->dev->dev_type_template.cmd_passthrough(tid, cmd);
 
@@ -1167,23 +1180,26 @@ int target_cmd_perform_passthrough(int tid, struct scsi_cmd *cmd)
 
 void target_cmd_io_done(struct scsi_cmd *cmd, int result)
 {
+	enum data_direction cmd_dir = scsi_get_data_dir(cmd);
+	struct lu_stat *stat = &cmd->itn_lu_info->stat;
+	int lid = cmd->c_target->lid;
+
 	scsi_set_result(cmd, result);
-	if (scsi_get_data_dir(cmd) == DATA_WRITE) {
-		cmd->itn_lu_info->stat.wr_done_bytes += scsi_get_out_length(cmd);
-		cmd->itn_lu_info->stat.wr_done_cmds++;
-	} else if (scsi_get_data_dir(cmd) == DATA_READ) {
-		cmd->itn_lu_info->stat.rd_done_bytes += scsi_get_in_length(cmd);
-		cmd->itn_lu_info->stat.rd_done_cmds++;
-	} else if (scsi_get_data_dir(cmd) == DATA_BIDIRECTIONAL) {
-		cmd->itn_lu_info->stat.wr_done_bytes += scsi_get_out_length(cmd);
-		cmd->itn_lu_info->stat.rd_done_bytes += scsi_get_in_length(cmd);
-		cmd->itn_lu_info->stat.bidir_done_cmds++;
+	if (cmd_dir == DATA_WRITE) {
+		stat->wr_done_bytes += scsi_get_out_length(cmd);
+		stat->wr_done_cmds++;
+	} else if (cmd_dir == DATA_READ) {
+		stat->rd_done_bytes += scsi_get_in_length(cmd);
+		stat->rd_done_cmds++;
+	} else if (cmd_dir == DATA_BIDIRECTIONAL) {
+		stat->wr_done_bytes += scsi_get_out_length(cmd);
+		stat->rd_done_bytes += scsi_get_in_length(cmd);
+		stat->bidir_done_cmds++;
 	}
 	if (result != SAM_STAT_GOOD)
-		cmd->itn_lu_info->stat.err_num++;
+		stat->err_num++;
 
-	tgt_drivers[cmd->c_target->lid]->cmd_end_notify(cmd->cmd_itn_id,
-							result, cmd);
+	tgt_drivers[lid]->cmd_end_notify(cmd->cmd_itn_id, result, cmd);
 	return;
 }
 
@@ -1195,14 +1211,17 @@ static void post_cmd_done(struct tgt_cmd_queue *q)
 	list_for_each_entry_safe(cmd, tmp, &q->queue, qlist) {
 		enabled = cmd_enabled(q, cmd);
 		if (enabled) {
+			int tid = cmd->c_target->tid;
+			uint64_t itn_id = cmd->cmd_itn_id;
 			struct it_nexus *nexus;
 
-			nexus = it_nexus_lookup(cmd->c_target->tid, cmd->cmd_itn_id);
+			nexus = it_nexus_lookup(tid, itn_id);
 			if (!nexus)
-				eprintf("BUG: %" PRIu64 "\n", cmd->cmd_itn_id);
+				eprintf("BUG: %" PRIu64 "\n", itn_id);
 
 			list_del(&cmd->qlist);
-			dprintf("perform %" PRIx64 " %x\n", cmd->tag, cmd->attribute);
+			dprintf("perform %" PRIx64 " %x\n", cmd->tag,
+				cmd->attribute);
 			result = scsi_cmd_perform(nexus->host_no, cmd);
 			cmd_post_perform(q, cmd);
 			set_cmd_processed(cmd);
@@ -1263,7 +1282,7 @@ void target_cmd_done(struct scsi_cmd *cmd)
 	cmd->dev->cmd_done(cmd->c_target, cmd);
 }
 
-static int abort_cmd(struct target* target, struct mgmt_req *mreq,
+static int abort_cmd(struct target *target, struct mgmt_req *mreq,
 		     struct scsi_cmd *cmd)
 {
 	int err = 0;
@@ -1285,7 +1304,7 @@ static int abort_cmd(struct target* target, struct mgmt_req *mreq,
 	return err;
 }
 
-static int abort_task_set(struct mgmt_req *mreq, struct target* target,
+static int abort_task_set(struct mgmt_req *mreq, struct target *target,
 			  uint64_t itn_id, uint64_t tag, uint8_t *lun, int all)
 {
 	struct scsi_cmd *cmd, *tmp;
@@ -1361,14 +1380,16 @@ enum mgmt_req_result target_mgmt_request(int tid, uint64_t itn_id,
 		if (mreq->busy)
 			send = 0;
 
-		list_for_each_entry(itn, &target->it_nexus_list, nexus_siblings) {
+		list_for_each_entry(itn, &target->it_nexus_list,
+				    nexus_siblings) {
+
 			list_for_each_entry(itn_lu, &itn->itn_itl_info_list,
 					    itn_itl_info_siblings) {
+
 				if (itn_lu->lu->lun == lun) {
-					if (itn->itn_id == itn_id)
-						asc = ASC_POWERON_RESET;
-					else
-						asc = ASC_CMDS_CLEARED_BY_ANOTHER_INI;
+					asc = (itn->itn_id == itn_id) ?
+						ASC_POWERON_RESET :
+						ASC_CMDS_CLEARED_BY_ANOTHER_INI;
 
 					asc = ua_sense_add(itn_lu, asc);
 					break;
@@ -1383,9 +1404,12 @@ enum mgmt_req_result target_mgmt_request(int tid, uint64_t itn_id,
 		if (mreq->busy)
 			send = 0;
 
-		list_for_each_entry(itn, &target->it_nexus_list, nexus_siblings) {
+		list_for_each_entry(itn, &target->it_nexus_list,
+				    nexus_siblings) {
+
 			list_for_each_entry(itn_lu, &itn->itn_itl_info_list,
 					    itn_itl_info_siblings) {
+
 				if (itn_lu->lu->lun == lun) {
 					itn_lu->prevent = 0;
 					ua_sense_add(itn_lu, ASC_POWERON_RESET);
@@ -1442,7 +1466,8 @@ static struct account_entry *__account_lookup_user(char *user)
 	return NULL;
 }
 
-int account_lookup(int tid, int type, char *user, int ulen, char *password, int plen)
+int account_lookup(int tid, int type, char *user, int ulen,
+		   char *password, int plen)
 {
 	int i;
 	struct target *target;
@@ -1720,9 +1745,11 @@ tgtadm_err iqn_acl_add(int tid, char *name)
 	if (!target)
 		return TGTADM_NO_TARGET;
 
-	list_for_each_entry_safe(iqn_acl, tmp, &target->iqn_acl_list, iqn_aclent_list)
+	list_for_each_entry_safe(iqn_acl, tmp, &target->iqn_acl_list,
+				 iqn_aclent_list) {
 		if (!strcmp(name, iqn_acl->name))
 			return TGTADM_ACL_EXIST;
+	}
 
 	iqn_acl = zalloc(sizeof(*iqn_acl));
 	if (!iqn_acl)
@@ -1750,7 +1777,9 @@ tgtadm_err iqn_acl_del(int tid, char *name)
 	if (!target)
 		return TGTADM_NO_TARGET;
 
-	list_for_each_entry_safe(iqn_acl, tmp, &target->iqn_acl_list, iqn_aclent_list) {
+	list_for_each_entry_safe(iqn_acl, tmp, &target->iqn_acl_list,
+				 iqn_aclent_list) {
+
 		if (!strcmp(name, iqn_acl->name)) {
 			list_del(&iqn_acl->iqn_aclent_list);
 			free(iqn_acl->name);
@@ -1963,7 +1992,9 @@ tgtadm_err tgt_target_show_all(struct concat_buf *b)
 
 		concat_printf(b, _TAB1 "I_T nexus information:\n");
 
-		list_for_each_entry(nexus, &target->it_nexus_list, nexus_siblings) {
+		list_for_each_entry(nexus, &target->it_nexus_list,
+				    nexus_siblings) {
+
 			concat_printf(b, _TAB2 "I_T nexus: %" PRIu64 "\n",
 				      nexus->itn_id);
 			if (nexus->info)
@@ -1973,36 +2004,36 @@ tgtadm_err tgt_target_show_all(struct concat_buf *b)
 		concat_printf(b, _TAB1 "LUN information:\n");
 		list_for_each_entry(lu, &target->device_list, device_siblings)
 			concat_printf(b,
-				 _TAB2 "LUN: %" PRIu64 "\n"
-  				 _TAB3 "Type: %s\n"
-				 _TAB3 "SCSI ID: %s\n"
-				 _TAB3 "SCSI SN: %s\n"
-				 _TAB3 "Size: %s, Block size: %d\n"
-				 _TAB3 "Online: %s\n"
-				 _TAB3 "Removable media: %s\n"
-				 _TAB3 "Prevent removal: %s\n"
-				 _TAB3 "Readonly: %s\n"
-				 _TAB3 "Thin-provisioning: %s\n"
-				 _TAB3 "Backing store type: %s\n"
-				 _TAB3 "Backing store path: %s\n"
-				 _TAB3 "Backing store flags: %s\n",
-				 lu->lun,
-  				 print_type(lu->attrs.device_type),
-				 lu->attrs.scsi_id,
-				 lu->attrs.scsi_sn,
-				 print_disksize(lu->size),
-				 1U << lu->blk_shift,
-				 lu->attrs.online ? "Yes" : "No",
-				 lu->attrs.removable ? "Yes" : "No",
-				 lu_prevent_removal(lu) ?
-					"Yes" : "No",
-				 lu->attrs.readonly ? "Yes" : "No",
-				 lu->attrs.thinprovisioning ? "Yes" : "No",
-				 lu->bst ?
+				_TAB2 "LUN: %" PRIu64 "\n"
+				_TAB3 "Type: %s\n"
+				_TAB3 "SCSI ID: %s\n"
+				_TAB3 "SCSI SN: %s\n"
+				_TAB3 "Size: %s, Block size: %d\n"
+				_TAB3 "Online: %s\n"
+				_TAB3 "Removable media: %s\n"
+				_TAB3 "Prevent removal: %s\n"
+				_TAB3 "Readonly: %s\n"
+				_TAB3 "Thin-provisioning: %s\n"
+				_TAB3 "Backing store type: %s\n"
+				_TAB3 "Backing store path: %s\n"
+				_TAB3 "Backing store flags: %s\n",
+				lu->lun,
+				print_type(lu->attrs.device_type),
+				lu->attrs.scsi_id,
+				lu->attrs.scsi_sn,
+				print_disksize(lu->size),
+				1U << lu->blk_shift,
+				lu->attrs.online ? "Yes" : "No",
+				lu->attrs.removable ? "Yes" : "No",
+				lu_prevent_removal(lu) ? "Yes" : "No",
+				lu->attrs.readonly ? "Yes" : "No",
+				lu->attrs.thinprovisioning ? "Yes" : "No",
+				lu->bst ?
 					(lu->bst->bs_name ? : "Unknown") :
 					"None",
-				 lu->path ? : "None",
-				 open_flags_to_str(strflags, lu->bsoflags));
+				lu->path ? : "None",
+					open_flags_to_str(strflags,
+							  lu->bsoflags));
 
 		if (!strcmp(tgt_drivers[target->lid]->name, "iscsi") ||
 		    !strcmp(tgt_drivers[target->lid]->name, "iser")) {
@@ -2025,8 +2056,10 @@ tgtadm_err tgt_target_show_all(struct concat_buf *b)
 		list_for_each_entry(acl, &target->acl_list, aclent_list)
 			concat_printf(b, _TAB2 "%s\n", acl->address);
 
-		list_for_each_entry(iqn_acl, &target->iqn_acl_list, iqn_aclent_list)
+		list_for_each_entry(iqn_acl, &target->iqn_acl_list,
+				    iqn_aclent_list) {
 			concat_printf(b, _TAB2 "%s\n", iqn_acl->name);
+		}
 
 	}
 	return TGTADM_SUCCESS;
@@ -2170,7 +2203,8 @@ tgtadm_err tgt_target_destroy(int lld_no, int tid, int force)
 		free(acl);
 	}
 
-	list_for_each_entry_safe(iqn_acl, tmp1, &target->iqn_acl_list, iqn_aclent_list) {
+	list_for_each_entry_safe(iqn_acl, tmp1, &target->iqn_acl_list,
+				 iqn_aclent_list) {
 		list_del(&iqn_acl->iqn_aclent_list);
 		free(iqn_acl->name);
 		free(iqn_acl);
@@ -2313,8 +2347,10 @@ tgtadm_err system_show(int mode, struct concat_buf *b)
 		if (!bst->bs_oflags_supported)
 			concat_printf(b, _TAB1 "%s\n", bst->bs_name);
 		else
-			concat_printf(b, _TAB1 "%s (bsoflags %s)\n", bst->bs_name,
-				      open_flags_to_str(strflags, bst->bs_oflags_supported));
+			concat_printf(b, _TAB1 "%s (bsoflags %s)\n",
+				      bst->bs_name,
+				      open_flags_to_str(strflags,
+						bst->bs_oflags_supported));
 	}
 
 	concat_printf(b, "Device types:\n");
@@ -2348,8 +2384,11 @@ tgtadm_err lld_show(struct concat_buf *b)
 	for (i = 0; tgt_drivers[i]; i++) {
 		concat_printf(b, _TAB1 "%s: %s\n", tgt_drivers[i]->name,
 				  driver_state_name(tgt_drivers[i]));
-		list_for_each_entry(target, &tgt_drivers[i]->target_list, lld_siblings) {
-			concat_printf(b, _TAB2 "Target %d: %s\n", target->tid, target->name);
+
+		list_for_each_entry(target, &tgt_drivers[i]->target_list,
+				    lld_siblings) {
+			concat_printf(b, _TAB2 "Target %d: %s\n", target->tid,
+				      target->name);
 		}
 	}
 
@@ -2375,7 +2414,7 @@ int is_system_inactive(void)
 	return list_empty(&target_list);
 }
 
-__attribute__((constructor)) static void target_constructor(void)
+static void __attribute__((constructor)) target_constructor(void)
 {
 	static int global_target_aids[DEFAULT_NR_ACCOUNT];
 
