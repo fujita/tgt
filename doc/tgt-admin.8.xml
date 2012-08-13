@@ -153,7 +153,7 @@ Example usage:
         <listitem>
           <para>
             Specify an alternative configuration file instead of
-            /etc/tgt/target.conf, which is the default.
+            /etc/tgt/targets.conf, which is the default.
           </para>
         </listitem>
       </varlistentry>
