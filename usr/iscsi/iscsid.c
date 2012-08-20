@@ -345,8 +345,7 @@ static void text_scan_login(struct iscsi_connection *conn)
 				text_key_add_reject(conn, key);
 				continue;
 			}
-			if (idx == ISCSI_PARAM_MAX_XMIT_DLENGTH &&
-			    conn->session_type == SESSION_DISCOVERY)
+			if (idx == ISCSI_PARAM_MAX_XMIT_DLENGTH)
 				conn->session_param[idx].val = val;
 			else
 				param_set_val(session_keys,
