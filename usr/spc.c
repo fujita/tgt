@@ -1642,9 +1642,9 @@ tgtadm_err add_mode_page(struct scsi_lu *lu, char *p)
 			p++;
 	}
 
-	if (i != size + 3) {
+	if (i > size + 3) {
 		adm_err = TGTADM_INVALID_REQUEST;
-		eprintf("Mode Page %d (0x%02x): param_count %d != "
+		eprintf("Mode Page %d (0x%02x): param_count %d > "
 			"MODE PAGE size : %d\n", pcode, subpcode, i, size + 3);
 	}
 exit:
