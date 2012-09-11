@@ -65,6 +65,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 	int result = SAM_STAT_GOOD;
 	uint8_t key;
 	uint16_t asc;
+	uint32_t info = 0;
 	char *tmpbuf;
 	size_t blocksize;
 	uint64_t offset = cmd->offset;
@@ -117,12 +118,32 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 
 		ret = pread64(fd, tmpbuf, length, offset);
 
-		if (ret != length)
+		if (ret != length) {
 			set_medium_error(&result, &key, &asc);
-		else if (memcmp(scsi_get_out_buffer(cmd), tmpbuf, length)) {
+			free(tmpbuf);
+			break;
+		}
+
+		if (memcmp(scsi_get_out_buffer(cmd), tmpbuf, length)) {
+			uint32_t pos = 0;
+			char *spos = scsi_get_out_buffer(cmd);
+			char *dpos = tmpbuf;
+
+			/*
+			 * Data differed, this is assumed to be 'rare'
+			 * so use a much more expensive byte-by-byte
+			 * comparasion to find out at which offset the
+			 * data differs.
+			 */
+			for (pos = 0; pos < length && *spos++ == *dpos++;
+			     pos++)
+				;
+			info = pos;
 			result = SAM_STAT_CHECK_CONDITION;
 			key = MISCOMPARE;
 			asc = ASC_MISCOMPARE_DURING_VERIFY_OPERATION;
+			free(tmpbuf);
+			break;
 		}
 
 		if (cmd->scb[1] & 0x10)
