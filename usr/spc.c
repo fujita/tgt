@@ -227,7 +227,7 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 		data[0] = devtype;
 		data[1] = (attrs->removable) ? 0x80 : 0;
 		data[2] = 5;	/* SPC-3 */
-		data[3] = 0x42;
+		data[3] = 0x12;
 		data[7] = 0x02;
 
 		memset(data + 8, 0x20, 28);
