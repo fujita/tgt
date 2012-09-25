@@ -426,13 +426,13 @@ int lld_init_one(int lld_index)
 {
 	int err;
 
+	INIT_LIST_HEAD(&tgt_drivers[lld_index]->target_list);
 	if (tgt_drivers[lld_index]->init) {
 		err = tgt_drivers[lld_index]->init(lld_index, spare_args);
 		if (err) {
 			tgt_drivers[lld_index]->drv_state = DRIVER_ERR;
 			return err;
 		}
-		INIT_LIST_HEAD(&tgt_drivers[lld_index]->target_list);
 		tgt_drivers[lld_index]->drv_state = DRIVER_INIT;
 	}
 	return 0;
