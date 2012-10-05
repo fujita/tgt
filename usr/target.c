@@ -887,6 +887,9 @@ int device_release(int tid, uint64_t itn_id, uint64_t lun, int force)
 		return 0;
 	}
 
+	if (lu->reserve_id != itn_id)
+		return 0;
+
 	return -EBUSY;
 }
 
