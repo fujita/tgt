@@ -198,7 +198,15 @@ Possible backend types are:
       <varlistentry><term><option>--lld &lt;driver&gt; --op update --mode target --tid &lt;id&gt; --params parameter=value&lt;,...&gt;</option></term>
         <listitem>
           <para>
-	    Sets/changes the value of one or more parameters.
+	    Sets/changes the value of one or more target parameters.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry><term><option>--lld &lt;driver&gt; --op update --mode logicalunit --tid &lt;id&gt; --lun &lt;id&gt; --params parameter=value&lt;,...&gt;</option></term>
+        <listitem>
+          <para>
+	    Sets/changes the value of one or more logical unit parameters.
           </para>
         </listitem>
       </varlistentry>
