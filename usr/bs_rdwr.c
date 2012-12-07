@@ -73,7 +73,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 	int do_verify = 0;
 	int i;
 	char *ptr;
-
+	const char *write_buf = NULL;
 	ret = length = 0;
 	key = asc = 0;
 
@@ -104,9 +104,20 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 
 		free(tmpbuf);
 
+		write_buf = scsi_get_out_buffer(cmd);
 		goto write;
 	case COMPARE_AND_WRITE:
-		length = scsi_get_out_length(cmd);
+		/* Blocks are transferred twice, first the set that
+		 * we compare to the existing data, and second the set
+		 * to write if the compare was successful.
+		 */
+		length = scsi_get_out_length(cmd) / 2;
+		if (length != cmd->tl) {
+			result = SAM_STAT_CHECK_CONDITION;
+			key = ILLEGAL_REQUEST;
+			asc = ASC_INVALID_FIELD_IN_CDB;
+			break;
+		}
 
 		tmpbuf = malloc(length);
 		if (!tmpbuf) {
@@ -152,6 +163,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 
 		free(tmpbuf);
 
+		write_buf = scsi_get_out_buffer(cmd) + length;
 		goto write;
 	case SYNCHRONIZE_CACHE:
 	case SYNCHRONIZE_CACHE_16:
@@ -173,9 +185,10 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 	case WRITE_10:
 	case WRITE_12:
 	case WRITE_16:
-write:
 		length = scsi_get_out_length(cmd);
-		ret = pwrite64(fd, scsi_get_out_buffer(cmd), length,
+		write_buf = scsi_get_out_buffer(cmd);
+write:
+		ret = pwrite64(fd, write_buf, length,
 			       offset);
 		if (ret == length) {
 			struct mode_pg *pg;
