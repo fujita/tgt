@@ -1060,14 +1060,15 @@ static void __unregister(struct scsi_lu *lu, struct registration *reg)
 
 static int check_pr_out_basic_parameter(struct scsi_cmd *cmd)
 {
-	uint8_t spec_i_pt, all_tg_pt, aptpl;
+	uint32_t param_list_len;
 	uint8_t *buf;
-	uint16_t len = 24;
+	uint8_t spec_i_pt, all_tg_pt, aptpl;
 
-	if (get_unaligned_be16(cmd->scb + 7) < len)
+	param_list_len = get_unaligned_be32(&cmd->scb[5]);
+	if (param_list_len != 24)
 		return 1;
 
-	if (scsi_get_out_length(cmd) < len)
+	if (scsi_get_out_length(cmd) < 24)
 		return 1;
 
 	buf = scsi_get_out_buffer(cmd);
