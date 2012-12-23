@@ -1418,24 +1418,26 @@ static int spc_pr_register_and_move(int host_no, struct scsi_cmd *cmd)
 {
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 	uint8_t key = ILLEGAL_REQUEST;
+	uint32_t param_list_len;
 	char *buf;
-	uint8_t unreg;
+	uint8_t unreg, aptpl;
 	uint64_t res_key, sa_res_key;
-	uint32_t addlen, idlen;
+	uint32_t tpid_data_len, idlen;
 	struct registration *reg, *dst;
-	uint16_t len = 24;
 	int (*id)(int, uint64_t, char *, int);
 	char tpid[300]; /* large enough? */
 
-	if (get_unaligned_be16(cmd->scb + 7) < len)
+	param_list_len = get_unaligned_be32(&cmd->scb[5]);
+	if (param_list_len < 24)
 		goto sense;
 
-	if (scsi_get_out_length(cmd) < len)
+	if (scsi_get_out_length(cmd) < param_list_len)
 		goto sense;
 
 	buf = scsi_get_out_buffer(cmd);
 
-	if (buf[17] & 0x01)
+	aptpl = buf[17] & 0x01;
+	if (aptpl) /* not reported in capabilities */
 		goto sense;
 
 	unreg = buf[17] & 0x02;
@@ -1443,7 +1445,11 @@ static int spc_pr_register_and_move(int host_no, struct scsi_cmd *cmd)
 	res_key = get_unaligned_be64(buf);
 	sa_res_key = get_unaligned_be64(buf + 8);
 
-	addlen = get_unaligned_be32(buf + 24);
+	tpid_data_len = get_unaligned_be32(&buf[20]);
+	if (tpid_data_len < 24 || tpid_data_len % 4 != 0)
+		goto sense;
+	if (param_list_len - 24 < tpid_data_len)
+		goto sense;
 
 	reg = lookup_registration_by_nexus(cmd->dev, cmd->it_nexus);
 	if (!reg) {
@@ -1474,10 +1480,8 @@ found:
 	if (id) {
 		memset(tpid, 0, sizeof(tpid));
 		idlen = id(cmd->dev->tgt->tid, dst->nexus_id, tpid, sizeof(tpid));
-		if (addlen) {
-			if (strncmp(tpid, buf + 28, strlen(tpid)))
-				goto sense;
-		}
+		if (tpid_data_len != idlen || memcmp(tpid, &buf[24], idlen))
+			goto sense;
 	}
 
 	cmd->dev->pr_holder = dst;
