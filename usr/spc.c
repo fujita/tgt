@@ -1002,6 +1002,8 @@ static int spc_pr_report_capabilities(int host_no, struct scsi_cmd *cmd)
 	/* we don't set any capability for now */
 
 	/* Persistent Reservation Type Mask format */
+	buf[3] |= 0x80; /* Type Mask Valid (TMV) */
+
 	buf[4] |= 0x80; /* PR_TYPE_EXCLUSIVE_ACCESS_ALLREG */
 	buf[4] |= 0x40; /* PR_TYPE_EXCLUSIVE_ACCESS_REGONLY */
 	buf[4] |= 0x20; /* PR_TYPE_WRITE_EXCLUSIVE_REGONLY */
