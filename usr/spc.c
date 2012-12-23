@@ -928,46 +928,47 @@ sense:
 
 static int spc_pr_read_reservation(int host_no, struct scsi_cmd *cmd)
 {
+	uint32_t alloc_len, add_len, avail_len, actual_len;
+	struct registration *reg;
+	uint64_t res_key;
+	uint8_t *buf;
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 	uint8_t key = ILLEGAL_REQUEST;
-	struct registration *reg;
-	uint16_t len;
-	uint8_t *buf;
-	uint64_t res_key;
+
+	alloc_len = (uint32_t)get_unaligned_be16(&cmd->scb[7]);
+	if (alloc_len < 8)
+		goto sense;
+
+	if (scsi_get_in_length(cmd) < alloc_len)
+		goto sense;
 
 	reg = cmd->dev->pr_holder;
-
-	if (reg)
-		len = 24;
-	else
-		len = 8;
-
-	if (get_unaligned_be16(cmd->scb + 7) < len)
-		goto sense;
-
-	if (scsi_get_in_length(cmd) < len)
-		goto sense;
+	add_len = (reg ? 16 : 0);
+	avail_len = 8 + add_len;
 
 	buf = scsi_get_in_buffer(cmd);
-	memset(buf, 0, len);
+	memset(buf, 0, alloc_len);
 
 	put_unaligned_be32(cmd->dev->prgeneration, &buf[0]);
+	put_unaligned_be32(add_len, &buf[4]); /* additional length */
 
 	if (reg) {
-		put_unaligned_be32(16, &buf[4]);
-
 		if (reg->pr_type == PR_TYPE_WRITE_EXCLUSIVE_ALLREG ||
 		    reg->pr_type == PR_TYPE_EXCLUSIVE_ACCESS_ALLREG)
 			res_key = 0;
 		else
 			res_key = reg->key;
 
-		put_unaligned_be64(res_key, &buf[8]);
-		buf[21] = ((reg->pr_scope << 4) & 0xf0) | (reg->pr_type & 0x0f);
-	} else
-		put_unaligned_be32(0, &buf[4]);
+		if (alloc_len > 15)
+			put_unaligned_be64(res_key, &buf[8]);
+		if (alloc_len > 21) {
+			buf[21] = (reg->pr_scope << 4) & 0xf0;
+			buf[21] |= reg->pr_type & 0x0f;
+		}
+	}
 
-	scsi_set_in_resid_by_actual(cmd, len);
+	actual_len = min_t(uint32_t, alloc_len, avail_len);
+	scsi_set_in_resid_by_actual(cmd, actual_len);
 
 	return SAM_STAT_GOOD;
 sense:
