@@ -281,11 +281,11 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 	if (ret != SAM_STAT_GOOD)
 		goto sense;
 
-	scsi_set_in_resid_by_actual(cmd, len);
-	memcpy(scsi_get_in_buffer(cmd), data, scb[4]);
-
 	if (cmd->dev->lun != cmd->dev_id)
 		data[0] = TYPE_NO_LUN;
+
+	scsi_set_in_resid_by_actual(cmd, len);
+	memcpy(scsi_get_in_buffer(cmd), data, scb[4]);
 
 	return SAM_STAT_GOOD;
 sense:
