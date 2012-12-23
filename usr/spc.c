@@ -1058,6 +1058,68 @@ static void __unregister(struct scsi_lu *lu, struct registration *reg)
 	free(reg);
 }
 
+static void __unregister_and_clean(struct scsi_cmd *cmd,
+				   struct registration *reg)
+{
+	struct registration *holder, *registrant;
+
+
+	/* if reservation owner goes away then so does reservation */
+	list_del(&reg->registration_siblings);
+
+	holder = cmd->dev->pr_holder;
+	if (!holder) {
+		free(reg);
+		return;
+	}
+
+	if (!is_pr_holder(cmd->dev, reg)) {
+		free(reg);
+		return;
+	}
+
+	if (((holder->pr_type != PR_TYPE_WRITE_EXCLUSIVE_ALLREG) &&
+	     (holder->pr_type != PR_TYPE_EXCLUSIVE_ACCESS_ALLREG)) ||
+	    list_empty(&cmd->dev->registration_list)) {
+
+		/* not all-registrants or no more registrants */
+
+		holder->pr_scope = 0;
+		holder->pr_type = 0;
+		cmd->dev->pr_holder = NULL;
+
+		/* tell other registrants the reservation went away */
+		list_for_each_entry(registrant,
+		    &cmd->dev->registration_list,
+		    registration_siblings) {
+			/* do not send UA to self */
+			if (registrant == reg)
+				continue;
+			ua_sense_add_other_it_nexus(registrant->nexus_id,
+			    cmd->dev,
+			    ASC_RESERVATIONS_RELEASED);
+		}
+		cmd->dev->prgeneration++;
+	} else {
+
+		/* all-registrants and there are more registrants */
+
+		list_for_each_entry(registrant,
+		    &cmd->dev->registration_list,
+		    registration_siblings) {
+			if (registrant != reg) {
+				/* give resvn to any sibling */
+				cmd->dev->pr_holder = registrant;
+				registrant->pr_scope = holder->pr_scope;
+				registrant->pr_type = holder->pr_type;
+				break;
+			}
+		}
+	}
+
+	free(reg);
+}
+
 static int check_pr_out_basic_parameter(struct scsi_cmd *cmd)
 {
 	uint32_t param_list_len;
@@ -1114,7 +1176,7 @@ static int spc_pr_register(int host_no, struct scsi_cmd *cmd)
 			if (sa_res_key)
 				reg->key = sa_res_key;
 			else
-				__unregister(cmd->dev, reg);
+				__unregister_and_clean(cmd, reg);
 		} else
 			return SAM_STAT_RESERVATION_CONFLICT;
 	} else {
@@ -1239,7 +1301,7 @@ static int spc_pr_release(int host_no, struct scsi_cmd *cmd)
 	if (res_key != reg->key)
 		return SAM_STAT_RESERVATION_CONFLICT;
 
-	if (reg->pr_scope != pr_scope || reg->pr_type != pr_type) {
+	if (holder->pr_scope != pr_scope || holder->pr_type != pr_type) {
 		asc = ASC_INVALID_RELEASE_OF_PERSISTENT_RESERVATION;
 		goto sense;
 	}
@@ -1528,9 +1590,10 @@ int spc_access_check(struct scsi_cmd *cmd)
 	pr_type = cmd->dev->pr_holder->pr_type;
 	bits = cmd->dev->dev_type_template.ops[op].pr_conflict_bits;
 
-	if (pr_type == PR_TYPE_WRITE_EXCLUSIVE ||
-	    pr_type == PR_TYPE_EXCLUSIVE_ACCESS)
-		conflict = bits & (PR_WE_FA|PR_EA_FA);
+	if (pr_type == PR_TYPE_EXCLUSIVE_ACCESS)
+		conflict = bits & PR_EA_FA;
+	else if (pr_type == PR_TYPE_WRITE_EXCLUSIVE)
+		conflict = bits & PR_WE_FA;
 	else {
 		if (reg)
 			conflict = bits & PR_RR_FR;
