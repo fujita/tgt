@@ -325,6 +325,9 @@ static int resp_var_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length,
 		if (h->blk_type == BLK_EOD)
 			sense_data_build(cmd, 0x40 | BLANK_CHECK,
 					 NO_ADDITIONAL_SENSE);
+		else if (h->blk_type == BLK_FILEMARK)
+			ssc_sense_data_build(cmd, NO_SENSE | SENSE_FILEMARK,
+					     ASC_MARK, info, sizeof(info));
 		else
 			ssc_sense_data_build(cmd, NO_SENSE | 0x20,
 					     NO_ADDITIONAL_SENSE,
@@ -339,8 +342,11 @@ static int resp_var_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length,
 
 		result = SAM_STAT_CHECK_CONDITION;
 
-		if (!length)
+		if (!length) {
+			if (h->blk_type == BLK_FILEMARK)
+				goto skip_and_out;
 			goto out;
+		}
 	}
 
 	ret = pread64(cmd->dev->fd, buf, length, h->curr + SSC_BLK_HDR_SIZE);
@@ -351,6 +357,7 @@ static int resp_var_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length,
 	}
 	*transferred = length;
 
+skip_and_out:
 	ret = skip_next_header(cmd->dev);
 	if (ret) {
 		sense_data_build(cmd, MEDIUM_ERROR, ASC_MEDIUM_FORMAT_CORRUPT);
