@@ -120,6 +120,44 @@ find_vacant_lun()
 	return $next_vacant_lun
 }
 
+get_acl() {
+	tid=$1
+	tgt_found=0
+	acl_found=0
+	next_vacant_lun=0
+	tmp_file=/tmp/target_list.txt
+	local _acl=""
+
+	$TGTADM --lld $lld_name --op show --mode target > $tmp_file
+
+	while read line; do
+		# Check if we finished going over this target
+		if ((tgt_found == 1 && $(echo $line | grep -c "^Target") == 1)); then
+			break
+		fi
+
+		# Check if we found the requested target
+		if (($(echo $line | grep -c "Target $tid:") == 1)); then
+			tgt_found=1
+			continue
+		fi
+
+		if ((tgt_found == 1 && $(echo $line | grep -c "ACL information") == 1)); then
+			acl_found=1
+			continue
+		fi
+
+		if ((tgt_found == 1 && acl_found == 1)); then
+			curr_acl=$(echo $line)
+			_acl=`echo $_acl $curr_acl`
+		fi
+	done < $tmp_file
+
+	rm -f $tmp_file
+
+	echo $_acl
+}
+
 err_exit()
 {
 	if ((new_tgt == 0)); then
@@ -208,7 +246,7 @@ check_if_tgt_exists
 if [ $? -eq 1 ]; then
 	echo "Error: target named $tgt_name already exists"
 	read -p "Add a new lun to the existing target? (yes/NO): " add_lun
-	if [ $add_lun != "yes" ]; then
+	if [ "$add_lun" != "yes" ]; then
 		exit 1
 	fi
 	tid=$($TGTADM --lld $lld_name --op show --mode target | grep $tgt_name | cut -d" " -f2)
@@ -248,10 +286,16 @@ if [ $res -ne 0 ]; then
 fi
 
 # Define which initiators can use this target
+tgt_acl=`get_acl $tid`
 if test "$initiators" ; then
 	# Allow access only for specific initiators
-	echo "Accepting connections only from $initiators"
+	echo "Accepting connections from $initiators"
 	for initiator in $initiators; do
+		# Check if record already exists
+		if ((`echo $tgt_acl | grep -c "\b$initiator\b"` == 1)) ; then
+			continue
+		fi
+
 		$TGTADM --lld $lld_name --op bind --mode target --tid $tid -I $initiator
 		res=$?
 
@@ -260,6 +304,11 @@ if test "$initiators" ; then
 		fi
 	done
 else
+	# Check if record already exists
+	if ((`echo $tgt_acl | grep -c "\bALL\b"` == 1)) ; then
+		exit 0
+	fi
+
 	# Allow access for everyone
 	echo "Accepting connections from all initiators"
 	$TGTADM --lld $lld_name --op bind --mode target --tid $tid -I ALL
