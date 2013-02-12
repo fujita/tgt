@@ -688,7 +688,7 @@ static int report_opcodes_all(struct scsi_cmd *cmd, int rctd,
 	struct device_type_operations *ops;
 	struct service_action *service_action;
 	int i;
-	uint32_t len;
+	uint32_t avail_len, actual_len;
 	int cdb_length;
 
 	/* cant request RCTD for all descriptors */
@@ -759,17 +759,12 @@ static int report_opcodes_all(struct scsi_cmd *cmd, int rctd,
 		}
 	}
 
-	len = data - &buf[0];
-	len -= 4;
-	buf[0] = (len >> 24) & 0xff;
-	buf[1] = (len >> 16) & 0xff;
-	buf[2] = (len >> 8)  & 0xff;
-	buf[3] = len & 0xff;
+	avail_len = data - &buf[0];
+	put_unaligned_be32(avail_len-4, data);
 
-	memcpy(scsi_get_in_buffer(cmd), buf,
-	       min(scsi_get_in_length(cmd), len+4));
-
-	scsi_set_in_resid_by_actual(cmd, len+4);
+	actual_len = spc_memcpy(scsi_get_in_buffer(cmd), &alloc_len,
+				buf, avail_len);
+	scsi_set_in_resid_by_actual(cmd, actual_len);
 
 	return SAM_STAT_GOOD;
 }
@@ -780,18 +775,16 @@ int spc_report_supported_opcodes(int host_no, struct scsi_cmd *cmd)
 	uint16_t requested_service_action;
 	uint32_t alloc_len;
 	int rctd;
-	int ret = SAM_STAT_GOOD;
+	int ret;
+	unsigned char key = ILLEGAL_REQUEST;
+	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 
 	reporting_options = cmd->scb[2] & 0x07;
+	requested_service_action = get_unaligned_be16(&cmd->scb[4]);
 
-	requested_service_action = cmd->scb[4];
-	requested_service_action <<= 8;
-	requested_service_action |= cmd->scb[5];
-
-	alloc_len = (uint32_t)cmd->scb[6] << 24 |
-		(uint32_t)cmd->scb[7] << 16 |
-		(uint32_t)cmd->scb[8] << 8 |
-		(uint32_t)cmd->scb[9];
+	alloc_len = get_unaligned_be32(&cmd->scb[6]);
+	if (scsi_get_in_length(cmd) < alloc_len)
+		goto sense;
 
 	rctd = cmd->scb[2] & 0x80;
 
@@ -802,13 +795,14 @@ int spc_report_supported_opcodes(int host_no, struct scsi_cmd *cmd)
 	case 0x01: /* report one no service action*/
 	case 0x02: /* report one service action */
 	default:
-		scsi_set_in_resid_by_actual(cmd, 0);
-		sense_data_build(cmd, ILLEGAL_REQUEST,
-			ASC_INVALID_FIELD_IN_CDB);
-		ret = SAM_STAT_CHECK_CONDITION;
+		goto sense;
 	}
-
 	return ret;
+
+sense:
+	scsi_set_in_resid_by_actual(cmd, 0);
+	sense_data_build(cmd, key, asc);
+	return SAM_STAT_CHECK_CONDITION;
 }
 
 struct service_action maint_in_service_actions[] = {
