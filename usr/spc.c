@@ -302,42 +302,41 @@ int spc_report_luns(int host_no, struct scsi_cmd *cmd)
 {
 	struct scsi_lu *lu;
 	struct list_head *dev_list = &cmd->c_target->device_list;
-	uint64_t lun, *data;
-	int idx, alen, nr_luns;
+	uint32_t alloc_len, avail_len, remain_len, actual_len;
+	uint64_t lun, *data, *plun;
 	unsigned char key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 	uint8_t *scb = cmd->scb;
 
-	alen = (uint32_t)scb[6] << 24 | (uint32_t)scb[7] << 16 |
-		(uint32_t)scb[8] << 8 | (uint32_t)scb[9];
-	if (alen < 16)
+	alloc_len = get_unaligned_be32(&scb[6]);
+	if (alloc_len < 16)
 		goto sense;
 
-	if (scsi_get_in_length(cmd) < alen)
+	if (scsi_get_in_length(cmd) < alloc_len)
 		goto sense;
 
 	data = scsi_get_in_buffer(cmd);
-	memset(data, 0, alen);
-
-	alen &= ~(8 - 1);
-	alen -= 8;
-	idx = 1;
-	nr_luns = 0;
+	plun = data + 1;
+	remain_len = alloc_len - 8;
+	actual_len = 8;
+	avail_len = 0; /* accumulate LUN list length */
 
 	list_for_each_entry(lu, dev_list, device_siblings) {
-		nr_luns++;
-
-		if (!alen)
-			continue;
-
-		lun = lu->lun;
-		lun = ((lun > 0xff) ? (0x1 << 30) : 0) | ((0x3ff & lun) << 16);
-		data[idx++] = __cpu_to_be64(lun << 32);
-		alen -= 8;
+		if (remain_len) {
+			lun = lu->lun;
+			lun = ((lun > 0xff) ? (0x1 << 30) : 0) |
+			      ((0x3ff & lun) << 16);
+			lun = __cpu_to_be64(lun << 32);
+		}
+		actual_len += spc_memcpy((uint8_t *)plun, &remain_len,
+					 (uint8_t *)&lun, 8);
+		avail_len += 8;
+		plun++;
 	}
 
-	*((uint32_t *) data) = __cpu_to_be32(nr_luns * 8);
-	scsi_set_in_resid_by_actual(cmd, nr_luns * 8 + 8);
+	*data = 0;
+	*((uint32_t *) data) = __cpu_to_be32(avail_len);
+	scsi_set_in_resid_by_actual(cmd, actual_len);
 
 	return SAM_STAT_GOOD;
 sense:
