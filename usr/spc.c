@@ -893,45 +893,39 @@ static int is_pr_holder(struct scsi_lu *lu, struct registration *reg)
 
 static int spc_pr_read_keys(int host_no, struct scsi_cmd *cmd)
 {
+	uint32_t alloc_len, avail_len, actual_len, remain_len;
+	uint8_t *buf;
+	struct registration *reg;
+	uint64_t reg_key;
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 	uint8_t key = ILLEGAL_REQUEST;
-	struct registration *reg;
-	uint16_t len;
-	uint32_t keys;
-	uint8_t *buf;
-	int off;
 
-	len = get_unaligned_be16(cmd->scb + 7);
-	if (len < 8)
+	alloc_len = (uint32_t)get_unaligned_be16(&cmd->scb[7]);
+	if (alloc_len < 8)
 		goto sense;
 
-	if (scsi_get_in_length(cmd) < len)
+	if (scsi_get_in_length(cmd) < alloc_len)
 		goto sense;
 
 	buf = scsi_get_in_buffer(cmd);
-	memset(buf, 0, len);
-
-	len &= ~(8 - 1);
-	keys = 0;
-	off = 8;
 
 	put_unaligned_be32(cmd->dev->prgeneration, &buf[0]);
+	actual_len = 8;
+	avail_len = 8;
+	remain_len = alloc_len - 8;
 
 	list_for_each_entry(reg, &cmd->dev->registration_list,
 			    registration_siblings) {
 
-		if (!len)
-			continue;
-		put_unaligned_be64(reg->key, &buf[off]);
-
-		len -= 8;
-		off += 8;
-		keys++;
+		reg_key = __cpu_to_be64(reg->key);
+		actual_len += spc_memcpy(&buf[actual_len], &remain_len,
+					 (uint8_t *)&reg_key, 8);
+		avail_len += 8;
 	}
 
-	put_unaligned_be32(keys * 8, &buf[4]);
+	put_unaligned_be32(avail_len - 8, &buf[4]); /* additional length */
 
-	scsi_set_in_resid_by_actual(cmd, keys * 8 + 8);
+	scsi_set_in_resid_by_actual(cmd, actual_len);
 
 	return SAM_STAT_GOOD;
 sense:
