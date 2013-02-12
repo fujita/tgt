@@ -1619,17 +1619,17 @@ int spc_access_check(struct scsi_cmd *cmd)
 
 int spc_request_sense(int host_no, struct scsi_cmd *cmd)
 {
-	uint8_t *data;
-	uint32_t len;
+	uint32_t alloc_len, actual_len;
 
-	data = scsi_get_in_buffer(cmd);
-	len = scsi_get_in_length(cmd);
+	alloc_len = (uint32_t)cmd->scb[4];
+	alloc_len = min_t(uint32_t, alloc_len, scsi_get_in_length(cmd));
 
 	sense_data_build(cmd, NO_SENSE, NO_ADDITIONAL_SENSE);
 
-	memcpy(data, cmd->sense_buffer, min_t(uint32_t, len, cmd->sense_len));
+	actual_len = spc_memcpy(scsi_get_in_buffer(cmd), &alloc_len,
+				cmd->sense_buffer, cmd->sense_len);
 
-	scsi_set_in_resid_by_actual(cmd, cmd->sense_len);
+	scsi_set_in_resid_by_actual(cmd, actual_len);
 
 	/* reset sense buffer in cmnd */
 	memset(cmd->sense_buffer, 0, sizeof(cmd->sense_buffer));
