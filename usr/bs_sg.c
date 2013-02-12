@@ -250,8 +250,16 @@ static void bs_bsg_cmd_complete(int fd, int events, void *data)
 	 * Check SCSI: command completion status
 	 * */
 	if (!io_hdr.device_status) {
-		scsi_set_out_resid(cmd, io_hdr.dout_resid);
-		scsi_set_in_resid(cmd, io_hdr.din_resid);
+		uint32_t actual_len;
+
+		if (io_hdr.dout_resid) {
+			actual_len = scsi_get_out_length(cmd) - io_hdr.dout_resid;
+			scsi_set_out_resid_by_actual(cmd, actual_len);
+		}
+		if (io_hdr.din_resid) {
+			actual_len = scsi_get_in_length(cmd) - io_hdr.din_resid;
+			scsi_set_in_resid_by_actual(cmd, actual_len);
+		}
 	} else {
 		/*
 		 * NAB: Used by linux/block/bsg.c:bsg_ioctl(), is this
@@ -261,6 +269,7 @@ static void bs_bsg_cmd_complete(int fd, int events, void *data)
 		scsi_set_out_resid_by_actual(cmd, 0);
 		scsi_set_in_resid_by_actual(cmd, 0);
 	}
+
 	target_cmd_io_done(cmd, io_hdr.device_status);
 }
 
@@ -269,7 +278,7 @@ static void bs_sg_cmd_complete(int fd, int events, void *data)
 	struct sg_io_hdr io_hdr;
 	struct scsi_cmd *cmd;
 	int err;
-	unsigned resid;
+	uint32_t actual_len;
 
 	memset(&io_hdr, 0, sizeof(io_hdr));
 	io_hdr.interface_id = 'S';
@@ -281,18 +290,21 @@ static void bs_sg_cmd_complete(int fd, int events, void *data)
 
 	cmd = (struct scsi_cmd *)io_hdr.usr_ptr;
 	if (!io_hdr.status) {
-		scsi_set_out_resid(cmd, io_hdr.resid);
-		scsi_set_in_resid(cmd, io_hdr.resid);
+		actual_len = io_hdr.dxfer_len - io_hdr.resid;
 	} else {
 		/* NO SENSE | ILI (Incorrect Length Indicator) */
 		if (io_hdr.sbp[2] == 0x20)
-			resid = io_hdr.dxfer_len - io_hdr.resid;
+			actual_len = io_hdr.dxfer_len - io_hdr.resid;
 		else
-			resid = 0;
+			actual_len = 0;
 
 		cmd->sense_len = io_hdr.sb_len_wr;
-		scsi_set_out_resid_by_actual(cmd, resid);
-		scsi_set_in_resid_by_actual(cmd, resid);
+	}
+	if (!actual_len || io_hdr.resid) {
+		if (io_hdr.dxfer_direction == SG_DXFER_TO_DEV)
+			scsi_set_out_resid_by_actual(cmd, actual_len);
+		else
+			scsi_set_in_resid_by_actual(cmd, actual_len);
 	}
 
 	target_cmd_io_done(cmd, io_hdr.status);
