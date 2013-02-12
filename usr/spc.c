@@ -561,43 +561,48 @@ int set_mode_page_changeable_mask(struct scsi_lu *lu, uint8_t pcode,
  * be returned to the initiator
  *
  * Returns number of bytes copied.
+ * Returns remaining alloc length in out-param remain_len
  */
 static int build_mode_page(uint8_t *data, struct mode_pg *pg,
-			   uint8_t pc, uint16_t *alloc_len)
+			   uint32_t *avail_len, uint32_t *remain_len,
+			   uint8_t pc)
 {
-	uint8_t *p;
-	int len, hdr_size = 2;
-	uint8_t *mode_data;
+	uint8_t hdr[4];
+	uint32_t hdr_size, actual_len;
+	uint8_t *p, *mode_data;
 
-	len = pg->pcode_size;
-	if (*alloc_len >= 2) {
-		if (!pg->subpcode) {
-			data[0] = pg->pcode;
-			data[1] = len;
-		} else {
-			data[0] = pg->pcode | 0x40;
-			data[1] = pg->subpcode;
-			data[2] = len >> 8;
-			data[3] = len & 0xff;
-			hdr_size = 4;
-		}
+	if (!pg->subpcode) {
+		hdr[0] = pg->pcode;
+		hdr[1] = pg->pcode_size;
+		hdr_size = 2;
+	} else {
+		hdr[0] = pg->pcode | 0x40;
+		hdr[1] = pg->subpcode;
+		hdr[2] = (pg->pcode_size >> 8) & 0xff;
+		hdr[3] = pg->pcode_size & 0xff;
+		hdr_size = 4;
 	}
-	*alloc_len -= min_t(uint16_t, *alloc_len, hdr_size);
+	actual_len = spc_memcpy(data, remain_len, hdr, hdr_size);
+	*avail_len += hdr_size;
 
 	p = &data[hdr_size];
-	len += hdr_size;
-	if (*alloc_len >= pg->pcode_size) {
-		if (pc == 1)
-			mode_data = pg->mode_data + pg->pcode_size;
-		else
-			mode_data = pg->mode_data;
+	mode_data = pg->mode_data;
+	if (pc == 1)
+		mode_data += pg->pcode_size;
+	actual_len += spc_memcpy(p, remain_len, mode_data, pg->pcode_size);
+	*avail_len += pg->pcode_size;
 
-		memcpy(p, mode_data, pg->pcode_size);
-	}
+	return actual_len;
+}
 
-	*alloc_len -= min_t(uint16_t, *alloc_len, pg->pcode_size);
-
-	return len;
+/*
+ * Set a byte at the given index within dst buffer to val,
+ * not exceeding dst_len bytes available at dst.
+ */
+void set_byte_safe(uint8_t *dst, uint32_t dst_len, uint32_t index, int val)
+{
+	if (index < dst_len)
+		dst[index] = (uint8_t)val;
 }
 
 /**
@@ -609,15 +614,18 @@ static int build_mode_page(uint8_t *data, struct mode_pg *pg,
  */
 int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 {
-	uint8_t *data = NULL, *scb, mode6, dbd, pcode, subpcode, pctrl;
-	uint16_t alloc_len, len = 0;
+	uint8_t *data = NULL, *scb;
+	uint8_t mode6, dbd, blk_desc_len, pcode, pctrl, subpcode;
 	unsigned char key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
+	uint32_t alloc_len, avail_len, remain_len, actual_len;
+	uint32_t hdr_len, mod_data_len;
 	struct mode_pg *pg;
 
 	scb = cmd->scb;
 	mode6 = (scb[0] == 0x1a);
 	dbd = scb[1] & 0x8; /* Disable Block Descriptors */
+	blk_desc_len = dbd ? 0 : BLOCK_DESCRIPTOR_LEN;
 	pcode = scb[2] & 0x3f;
 	pctrl = (scb[2] & 0xc0) >> 6;
 	subpcode = scb[3];
@@ -630,50 +638,59 @@ int spc_mode_sense(int host_no, struct scsi_cmd *cmd)
 	data = scsi_get_in_buffer(cmd);
 
 	if (mode6) {
-		alloc_len = scb[4];
-		len = 4;
+		alloc_len = (uint32_t)scb[4];
+		hdr_len = 4;
 	} else {
-		alloc_len = (scb[7] << 8) + scb[8];
-		len = 8;
+		alloc_len = (uint32_t)get_unaligned_be16(&scb[7]);
+		hdr_len = 8;
 	}
 
 	if (scsi_get_in_length(cmd) < alloc_len)
 		goto sense;
 	memset(data, 0, alloc_len);
 
-	alloc_len -= min(alloc_len, len);
+	avail_len = hdr_len;
+	actual_len = min_t(uint32_t, alloc_len, hdr_len);
+	remain_len = alloc_len - actual_len;
 
 	if (!dbd) {
-		if (alloc_len >= BLOCK_DESCRIPTOR_LEN)
-			memcpy(data + len, cmd->dev->mode_block_descriptor,
-			       BLOCK_DESCRIPTOR_LEN);
-		len += BLOCK_DESCRIPTOR_LEN;
-		alloc_len -= min_t(uint16_t, alloc_len, BLOCK_DESCRIPTOR_LEN);
+		actual_len += spc_memcpy(data + actual_len,
+					 &remain_len,
+					 cmd->dev->mode_block_descriptor,
+					 BLOCK_DESCRIPTOR_LEN);
+		avail_len += BLOCK_DESCRIPTOR_LEN;
 	}
 
 	if (pcode == 0x3f) {
 		list_for_each_entry(pg,
 				    &cmd->dev->mode_pages,
 				    mode_pg_siblings) {
-			len += build_mode_page(data + len, pg, pctrl,
-					       &alloc_len);
+			actual_len += build_mode_page(data + actual_len, pg,
+						      &avail_len, &remain_len,
+						      pctrl);
 		}
 	} else {
 		pg = find_mode_page(cmd->dev, pcode, subpcode);
 		if (!pg)
 			goto sense;
-		len += build_mode_page(data + len, pg, pctrl, &alloc_len);
+		actual_len += build_mode_page(data + actual_len, pg,
+					      &avail_len, &remain_len,
+					      pctrl);
 	}
 
 	if (mode6) {
-		data[0] = len - 1;
-		data[3] = dbd ? 0 : BLOCK_DESCRIPTOR_LEN;
+		mod_data_len = avail_len - 1;
+		set_byte_safe(data, 0, alloc_len, mod_data_len & 0xff);
+		set_byte_safe(data, 3, alloc_len, blk_desc_len & 0xff);
 	} else {
-		*(uint16_t *)(data) = __cpu_to_be16(len - 2);
-		data[7] = dbd ? 0 : BLOCK_DESCRIPTOR_LEN;
+		mod_data_len = avail_len - 2;
+		set_byte_safe(data, 0, alloc_len, (mod_data_len >> 8) & 0xff);
+		set_byte_safe(data, 1, alloc_len, mod_data_len & 0xff);
+		set_byte_safe(data, 6, alloc_len, (blk_desc_len >> 8) & 0xff);
+		set_byte_safe(data, 7, alloc_len, blk_desc_len & 0xff);
 	}
 
-	scsi_set_in_resid_by_actual(cmd, len);
+	scsi_set_in_resid_by_actual(cmd, actual_len);
 	return SAM_STAT_GOOD;
 sense:
 	scsi_set_in_resid_by_actual(cmd, 0);
