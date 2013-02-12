@@ -1111,6 +1111,13 @@ int target_cmd_queue(int tid, struct scsi_cmd *cmd)
 	/* service delivery or target failure */
 	if (target->target_state != SCSI_TARGET_READY)
 		return -EBUSY;
+
+	/* by default assume zero residual counts */
+	scsi_set_in_resid(cmd, 0);
+	scsi_set_in_transfer_len(cmd, scsi_get_in_length(cmd));
+	scsi_set_out_resid(cmd, 0);
+	scsi_set_out_transfer_len(cmd, scsi_get_out_length(cmd));
+
 	/*
 	 * Call struct scsi_lu->cmd_perform() that will either be setup for
 	 * internal or passthrough CDB processing using 2 functions below.

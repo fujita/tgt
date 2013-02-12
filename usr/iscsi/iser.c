@@ -2000,7 +2000,6 @@ static void iser_scsi_cmd_iosubmit(struct iser_task *task, int not_last)
 	scsi_set_out_length(scmd, 0);
 
 	if (task->is_write) {
-		scsi_set_out_resid(scmd, 0);
 		/* It's either the last buffer, which is RDMA,
 		   or the only buffer */
 		data_buf = list_entry(task->out_buf_list.prev,
@@ -2023,7 +2022,6 @@ static void iser_scsi_cmd_iosubmit(struct iser_task *task, int not_last)
 		scsi_set_out_length(scmd, task->out_len);
 	}
 	if (task->is_read) {
-		scsi_set_in_resid(scmd, 0);
 		/* ToDo: multiple RDMA-Read buffers */
 		data_buf = list_entry(task->in_buf_list.next,
 				      struct iser_membuf, task_list);
@@ -2049,32 +2047,6 @@ static void iser_scsi_cmd_iosubmit(struct iser_task *task, int not_last)
 	target_cmd_queue(session->target->tid, scmd);
 }
 
-static void iser_rsp_set_read_resid(struct iscsi_cmd_rsp *rsp_bhs,
-				    int in_resid)
-{
-	if (in_resid > 0) {
-		rsp_bhs->flags |= ISCSI_FLAG_CMD_UNDERFLOW;
-		rsp_bhs->residual_count = cpu_to_be32((uint32_t)in_resid);
-	} else {
-		rsp_bhs->flags |= ISCSI_FLAG_CMD_OVERFLOW;
-		rsp_bhs->residual_count = cpu_to_be32(((uint32_t)-in_resid));
-	}
-	rsp_bhs->bi_residual_count = 0;
-}
-
-static void iser_rsp_set_bidir_resid(struct iscsi_cmd_rsp *rsp_bhs,
-				     int in_resid)
-{
-	if (in_resid > 0) {
-		rsp_bhs->flags |= ISCSI_FLAG_CMD_BIDI_UNDERFLOW;
-		rsp_bhs->bi_residual_count = cpu_to_be32((uint32_t)in_resid);
-	} else {
-		rsp_bhs->flags |= ISCSI_FLAG_CMD_BIDI_OVERFLOW;
-		rsp_bhs->bi_residual_count = cpu_to_be32(((uint32_t)-in_resid));
-	}
-	rsp_bhs->residual_count = 0;
-}
-
 static int iser_scsi_cmd_done(uint64_t nid, int result,
 			      struct scsi_cmd *scmd)
 {
@@ -2084,7 +2056,6 @@ static int iser_scsi_cmd_done(uint64_t nid, int result,
 	struct iser_conn *conn = task->conn;
 	struct iscsi_session *session = conn->h.session;
 	unsigned char sense_len = scmd->sense_len;
-	int in_resid;
 
 	assert(nid == scmd->cmd_itn_id);
 
@@ -2108,21 +2079,12 @@ static int iser_scsi_cmd_done(uint64_t nid, int result,
 	iser_set_rsp_stat_sn(session, task->pdu.bhs);
 	rsp_bhs->exp_datasn = 0;
 
+	iscsi_rsp_set_residual(rsp_bhs, scmd);
 	if (task->is_read) {
-		in_resid = scsi_get_in_resid(scmd);
-		if (in_resid != 0) {
-			if (!task->is_write)
-				iser_rsp_set_read_resid(rsp_bhs, in_resid);
-			else
-				iser_rsp_set_bidir_resid(rsp_bhs, in_resid);
-			if (in_resid > 0)
-				task->rdma_wr_remains = task->in_len - in_resid;
-		}
-		/* schedule_rdma_write(task, conn); // ToDo: need this? */
-	} else {
-		rsp_bhs->bi_residual_count = 0;
-		rsp_bhs->residual_count = 0;
+		task->rdma_wr_remains = scsi_get_in_transfer_len(scmd);
+		task->rdma_wr_sz = scsi_get_in_transfer_len(scmd);
 	}
+
 	task->pdu.ahssize = 0;
 	task->pdu.membuf.size = 0;
 

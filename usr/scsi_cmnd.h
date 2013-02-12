@@ -12,9 +12,10 @@ enum data_direction {
 };
 
 struct scsi_data_buffer {
-	int resid;
-	uint32_t length;
 	uint64_t buffer;
+	uint32_t length;
+	uint32_t transfer_len;
+	int32_t resid;
 };
 
 struct scsi_cmd {
@@ -80,22 +81,42 @@ static inline type scsi_get_##dir##_##field(struct scsi_cmd *scmd)		\
 	return get_cast (scmd->dir##_sdb.field);				\
 }
 
-scsi_data_buffer_accessor(length, uint32_t,,);
-scsi_data_buffer_accessor(resid, int,,);
+scsi_data_buffer_accessor(length, uint32_t, ,);
+scsi_data_buffer_accessor(transfer_len, uint32_t, ,);
+scsi_data_buffer_accessor(resid, int32_t, ,);
 scsi_data_buffer_accessor(buffer, void *, (unsigned long), (void *)(unsigned long));
 
 static inline void scsi_set_in_resid_by_actual(struct scsi_cmd *scmd,
-					       uint32_t actual)
+					       uint32_t transfer_len)
 {
-	scsi_set_in_resid(scmd, scsi_get_in_length(scmd) - actual);
+	uint32_t expected_len = scsi_get_in_length(scmd);
+	int32_t resid;
+
+	if (transfer_len <= expected_len)
+		resid = expected_len - transfer_len;
+	else {
+		resid = -(int32_t)(transfer_len - expected_len);
+		transfer_len = expected_len;
+	}
+	scsi_set_in_transfer_len(scmd, transfer_len);
+	scsi_set_in_resid(scmd, resid);
 }
 
 static inline void scsi_set_out_resid_by_actual(struct scsi_cmd *scmd,
-					       uint32_t actual)
+						uint32_t transfer_len)
 {
-	scsi_set_out_resid(scmd, scsi_get_out_length(scmd) - actual);
-}
+	uint32_t expected_len = scsi_get_out_length(scmd);
+	int32_t resid;
 
+	if (transfer_len <= expected_len)
+		resid = expected_len - transfer_len;
+	else {
+		resid = -(int32_t)(transfer_len - expected_len);
+		transfer_len = expected_len;
+	}
+	scsi_set_out_transfer_len(scmd, transfer_len);
+	scsi_set_out_resid(scmd, resid);
+}
 
 enum {
 	TGT_CMD_QUEUED,
