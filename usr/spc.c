@@ -194,9 +194,10 @@ static void update_b0_opt_xfer_len(struct scsi_lu *lu, int opt_xfer_len)
 
 int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 {
-	int len = 0, ret = SAM_STAT_CHECK_CONDITION;
+	int ret = SAM_STAT_CHECK_CONDITION;
 	uint8_t *data;
 	uint8_t *scb = cmd->scb;
+	uint32_t alloc_len, avail_len, actual_len;
 	unsigned char key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 	uint8_t devtype = 0;
@@ -207,11 +208,13 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 	if (!(scb[1] & 0x1) && scb[2])
 		goto sense;
 
-	if (scsi_get_in_length(cmd) < scb[4])
+	alloc_len = (uint32_t)get_unaligned_be16(&scb[3]);
+	if (scsi_get_in_length(cmd) < alloc_len)
 		goto sense;
 
 	memset(buf, 0, sizeof(buf));
 	data = buf;
+	avail_len = 0;
 
 	dprintf("%x %x\n", scb[1], scb[2]);
 
@@ -239,8 +242,8 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 		for (i = 0; i < ARRAY_SIZE(attrs->version_desc); i++)
 			*desc++ = __cpu_to_be16(attrs->version_desc[i]);
 
-		len = 66;
-		data[4] = len - 5;	/* Additional Length */
+		avail_len = 66;
+		data[4] = avail_len - 5; /* Additional Length */
 		ret = SAM_STAT_GOOD;
 	} else if (scb[1] & 0x1) {
 		uint8_t pcode = scb[2];
@@ -263,7 +266,7 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 			}
 			data[3] = cnt;
 			data[4] = 0x0;
-			len = cnt + 4;
+			avail_len = cnt + 4;
 			ret = SAM_STAT_GOOD;
 		} else if (attrs->lu_vpd[PCODE_OFFSET(pcode)]) {
 			vpd_pg = attrs->lu_vpd[PCODE_OFFSET(pcode)];
@@ -273,7 +276,7 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 			data[2] = (vpd_pg->size >> 8);
 			data[3] = vpd_pg->size & 0xff;
 			memcpy(&data[4], vpd_pg->data, vpd_pg->size);
-			len = vpd_pg->size + 4;
+			avail_len = vpd_pg->size + 4;
 			ret = SAM_STAT_GOOD;
 		}
 	}
@@ -284,8 +287,9 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 	if (cmd->dev->lun != cmd->dev_id)
 		data[0] = TYPE_NO_LUN;
 
-	scsi_set_in_resid_by_actual(cmd, len);
-	memcpy(scsi_get_in_buffer(cmd), data, scb[4]);
+	actual_len = spc_memcpy(scsi_get_in_buffer(cmd), &alloc_len,
+				data, avail_len);
+	scsi_set_in_resid_by_actual(cmd, actual_len);
 
 	return SAM_STAT_GOOD;
 sense:
