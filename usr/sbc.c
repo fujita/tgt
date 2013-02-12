@@ -477,13 +477,14 @@ sense:
 
 static int sbc_readcapacity16(int host_no, struct scsi_cmd *cmd)
 {
-	uint32_t *data;
+	uint32_t alloc_len, avail_len, actual_len;
+	uint8_t *data;
+	uint8_t buf[32];
 	unsigned int bshift;
 	uint64_t size;
-	int len = 32;
-	int val;
+	uint32_t val;
+	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 	unsigned char key = ILLEGAL_REQUEST;
-	uint16_t asc = ASC_INVALID_OP_CODE;
 
 	if (cmd->dev->attrs.removable && !cmd->dev->attrs.online) {
 		key = NOT_READY;
@@ -491,27 +492,29 @@ static int sbc_readcapacity16(int host_no, struct scsi_cmd *cmd)
 		goto sense;
 	}
 
-	if (scsi_get_in_length(cmd) < 12)
-		goto overflow;
+	alloc_len = get_unaligned_be32(&cmd->scb[10]);
+	if (scsi_get_in_length(cmd) < alloc_len)
+		goto sense;
 
-	len = min_t(int, len, scsi_get_in_length(cmd));
-
-	data = scsi_get_in_buffer(cmd);
-	memset(data, 0, len);
+	data = buf;
+	memset(data, 0, 32);
+	avail_len = 32;
 
 	bshift = cmd->dev->blk_shift;
 	size = cmd->dev->size >> bshift;
 
-	*((uint64_t *)(data)) = __cpu_to_be64(size - 1);
-	data[2] = __cpu_to_be32(1UL << bshift);
+	put_unaligned_be64(size - 1, &data[0]);
+	put_unaligned_be32(1UL << bshift, &data[8]);
 
 	val = (cmd->dev->attrs.lbppbe << 16) | cmd->dev->attrs.la_lba;
 	if (cmd->dev->attrs.thinprovisioning)
 		val |= (3 << 14); /* set LBPME and LBPRZ */
-	data[3] = __cpu_to_be32(val);
+	put_unaligned_be32(val, &data[12]);
 
-overflow:
-	scsi_set_in_resid_by_actual(cmd, len);
+	actual_len = spc_memcpy(scsi_get_in_buffer(cmd), &alloc_len,
+				data, avail_len);
+	scsi_set_in_resid_by_actual(cmd, actual_len);
+
 	return SAM_STAT_GOOD;
 
 sense:
