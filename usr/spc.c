@@ -986,25 +986,22 @@ sense:
 
 static int spc_pr_report_capabilities(int host_no, struct scsi_cmd *cmd)
 {
+	uint32_t alloc_len, avail_len, actual_len;
+	uint8_t *data, buf[8];
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 	uint8_t key = ILLEGAL_REQUEST;
-	uint8_t *buf;
-	uint16_t len;
 
-	len = get_unaligned_be16(cmd->scb + 7);
-	if (len < 8)
+	alloc_len = (uint32_t)get_unaligned_be16(&cmd->scb[7]);
+	if (alloc_len < 8)
 		goto sense;
 
-	if (scsi_get_in_length(cmd) < len)
+	if (scsi_get_in_length(cmd) < alloc_len)
 		goto sense;
 
-	buf = scsi_get_in_buffer(cmd);
+	memset(buf, 0, 8);
+	avail_len = 8;
 
-	len = 8;
-
-	memset(buf, 0, len);
-
-	put_unaligned_be16(len, &buf[0]);
+	put_unaligned_be16(avail_len, &buf[0]); /* length */
 
 	/* we don't set any capability for now */
 
@@ -1017,6 +1014,10 @@ static int spc_pr_report_capabilities(int host_no, struct scsi_cmd *cmd)
 	buf[4] |= 0x08; /* PR_TYPE_EXCLUSIVE_ACCESS */
 	buf[4] |= 0x02; /* PR_TYPE_WRITE_EXCLUSIVE */
 	buf[5] |= 0x01; /* PR_TYPE_EXCLUSIVE_ACCESS_ALLREG */
+
+	data = scsi_get_in_buffer(cmd);
+	actual_len = spc_memcpy(data, &alloc_len, buf, avail_len);
+	scsi_set_in_resid_by_actual(cmd, actual_len);
 
 	return SAM_STAT_GOOD;
 sense:
