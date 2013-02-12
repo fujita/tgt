@@ -939,7 +939,8 @@ static int spc_pr_read_reservation(int host_no, struct scsi_cmd *cmd)
 	uint32_t alloc_len, add_len, avail_len, actual_len;
 	struct registration *reg;
 	uint64_t res_key;
-	uint8_t *buf;
+	uint8_t buf[32];
+	uint8_t *data;
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 	uint8_t key = ILLEGAL_REQUEST;
 
@@ -954,8 +955,7 @@ static int spc_pr_read_reservation(int host_no, struct scsi_cmd *cmd)
 	add_len = (reg ? 16 : 0);
 	avail_len = 8 + add_len;
 
-	buf = scsi_get_in_buffer(cmd);
-	memset(buf, 0, alloc_len);
+	memset(buf, 0, avail_len);
 
 	put_unaligned_be32(cmd->dev->prgeneration, &buf[0]);
 	put_unaligned_be32(add_len, &buf[4]); /* additional length */
@@ -967,15 +967,14 @@ static int spc_pr_read_reservation(int host_no, struct scsi_cmd *cmd)
 		else
 			res_key = reg->key;
 
-		if (alloc_len > 15)
-			put_unaligned_be64(res_key, &buf[8]);
-		if (alloc_len > 21) {
-			buf[21] = (reg->pr_scope << 4) & 0xf0;
-			buf[21] |= reg->pr_type & 0x0f;
-		}
+		put_unaligned_be64(res_key, &buf[8]);
+
+		buf[21] = (reg->pr_scope << 4) & 0xf0;
+		buf[21] |= reg->pr_type & 0x0f;
 	}
 
-	actual_len = min_t(uint32_t, alloc_len, avail_len);
+	data = scsi_get_in_buffer(cmd);
+	actual_len = spc_memcpy(data, &alloc_len, buf, avail_len);
 	scsi_set_in_resid_by_actual(cmd, actual_len);
 
 	return SAM_STAT_GOOD;
