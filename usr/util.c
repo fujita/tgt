@@ -196,3 +196,21 @@ int get_blk_shift(unsigned int size)
 	return shift;
 }
 
+/*
+ * memory copy for spc-style scsi commands.
+ * Copy up to src_len bytes from src,
+ * not exceeding *dst_remain_len bytes available at dst.
+ * Reflect decreased space in *dst_remain_len.
+ * Return actually copied length.
+ */
+int spc_memcpy(uint8_t *dst, uint32_t *dst_remain_len,
+	       uint8_t *src, uint32_t src_len)
+{
+	int copy_len = min_t(uint32_t, *dst_remain_len, src_len);
+
+	if (copy_len) {
+		memcpy(dst, src, copy_len);
+		*dst_remain_len -= copy_len;
+	}
+	return copy_len;
+}

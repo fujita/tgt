@@ -67,6 +67,8 @@ extern int backed_file_open(char *path, int oflag, uint64_t *size,
 extern int set_non_blocking(int fd);
 extern int str_to_open_flags(char *buf);
 extern char *open_flags_to_str(char *dest, int flags);
+extern int spc_memcpy(uint8_t *dst, uint32_t *dst_remain_len,
+		      uint8_t *src, uint32_t src_len);
 
 #define zalloc(size)			\
 ({					\
