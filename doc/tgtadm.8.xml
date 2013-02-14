@@ -88,6 +88,7 @@ Possible device-types are:
 Possible backend types are:
     rdwr    : Use normal file I/O. This is the default for disk devices
     aio     : Use Asynchronous I/O
+    rbd     : Use Ceph's distributed-storage RADOS Block Device
 
     sg      : Special backend type for passthrough devices
     ssc     : Special backend type for tape emulation
@@ -138,8 +139,9 @@ Possible backend types are:
           <para>
 	    Add a new logical unit with &lt;lun&gt; to specific target with &lt;id&gt;. The
 	    logical unit is offered to the initiators. &lt;path&gt; must be block device
-	    files (including LVM and RAID devices) or regular files. lun0 is
-	    reserved for a special device automatically created.
+	    files (including LVM and RAID devices) or regular files, or an RBD image or
+	    snapshot name for --driver rbd. lun0 is reserved for a special device
+	    automatically created.
           </para>
         </listitem>
       </varlistentry>
