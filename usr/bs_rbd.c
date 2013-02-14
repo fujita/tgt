@@ -1,6 +1,7 @@
 /*
- * Synchronous I/O file backing store routine
+ * Synchronous rbd image backing store routine
  *
+ * modified from bs_rdrw.c:
  * Copyright (C) 2006-2007 FUJITA Tomonori <tomof@acm.org>
  * Copyright (C) 2006-2007 Mike Christie <michaelc@cs.wisc.edu>
  *
@@ -41,6 +42,52 @@
 #include "spc.h"
 #include "bs_thread.h"
 
+#include "rados/librados.h"
+#include "rbd/librbd.h"
+
+/* one cluster connection only */
+rados_t cluster;
+
+struct active_rbd {
+	char *poolname;
+	char *imagename;
+	char *snapname;
+	rados_ioctx_t ioctx;
+	rbd_image_t rbd_image;
+};
+
+#define MAX_IMAGES	20
+struct active_rbd active_rbds[MAX_IMAGES];
+
+#define RBDP(fd)	(&active_rbds[fd])
+
+static void parse_imagepath(char *path, char **pool, char **image, char **snap)
+{
+	char *origp = strdup(path);
+	char *p, *sep;
+
+	p = origp;
+	sep = strchr(p, '/');
+	if (sep == NULL) {
+		*pool = "rbd";
+	} else {
+		*sep = '\0';
+		*pool = strdup(p);
+		p = sep + 1;
+	}
+	/* p points to image[@snap] */
+	sep = strchr(p, '@');
+	if (sep == NULL) {
+		*snap = "";
+	} else {
+		*snap = strdup(sep + 1);
+		*sep = '\0';
+	}
+	/* p points to image\0 */
+	*image = strdup(p);
+	free(origp);
+}
+
 static void set_medium_error(int *result, uint8_t *key, uint16_t *asc)
 {
 	*result = SAM_STAT_CHECK_CONDITION;
@@ -53,19 +100,26 @@ static void bs_sync_sync_range(struct scsi_cmd *cmd, uint32_t length,
 {
 	int ret;
 
-	ret = fdatasync(cmd->dev->fd);
+	ret = rbd_flush(RBDP(cmd->dev->fd)->rbd_image);
 	if (ret)
 		set_medium_error(result, key, asc);
 }
 
-static void bs_rdwr_request(struct scsi_cmd *cmd)
+static void bs_rbd_request(struct scsi_cmd *cmd)
 {
-	int ret, fd = cmd->dev->fd;
+	int ret;
 	uint32_t length;
 	int result = SAM_STAT_GOOD;
 	uint8_t key;
 	uint16_t asc;
+#if 0
+	/*
+	 * This should go in the sense data on error for COMPARE_AND_WRITE, but
+	 * there doesn't seem to be any attempt to do so...
+	 */
+
 	uint32_t info = 0;
+#endif
 	char *tmpbuf;
 	size_t blocksize;
 	uint64_t offset = cmd->offset;
@@ -76,9 +130,9 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 	const char *write_buf = NULL;
 	ret = length = 0;
 	key = asc = 0;
+	struct active_rbd *rbd = RBDP(cmd->dev->fd);
 
-	switch (cmd->scb[0])
-	{
+	switch (cmd->scb[0]) {
 	case ORWRITE_16:
 		length = scsi_get_out_length(cmd);
 
@@ -90,7 +144,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 			break;
 		}
 
-		ret = pread64(fd, tmpbuf, length, offset);
+		ret = rbd_read(rbd->rbd_image, offset, length, tmpbuf);
 
 		if (ret != length) {
 			set_medium_error(&result, &key, &asc);
@@ -127,7 +181,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 			break;
 		}
 
-		ret = pread64(fd, tmpbuf, length, offset);
+		ret = rbd_read(rbd->rbd_image, offset, length, tmpbuf);
 
 		if (ret != length) {
 			set_medium_error(&result, &key, &asc);
@@ -149,7 +203,10 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 			for (pos = 0; pos < length && *spos++ == *dpos++;
 			     pos++)
 				;
+#if 0
+			/* See comment above at declaration */
 			info = pos;
+#endif
 			result = SAM_STAT_CHECK_CONDITION;
 			key = MISCOMPARE;
 			asc = ASC_MISCOMPARE_DURING_VERIFY_OPERATION;
@@ -157,10 +214,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 			break;
 		}
 
-		if (cmd->scb[1] & 0x10)
-			posix_fadvise(fd, offset, length,
-				      POSIX_FADV_NOREUSE);
-
+		/* no DPO bit (cache retention advice) support */
 		free(tmpbuf);
 
 		write_buf = scsi_get_out_buffer(cmd) + length;
@@ -188,8 +242,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 		length = scsi_get_out_length(cmd);
 		write_buf = scsi_get_out_buffer(cmd);
 write:
-		ret = pwrite64(fd, write_buf, length,
-			       offset);
+		ret = rbd_write(rbd->rbd_image, offset, length, write_buf);
 		if (ret == length) {
 			struct mode_pg *pg;
 
@@ -211,9 +264,6 @@ write:
 		} else
 			set_medium_error(&result, &key, &asc);
 
-		if ((cmd->scb[0] != WRITE_6) && (cmd->scb[1] & 0x10))
-			posix_fadvise(fd, offset, length,
-				      POSIX_FADV_NOREUSE);
 		if (do_verify)
 			goto verify;
 		break;
@@ -221,7 +271,7 @@ write:
 	case WRITE_SAME_16:
 		/* WRITE_SAME used to punch hole in file */
 		if (cmd->scb[1] & 0x08) {
-			ret = unmap_file_region(fd, offset, tl);
+			ret = rbd_discard(rbd->rbd_image, offset, tl);
 			if (ret != 0) {
 				eprintf("Failed to punch hole for WRITE_SAME"
 					" command\n");
@@ -236,7 +286,7 @@ write:
 			blocksize = 1 << cmd->dev->blk_shift;
 			tmpbuf = scsi_get_out_buffer(cmd);
 
-			switch(cmd->scb[1] & 0x06) {
+			switch (cmd->scb[1] & 0x06) {
 			case 0x02: /* PBDATA==0 LBDATA==1 */
 				put_unaligned_be32(offset, tmpbuf);
 				break;
@@ -246,7 +296,8 @@ write:
 				break;
 			}
 
-			ret = pwrite64(fd, tmpbuf, blocksize, offset);
+			ret = rbd_write(rbd->rbd_image, offset, blocksize,
+					tmpbuf);
 			if (ret != blocksize)
 				set_medium_error(&result, &key, &asc);
 
@@ -259,24 +310,15 @@ write:
 	case READ_12:
 	case READ_16:
 		length = scsi_get_in_length(cmd);
-		ret = pread64(fd, scsi_get_in_buffer(cmd), length,
-			      offset);
+		ret = rbd_read(rbd->rbd_image, offset, length,
+			       scsi_get_in_buffer(cmd));
 
 		if (ret != length)
 			set_medium_error(&result, &key, &asc);
 
-		if ((cmd->scb[0] != READ_6) && (cmd->scb[1] & 0x10))
-			posix_fadvise(fd, offset, length,
-				      POSIX_FADV_NOREUSE);
-
 		break;
 	case PRE_FETCH_10:
 	case PRE_FETCH_16:
-		ret = posix_fadvise(fd, offset, cmd->tl,
-				POSIX_FADV_WILLNEED);
-
-		if (ret != 0)
-			set_medium_error(&result, &key, &asc);
 		break;
 	case VERIFY_10:
 	case VERIFY_12:
@@ -292,7 +334,7 @@ verify:
 			break;
 		}
 
-		ret = pread64(fd, tmpbuf, length, offset);
+		ret = rbd_read(rbd->rbd_image, offset, length, tmpbuf);
 
 		if (ret != length)
 			set_medium_error(&result, &key, &asc);
@@ -301,10 +343,6 @@ verify:
 			key = MISCOMPARE;
 			asc = ASC_MISCOMPARE_DURING_VERIFY_OPERATION;
 		}
-
-		if (cmd->scb[1] & 0x10)
-			posix_fadvise(fd, offset, length,
-				      POSIX_FADV_NOREUSE);
 
 		free(tmpbuf);
 		break;
@@ -341,7 +379,8 @@ verify:
 			}
 
 			if (tl > 0) {
-				if (unmap_file_region(fd, offset, tl) != 0) {
+				if (rbd_discard(rbd->rbd_image, offset, tl)
+				    != 0) {
 					eprintf("Failed to punch hole for"
 						" UNMAP at offset:%" PRIu64
 						" length:%d\n",
@@ -372,20 +411,53 @@ verify:
 	}
 }
 
-static int bs_rdwr_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
+
+static int bs_rbd_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 {
 	uint32_t blksize = 0;
+	int ret;
+	rbd_image_info_t inf;
+	char *poolname;
+	char *imagename;
+	char *snapname;
+	struct active_rbd *rbd = NULL;
+	int lfd;
 
-	*fd = backed_file_open(path, O_RDWR|O_LARGEFILE|lu->bsoflags, size,
-				&blksize);
-	/* If we get access denied, try opening the file in readonly mode */
-	if (*fd == -1 && (errno == EACCES || errno == EROFS)) {
-		*fd = backed_file_open(path, O_RDONLY|O_LARGEFILE|lu->bsoflags,
-				       size, &blksize);
-		lu->attrs.readonly = 1;
+	parse_imagepath(path, &poolname, &imagename, &snapname);
+	for (lfd = 0; lfd < MAX_IMAGES; lfd++) {
+		if (active_rbds[lfd].rbd_image == NULL) {
+			rbd = &active_rbds[lfd];
+			*fd = lfd;
+			break;
+		}
 	}
-	if (*fd < 0)
-		return *fd;
+	if (!rbd) {
+		*fd = -1;
+		return -EMFILE;
+	}
+
+	rbd->poolname = poolname;
+	rbd->imagename = imagename;
+	rbd->snapname = snapname;
+	eprintf("bs_rbd_open: pool: %s image: %s snap: %s\n",
+		poolname, imagename, snapname);
+
+	if ((ret == rados_ioctx_create(cluster, poolname, &rbd->ioctx)) < 0) {
+		eprintf("bs_rbd_open: rados_ioctx_create: %d\n", ret);
+		return -EIO;
+	}
+	/* null snap name */
+	ret = rbd_open(rbd->ioctx, imagename, &rbd->rbd_image, snapname);
+	if (ret < 0) {
+		eprintf("bs_rbd_open: rbd_open: %d\n", ret);
+		return ret;
+	}
+	if (rbd_stat(rbd->rbd_image, &inf, sizeof(inf)) < 0) {
+		eprintf("bs_rbd_open: rbd_stat: %d\n", ret);
+		return ret;
+	}
+	*size = inf.size;
+	blksize = inf.obj_size;
 
 	if (!lu->attrs.no_auto_lbppbe)
 		update_lbppbe(lu, blksize);
@@ -393,37 +465,72 @@ static int bs_rdwr_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 	return 0;
 }
 
-static void bs_rdwr_close(struct scsi_lu *lu)
+static void bs_rbd_close(struct scsi_lu *lu)
 {
-	close(lu->fd);
+	struct active_rbd *rbd = RBDP(lu->fd);
+
+	if (rbd->rbd_image) {
+		rbd_close(rbd->rbd_image);
+		rados_ioctx_destroy(rbd->ioctx);
+		rbd->rbd_image = rbd->ioctx = NULL;
+	}
 }
 
-static tgtadm_err bs_rdwr_init(struct scsi_lu *lu)
+static tgtadm_err bs_rbd_init(struct scsi_lu *lu)
 {
+	tgtadm_err ret = TGTADM_UNKNOWN_ERR;
+	int rados_ret;
 	struct bs_thread_info *info = BS_THREAD_I(lu);
 
-	return bs_thread_open(info, bs_rdwr_request, nr_iothreads);
+	rados_ret = rados_create(&cluster, NULL);
+	if (rados_ret < 0) {
+		eprintf("bs_rbd_init: rados_create: %d\n", rados_ret);
+		return ret;
+	}
+	/* read config from environment and then default files */
+	rados_ret = rados_conf_parse_env(cluster, NULL);
+	if (rados_ret < 0) {
+		eprintf("bs_rbd_init: rados_conf_parse_env: %d\n", rados_ret);
+		goto fail;
+	}
+	rados_ret = rados_conf_read_file(cluster, NULL);
+	if (rados_ret < 0) {
+		eprintf("bs_rbd_init: rados_conf_read_file: %d\n", rados_ret);
+		goto fail;
+	}
+	rados_ret = rados_connect(cluster);
+	if (rados_ret < 0) {
+		eprintf("bs_rbd_init: rados_connect: %d\n", rados_ret);
+		goto fail;
+	}
+	ret = bs_thread_open(info, bs_rbd_request, nr_iothreads);
+	if (ret == TGTADM_SUCCESS)
+		return ret;
+fail:
+	rados_shutdown(&cluster);
+	return ret;
 }
 
-static void bs_rdwr_exit(struct scsi_lu *lu)
+static void bs_rbd_exit(struct scsi_lu *lu)
 {
 	struct bs_thread_info *info = BS_THREAD_I(lu);
 
 	bs_thread_close(info);
+	rados_shutdown(&cluster);
 }
 
-static struct backingstore_template rdwr_bst = {
-	.bs_name		= "rdwr",
+static struct backingstore_template rbd_bst = {
+	.bs_name		= "rbd",
 	.bs_datasize		= sizeof(struct bs_thread_info),
-	.bs_open		= bs_rdwr_open,
-	.bs_close		= bs_rdwr_close,
-	.bs_init		= bs_rdwr_init,
-	.bs_exit		= bs_rdwr_exit,
+	.bs_open		= bs_rbd_open,
+	.bs_close		= bs_rbd_close,
+	.bs_init		= bs_rbd_init,
+	.bs_exit		= bs_rbd_exit,
 	.bs_cmd_submit		= bs_thread_cmd_submit,
 	.bs_oflags_supported    = O_SYNC | O_DIRECT,
 };
 
-__attribute__((constructor)) static void bs_rdwr_constructor(void)
+static __attribute__((constructor)) void bs_rbd_constructor(void)
 {
-	register_backingstore_template(&rdwr_bst);
+	register_backingstore_template(&rbd_bst);
 }

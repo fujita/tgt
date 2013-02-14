@@ -44,6 +44,9 @@ LIST_HEAD(bst_list);
 static LIST_HEAD(finished_list);
 static pthread_mutex_t finished_lock;
 
+/* used by both bs_rdwr.c and bs_rbd.c */
+int nr_iothreads = 16;
+
 static int sig_fd = -1;
 
 static int command_fd[2];

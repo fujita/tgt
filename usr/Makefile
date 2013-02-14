@@ -12,6 +12,8 @@ TGTD_OBJS += $(addprefix iscsi/, conn.o param.o session.o \
 		iscsid.o target.o chap.o sha1.o md5.o transport.o iscsi_tcp.o \
 		isns.o)
 TGTD_OBJS += bs_rdwr.o
+TGTD_OBJS += bs_rbd.o
+LIBS += -lrados -lrbd
 
 ifneq ($(shell test -e /usr/include/sys/eventfd.h && test -e /usr/include/libaio.h && echo 1),)
 CFLAGS += -DUSE_EVENTFD
