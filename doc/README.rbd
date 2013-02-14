@@ -1,0 +1,26 @@
+The 'rbd' backing-store driver provides access to Ceph (http://ceph.com)
+'RADOS block devices (rbd)" through tgtd.
+
+Ceph is a distributed storage system that provides clustered redundant
+object storage; one of the ways to use such storage is through the
+abstraction of a "block device".  rbd devices can be mapped through a
+kernel driver and show up as block devices directly, or they can be used
+through userland libraries to provide backing store for things like QEMU
+virtual disks.
+
+The bs_rbd backing-store driver allows tgtd to use rbd images as backing
+storage without requiring the 'rbd' kernel block device driver, and so
+avoids kernel version dependencies and the extra context switching between
+kernel and userland.  It also allows for userland caching of block images,
+managed by librbd.
+
+To use bs_rbd, select --bstype rbd, and set --backing-store to an rbd
+image specifier.  This is of the form
+
+	[poolname/]imagename[@snapname]
+
+where poolname is the RADOS pool containing the rbd image (defaults to
+"rbd"), imagename is the image you want to export, and snapname is the
+optional (readonly) snapshot of the image imagename.  (Obviously when
+a snapshot is exported, writes are not supported.)
+
