@@ -25,6 +25,8 @@
 
 #include "iscsid.h"
 
+extern short control_port;
+
 /*
  * The IB-extended version from the kernel.  Stags and VAs are in
  * big-endian format.

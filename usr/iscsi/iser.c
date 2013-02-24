@@ -97,6 +97,7 @@ struct iscsi_sense_data {
 } __packed;
 
 static size_t buf_pool_sz_mb = DEFAULT_POOL_SIZE_MB;
+static int cq_vector = -1;
 
 static int membuf_num;
 static size_t membuf_size = RDMA_TRANSFER_SIZE;
@@ -3264,8 +3265,18 @@ static int iser_device_init(struct iser_device *dev)
 		goto out;
 	}
 
+	/* verify cq_vector */
+	if (cq_vector < 0)
+		cq_vector = control_port % dev->ibv_ctxt->num_comp_vectors;
+	else if (cq_vector >= dev->ibv_ctxt->num_comp_vectors) {
+		eprintf("Bad CQ vector. max: %d\n",
+			dev->ibv_ctxt->num_comp_vectors);
+		goto out;
+	}
+	dprintf("CQ vector: %d\n", cq_vector);
+
 	dev->cq = ibv_create_cq(dev->ibv_ctxt, cqe_num, NULL,
-				dev->cq_channel, 0);
+				dev->cq_channel, cq_vector);
 	if (dev->cq == NULL) {
 		eprintf("ibv_create_cq failed\n");
 		goto out;
@@ -3479,6 +3490,7 @@ static const char *lld_param_nop = "nop";
 static const char *lld_param_on = "on";
 static const char *lld_param_off = "off";
 static const char *lld_param_pool_sz_mb = "pool_sz_mb";
+static const char *lld_param_cq_vector = "cq_vector";
 
 static int iser_param_parser(char *p)
 {
@@ -3517,6 +3529,16 @@ static int iser_param_parser(char *p)
 			buf_pool_sz_mb = atoi(q);
 			if (buf_pool_sz_mb < 128)
 				buf_pool_sz_mb = 128;
+		} else if (!strncmp(p, lld_param_cq_vector,
+				    strlen(lld_param_cq_vector))) {
+			q = p + strlen(lld_param_cq_vector) + 1;
+			cq_vector = atoi(q);
+			if (cq_vector < 0) {
+				eprintf("unsupported value for param: %s\n",
+					lld_param_cq_vector);
+				err = -EINVAL;
+				break;
+			}
 		} else {
 			dprintf("unsupported param:%s\n", p);
 			err = -EINVAL;
