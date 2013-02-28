@@ -17,6 +17,11 @@ version=`git describe --tags --abbrev=0`
 # release is number of commits since the version tag
 release=`git describe --tags | cut -d- -f2 | tr - _`
 
+if [ "$version" = "$release" ]; then
+    # no commits and release can't be empty
+    release=0
+fi
+
 if [ "$branch" != "master" ]; then
     # if not under master branch include hash tag
     hash=`git rev-parse HEAD | cut -c 1-6`
