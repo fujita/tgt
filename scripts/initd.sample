@@ -1,6 +1,17 @@
 #!/bin/sh
-
 # This is an example init.d script for stopping/starting/reconfiguring tgtd.
+
+# chkconfig: 345 20 80
+#
+### BEGIN INIT INFO
+# Provides: tgtd
+# Required-Start: $network
+# Required-Stop: $network
+# Default-Start: 3 4 5
+# Default-Stop: 0 1 2 6
+# Short-Description: Starts and stops the generic storage target daemon
+# Description: tgtd provides the SCSI and software transport target state machine daemon.
+### END INIT INFO
 
 TGTD_CONFIG=/etc/tgt/targets.conf
 
