@@ -871,6 +871,10 @@ static void text_scan_text(struct iscsi_connection *conn)
 				continue;
 			}
 
+			/* strip zone id */
+			if (ss.ss_family == AF_INET6)
+				(void) strsep(&p, "%");
+
 			p = buf + strlen(buf);
 
 			if (ss.ss_family == AF_INET6)
