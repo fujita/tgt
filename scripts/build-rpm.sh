@@ -13,7 +13,7 @@ LOG=/tmp/`basename $0`-$$.log
 # get branch name
 branch=`git branch | grep '^*' | sed 's/^..\(.*\)/\1/'`
 # get version tag
-version=`git describe --tags --abbrev=0`
+version=`git describe --tags --abbrev=0 | sed "s/^v//g"`
 # release is number of commits since the version tag
 release=`git describe --tags | cut -d- -f2 | tr - _`
 
