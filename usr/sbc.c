@@ -335,6 +335,17 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 	cmd->offset = lba << cmd->dev->blk_shift;
 	cmd->tl     = tl  << cmd->dev->blk_shift;
 
+	/* Handle residuals */
+	switch (cmd->scb[0]) {
+	case READ_6:
+	case READ_10:
+	case READ_12:
+	case READ_16:
+		if (cmd->tl != scsi_get_in_length(cmd))
+			scsi_set_in_resid_by_actual(cmd, cmd->tl);
+		break;
+	}
+
 	ret = cmd->dev->bst->bs_cmd_submit(cmd);
 	if (ret) {
 		key = HARDWARE_ERROR;
