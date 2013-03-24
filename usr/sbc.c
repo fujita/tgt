@@ -344,6 +344,25 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 		if (cmd->tl != scsi_get_in_length(cmd))
 			scsi_set_in_resid_by_actual(cmd, cmd->tl);
 		break;
+	case WRITE_6:
+	case WRITE_10:
+	case WRITE_12:
+	case WRITE_16:
+	case WRITE_VERIFY:
+	case WRITE_VERIFY_12:
+	case WRITE_VERIFY_16:
+		if (cmd->tl != scsi_get_out_length(cmd)) {
+			scsi_set_out_resid_by_actual(cmd, cmd->tl);
+
+			/* We need to clamp the size of the in-buffer
+			 * so that we dont try to write > cmd->tl in the
+			 * backend store.
+			 */
+			if (cmd->tl < scsi_get_out_length(cmd)) {
+				scsi_set_out_length(cmd, cmd->tl);
+			}
+		}
+		break;
 	}
 
 	ret = cmd->dev->bst->bs_cmd_submit(cmd);
