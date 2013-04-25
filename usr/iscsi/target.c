@@ -531,7 +531,7 @@ tgtadm_err iscsi_target_update(int mode, int op, int tid, uint64_t sid, uint64_t
 			if (!strncmp(str, "Temporary", 9)) {
 				target->redirect_info.reason =
 					ISCSI_LOGIN_STATUS_TGT_MOVED_TEMP;
-				err = TGTADM_SUCCESS;
+				adm_err = TGTADM_SUCCESS;
 			} else if (!strncmp(str, "Permanent", 9)) {
 				target->redirect_info.reason =
 					ISCSI_LOGIN_STATUS_TGT_MOVED_PERM;
