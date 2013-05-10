@@ -62,6 +62,7 @@ struct vpd {
 struct lu_phy_attr {
 	char scsi_id[SCSI_ID_LEN + 1];
 	char scsi_sn[SCSI_SN_LEN + 1];
+	uint64_t numeric_id;
 
 	char vendor_id[VENDOR_ID_LEN + 1];
 	char product_id[PRODUCT_ID_LEN + 1];

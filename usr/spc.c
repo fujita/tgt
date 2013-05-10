@@ -40,6 +40,8 @@
 
 #define PRODUCT_REV	"0"
 
+#define DESG_HDR_LEN	4
+
 /*
  * Protocol Identifier Values
  *
@@ -111,6 +113,15 @@
 #define DESG_MD5 7
 #define DESG_SCSI 8
 
+#define NAA_IEEE_EXTD		0x2
+#define NAA_LOCAL		0x3
+#define NAA_IEEE_REGD		0x5
+#define NAA_IEEE_REGD_EXTD	0x6
+
+#define NAA_DESG_LEN		0x8
+#define NAA_DESG_LEN_EXTD	0x10
+
+
 static void update_vpd_80(struct scsi_lu *lu, void *sn)
 {
 	struct vpd *vpd_pg = lu->attrs.lu_vpd[PCODE_OFFSET(0x80)];
@@ -137,8 +148,18 @@ static void update_vpd_83(struct scsi_lu *lu, void *id)
 	data[0] = INQ_CODE_ASCII;
 	data[1] = DESG_T10;
 	data[3] = SCSI_ID_LEN;
+	data += DESG_HDR_LEN;
 
-	strncpy((char *)data + 4, id, SCSI_ID_LEN);
+	strncpy((char *)data, id, SCSI_ID_LEN);
+	data += SCSI_ID_LEN;
+
+	data[0] = INQ_CODE_BIN;
+	data[1] = DESG_NAA;
+	data[3] = NAA_DESG_LEN;
+	data += DESG_HDR_LEN;
+
+	put_unaligned_be64(lu->attrs.numeric_id, data);
+	data[0] |= NAA_LOCAL << 4;
 }
 
 static void update_vpd_b2(struct scsi_lu *lu, void *id)
@@ -1949,6 +1970,9 @@ int spc_lu_init(struct scsi_lu *lu)
 		 "IET     %04x%04" PRIx64, tgt->tid, lu->lun);
 	snprintf(lu->attrs.scsi_sn, sizeof(lu->attrs.scsi_sn),
 		 "beaf%d%" PRIu64, tgt->tid, lu->lun);
+	lu->attrs.numeric_id = tgt->tid;
+	lu->attrs.numeric_id <<= 32;
+	lu->attrs.numeric_id |= lu->lun;
 
 	/* VPD page 0x80 */
 	pg = PCODE_OFFSET(0x80);
@@ -1960,7 +1984,7 @@ int spc_lu_init(struct scsi_lu *lu)
 
 	/* VPD page 0x83 */
 	pg = PCODE_OFFSET(0x83);
-	lu_vpd[pg] = alloc_vpd(SCSI_ID_LEN + 4);
+	lu_vpd[pg] = alloc_vpd(2*DESG_HDR_LEN + NAA_DESG_LEN + SCSI_ID_LEN);
 	if (!lu_vpd[pg])
 		return -ENOMEM;
 	lu_vpd[pg]->vpd_update = update_vpd_83;
