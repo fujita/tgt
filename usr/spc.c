@@ -36,6 +36,8 @@
 #include "scsi.h"
 #include "spc.h"
 
+#define INQUIRY_EVPD	0x01
+
 #define PRODUCT_REV	"0"
 
 /*
@@ -197,6 +199,8 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 	int ret = SAM_STAT_CHECK_CONDITION;
 	uint8_t *data;
 	uint8_t *scb = cmd->scb;
+	int evpd = (scb[1] & INQUIRY_EVPD) ? 1 : 0;
+	int pcode = scb[2];
 	uint32_t alloc_len, avail_len, actual_len;
 	unsigned char key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
@@ -205,7 +209,7 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 	struct vpd *vpd_pg;
 	uint8_t buf[256];
 
-	if (!(scb[1] & 0x1) && scb[2])
+	if (!evpd && pcode)
 		goto sense;
 
 	alloc_len = (uint32_t)get_unaligned_be16(&scb[3]);
@@ -216,14 +220,14 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 	data = buf;
 	avail_len = 0;
 
-	dprintf("%x %x\n", scb[1], scb[2]);
+	dprintf("%x %x\n", (int)scb[1], pcode);
 
 	attrs = &cmd->dev->attrs;
 
 	devtype = (attrs->qualifier & 0x7) << 5;
 	devtype |= (attrs->device_type & 0x1f);
 
-	if (!(scb[1] & 0x1)) {
+	if (!evpd) { /* no VPD, return standard Inquiry data */
 		int i;
 		uint16_t *desc;
 
@@ -245,10 +249,8 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 		avail_len = 66;
 		data[4] = avail_len - 5; /* Additional Length */
 		ret = SAM_STAT_GOOD;
-	} else if (scb[1] & 0x1) {
-		uint8_t pcode = scb[2];
-
-		if (pcode == 0x00) {
+	} else { /* return requested page of VPD */
+		if (pcode == 0x0) {
 			uint8_t *p;
 			int i, cnt;
 
@@ -272,7 +274,7 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 			vpd_pg = attrs->lu_vpd[PCODE_OFFSET(pcode)];
 
 			data[0] = devtype;
-			data[1] = pcode;
+			data[1] = (uint8_t)pcode;
 			data[2] = (vpd_pg->size >> 8);
 			data[3] = vpd_pg->size & 0xff;
 			memcpy(&data[4], vpd_pg->data, vpd_pg->size);
