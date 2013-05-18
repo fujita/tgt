@@ -800,7 +800,7 @@ static int report_opcodes_all(struct scsi_cmd *cmd, int rctd,
 	}
 
 	avail_len = data - &buf[0];
-	put_unaligned_be32(avail_len-4, data);
+	put_unaligned_be32(avail_len-4, &buf[0]);
 
 	actual_len = spc_memcpy(scsi_get_in_buffer(cmd), &alloc_len,
 				buf, avail_len);
