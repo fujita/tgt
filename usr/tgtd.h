@@ -327,6 +327,8 @@ extern int scsi_is_io_opcode(unsigned char op);
 extern enum data_direction scsi_data_dir_opcode(unsigned char op);
 extern int get_scsi_cdb_size(struct scsi_cmd *cmd);
 extern int get_scsi_command_size(unsigned char op);
+extern const unsigned char *get_scsi_cdb_usage_data(unsigned char op,
+						    unsigned char sa);
 
 extern enum scsi_target_state tgt_get_target_state(int tid);
 extern tgtadm_err tgt_set_target_state(int tid, char *str);

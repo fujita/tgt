@@ -816,9 +816,59 @@ static int report_opcodes_all(struct scsi_cmd *cmd, int rctd,
 	return SAM_STAT_GOOD;
 }
 
+static int report_opcode_one(struct scsi_cmd *cmd, int rctd, uint8_t opcode,
+	uint16_t sa, int is_service_action, uint32_t alloc_len)
+{
+	struct device_type_operations *ops;
+	uint8_t buf[256], *data;
+	uint32_t avail_len, actual_len;
+	int cdb_length;
+
+	ops = cmd->dev->dev_type_template.ops;
+
+	if ((is_service_action && !ops[opcode].service_actions)
+	||  (!is_service_action && ops[opcode].service_actions)) {
+		return SAM_STAT_CHECK_CONDITION;
+	}
+
+	memset(buf, 0, sizeof(buf));
+	data = &buf[0];
+
+	/* reserved */
+	data++;
+
+	/* ctdp and support */
+	*data++ = rctd ? 0x83 : 0x03;
+
+	/* cdb length */
+	cdb_length = get_scsi_command_size(opcode);
+	*data++ = (cdb_length >> 8) & 0xff;
+	*data++ = cdb_length & 0xff;
+
+	/* cdb usage data */
+	memcpy(data, get_scsi_cdb_usage_data(opcode, sa), cdb_length);
+	data += cdb_length;
+
+	/* timeout descriptor */
+	if (rctd) {
+		/* length == 0x0a */
+		data[1] = 0x0a;
+		data += 12;
+	}
+
+
+	avail_len = data - &buf[0];
+	actual_len = spc_memcpy(scsi_get_in_buffer(cmd), &alloc_len,
+				buf, avail_len);
+	scsi_set_in_resid_by_actual(cmd, actual_len);
+
+	return SAM_STAT_GOOD;
+}
+
 int spc_report_supported_opcodes(int host_no, struct scsi_cmd *cmd)
 {
 	uint8_t reporting_options;
+	uint8_t opcode;
 	uint16_t requested_service_action;
 	uint32_t alloc_len;
 	int rctd;
@@ -827,6 +877,7 @@ int spc_report_supported_opcodes(int host_no, struct scsi_cmd *cmd)
 	uint16_t asc = ASC_INVALID_FIELD_IN_CDB;
 
 	reporting_options = cmd->scb[2] & 0x07;
+	opcode = cmd->scb[3];
 	requested_service_action = get_unaligned_be16(&cmd->scb[4]);
 
 	alloc_len = get_unaligned_be32(&cmd->scb[6]);
@@ -840,7 +891,17 @@ int spc_report_supported_opcodes(int host_no, struct scsi_cmd *cmd)
 		ret = report_opcodes_all(cmd, rctd, alloc_len);
 		break;
 	case 0x01: /* report one no service action*/
+		ret = report_opcode_one(cmd, rctd, opcode,
+			requested_service_action, 0, alloc_len);
+		if (ret)
+			goto sense;
+		break;
 	case 0x02: /* report one service action */
+		ret = report_opcode_one(cmd, rctd, opcode,
+			requested_service_action, 1, alloc_len);
+		if (ret)
+			goto sense;
+		break;
 	default:
 		goto sense;
 	}

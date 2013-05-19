@@ -84,6 +84,7 @@
 #define	SAI_READ_CAPACITY_16  0x10
 #define	SAI_GET_LBA_STATUS    0x12
 #define REPORT_LUNS           0xa0
+#define MAINT_PROTOCOL_IN     0xa3
 #define MOVE_MEDIUM           0xa5
 #define EXCHANGE_MEDIUM       0xa6
 #define READ_12               0xa8
@@ -96,6 +97,9 @@
 #define READ_ELEMENT_STATUS   0xb8
 #define SEND_VOLUME_TAG       0xb6
 #define WRITE_LONG_2          0xea
+
+/* Service actions for opcode 0xa3 */
+#define MPI_REPORT_SUPPORTED_OPCODES 0x0c
 
 #define SAM_STAT_GOOD            0x00
 #define SAM_STAT_CHECK_CONDITION 0x02
