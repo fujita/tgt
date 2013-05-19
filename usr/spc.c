@@ -731,14 +731,6 @@ static int report_opcodes_all(struct scsi_cmd *cmd, int rctd,
 	uint32_t avail_len, actual_len;
 	int cdb_length;
 
-	/* cant request RCTD for all descriptors */
-	if (rctd) {
-		scsi_set_in_resid_by_actual(cmd, 0);
-		sense_data_build(cmd, ILLEGAL_REQUEST,
-				 ASC_INVALID_FIELD_IN_CDB);
-		return SAM_STAT_CHECK_CONDITION;
-	}
-
 	memset(buf, 0, sizeof(buf));
 	data = &buf[4];
 
@@ -762,14 +754,21 @@ static int report_opcodes_all(struct scsi_cmd *cmd, int rctd,
 			/* reserved */
 			data++;
 
-			/* flags : no service action, no command descriptor */
-			data++;
+			/* flags : no service action, possibly timeout desc */
+			*data++ = rctd ? 0x02 : 0x00;
 
 			/* cdb length */
 			cdb_length = get_scsi_command_size(i);
 			*data++ = (cdb_length >> 8) & 0xff;
 			*data++ = cdb_length & 0xff;
 
+			/* timeout descriptor */
+			if (rctd) {
+				/* length == 0x0a */
+				data[1] = 0x0a;
+
+				data += 12;
+			}
 			continue;
 		}
 
@@ -789,13 +788,21 @@ static int report_opcodes_all(struct scsi_cmd *cmd, int rctd,
 			/* reserved */
 			data++;
 
-			/* flags : service action */
-			*data++ = 0x01;
+			/* flags : service action, possibly timeout desc */
+			*data++ = rctd ? 0x03 : 0x01;
 
 			/* cdb length */
 			cdb_length = get_scsi_command_size(i);
 			*data++ = (cdb_length >> 8) & 0xff;
 			*data++ = cdb_length & 0xff;
+
+			/* timeout descriptor */
+			if (rctd) {
+				/* length == 0x0a */
+				data[1] = 0x0a;
+
+				data += 12;
+			}
 		}
 	}
 
