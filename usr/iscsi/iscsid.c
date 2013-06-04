@@ -1785,14 +1785,37 @@ static int iscsi_task_rx_start(struct iscsi_connection *conn)
 
 static int iscsi_scsi_cmd_tx_start(struct iscsi_task *task)
 {
+	enum data_direction data_dir = scsi_get_data_dir(&task->scmd);
 	int err = 0;
 
-	if (task->r2t_count)
-		err = iscsi_r2t_build(task);
-	else if (task->offset < scsi_get_in_transfer_len(&task->scmd))
-		err = iscsi_data_rsp_build(task);
-	else
+	switch (data_dir) {
+	case DATA_NONE:
 		err = iscsi_cmd_rsp_build(task);
+		break;
+	case DATA_READ:
+		if (task->offset < scsi_get_in_transfer_len(&task->scmd))
+			err = iscsi_data_rsp_build(task);
+		else
+			err = iscsi_cmd_rsp_build(task);
+		break;
+	case DATA_WRITE:
+		if (task->r2t_count)
+			err = iscsi_r2t_build(task);
+		else
+			err = iscsi_cmd_rsp_build(task);
+		break;
+	case DATA_BIDIRECTIONAL:
+		if (task->r2t_count)
+			err = iscsi_r2t_build(task);
+		else if (task->offset < scsi_get_in_transfer_len(&task->scmd))
+			err = iscsi_data_rsp_build(task);
+		else
+			err = iscsi_cmd_rsp_build(task);
+		break;
+	default:
+		eprintf("Unexpected data_dir %d task %p\n", data_dir, task);
+		exit(-1);
+	}
 
 	return err;
 }
