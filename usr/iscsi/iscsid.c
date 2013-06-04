@@ -1012,6 +1012,21 @@ static void cmnd_finish(struct iscsi_connection *conn)
 	}
 }
 
+void iscsi_set_data_rsp_residual(struct iscsi_data_rsp *data_in, struct scsi_cmd *scmd)
+{
+	int32_t resid = scsi_get_in_resid(scmd);
+
+	if (likely(!resid))
+		data_in->residual_count = 0;
+	else if (resid > 0) {
+		data_in->flags |= ISCSI_FLAG_CMD_UNDERFLOW;
+		data_in->residual_count = cpu_to_be32((uint32_t)resid);
+	} else {
+		data_in->flags |= ISCSI_FLAG_CMD_OVERFLOW;
+		data_in->residual_count = cpu_to_be32((uint32_t)-resid);
+	}
+}
+
 static inline void iscsi_rsp_set_resid(struct iscsi_cmd_rsp *rsp,
 				       int32_t resid)
 {
@@ -1128,8 +1143,7 @@ static int iscsi_data_rsp_build(struct iscsi_task *task)
 			rsp->flags |= ISCSI_FLAG_DATA_STATUS;
 			rsp->cmd_status = result;
 			rsp->statsn = cpu_to_be32(conn->stat_sn++);
-			iscsi_rsp_set_residual((struct iscsi_cmd_rsp *) rsp,
-					       &task->scmd);
+			iscsi_set_data_rsp_residual(rsp, &task->scmd);
 		}
 	} else
 		datalen = maxdatalen;
