@@ -24,6 +24,7 @@
 		<arg choice="opt">-Y --device-type &lt;type&gt;</arg>
 		<arg choice="opt">-l --lun &lt;lun&gt;</arg>
 		<arg choice="opt">-b --backing-store &lt;path&gt;</arg>
+		<arg choice="opt">-f --bsoflags {direct|sync}</arg>
 		<arg choice="opt">-E --bstype &lt;type&gt;</arg>
 		<arg choice="opt">-I --initiator-address &lt;address&gt;</arg>
 		<arg choice="opt">-Q --initiator-name &lt;name&gt;</arg>
@@ -569,11 +570,25 @@ tgtadm --lld iscsi --mode target --op show
         </para>
       </listitem>
     </varlistentry>
+    <varlistentry><term><option>--bsoflags={direct|sync}</option></term>
+      <listitem>
+        <para>
+	  This argument is used when creating a LUN to specify extra flags
+	  to use when opening the backing file.
+	  O_DIRECT is specified by "direct" and O_SYNC by "sync".
+        </para>
+      </listitem>
+    </varlistentry>
     <screen format="linespecific">
 Example:
 Make /dev/sg4 available to initiators connecting to TGTD.
 
 tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 1 --bstype=sg --device-type=pt --backing-store=/dev/sg4
+
+Example:
+Open the backing file with O_SYNC.
+
+tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 1 --bsoflags="sync" --backing-store=/data/100m_image.raw
     </screen>
 
   </refsect1>
