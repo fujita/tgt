@@ -622,7 +622,7 @@ static int build_mode_page(uint8_t *data, struct mode_pg *pg,
  * Set a byte at the given index within dst buffer to val,
  * not exceeding dst_len bytes available at dst.
  */
-void set_byte_safe(uint8_t *dst, uint32_t dst_len, uint32_t index, int val)
+void set_byte_safe(uint8_t *dst, uint32_t index, uint32_t dst_len, int val)
 {
 	if (index < dst_len)
 		dst[index] = (uint8_t)val;
