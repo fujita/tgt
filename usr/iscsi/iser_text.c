@@ -610,6 +610,8 @@ void iser_login_exec(struct iscsi_connection *iscsi_conn,
 	struct iscsi_login_rsp *rsp_bhs = (struct iscsi_login_rsp *)tx_pdu->bhs;
 	int stay = 0, nsg_disagree = 0;
 
+	tx_pdu->membuf.size = 0;
+
 	memset(rsp_bhs, 0, BHS_SIZE);
 	if ((req_bhs->opcode & ISCSI_OPCODE_MASK) != ISCSI_OP_LOGIN ||
 	    !(req_bhs->opcode & ISCSI_OP_IMMEDIATE)) {
