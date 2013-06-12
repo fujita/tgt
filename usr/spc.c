@@ -348,7 +348,7 @@ int spc_report_luns(int host_no, struct scsi_cmd *cmd)
 		if (remain_len) {
 			lun = lu->lun;
 			lun = ((lun > 0xff) ? (0x1 << 30) : 0) |
-			      ((0x3ff & lun) << 16);
+			      ((0x3fff & lun) << 16);
 			lun = __cpu_to_be64(lun << 32);
 		}
 		actual_len += spc_memcpy((uint8_t *)plun, &remain_len,
