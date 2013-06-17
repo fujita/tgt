@@ -29,7 +29,7 @@
 
 void concat_buf_init(struct concat_buf *b)
 {
-	b->streamf = open_memstream(&b->buf, (size_t *)&b->size);
+	b->streamf = open_memstream(&b->buf, &b->size);
 	b->err = b->streamf ? 0 : errno;
 	b->used = 0;
 }

@@ -195,7 +195,7 @@ struct concat_buf {
 	int err;
 	int used;
 	char *buf;
-	int size;
+	size_t size;
 };
 
 void concat_buf_init(struct concat_buf *b);
