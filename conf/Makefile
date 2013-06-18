@@ -15,6 +15,7 @@ install:
 	for f in $(EXAMPLES) ; do \
 		install -m 644 examples/$$f $(DESTDIR)$(sysconfdir)/tgt/examples ;\
 	done
+	install -d $(DESTDIR)$(sysconfdir)/tgt/conf.d
 
 .PHONY: clean
 clean:
