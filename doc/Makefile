@@ -5,7 +5,8 @@ MANPAGES = manpages/tgtadm.8 manpages/tgt-admin.8 manpages/tgtimg.8 \
 		manpages/tgt-setup-lun.8 manpages/tgtd.8
 
 DOCS = README.iscsi README.iser \
-	    README.lu_configuration README.mmc tmf.txt
+	    README.lu_configuration README.mmc tmf.txt \
+	    README.rbd
 
 XSLTPROC = /usr/bin/xsltproc
 XMLMAN = manpages/tgtd.8 manpages/tgtadm.8 manpages/tgtimg.8 \
