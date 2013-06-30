@@ -239,6 +239,9 @@ struct iscsi_connection {
 
 #define INCOMING_BUFSIZE	8192
 
+extern int default_nop_interval;
+extern int default_nop_count;
+
 struct iscsi_target {
 	struct list_head tlist;
 
@@ -262,6 +265,8 @@ struct iscsi_target {
 	struct list_head isns_list;
 
 	int rdma;
+	int nop_interval;
+	int nop_count;
 };
 
 enum task_flags {
@@ -315,6 +320,11 @@ extern void iscsi_rx_handler(struct iscsi_connection *conn);
 extern int iscsi_scsi_cmd_execute(struct iscsi_task *task);
 extern int iscsi_transportid(int tid, uint64_t itn_id, char *buf, int size);
 extern int iscsi_add_portal(char *addr, int port, int tpgt);
+extern void iscsi_print_nop_settings(struct concat_buf *b, int tid);
+extern int iscsi_update_target_nop_count(int tid, int count);
+extern int iscsi_update_target_nop_interval(int tid, int interval);
+extern void iscsi_set_nop_interval(int interval);
+extern void iscsi_set_nop_count(int count);
 extern int iscsi_delete_portal(char *addr, int port);
 extern int iscsi_param_parse_portals(char *p, int do_add, int do_delete);
 extern void iscsi_update_conn_stats_rx(struct iscsi_connection *conn, int size, int opcode);

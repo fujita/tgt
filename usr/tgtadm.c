@@ -707,12 +707,12 @@ int main(int argc, char **argv)
 		case OP_UPDATE:
 			rc = verify_mode_params(argc, argv, "LmotnvC");
 			if (rc) {
-				eprintf("target mode: option '-%c' is not "
+				eprintf("target mode: option '-%c' is not " \
 					  "allowed/supported\n", rc);
 				exit(EINVAL);
 			}
 			if ((!name || !value)) {
-				eprintf("update operation requires 'name'"
+				eprintf("update operation requires 'name'" \
 						" and 'value' options\n");
 				exit(EINVAL);
 			}

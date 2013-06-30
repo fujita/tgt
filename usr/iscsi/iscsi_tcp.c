@@ -35,8 +35,15 @@
 #include "iscsid.h"
 #include "tgtd.h"
 #include "util.h"
+#include "work.h"
 
 static void iscsi_tcp_event_handler(int fd, int events, void *data);
+static void iscsi_tcp_release(struct iscsi_connection *conn);
+static struct iscsi_task *iscsi_tcp_alloc_task(struct iscsi_connection *conn,
+						size_t ext_len);
+static void iscsi_tcp_free_task(struct iscsi_task *task);
+
+static long nop_ttt;
 
 static int listen_fds[8];
 static struct iscsi_transport iscsi_tcp;
@@ -44,12 +51,123 @@ static struct iscsi_transport iscsi_tcp;
 struct iscsi_tcp_connection {
 	int fd;
 
+	struct list_head tcp_conn_siblings;
+	int nop_inflight_count;
+	int nop_interval;
+	int nop_tick;
+	int nop_count;
+	long ttt;
+
 	struct iscsi_connection iscsi_conn;
 };
 
 static inline struct iscsi_tcp_connection *TCP_CONN(struct iscsi_connection *conn)
 {
 	return container_of(conn, struct iscsi_tcp_connection, iscsi_conn);
+}
+
+static struct tgt_work nop_work;
+
+/* all iscsi connections */
+static struct list_head iscsi_tcp_conn_list;
+
+static int iscsi_send_ping_nop_in(struct iscsi_tcp_connection *tcp_conn)
+{
+	struct iscsi_connection *conn = &tcp_conn->iscsi_conn;
+	struct iscsi_task *task = NULL;
+
+	task = iscsi_tcp_alloc_task(&tcp_conn->iscsi_conn, 0);
+	task->conn = conn;
+
+	task->tag = ISCSI_RESERVED_TAG;
+	task->req.opcode = ISCSI_OP_NOOP_IN;
+	task->req.itt = cpu_to_be32(ISCSI_RESERVED_TAG);
+	task->req.ttt = cpu_to_be32(tcp_conn->ttt);
+
+	list_add_tail(&task->c_list, &task->conn->tx_clist);
+	task->conn->tp->ep_event_modify(task->conn, EPOLLIN | EPOLLOUT);
+
+	return 0;
+}
+
+static void iscsi_tcp_nop_work_handler(void *data)
+{
+	struct iscsi_tcp_connection *tcp_conn;
+
+	list_for_each_entry(tcp_conn, &iscsi_tcp_conn_list, tcp_conn_siblings) {
+		if (tcp_conn->nop_interval == 0)
+			continue;
+
+		tcp_conn->nop_tick--;
+		if (tcp_conn->nop_tick > 0)
+			continue;
+
+		tcp_conn->nop_tick = tcp_conn->nop_interval;
+
+		tcp_conn->nop_inflight_count++;
+		if (tcp_conn->nop_inflight_count > tcp_conn->nop_count) {
+			eprintf("tcp connection timed out after %d failed " \
+				"NOP-OUT\n", tcp_conn->nop_count);
+			iscsi_tcp_release(&tcp_conn->iscsi_conn);
+			/* cant/shouldnt delete tcp_conn from within the loop */
+			break;
+		}
+		nop_ttt++;
+		if (nop_ttt == ISCSI_RESERVED_TAG)
+			nop_ttt = 1;
+
+		tcp_conn->ttt = nop_ttt;
+		iscsi_send_ping_nop_in(tcp_conn);
+	}
+
+	add_work(&nop_work, 1);
+}
+
+static void iscsi_tcp_nop_reply(long ttt)
+{
+	struct iscsi_tcp_connection *tcp_conn;
+
+	list_for_each_entry(tcp_conn, &iscsi_tcp_conn_list, tcp_conn_siblings) {
+		if (tcp_conn->ttt != ttt)
+			continue;
+		tcp_conn->nop_inflight_count = 0;
+	}
+}
+
+int iscsi_update_target_nop_count(int tid, int count)
+{
+	struct iscsi_target *target;
+
+	list_for_each_entry(target, &iscsi_targets_list, tlist) {
+		if (target->tid != tid)
+			continue;
+		target->nop_count = count;
+		return 0;
+	}
+	return -1;
+}
+
+int iscsi_update_target_nop_interval(int tid, int interval)
+{
+	struct iscsi_target *target;
+
+	list_for_each_entry(target, &iscsi_targets_list, tlist) {
+		if (target->tid != tid)
+			continue;
+		target->nop_interval = interval;
+		return 0;
+	}
+	return -1;
+}
+
+void iscsi_set_nop_interval(int interval)
+{
+	default_nop_interval = interval;
+}
+
+void iscsi_set_nop_count(int count)
+{
+	default_nop_count = count;
 }
 
 static int set_keepalive(int fd)
@@ -143,6 +261,8 @@ static void accept_connection(int afd, int events, void *data)
 		free(tcp_conn);
 		goto out;
 	}
+
+	list_add(&tcp_conn->tcp_conn_siblings, &iscsi_tcp_conn_list);
 
 	return;
 out:
@@ -313,6 +433,12 @@ static int iscsi_tcp_init(void)
 		iscsi_add_portal(NULL, 3260, 1);
 	}
 
+	INIT_LIST_HEAD(&iscsi_tcp_conn_list);
+
+	nop_work.func = iscsi_tcp_nop_work_handler;
+	nop_work.data = &nop_work;
+	add_work(&nop_work, 1);
+
 	return 0;
 }
 
@@ -328,6 +454,26 @@ static void iscsi_tcp_exit(void)
 
 static int iscsi_tcp_conn_login_complete(struct iscsi_connection *conn)
 {
+	struct iscsi_tcp_connection *tcp_conn;
+	struct iscsi_target *target;
+
+	list_for_each_entry(tcp_conn, &iscsi_tcp_conn_list, tcp_conn_siblings)
+		if (&tcp_conn->iscsi_conn == conn)
+			break;
+
+	if (tcp_conn == NULL)
+		return 0;
+
+	list_for_each_entry(target, &iscsi_targets_list, tlist) {
+		if (target->tid != conn->tid)
+			continue;
+
+		tcp_conn->nop_count = target->nop_count;
+		tcp_conn->nop_interval = target->nop_interval;
+		tcp_conn->nop_tick = target->nop_interval;
+		break;
+	}
+
 	return 0;
 }
 
@@ -370,6 +516,7 @@ static void iscsi_tcp_release(struct iscsi_connection *conn)
 
 	conn_exit(conn);
 	close(tcp_conn->fd);
+	list_del(&tcp_conn->tcp_conn_siblings);
 	free(tcp_conn);
 }
 
@@ -459,6 +606,25 @@ static void iscsi_tcp_conn_force_close(struct iscsi_connection *conn)
 	conn->tp->ep_event_modify(conn, EPOLLIN|EPOLLOUT|EPOLLERR);
 }
 
+void iscsi_print_nop_settings(struct concat_buf *b, int tid)
+{
+	struct iscsi_target *target;
+
+	list_for_each_entry(target, &iscsi_targets_list, tlist) {
+		if (target->tid != tid)
+			continue;
+		if (target->nop_interval == 0)
+			continue;
+
+		concat_printf(b,
+		      _TAB2 "Nop interval: %d\n"
+		      _TAB2 "Nop count: %d\n",
+		      target->nop_interval,
+		      target->nop_count);
+		break;
+	}
+}
+
 static struct iscsi_transport iscsi_tcp = {
 	.name			= "iscsi",
 	.rdma			= 0,
@@ -480,6 +646,7 @@ static struct iscsi_transport iscsi_tcp = {
 	.free_data_buf		= iscsi_tcp_free_data_buf,
 	.ep_getsockname		= iscsi_tcp_getsockname,
 	.ep_getpeername		= iscsi_tcp_getpeername,
+	.ep_nop_reply		= iscsi_tcp_nop_reply,
 };
 
 __attribute__((constructor)) static void iscsi_transport_init(void)

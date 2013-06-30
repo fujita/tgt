@@ -696,6 +696,48 @@ Account information:
   </refsect1>
 
 
+  <refsect1><title>NOP-OUT Probes</title>
+    <para>
+      TGTD can send NOP-OUT probes to connected initiators to determine when
+      an initiator is dead and then automatically clear and tear down the
+      TCP connection. This can either be set as a global default from the
+      tgtd command-line or it can be set for individual targets using the
+      tgtadm command.
+    </para>
+    <refsect2><title>Check the current NOP-OUT setting</title>
+      <para>
+	The tgtadm command is used to view the current setting for if/when
+	to send NOP-OUT probes to connected initiators.
+      </para>
+      <para>
+	If the target is configured to send NOP-OUT probes this will show up
+	as two parameter lines in the target printout. If the target is not
+	configured to send NOP-OUT these lines will not be printed at all.
+      </para>
+      <screen format="linespecific">
+tgtadm --lld iscsi --op show --mode target
+
+Target 1: iqn.ronnie.test
+    System information:
+        Driver: iscsi
+        State: ready
+        Nop interval: 5
+        Nop count: 5
+    I_T nexus information:
+     </screen>
+    </refsect2>
+    <refsect2><title>Setting NOP-OUT for a target</title>
+      <para>
+	The tgtadm command is used to change the NOP-OUT settings.
+      </para>
+      <screen format="linespecific">
+tgtadm --op update --mode target --tid 1 -n nop_count -v 5
+tgtadm --op update --mode target --tid 1 -n nop_interval -v 5
+     </screen>
+    </refsect2>
+  </refsect1>
+
+
   <refsect1><title>iSCSI PORTALS</title>
     <para>
       iSCSI portals can be viewed, added and removed at runtime.

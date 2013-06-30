@@ -43,6 +43,9 @@
 
 #define MAX_QUEUE_CMD	128
 
+int default_nop_interval;
+int default_nop_count;
+
 LIST_HEAD(iscsi_portals_list);
 
 char *portal_arguments;
@@ -1674,13 +1677,9 @@ static int iscsi_noop_out_rx_start(struct iscsi_connection *conn)
 
 	dprintf("%x %x %u\n", req->ttt, req->itt, ntoh24(req->dlength));
 	if (req->ttt != cpu_to_be32(ISCSI_RESERVED_TAG)) {
-		/*
-		 * We don't request a NOP-Out by sending a NOP-In.
-		 * See 10.18.2 in the draft 20.
-		 */
-		eprintf("initiator bug\n");
-		err = -ISCSI_REASON_PROTOCOL_ERROR;
-		goto out;
+		if ((req->opcode & ISCSI_OPCODE_MASK) == ISCSI_OP_NOOP_OUT) {
+			goto good;
+		}
 	}
 
 	if (req->itt == cpu_to_be32(ISCSI_RESERVED_TAG)) {
@@ -1691,6 +1690,7 @@ static int iscsi_noop_out_rx_start(struct iscsi_connection *conn)
 		}
 	}
 
+good:
 	conn->exp_stat_sn = be32_to_cpu(req->exp_statsn);
 
 	len = ntoh24(req->dlength);
@@ -1836,6 +1836,28 @@ static int iscsi_logout_tx_start(struct iscsi_task *task)
 	return 0;
 }
 
+static int iscsi_noop_in_tx_start(struct iscsi_task *task)
+{
+	struct iscsi_connection *conn = task->conn;
+	struct iscsi_data_rsp *rsp = (struct iscsi_data_rsp *) &conn->rsp.bhs;
+
+	memset(rsp, 0, sizeof(*rsp));
+	rsp->opcode = ISCSI_OP_NOOP_IN;
+	rsp->flags = ISCSI_FLAG_CMD_FINAL;
+	rsp->itt = task->req.itt;
+	rsp->ttt = task->req.ttt;
+	rsp->statsn = cpu_to_be32(conn->stat_sn);
+	rsp->exp_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn);
+	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn + MAX_QUEUE_CMD);
+
+	/* TODO: honor max_burst */
+	conn->rsp.datasize = task->len;
+	hton24(rsp->dlength, task->len);
+	conn->rsp.data = task->data;
+
+	return 0;
+}
+
 static int iscsi_noop_out_tx_start(struct iscsi_task *task, int *is_rsp)
 {
 	struct iscsi_connection *conn = task->conn;
@@ -1843,6 +1865,10 @@ static int iscsi_noop_out_tx_start(struct iscsi_task *task, int *is_rsp)
 
 	if (task->req.itt == cpu_to_be32(ISCSI_RESERVED_TAG)) {
 		*is_rsp = 0;
+
+		if (conn->tp->ep_nop_reply)
+			conn->tp->ep_nop_reply(be32_to_cpu(task->req.ttt));
+
 		iscsi_free_task(task);
 	} else {
 		*is_rsp = 1;
@@ -1954,6 +1980,9 @@ static int iscsi_task_tx_start(struct iscsi_connection *conn)
 	switch (task->req.opcode & ISCSI_OPCODE_MASK) {
 	case ISCSI_OP_SCSI_CMD:
 		err = iscsi_scsi_cmd_tx_start(task);
+		break;
+	case ISCSI_OP_NOOP_IN:
+		err = iscsi_noop_in_tx_start(task);
 		break;
 	case ISCSI_OP_NOOP_OUT:
 		err = iscsi_noop_out_tx_start(task, &is_rsp);
@@ -2450,6 +2479,10 @@ int iscsi_param_parse_portals(char *p, int do_add,
 					return -1;
 				}
 			}
+		} else if (!strncmp(p, "nop_interval", 12)) {
+			iscsi_set_nop_interval(atoi(p+13));
+		} else if (!strncmp(p, "nop_count", 9)) {
+			iscsi_set_nop_count(atoi(p+10));
 		}
 
 		p += strcspn(p, ",");

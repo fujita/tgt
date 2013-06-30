@@ -36,6 +36,7 @@
 #include "driver.h"
 #include "target.h"
 #include "scsi.h"
+#include "iscsi/iscsid.h"
 #include "tgtadm.h"
 #include "parser.h"
 #include "spc.h"
@@ -1999,6 +2000,9 @@ tgtadm_err tgt_target_show_all(struct concat_buf *b)
 			 target->name,
 			 tgt_drivers[target->lid]->name,
 			 target_state_name(target->target_state));
+
+		if (!strcmp(tgt_drivers[target->lid]->name, "iscsi"))
+			iscsi_print_nop_settings(b, target->tid);
 
 		concat_printf(b, _TAB1 "I_T nexus information:\n");
 

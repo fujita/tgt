@@ -39,6 +39,7 @@ struct iscsi_transport {
 			      struct sockaddr *sa, socklen_t *len);
 	int (*ep_getpeername)(struct iscsi_connection *conn,
 			      struct sockaddr *sa, socklen_t *len);
+	void (*ep_nop_reply) (long ttt);
 };
 
 extern int iscsi_transport_register(struct iscsi_transport *);

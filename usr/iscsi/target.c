@@ -470,6 +470,8 @@ int iscsi_target_create(struct target *t)
 	INIT_LIST_HEAD(&target->sessions_list);
 	INIT_LIST_HEAD(&target->isns_list);
 	target->tid = tid;
+	target->nop_interval = default_nop_interval;
+	target->nop_count = default_nop_count;
 	list_add_tail(&target->tlist, &iscsi_targets_list);
 
 	isns_target_register(tgt_targetname(tid));
@@ -545,6 +547,18 @@ tgtadm_err iscsi_target_update(int mode, int op, int tid, uint64_t sid, uint64_t
 				break;
 			}
 			adm_err = TGTADM_SUCCESS;
+		} else if (!strncmp(name, "nop_count", 9)) {
+			err = iscsi_update_target_nop_count(tid,
+				atoi(&name[10]));
+			adm_err = !err ? TGTADM_SUCCESS :
+				TGTADM_INVALID_REQUEST;
+			break;
+		} else if (!strncmp(name, "nop_interval", 12)) {
+			err = iscsi_update_target_nop_interval(tid,
+				atoi(&name[13]));
+			adm_err = !err ? TGTADM_SUCCESS :
+				TGTADM_INVALID_REQUEST;
+			break;
 		}
 
 		idx = param_index_by_name(name, session_keys);

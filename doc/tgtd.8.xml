@@ -129,6 +129,36 @@
       </screen>
       </para>
     </refsect2>
+    <refsect2><title>nop_interval=&lt;integer&gt;</title>
+      <para>
+	This sets the default interval for sending NOP-OUT to probe for
+	connected initiators.
+	This parameter only controls the default value for targets.
+	Individual targets can be controlled using tgtadm.
+      </para>
+      <para>
+	The default value is 0 which means that the feature is disabled
+	TGTD will not send any NOP-OUT probes.
+      </para>
+    </refsect2>
+    <refsect2><title>nop_count=&lt;integer&gt;</title>
+      <para>
+	This sets the default value for after how many failed probes TGTD
+	will consider the initiator dead and tear down the session.
+	This parameter only controls the default value for targets.
+	Individual targets can be controlled using tgtadm.
+      </para>
+      <para>
+	The default value is 0.
+      </para>
+      <para>
+      Example: send NOP-OUT every 5 seconds and abort the session after
+      6 failures.
+      <screen format="linespecific">
+	tgtd --iscsi portal=192.0.2.1:3260,nop_interval=5,nop_count=6
+      </screen>
+      </para>
+    </refsect2>
   </refsect1>
 
 
