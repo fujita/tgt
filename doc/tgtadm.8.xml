@@ -21,6 +21,7 @@
 		<arg choice="opt">-m --mode &lt;mode&gt;</arg>
 		<arg choice="opt">-t --tid &lt;id&gt;</arg>
 		<arg choice="opt">-T --targetname &lt;targetname&gt;</arg>
+		<arg choice="opt">-y --blocksize &lt;size&gt;</arg>
 		<arg choice="opt">-Y --device-type &lt;type&gt;</arg>
 		<arg choice="opt">-l --lun &lt;lun&gt;</arg>
 		<arg choice="opt">-b --backing-store &lt;path&gt;</arg>
@@ -58,6 +59,23 @@
           </para>
         </listitem>
       </varlistentry>
+
+      <varlistentry><term><option>-y, --blocksize &lt;size&gt;</option></term>
+        <listitem>
+          <para>
+	    Block devices are created with a default block size of 512 bytes.
+	    This argument can be used to create block devices with different
+	    block sizes.
+          </para>
+        </listitem>
+      </varlistentry>
+      <screen format="linespecific">
+Example:
+
+tgtadm --lld iscsi --mode logicalunit --op new \
+       --tid &lt;TID&gt; --lun &lt;LUN&gt; \
+       -b &lt;backing-file&gt; --blocksize=4096
+      </screen>
 
       <varlistentry><term><option>-Y, --device-type &lt;type&gt;</option></term>
         <listitem>
