@@ -69,9 +69,12 @@ static off_t find_next_hole(struct scsi_lu *dev, off_t offset)
 static int sbc_mode_page_update(struct scsi_cmd *cmd, uint8_t *data, int *changed)
 {
 	uint8_t pcode = data[0] & 0x3f;
-	uint8_t subpcode = data[1];
+	uint8_t subpcode = 0;
 	struct mode_pg *pg;
 	uint8_t old;
+
+	if (data[0] & 0x40)
+		subpcode = data[1];
 
 	pg = find_mode_page(cmd->dev, pcode, subpcode);
 	if (pg == NULL)
@@ -79,7 +82,8 @@ static int sbc_mode_page_update(struct scsi_cmd *cmd, uint8_t *data, int *change
 
 	eprintf("%x %x\n", pg->mode_data[0], data[2]);
 
-	if (pcode == 0x08) {
+	switch (pcode) {
+	case 0x08: /* Cachning mode page */
 		old = pg->mode_data[0];
 		if (0x4 & data[2])
 			pg->mode_data[0] |= 0x4;
@@ -88,6 +92,19 @@ static int sbc_mode_page_update(struct scsi_cmd *cmd, uint8_t *data, int *change
 
 		if (old != pg->mode_data[0])
 			*changed = 1;
+
+		return 0;
+	case 0x0a: /* Control mode page */
+		old = pg->mode_data[2];
+		if (0x8 & data[4])
+			pg->mode_data[2] |= 0x8;
+		else
+			pg->mode_data[2] &= ~0x8;
+
+		if (old != pg->mode_data[2])
+			*changed = 1;
+
+		cmd->dev->attrs.swp = (0x8 & data[4]) ? 1 : 0;
 
 		return 0;
 	}
@@ -110,7 +127,8 @@ static int sbc_mode_sense(int host_no, struct scsi_cmd *cmd)
 	 * If this is a read-only lun, we must modify the data and set the
 	 * write protect bit
 	 */
-	if (cmd->dev->attrs.readonly && ret == SAM_STAT_GOOD) {
+	if ((cmd->dev->attrs.readonly || cmd->dev->attrs.swp)
+	&& ret == SAM_STAT_GOOD) {
 		uint8_t *data, mode6;
 
 		mode6 = (cmd->scb[0] == 0x1a);
@@ -141,7 +159,7 @@ static int sbc_format_unit(int host_no, struct scsi_cmd *cmd)
 		goto sense;
 	}
 
-	if (cmd->dev->attrs.readonly) {
+	if (cmd->dev->attrs.readonly || cmd->dev->attrs.swp) {
 		key = DATA_PROTECT;
 		asc = ASC_WRITE_PROTECT;
 		goto sense;
@@ -199,7 +217,7 @@ static int sbc_unmap(int host_no, struct scsi_cmd *cmd)
 		goto sense;
 	}
 
-	if (lu->attrs.readonly) {
+	if (lu->attrs.readonly || cmd->dev->attrs.swp) {
 		key = DATA_PROTECT;
 		asc = ASC_WRITE_PROTECT;
 		goto sense;
@@ -290,7 +308,7 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 		break;
 	}
 
-	if (lu->attrs.readonly) {
+	if (lu->attrs.readonly || cmd->dev->attrs.swp) {
 		switch (cmd->scb[0]) {
 		case WRITE_6:
 		case WRITE_10:
@@ -736,6 +754,13 @@ static tgtadm_err sbc_lu_init(struct scsi_lu *lu)
 
 	/* Control page */
 	add_mode_page(lu, "0x0a:0:10:2:0x10:0:0:0:0:0:0:2:0");
+	{
+		uint8_t mask[10];
+		memset(mask, 0, sizeof(mask));
+		mask[2] = 0x08; /* allow changing SWP */
+
+		set_mode_page_changeable_mask(lu, 0x0a, 0, mask);
+	}
 
 	/* Control Extensions mode page:  TCMOS:1 */
 	add_mode_page(lu, "0x0a:1:0x1c:0x04:0x00:0x00");

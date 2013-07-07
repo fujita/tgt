@@ -2027,6 +2027,7 @@ tgtadm_err tgt_target_show_all(struct concat_buf *b)
 				_TAB3 "Removable media: %s\n"
 				_TAB3 "Prevent removal: %s\n"
 				_TAB3 "Readonly: %s\n"
+				_TAB3 "SWP: %s\n"
 				_TAB3 "Thin-provisioning: %s\n"
 				_TAB3 "Backing store type: %s\n"
 				_TAB3 "Backing store path: %s\n"
@@ -2041,6 +2042,7 @@ tgtadm_err tgt_target_show_all(struct concat_buf *b)
 				lu->attrs.removable ? "Yes" : "No",
 				lu_prevent_removal(lu) ? "Yes" : "No",
 				lu->attrs.readonly ? "Yes" : "No",
+				lu->attrs.swp ? "Yes" : "No",
 				lu->attrs.thinprovisioning ? "Yes" : "No",
 				lu->bst ?
 					(lu->bst->bs_name ? : "Unknown") :

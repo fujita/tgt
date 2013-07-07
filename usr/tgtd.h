@@ -74,6 +74,7 @@ struct lu_phy_attr {
 	char qualifier;		/* Peripheral Qualifier */
 	char removable;		/* Removable media */
 	char readonly;          /* Read-Only media */
+	char swp;               /* Software Write Protect */
 	char thinprovisioning;  /* Use thin-provisioning for this LUN */
 	char online;		/* Logical Unit online */
 	char sense_format;	/* Descrptor format sense data supported */

@@ -2028,6 +2028,7 @@ int spc_lu_init(struct scsi_lu *lu)
 	lu->attrs.thinprovisioning = 0;
 	lu->attrs.removable = 0;
 	lu->attrs.readonly = 0;
+	lu->attrs.swp = 0;
 	lu->attrs.sense_format = 0;
 
 	snprintf(lu->attrs.vendor_id, sizeof(lu->attrs.vendor_id),
