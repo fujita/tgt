@@ -507,7 +507,6 @@ static tgtadm_err bs_rbd_init(struct scsi_lu *lu)
 	if (ret == TGTADM_SUCCESS)
 		return ret;
 fail:
-	rados_shutdown(&cluster);
 	return ret;
 }
 
