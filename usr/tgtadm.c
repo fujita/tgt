@@ -655,7 +655,11 @@ int main(int argc, char **argv)
 
 	if (mode == MODE_TARGET) {
 		if ((tid <= 0 && (op != OP_SHOW))) {
-			eprintf("'tid' option is necessary\n");
+			if (tid == 0)
+				eprintf("'tid' cannot be 0\n");
+			else
+				eprintf("'tid' option is necessary\n");
+
 			exit(EINVAL);
 		}
 		switch (op) {
@@ -793,7 +797,10 @@ int main(int argc, char **argv)
 
 	if (mode == MODE_DEVICE) {
 		if (tid <= 0) {
-			eprintf("'tid' option is necessary\n");
+			if (tid == 0)
+				eprintf("'tid' must not be 0\n");
+			else
+				eprintf("'tid' option is necessary\n");
 			exit(EINVAL);
 		}
 		if (lun == UINT64_MAX) {
