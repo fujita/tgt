@@ -35,6 +35,7 @@
 #include <sys/epoll.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 
 #include "list.h"
 #include "tgtd.h"
@@ -110,17 +111,27 @@ static void signal_catch(int signo)
 static int oom_adjust(void)
 {
 	int fd, err;
-	char path[64];
+	const char *path, *score;
+	struct stat st;
 
 	/* Avoid oom-killer */
-	sprintf(path, "/proc/%d/oom_adj", getpid());
+	path = "/proc/self/oom_score_adj";
+	score = "-1000\n";
+
+	if (stat(path, &st)) {
+		/* oom_score_adj cannot be used, try oom_adj */
+		path = "/proc/self/oom_adj";
+		score = "-17\n";
+	}
+
 	fd = open(path, O_WRONLY);
 	if (fd < 0) {
 		fprintf(stderr, "can't adjust oom-killer's pardon %s, %m\n",
 			path);
 		return errno;
 	}
-	err = write(fd, "-17\n", 4);
+
+	err = write(fd, score, strlen(score));
 	if (err < 0) {
 		fprintf(stderr, "can't adjust oom-killer's pardon %s, %m\n",
 			path);
