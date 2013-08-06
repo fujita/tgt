@@ -66,14 +66,18 @@ install: install-programs install-doc install-conf install-scripts
 
 .PHONY: rpm
 rpm:
-	@./scripts/build-rpm.sh
+	@./scripts/build-pkg.sh rpm
 
-.PHONY: clean-rpm
-clean-rpm:
-	rm -fr rpmtop
+.PHONY: deb
+deb:
+	@./scripts/build-pkg.sh deb
 
 .PHONY: clean
-clean: clean-programs clean-doc clean-conf clean-scripts clean-rpm
+clean-pkg:
+	rm -fr pkg
+
+.PHONY: clean
+clean: clean-programs clean-doc clean-conf clean-scripts clean-pkg
 
 .PHONY:check
 check: ARCH=$(shell sh script/checkarch.sh)
