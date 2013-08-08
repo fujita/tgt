@@ -293,7 +293,7 @@ static void iser_login_oper_scan(struct iscsi_connection *iscsi_conn,
 
 			switch (iscsi_conn->session_param[idx].state) {
 			case KEY_STATE_START:
-				if (idx == ISCSI_PARAM_MAX_XMIT_DLENGTH)
+				if (idx >= ISCSI_PARAM_FIRST_LOCAL)
 					break;
 				memset(buf, 0, sizeof(buf));
 				param_val_to_str(session_keys, idx, val, buf);
@@ -343,7 +343,7 @@ static int iser_login_check_params(struct iscsi_connection *iscsi_conn,
 	for (i = 0, cnt = 0; session_keys[i].name; i++) {
 		if (p[i].state == KEY_STATE_START && p[i].val != session_keys[i].def) {
 			if (iscsi_conn->state == STATE_LOGIN) {
-				if (i == ISCSI_PARAM_MAX_XMIT_DLENGTH) {
+				if (i >= ISCSI_PARAM_FIRST_LOCAL) {
 					if (p[i].val > session_keys[i].def)
 						p[i].val = session_keys[i].def;
 					p[i].state = KEY_STATE_DONE;

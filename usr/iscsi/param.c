@@ -322,8 +322,6 @@ static struct iscsi_key_ops marker_ops = {
 struct iscsi_key session_keys[] = {
 	[ISCSI_PARAM_MAX_RECV_DLENGTH] =
 	{"MaxRecvDataSegmentLength", 8192, 512, 16777215, &minimum_ops},
-	[ISCSI_PARAM_MAX_XMIT_DLENGTH] =
-	{"MaxXmitDataSegmentLength", 8192, 512, 16777215, &minimum_ops},
 	[ISCSI_PARAM_HDRDGST_EN] =
 	{"HeaderDigest", DIGEST_NONE, DIGEST_NONE, DIGEST_ALL, &digest_ops},
 	[ISCSI_PARAM_DATADGST_EN] =
@@ -367,6 +365,9 @@ struct iscsi_key session_keys[] = {
 	{"InitiatorRecvDataSegmentLength", 8192, 512, 16777215, &minimum_ops},
 	[ISCSI_PARAM_MAX_OUTST_PDU] =
 	{"MaxOutstandingUnexpectedPDUs", 0, 2, 4294967295U, &min_or_zero_ops},
+	/* "local" parmas, never sent to the initiator */
+	[ISCSI_PARAM_MAX_XMIT_DLENGTH] =
+	{"MaxXmitDataSegmentLength", 8192, 512, 16777215, &minimum_ops},
 	[ISCSI_PARAM_MAX] =
 	{NULL,},
 };

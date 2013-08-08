@@ -348,7 +348,7 @@ static void text_scan_login(struct iscsi_connection *conn)
 				text_key_add_reject(conn, key);
 				continue;
 			}
-			if (idx == ISCSI_PARAM_MAX_XMIT_DLENGTH)
+			if (idx >= ISCSI_PARAM_FIRST_LOCAL)
 				conn->session_param[idx].val = val;
 			else
 				param_set_val(session_keys,
@@ -357,7 +357,7 @@ static void text_scan_login(struct iscsi_connection *conn)
 
 			switch (conn->session_param[idx].state) {
 			case KEY_STATE_START:
-				if (idx == ISCSI_PARAM_MAX_XMIT_DLENGTH)
+				if (idx >= ISCSI_PARAM_FIRST_LOCAL)
 					break;
 				memset(buf, 0, sizeof(buf));
 				param_val_to_str(session_keys, idx, val, buf);
@@ -405,7 +405,7 @@ static int text_check_param(struct iscsi_connection *conn)
 	for (i = 0, cnt = 0; session_keys[i].name; i++) {
 		if (p[i].state == KEY_STATE_START && p[i].val != session_keys[i].def) {
 			if (conn->state == STATE_LOGIN) {
-				if (i == ISCSI_PARAM_MAX_XMIT_DLENGTH) {
+				if (i >= ISCSI_PARAM_FIRST_LOCAL) {
 					if (p[i].val > session_keys[i].def)
 						p[i].val = session_keys[i].def;
 					p[i].state = KEY_STATE_DONE;

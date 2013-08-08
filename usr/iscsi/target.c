@@ -433,7 +433,6 @@ int iscsi_target_create(struct target *t)
 	struct iscsi_target *target;
 	struct param default_tgt_session_param[] = {
 		[ISCSI_PARAM_MAX_RECV_DLENGTH] = {0, 8192},
-		[ISCSI_PARAM_MAX_XMIT_DLENGTH] = {0, 8192},  /* do not edit */
 		[ISCSI_PARAM_HDRDGST_EN] = {0, DIGEST_NONE},
 		[ISCSI_PARAM_DATADGST_EN] = {0, DIGEST_NONE},
 		[ISCSI_PARAM_INITIAL_R2T_EN] = {0, 1},
@@ -455,6 +454,8 @@ int iscsi_target_create(struct target *t)
 		[ISCSI_PARAM_TARGET_RDSL] = {0, 262144},
 		[ISCSI_PARAM_INITIATOR_RDSL] = {0, 262144},
 		[ISCSI_PARAM_MAX_OUTST_PDU] =  {0, 0},  /* not in open-iscsi */
+		/* "local" parmas, never sent to the initiator */
+		[ISCSI_PARAM_MAX_XMIT_DLENGTH] = {0, 8192},  /* do not edit */
 	};
 
 	target = malloc(sizeof(*target));
