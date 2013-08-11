@@ -1227,6 +1227,10 @@ void iscsi_free_task(struct iscsi_task *task)
 	conn->tp->free_data_buf(conn, scsi_get_in_buffer(&task->scmd));
 	conn->tp->free_data_buf(conn, scsi_get_out_buffer(&task->scmd));
 
+	if ((task->data != scsi_get_in_buffer(&task->scmd)) ||
+	    (task->data != scsi_get_out_buffer(&task->scmd)))
+		conn->tp->free_data_buf(conn, task->data);
+
 	conn->tp->free_task(task);
 	conn_put(conn);
 }
