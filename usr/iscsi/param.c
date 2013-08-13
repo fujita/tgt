@@ -368,6 +368,9 @@ struct iscsi_key session_keys[] = {
 	/* "local" parmas, never sent to the initiator */
 	[ISCSI_PARAM_MAX_XMIT_DLENGTH] =
 	{"MaxXmitDataSegmentLength", 8192, 512, 16777215, &minimum_ops},
+	[ISCSI_PARAM_MAX_QUEUE_CMD] =
+	{"MaxQueueCmd", MAX_QUEUE_CMD_DEF, MAX_QUEUE_CMD_MIN,
+			MAX_QUEUE_CMD_MAX, &minimum_ops},
 	[ISCSI_PARAM_MAX] =
 	{NULL,},
 };

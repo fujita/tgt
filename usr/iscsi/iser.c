@@ -83,8 +83,7 @@ char *iser_portal_addr;
 #define MAX_POLL_WC 32
 
 #define DEFAULT_POOL_SIZE_MB    1024
-#define ISER_MAX_QUEUE_CMD      128     /* iSCSI cmd window size */
-#define MAX_CQ_ENTRIES          (128 * 1024)
+#define MAX_CQ_ENTRIES          (MAX_QUEUE_CMD_MAX * DEFAULT_POOL_SIZE_MB)
 
 #define MASK_BY_BIT(b)  	((1UL << b) - 1)
 #define ALIGN_TO_BIT(x, b)      ((((unsigned long)x) + MASK_BY_BIT(b)) & \
@@ -556,7 +555,7 @@ static inline void iser_set_rsp_stat_sn(struct iscsi_session *session,
 	if (session) {
 		rsp->exp_statsn = cpu_to_be32(session->exp_cmd_sn);
 		rsp->max_statsn = cpu_to_be32(session->exp_cmd_sn +
-					      ISER_MAX_QUEUE_CMD);
+					      session->max_queue_cmd);
 	}
 }
 
@@ -1121,6 +1120,7 @@ int iser_login_complete(struct iscsi_connection *iscsi_conn)
 	unsigned int trdsl;
 	/* unsigned int irdsl; */
 	unsigned int outst_pdu, hdrsz;
+	uint32_t max_q_cmd;
 	int err = -1;
 
 	dprintf("entry\n");
@@ -1142,9 +1142,10 @@ int iser_login_complete(struct iscsi_connection *iscsi_conn)
 #define ISER_MAX_RX_MISC_PDUS   4
 #define ISER_MAX_TX_MISC_PDUS   6
 
+	max_q_cmd = iscsi_conn->session_param[ISCSI_PARAM_MAX_QUEUE_CMD].val;
 	/* if (outst_pdu == 0) // ToDo: outstanding pdus num */
 	outst_pdu =
-		3 * ISER_MAX_QUEUE_CMD * (1 + ISER_INFLIGHT_DATAOUTS) +
+		3 * max_q_cmd * (1 + ISER_INFLIGHT_DATAOUTS) +
 		ISER_MAX_RX_MISC_PDUS + ISER_MAX_TX_MISC_PDUS;
 
 	/* RDSLs do not include headers. */
@@ -2656,10 +2657,11 @@ static int iser_queue_task(struct iscsi_session *session,
 		cmd_sn = be32_to_cpu(task->pdu.bhs->statsn);
 	}
 
-	/* cmd_sn > (exp_cmd_sn+ISER_MAX_QUEUE_CMD), i.e. beyond allowed window */
-	if (cmdsn_cmp(cmd_sn, session->exp_cmd_sn+ISER_MAX_QUEUE_CMD) == 1) {
+	/* cmd_sn > (exp_cmd_sn+max_queue_cmd), i.e. beyond allowed window */
+	if (cmdsn_cmp(cmd_sn,
+		      session->exp_cmd_sn+session->max_queue_cmd) == 1) {
 		eprintf("unexpected cmd_sn:0x%x, max:0x%x\n",
-			cmd_sn, session->exp_cmd_sn+ISER_MAX_QUEUE_CMD);
+			cmd_sn, session->exp_cmd_sn+session->max_queue_cmd);
 		return -EINVAL;
 	}
 

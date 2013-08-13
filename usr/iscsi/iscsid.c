@@ -41,8 +41,6 @@
 #include "tgtadm.h"
 #include "crc32c.h"
 
-#define MAX_QUEUE_CMD	128
-
 int default_nop_interval;
 int default_nop_count;
 
@@ -1092,7 +1090,8 @@ static int iscsi_cmd_rsp_build(struct iscsi_task *task)
 	rsp->cmd_status = scsi_get_result(&task->scmd);
 	rsp->statsn = cpu_to_be32(conn->stat_sn++);
 	rsp->exp_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn);
-	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn + MAX_QUEUE_CMD);
+	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn +
+				     conn->session->max_queue_cmd);
 
 	iscsi_rsp_set_residual(rsp, &task->scmd);
 
@@ -1152,7 +1151,8 @@ static int iscsi_data_rsp_build(struct iscsi_task *task)
 		datalen = maxdatalen;
 
 	rsp->exp_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn);
-	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn + MAX_QUEUE_CMD);
+	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn +
+				     conn->session->max_queue_cmd);
 
 	conn->rsp.datasize = datalen;
 	hton24(rsp->dlength, datalen);
@@ -1835,7 +1835,8 @@ static int iscsi_logout_tx_start(struct iscsi_task *task)
 	rsp->itt = task->req.itt;
 	rsp->statsn = cpu_to_be32(conn->stat_sn++);
 	rsp->exp_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn);
-	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn + MAX_QUEUE_CMD);
+	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn +
+				     conn->session->max_queue_cmd);
 
 	return 0;
 }
@@ -1852,7 +1853,8 @@ static int iscsi_noop_in_tx_start(struct iscsi_task *task)
 	rsp->ttt = task->req.ttt;
 	rsp->statsn = cpu_to_be32(conn->stat_sn);
 	rsp->exp_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn);
-	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn + MAX_QUEUE_CMD);
+	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn +
+				     conn->session->max_queue_cmd);
 
 	/* TODO: honor max_burst */
 	conn->rsp.datasize = task->len;
@@ -1884,7 +1886,8 @@ static int iscsi_noop_out_tx_start(struct iscsi_task *task, int *is_rsp)
 		rsp->ttt = cpu_to_be32(ISCSI_RESERVED_TAG);
 		rsp->statsn = cpu_to_be32(conn->stat_sn++);
 		rsp->exp_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn);
-		rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn + MAX_QUEUE_CMD);
+		rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn +
+					     conn->session->max_queue_cmd);
 
 		/* TODO: honor max_burst */
 		conn->rsp.datasize = task->len;
@@ -1908,7 +1911,8 @@ static int iscsi_tm_tx_start(struct iscsi_task *task)
 
 	rsp->statsn = cpu_to_be32(conn->stat_sn++);
 	rsp->exp_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn);
-	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn + MAX_QUEUE_CMD);
+	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn +
+				     conn->session->max_queue_cmd);
 
 	return 0;
 }

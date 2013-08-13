@@ -152,6 +152,9 @@ int session_create(struct iscsi_connection *conn)
 	memcpy(session->session_param, conn->session_param,
 	       sizeof(session->session_param));
 
+	session->max_queue_cmd =
+		session->session_param[ISCSI_PARAM_MAX_QUEUE_CMD].val;
+
 	return 0;
 }
 

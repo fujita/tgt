@@ -222,6 +222,7 @@ enum iscsi_param {
 	/* "local" parmas, never sent to the initiator */
 	ISCSI_PARAM_FIRST_LOCAL,
 	ISCSI_PARAM_MAX_XMIT_DLENGTH = ISCSI_PARAM_FIRST_LOCAL,
+	ISCSI_PARAM_MAX_QUEUE_CMD,
 	/* must always be last */
 	ISCSI_PARAM_MAX,
 };

@@ -40,6 +40,10 @@
 #define be32_to_cpu(x)	__be32_to_cpu(x)
 #define be64_to_cpu(x)	__be64_to_cpu(x)
 
+#define MAX_QUEUE_CMD_MIN	1
+#define MAX_QUEUE_CMD_DEF	128
+#define MAX_QUEUE_CMD_MAX	512
+
 #define ISCSI_NAME_LEN 256
 
 #define DIGEST_ALL		(DIGEST_NONE | DIGEST_CRC32C)
@@ -90,6 +94,7 @@ struct iscsi_session {
 	struct list_head pending_cmd_list;
 
 	uint32_t exp_cmd_sn;
+	uint32_t max_queue_cmd;
 
 	struct param session_param[ISCSI_PARAM_MAX];
 
