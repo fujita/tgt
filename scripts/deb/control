@@ -3,7 +3,7 @@ Maintainer: FUJITA Tomonori <fujita.tomonori@lab.ntt.co.jp>
 Section: net
 Priority: optional
 Standards-Version: 3.9.1
-Build-Depends: debhelper (>= 8), dpkg-dev (>= 1.13.19),
+Build-Depends: debhelper (>= 8), dpkg-dev (>= 1.13.19), bash-completion,
     librdmacm-dev, libibverbs-dev, xsltproc
 Homepage: http://stgt.berlios.de/
 
