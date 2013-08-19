@@ -1227,7 +1227,11 @@ void iscsi_free_task(struct iscsi_task *task)
 	conn->tp->free_data_buf(conn, scsi_get_in_buffer(&task->scmd));
 	conn->tp->free_data_buf(conn, scsi_get_out_buffer(&task->scmd));
 
-	if ((task->data != scsi_get_in_buffer(&task->scmd)) ||
+	/*
+	 * If freeing task before in/out buffers are set, make sure to free
+	 * task->data or it leaks.
+	 */
+	if ((task->data != scsi_get_in_buffer(&task->scmd)) &&
 	    (task->data != scsi_get_out_buffer(&task->scmd)))
 		conn->tp->free_data_buf(conn, task->data);
 
