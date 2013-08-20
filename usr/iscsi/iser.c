@@ -56,13 +56,13 @@ static struct rdma_event_channel *rdma_evt_channel;
 static struct rdma_cm_id *cma_listen_id;
 
 /* accepted at RDMA layer, but not yet established */
-static struct list_head temp_conn;
+static LIST_HEAD(temp_conn);
 
 /* all devices */
-static struct list_head iser_dev_list;
+static LIST_HEAD(iser_dev_list);
 
 /* all iser connections */
-static struct list_head iser_conn_list;
+static LIST_HEAD(iser_conn_list);
 
 #define uint64_from_ptr(p) (uint64_t)(uintptr_t)(p)
 #define ptr_from_int64(p) (void *)(unsigned long)(p)
@@ -3388,10 +3388,6 @@ static int iser_ib_init(void)
 			    iser_handle_rdmacm, NULL);
 	if (err)
 		return err;
-
-	INIT_LIST_HEAD(&iser_dev_list);
-	INIT_LIST_HEAD(&iser_conn_list);
-	INIT_LIST_HEAD(&temp_conn);
 
 	return err;
 }
