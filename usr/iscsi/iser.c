@@ -3404,13 +3404,15 @@ static void iser_ib_release(void)
 		free(dev);
 	}
 
-	tgt_event_del(cma_listen_id->channel->fd);
+	if (cma_listen_id) {
+		tgt_event_del(cma_listen_id->channel->fd);
 
-	err = rdma_destroy_id(cma_listen_id);
-	if (err)
-		eprintf("rdma_destroy_id failed: (errno=%d %m)\n", errno);
+		err = rdma_destroy_id(cma_listen_id);
+		if (err)
+			eprintf("rdma_destroy_id failed: (errno=%d %m)\n", errno);
 
-	rdma_destroy_event_channel(rdma_evt_channel);
+		rdma_destroy_event_channel(rdma_evt_channel);
+	}
 }
 
 static int iser_send_nop = 1;
