@@ -285,6 +285,7 @@ struct iscsi_portal {
 	int port;
 	int tpgt;
 	int fd;
+	int af;
 };
 
 extern struct list_head iscsi_portals_list;

@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <arpa/inet.h>
 #include <sys/socket.h>
 #include <sys/epoll.h>
 #include <sys/types.h>
@@ -70,8 +71,6 @@ static struct isns_io isns_rx, scn_rx;
 static char *rxbuf;
 static uint16_t transaction;
 static char eid[ISCSI_NAME_LEN];
-static uint8_t ip[16]; /* IET supoprts only one portal */
-static uint16_t port;
 static struct sockaddr_storage ss;
 
 /*
@@ -121,8 +120,7 @@ int isns_scn_access(int tid, char *name)
 
 static int isns_get_ip(int fd)
 {
-	int err, i;
-	uint32_t addr;
+	int err;
 	struct sockaddr_storage lss;
 	socklen_t slen = sizeof(lss);
 
@@ -137,26 +135,6 @@ static int isns_get_ip(int fd)
 	if (err) {
 		eprintf("getnameinfo error %s!\n", gai_strerror(err));
 		return err;
-	}
-
-	switch (lss.ss_family) {
-	case AF_INET:
-		addr = (((struct sockaddr_in *) &lss)->sin_addr.s_addr);
-
-		ip[10] = ip[11] = 0xff;
-		ip[15] = 0xff & (addr >> 24);
-		ip[14] = 0xff & (addr >> 16);
-		ip[13] = 0xff & (addr >> 8);
-		ip[12] = 0xff & addr;
-
-		port = (((struct sockaddr_in *) &lss)->sin_port);
-		break;
-	case AF_INET6:
-		for (i = 0; i < ARRAY_SIZE(ip); i++)
-			ip[i] = ((struct sockaddr_in6 *) &lss)->sin6_addr.s6_addr[i];
-
-		port = (((struct sockaddr_in6 *) &lss)->sin6_port);
-		break;
 	}
 
 	return 0;
@@ -417,15 +395,15 @@ static int isns_attr_query(char *name)
 
 int isns_target_register(char *name)
 {
-	char buf[4096];
+	unsigned char buf[4096];
 	uint16_t flags = 0, length = 0;
 	struct isns_hdr *hdr = (struct isns_hdr *) buf;
 	struct isns_tlv *tlv;
 	struct iscsi_target *target;
-	uint32_t p    = htonl(port);
 	uint32_t node = htonl(ISNS_NODE_TARGET);
 	uint32_t type = htonl(2);
 	int err;
+	struct iscsi_portal *portal;
 
 	if (!use_isns)
 		return 0;
@@ -447,12 +425,55 @@ int isns_target_register(char *name)
 	length += isns_tlv_set_string(&tlv, ISNS_ATTR_ENTITY_IDENTIFIER, eid);
 
 	if (!num_targets) {
-		length += isns_tlv_set(&tlv, ISNS_ATTR_ENTITY_PROTOCOL,
-				       sizeof(type), &type);
-		length += isns_tlv_set(&tlv, ISNS_ATTR_PORTAL_IP_ADDRESS,
-				       sizeof(ip), &ip);
-		length += isns_tlv_set(&tlv, ISNS_ATTR_PORTAL_PORT,
-				       sizeof(p), &p);
+		list_for_each_entry(portal, &iscsi_portals_list,
+				    iscsi_portal_siblings) {
+			uint8_t t_ip[16];
+			uint32_t t_port = htonl(portal->port);
+			memset(t_ip, 0, 16);
+
+			/*
+			 * If listening on all ports, iSNS listings will
+			 * reflect local IP we connected to iSNS server with.
+			 */
+			if (portal->af == AF_INET) {
+				uint32_t addr;
+
+				if (!strcmp("0.0.0.0", portal->addr)) {
+					if (ss.ss_family != AF_INET)
+						continue;
+
+					addr = ((struct sockaddr_in *) &ss)->sin_addr.s_addr;
+				} else {
+					inet_pton(AF_INET, portal->addr, &addr);
+				}
+
+				/* RFC 4171 6.3.1: convert v4 to mapped v6 */
+				t_ip[10] = t_ip[11] = 0xff;
+				t_ip[15] = 0xff & (addr >> 24);
+				t_ip[14] = 0xff & (addr >> 16);
+				t_ip[13] = 0xff & (addr >> 8);
+				t_ip[12] = 0xff & addr;
+			} else {
+				if (!strcmp("::", portal->addr)) {
+					int i;
+
+					if (ss.ss_family != AF_INET6)
+						continue;
+
+					for (i = 0; i < ARRAY_SIZE(t_ip); i++)
+						t_ip[i] = ((struct sockaddr_in6 *) &ss)->sin6_addr.s6_addr[i];
+				} else {
+					inet_pton(AF_INET6, portal->addr, t_ip);
+				}
+			}
+
+			length += isns_tlv_set(&tlv, ISNS_ATTR_ENTITY_PROTOCOL,
+					       sizeof(type), &type);
+			length += isns_tlv_set(&tlv, ISNS_ATTR_PORTAL_IP_ADDRESS,
+					       sizeof(t_ip), &t_ip);
+			length += isns_tlv_set(&tlv, ISNS_ATTR_PORTAL_PORT,
+					       sizeof(t_port), &t_port);
+		}
 		flags = ISNS_FLAG_REPLACE;
 
 		if (scn_listen_port) {

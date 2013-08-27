@@ -380,6 +380,7 @@ int iscsi_tcp_init_portal(char *addr, int port, int tpgt)
 		portal->port = port;
 		portal->tpgt = tpgt;
 		portal->fd   = fd;
+		portal->af   = res->ai_family;
 
 		list_add(&portal->iscsi_portal_siblings, &iscsi_portals_list);
 	}
