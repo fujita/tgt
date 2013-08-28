@@ -1921,7 +1921,7 @@ tgtadm_err lu_config(struct scsi_lu *lu, char *params, match_fn_t *fn)
 	attrs = &lu->attrs;
 	lu_vpd = attrs->lu_vpd;
 
-	if (!strncmp("targetOps", params, 9))
+	if (params && !strncmp("targetOps", params, 9))
 		params = params + 10;
 
 	while ((p = strsep(&params, ",")) != NULL) {
