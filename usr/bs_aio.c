@@ -414,7 +414,7 @@ static struct backingstore_template aio_bst = {
 	.bs_cmd_submit  	= bs_aio_cmd_submit,
 };
 
-__attribute__((constructor)) static void bs_rdwr_constructor(void)
+void register_bs_module(void)
 {
 	register_backingstore_template(&aio_bst);
 }

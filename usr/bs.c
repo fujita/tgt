@@ -19,6 +19,12 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  */
+#define _GNU_SOURCE
+#include <dirent.h>
+#include <dlfcn.h>
+#include <linux/fs.h>
+#include <sys/ioctl.h>
+#include <stdio.h>
 #include <errno.h>
 #include <string.h>
 #include <inttypes.h>
@@ -31,7 +37,9 @@
 #include <syscall.h>
 #include <sys/types.h>
 #include <sys/epoll.h>
+#include <sys/stat.h>
 #include <linux/types.h>
+#include <unistd.h>
 
 #include "list.h"
 #include "tgtd.h"
@@ -233,6 +241,50 @@ static int bs_init_signalfd(void)
 {
 	sigset_t mask;
 	int ret;
+	DIR *dir;
+
+	dir = opendir(BSDIR);
+	if (dir == NULL) {
+		eprintf("could not open backing-store module directory %s\n",
+			BSDIR);
+	} else {
+		struct dirent *dirent;
+		void *handle;
+		while ((dirent = readdir(dir))) {
+			char *soname;
+			void (*register_bs_module)(void);
+
+			if (dirent->d_name[0] == '.') {
+				continue;
+			}
+
+			ret = asprintf(&soname, "%s/%s", BSDIR,
+					dirent->d_name);
+			if (ret == -1) {
+				eprintf("out of memory\n");
+				continue;
+			}
+			handle = dlopen(soname, RTLD_NOW|RTLD_LOCAL);
+			if (handle == NULL) {
+				eprintf("failed to dlopen backing-store "
+					"module %s error %s \n",
+					soname, dlerror());
+				free(soname);
+				continue;
+			}
+			register_bs_module = dlsym(handle, "register_bs_module");
+			if (register_bs_module == NULL) {
+				eprintf("could not find register_bs_module "
+					"symbol in module %s\n",
+					soname);
+				free(soname);
+				continue;
+			}
+			register_bs_module();
+			free(soname);
+		}
+		closedir(dir);
+	}
 
 	pthread_mutex_init(&finished_lock, NULL);
 

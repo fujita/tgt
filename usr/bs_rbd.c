@@ -529,7 +529,7 @@ static struct backingstore_template rbd_bst = {
 	.bs_oflags_supported    = O_SYNC | O_DIRECT,
 };
 
-static __attribute__((constructor)) void bs_rbd_constructor(void)
+void register_bs_module(void)
 {
 	register_backingstore_template(&rbd_bst);
 }

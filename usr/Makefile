@@ -1,4 +1,5 @@
 sbindir ?= $(PREFIX)/sbin
+libdir ?= $(PREFIX)/lib/tgt
 
 ifneq ($(shell test -e /usr/include/linux/signalfd.h && echo 1),)
 CFLAGS += -DUSE_SIGNALFD
@@ -11,17 +12,14 @@ endif
 TGTD_OBJS += $(addprefix iscsi/, conn.o param.o session.o \
 		iscsid.o target.o chap.o sha1.o md5.o transport.o iscsi_tcp.o \
 		isns.o)
-TGTD_OBJS += bs_rdwr.o
 
 ifneq ($(CEPH_RBD),)
-TGTD_OBJS += bs_rbd.o
-LIBS += -lrados -lrbd
+MODULES += bs_rbd.so
 endif
 
 ifneq ($(shell test -e /usr/include/sys/eventfd.h && test -e /usr/include/libaio.h && echo 1),)
 CFLAGS += -DUSE_EVENTFD
-TGTD_OBJS += bs_aio.o
-LIBS += -laio
+MODULES += bs_aio.o
 endif
 
 ifneq ($(ISCSI_RDMA),)
@@ -40,22 +38,26 @@ CFLAGS += -g -O2 -fno-strict-aliasing
 endif
 CFLAGS += -Wall -Wstrict-prototypes -fPIC
 CFLAGS += -DTGT_VERSION=\"$(VERSION)$(EXTRAVERSION)\"
+CFLAGS += -DBSDIR=\"$(DESTDIR)$(libdir)/backing-store\"
 
-LIBS += -lpthread
+LIBS += -lpthread -ldl
 
 PROGRAMS += tgtd tgtadm tgtimg
 TGTD_OBJS += tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o \
 		concat_buf.o parser.o spc.o sbc.o mmc.o osd.o scc.o smc.o \
-		ssc.o bs_ssc.o libssc.o \
+		ssc.o libssc.o bs_rdwr.o bs_ssc.o \
 		bs_null.o bs_sg.o bs.o libcrc32c.o
 
 TGTD_DEP = $(TGTD_OBJS:.o=.d)
 
+LDFLAGS = -Wl,-E,-rpath=$(libdir)
+
 .PHONY:all
-all: $(PROGRAMS)
+all: $(PROGRAMS) $(MODULES)
 
 tgtd: $(TGTD_OBJS)
-	$(CC) $^ -o $@ $(LIBS)
+	echo $(CC) $^ -o $@ $(LIBS)
+	$(CC) $^ -o $@ $(LDFLAGS) $(LIBS)
 
 -include $(TGTD_DEP)
 
@@ -79,11 +81,22 @@ tgtimg: $(TGTIMG_OBJS)
 	$(CC) -c $(CFLAGS) $*.c -o $*.o
 	@$(CC) -MM $(CFLAGS) -MF $*.d -MT $*.o $*.c
 
+%.so: %.c
+	$(CC) -shared $(CFLAGS) $*.c -o $*.so
+
+bs_aio.so: bs_aio.c
+	$(CC) -shared $(CFLAGS) bs_aio.c -o bs_aio.so -laio
+
+bs_rbd.so: bs_rbd.c
+	$(CC) -shared $(CFLAGS) bs_rbd.c -o bs_rbd.so -lrados -lrbd
+
 .PHONY: install
-install: $(PROGRAMS)
+install: $(PROGRAMS) $(MODULES)
 	install -d -m 755 $(DESTDIR)$(sbindir)
 	install -m 755 $(PROGRAMS) $(DESTDIR)$(sbindir)
+	install -d -m 755 $(DESTDIR)$(libdir)/backing-store
+	install -m 755 $(MODULES) $(DESTDIR)$(libdir)/backing-store
 
 .PHONY: clean
 clean:
-	rm -f *.[od] $(PROGRAMS) iscsi/*.[od] ibmvio/*.[od] fc/*.[od]
+	rm -f *.[od] *.so $(PROGRAMS) iscsi/*.[od] ibmvio/*.[od] fc/*.[od]
