@@ -244,8 +244,12 @@ Compile tgtd with:
 As iSCSI support is compiled in by default, there is no need to specify
 additional symbols for it.
 
-You'll need to have two libraries installed on your system:
-libibverbs.so and librdmacm.so.
+For build purposes, you'll need to have two libraries installed
+on your system: libibverbs-devel and librdmacm-devel.
+
+To run iser, you'lll need the binary form of these libraries,
+libibverbs.so and librdmacm.so along with device specific user
+space library such as libmlx4 for Mellanox ConnectX HCAs.
 
 If they are installed in the normal system paths (/usr/include and
 /usr/lib or /usr/lib64), they will be found automatically. Otherwise,
@@ -262,6 +266,9 @@ If these libraries are not in the normal system paths, you may
 possibly also have to set, e.g., LD_LIBRARY_PATH=/usr/local/lib in
 your environment to find the shared libraries at runtime.
 
+The libraries mentioned is this section have pre-set packages provided
+the by various distributions, e.g RPMs for Fedora, RedHat and Suse,
+or DEBs for Debian and Ubuntu.
 
 3.2.  Running tgtd
 
@@ -280,6 +287,12 @@ The target will listen on all TCP interfaces (as usual), as well
 as all RDMA devices.  Both use the same default iSCSI port, 3260.
 Clients on TCP or RDMA will connect to the same tgtd instance.
 
+When using iser, you need to make sure the kernel IB/RDMA stack
+is up and running.
+
+It's recommended to use the rping tool provided by librdmacm-utils
+for quick RDMA connectivity testing between the initiator and the
+target nodes.
 
 3.3.  Configuring tgtd
 
