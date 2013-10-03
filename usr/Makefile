@@ -19,7 +19,7 @@ endif
 
 ifneq ($(shell test -e /usr/include/sys/eventfd.h && test -e /usr/include/libaio.h && echo 1),)
 CFLAGS += -DUSE_EVENTFD
-MODULES += bs_aio.o
+MODULES += bs_aio.so
 endif
 
 ifneq ($(ISCSI_RDMA),)
