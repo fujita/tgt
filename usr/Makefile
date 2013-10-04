@@ -94,8 +94,10 @@ bs_rbd.so: bs_rbd.c
 install: $(PROGRAMS) $(MODULES)
 	install -d -m 755 $(DESTDIR)$(sbindir)
 	install -m 755 $(PROGRAMS) $(DESTDIR)$(sbindir)
+ifneq ($(MODULES),)
 	install -d -m 755 $(DESTDIR)$(libdir)/backing-store
 	install -m 755 $(MODULES) $(DESTDIR)$(libdir)/backing-store
+endif
 
 .PHONY: clean
 clean:
