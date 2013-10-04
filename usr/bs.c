@@ -19,7 +19,6 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  */
-#define _GNU_SOURCE
 #include <dirent.h>
 #include <dlfcn.h>
 #include <linux/fs.h>
