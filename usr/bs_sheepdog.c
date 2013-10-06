@@ -604,13 +604,27 @@ static int update_inode(struct sheepdog_access_info *ai)
 {
 	int ret = 0;
 	uint64_t oid = vid_to_vdi_oid(ai->inode.vdi_id);
+	uint32_t min, max, offset, data_len;
 
-	/* todo: optimization with partial update of inode object */
-	ret = write_object(ai->fd, (char *)&ai->inode, oid,
-			   ai->inode.nr_copies, SD_INODE_SIZE, 0,
+	min = ai->min_dirty_data_idx;
+	max = ai->max_dirty_data_idx;
+
+	if (max < min)
+		goto end;
+
+	offset = sizeof(ai->inode) - sizeof(ai->inode.data_vdi_id) +
+		min * sizeof(ai->inode.data_vdi_id[0]);
+	data_len = (max - min + 1) * sizeof(ai->inode.data_vdi_id[0]);
+
+	ret = write_object(ai->fd, (char *)&ai->inode + offset, oid,
+			   ai->inode.nr_copies, data_len, offset,
 			   0, 0, 0, NULL);
 	if (ret < 0)
 		eprintf("sync inode failed\n");
+
+end:
+	ai->min_dirty_data_idx = UINT32_MAX;
+	ai->max_dirty_data_idx = 0;
 
 	return ret;
 }
