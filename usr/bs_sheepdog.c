@@ -516,69 +516,70 @@ static int send_req(int sockfd, struct sheepdog_req *hdr, void *data,
 	return ret;
 }
 
-static int do_req(int sockfd, struct sheepdog_req *hdr, void *data,
-		  unsigned int *wlen, unsigned int *rlen)
+static int do_req(struct sheepdog_access_info *ai, struct sheepdog_req *hdr,
+		  void *data, unsigned int *wlen, unsigned int *rlen)
 {
-	int ret;
+	int ret, sockfd, count = 0;
+
+retry:
+	if (count++) {
+		eprintf("retrying to reconnect (%d)\n", count);
+		if (0 <= sockfd)
+			close_my_fd(ai, sockfd);
+
+		sleep(1);
+	}
+
+	sockfd = get_my_fd(ai);
+	if (sockfd < 0)
+		goto retry;
 
 	ret = send_req(sockfd, hdr, data, wlen);
-	if (ret) {
-		ret = -1;
-		goto out;
-	}
+	if (ret)
+		goto retry;
 
+	/* FIXME: retrying COW request should be handled in graceful way */
 	ret = do_read(sockfd, hdr, sizeof(*hdr));
-	if (ret) {
-		eprintf("failed to get a rsp, %s\n", strerror(errno));
-		ret = -1;
-		goto out;
-	}
+	if (ret)
+		goto retry;
 
 	if (hdr->data_length < *rlen)
 		*rlen = hdr->data_length;
 
 	if (*rlen) {
 		ret = do_read(sockfd, data, *rlen);
-		if (ret) {
-			eprintf("failed to get the data, %s\n",
-				strerror(errno));
-			ret = -1;
-			goto out;
-		}
+		if (ret)
+			goto retry;
 	}
-	ret = 0;
-out:
-	return ret;
+
+	return 0;
 }
 
-static int find_vdi_name(char *filename, uint32_t snapid,
-			 char *tag, uint32_t *vid, int for_snapshot);
-static int read_object(int fd, char *buf, uint64_t oid, int copies,
-		       unsigned int datalen, uint64_t offset);
+static int find_vdi_name(struct sheepdog_access_info *ai, char *filename,
+			 uint32_t snapid, char *tag, uint32_t *vid,
+			 int for_snapshot);
+static int read_object(struct sheepdog_access_info *ai, char *buf, uint64_t oid,
+		       int copies, unsigned int datalen, uint64_t offset);
 
 static int reload_inode(struct sheepdog_access_info *ai)
 {
 	int ret;
 	char tag[SD_MAX_VDI_TAG_LEN];
 	uint32_t vid;
-	int fd;
 
 	memset(tag, 0, sizeof(tag));
 
-	ret = find_vdi_name(ai->inode.name, CURRENT_VDI_ID, tag, &vid, 0);
+	ret = find_vdi_name(ai, ai->inode.name, CURRENT_VDI_ID, tag, &vid, 0);
 	if (ret)
 		return -1;
 
-	fd = get_my_fd(ai);
-	if (fd < 0)
-		return -1;
-
-	read_object(fd, (char *)&ai->inode, vid_to_vdi_oid(vid),
+	read_object(ai, (char *)&ai->inode, vid_to_vdi_oid(vid),
 		    ai->inode.nr_copies, SD_INODE_SIZE, 0);
 	return 0;
 }
 
-static int read_write_object(int fd, char *buf, uint64_t oid, int copies,
+static int read_write_object(struct sheepdog_access_info *ai, char *buf,
+			     uint64_t oid, int copies,
 			     unsigned int datalen, uint64_t offset,
 			     int write, int create, uint64_t old_oid,
 			     uint16_t flags, int *need_reload)
@@ -612,7 +613,7 @@ static int read_write_object(int fd, char *buf, uint64_t oid, int copies,
 	hdr.offset = offset;
 	hdr.copies = copies;
 
-	ret = do_req(fd, (struct sheepdog_req *)&hdr, buf, &wlen, &rlen);
+	ret = do_req(ai, (struct sheepdog_req *)&hdr, buf, &wlen, &rlen);
 	if (ret) {
 		eprintf("failed to send a request to the sheep\n");
 		return -1;
@@ -632,18 +633,20 @@ static int read_write_object(int fd, char *buf, uint64_t oid, int copies,
 	}
 }
 
-static int read_object(int fd, char *buf, uint64_t oid, int copies,
+static int read_object(struct sheepdog_access_info *ai, char *buf,
+		       uint64_t oid, int copies,
 		       unsigned int datalen, uint64_t offset)
 {
-	return read_write_object(fd, buf, oid, copies, datalen, offset,
+	return read_write_object(ai, buf, oid, copies, datalen, offset,
 				 0, 0, 0, 0, NULL);
 }
 
-static int write_object(int fd, char *buf, uint64_t oid, int copies,
+static int write_object(struct sheepdog_access_info *ai, char *buf,
+			uint64_t oid, int copies,
 			unsigned int datalen, uint64_t offset, int create,
 			uint64_t old_oid, uint16_t flags, int *need_reload)
 {
-	return read_write_object(fd, buf, oid, copies, datalen, offset, 1,
+	return read_write_object(ai, buf, oid, copies, datalen, offset, 1,
 				 create, old_oid, flags, need_reload);
 }
 
@@ -653,7 +656,6 @@ static int sd_sync(struct sheepdog_access_info *ai)
 	struct sheepdog_obj_req hdr;
 	struct sheepdog_obj_rsp *rsp = (struct sheepdog_obj_rsp *)&hdr;
 	unsigned int wlen = 0, rlen;
-	int fd;
 
 	memset(&hdr, 0, sizeof(hdr));
 
@@ -661,11 +663,7 @@ static int sd_sync(struct sheepdog_access_info *ai)
 	hdr.opcode = SD_OP_FLUSH_VDI;
 	hdr.oid = vid_to_vdi_oid(ai->inode.vdi_id);
 
-	fd = get_my_fd(ai);
-	if (fd < 0)
-		return -1;
-
-	ret = do_req(fd, (struct sheepdog_req *)&hdr, NULL, &wlen, &rlen);
+	ret = do_req(ai, (struct sheepdog_req *)&hdr, NULL, &wlen, &rlen);
 	if (ret) {
 		eprintf("failed to send a request to the sheep\n");
 		return -1;
@@ -690,7 +688,6 @@ static int update_inode(struct sheepdog_access_info *ai)
 	int ret = 0;
 	uint64_t oid = vid_to_vdi_oid(ai->inode.vdi_id);
 	uint32_t min, max, offset, data_len;
-	int fd;
 
 	min = ai->min_dirty_data_idx;
 	max = ai->max_dirty_data_idx;
@@ -702,12 +699,7 @@ static int update_inode(struct sheepdog_access_info *ai)
 		min * sizeof(ai->inode.data_vdi_id[0]);
 	data_len = (max - min + 1) * sizeof(ai->inode.data_vdi_id[0]);
 
-	fd = get_my_fd(ai);
-	if (fd < 0) {
-		ret = -1;
-		goto end;
-	}
-	ret = write_object(fd, (char *)&ai->inode + offset, oid,
+	ret = write_object(ai, (char *)&ai->inode + offset, oid,
 			   ai->inode.nr_copies, data_len, offset,
 			   0, 0, 0, NULL);
 	if (ret < 0)
@@ -734,11 +726,6 @@ static int sd_io(struct sheepdog_access_info *ai, int write, char *buf, int len,
 	uint16_t flags = 0;
 	int need_update_inode = 0, need_reload_inode;
 	int nr_copies = ai->inode.nr_copies;
-	int fd;
-
-	fd = get_my_fd(ai);
-	if (fd < 0)
-		return -1;
 
 	if (write)
 		pthread_rwlock_wrlock(&ai->inode_lock);
@@ -777,7 +764,7 @@ retry:
 			}
 
 			need_reload_inode = 0;
-			ret = write_object(fd, buf + (len - rest),
+			ret = write_object(ai, buf + (len - rest),
 					   oid, nr_copies, size,
 					   obj_offset, create,
 					   old_oid, flags, &need_reload_inode);
@@ -799,7 +786,7 @@ retry:
 				goto done;
 			}
 
-			ret = read_object(fd, buf + (len - rest),
+			ret = read_object(ai, buf + (len - rest),
 					  oid, nr_copies, size,
 					  obj_offset);
 		}
@@ -822,18 +809,15 @@ done:
 	return ret;
 }
 
-static int find_vdi_name(char *filename, uint32_t snapid,
-			 char *tag, uint32_t *vid, int for_snapshot)
+static int find_vdi_name(struct sheepdog_access_info *ai, char *filename,
+			 uint32_t snapid, char *tag, uint32_t *vid,
+			 int for_snapshot)
 {
-	int ret, fd;
+	int ret;
 	struct sheepdog_vdi_req hdr;
 	struct sheepdog_vdi_rsp *rsp = (struct sheepdog_vdi_rsp *)&hdr;
 	unsigned int wlen, rlen = 0;
 	char buf[SD_MAX_VDI_LEN + SD_MAX_VDI_TAG_LEN];
-
-	fd = connect_to_sdog(NULL, NULL);
-	if (fd < 0)
-		return -1;
 
 	memset(buf, 0, sizeof(buf));
 	strncpy(buf, filename, SD_MAX_VDI_LEN);
@@ -851,7 +835,7 @@ static int find_vdi_name(char *filename, uint32_t snapid,
 	hdr.snapid = snapid;
 	hdr.flags = SD_FLAG_CMD_WRITE;
 
-	ret = do_req(fd, (struct sheepdog_req *)&hdr, buf, &wlen, &rlen);
+	ret = do_req(ai, (struct sheepdog_req *)&hdr, buf, &wlen, &rlen);
 	if (ret) {
 		ret = -1;
 		goto out;
@@ -866,33 +850,27 @@ static int find_vdi_name(char *filename, uint32_t snapid,
 	*vid = rsp->vdi_id;
 
 	ret = 0;
+
 out:
-	close(fd);
 	return ret;
 }
 
 static int sd_open(struct sheepdog_access_info *ai, char *filename, int flags)
 {
-	int ret, fd;
+	int ret;
 	uint32_t vid = 0;
 	char tag[SD_MAX_VDI_TAG_LEN];
 
 	memset(tag, 0, sizeof(tag));
 
-	ret = find_vdi_name(filename, CURRENT_VDI_ID, tag, &vid, 0);
+	ret = find_vdi_name(ai, filename, CURRENT_VDI_ID, tag, &vid, 0);
 	if (ret)
 		goto out;
-
-	fd = get_my_fd(ai);
-	if (fd < 0) {
-		eprintf("failed to connect\n");
-		goto out;
-	}
 
 	ai->min_dirty_data_idx = UINT32_MAX;
 	ai->max_dirty_data_idx = 0;
 
-	ret = read_object(fd, (char *)&ai->inode, vid_to_vdi_oid(vid),
+	ret = read_object(ai, (char *)&ai->inode, vid_to_vdi_oid(vid),
 			  0, SD_INODE_SIZE, 0);
 
 	if (ret)
@@ -909,26 +887,17 @@ static void sd_close(struct sheepdog_access_info *ai)
 	struct sheepdog_vdi_rsp *rsp = (struct sheepdog_vdi_rsp *)&hdr;
 	unsigned int wlen = 0, rlen;
 	int ret;
-	int fd;
 
 	memset(&hdr, 0, sizeof(hdr));
 
 	hdr.opcode = SD_OP_RELEASE_VDI;
 	hdr.vdi_id = ai->inode.vdi_id;
 
-	fd = get_my_fd(ai);
-	if (fd < 0) {
-		eprintf("couldn't acquire fd for closing sheepdog VDI\n");
-		return;
-	}
-
-	ret = do_req(fd, (struct sheepdog_req *)&hdr, NULL, &wlen, &rlen);
+	ret = do_req(ai, (struct sheepdog_req *)&hdr, NULL, &wlen, &rlen);
 
 	if (!ret && rsp->result != SD_RES_SUCCESS &&
 	    rsp->result != SD_RES_VDI_NOT_LOCKED)
 		eprintf("%s, %s", sd_strerror(rsp->result), ai->inode.name);
-
-	close_my_fd(ai, fd);
 }
 
 static void set_medium_error(int *result, uint8_t *key, uint16_t *asc)
