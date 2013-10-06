@@ -31,6 +31,7 @@
 #include <netinet/tcp.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
+#include <pthread.h>
 
 #include "list.h"
 #include "tgtd.h"
@@ -209,13 +210,29 @@ struct sheepdog_inode {
 
 #define SD_INODE_SIZE (sizeof(struct sheepdog_inode))
 
-struct sheepdog_access_info {
+struct sheepdog_fd_list {
 	int fd;
+	pthread_t id;
+
+	struct list_head list;
+};
+
+struct sheepdog_access_info {
+	/*
+	 * maximum length of fd_list_head: nr_iothreads + 1
+	 * (+ 1 is for main thread)
+	 *
+	 * TODO: more effective data structure for handling massive parallel
+	 * access
+	 */
+	struct list_head fd_list_head;
+	pthread_rwlock_t fd_list_lock;
 
 	uint32_t min_dirty_data_idx;
 	uint32_t max_dirty_data_idx;
 
 	struct sheepdog_inode inode;
+	pthread_rwlock_t inode_lock;
 };
 
 static inline int is_data_obj_writeable(struct sheepdog_inode *inode,
@@ -345,6 +362,64 @@ reconnect:
 success:
 	freeaddrinfo(res0);
 	return fd;
+}
+
+static int get_my_fd(struct sheepdog_access_info *ai)
+{
+	pthread_t self_id = pthread_self();
+	struct sheepdog_fd_list *p;
+	int fd;
+
+	pthread_rwlock_rdlock(&ai->fd_list_lock);
+	list_for_each_entry(p, &ai->fd_list_head, list) {
+		if (p->id == self_id) {
+			pthread_rwlock_unlock(&ai->fd_list_lock);
+			return p->fd;
+		}
+	}
+	pthread_rwlock_unlock(&ai->fd_list_lock);
+
+	fd = connect_to_sdog(NULL, NULL);
+	if (fd < 0)
+		return -1;
+
+	p = zalloc(sizeof(*p));
+	if (!p) {
+		close(fd);
+		return -1;
+	}
+
+	p->id = self_id;
+	p->fd = fd;
+	INIT_LIST_HEAD(&p->list);
+
+	pthread_rwlock_wrlock(&ai->fd_list_lock);
+	list_add_tail(&p->list, &ai->fd_list_head);
+	pthread_rwlock_unlock(&ai->fd_list_lock);
+
+	return p->fd;
+}
+
+static void close_my_fd(struct sheepdog_access_info *ai, int fd)
+{
+	struct sheepdog_fd_list *p;
+	int closed = 0;
+
+	pthread_rwlock_wrlock(&ai->fd_list_lock);
+	list_for_each_entry(p, &ai->fd_list_head, list) {
+		if (p->fd == fd) {
+			close(fd);
+			list_del(&p->list);
+			free(p);
+			closed = 1;
+
+			break;
+		}
+	}
+	pthread_rwlock_unlock(&ai->fd_list_lock);
+
+	if (!closed)
+		eprintf("unknown fd to close: %d\n", fd);
 }
 
 static int do_read(int sockfd, void *buf, int len)
@@ -486,6 +561,7 @@ static int reload_inode(struct sheepdog_access_info *ai)
 	int ret;
 	char tag[SD_MAX_VDI_TAG_LEN];
 	uint32_t vid;
+	int fd;
 
 	memset(tag, 0, sizeof(tag));
 
@@ -493,7 +569,11 @@ static int reload_inode(struct sheepdog_access_info *ai)
 	if (ret)
 		return -1;
 
-	read_object(ai->fd, (char *)&ai->inode, vid_to_vdi_oid(vid),
+	fd = get_my_fd(ai);
+	if (fd < 0)
+		return -1;
+
+	read_object(fd, (char *)&ai->inode, vid_to_vdi_oid(vid),
 		    ai->inode.nr_copies, SD_INODE_SIZE, 0);
 	return 0;
 }
@@ -573,6 +653,7 @@ static int sd_sync(struct sheepdog_access_info *ai)
 	struct sheepdog_obj_req hdr;
 	struct sheepdog_obj_rsp *rsp = (struct sheepdog_obj_rsp *)&hdr;
 	unsigned int wlen = 0, rlen;
+	int fd;
 
 	memset(&hdr, 0, sizeof(hdr));
 
@@ -580,7 +661,11 @@ static int sd_sync(struct sheepdog_access_info *ai)
 	hdr.opcode = SD_OP_FLUSH_VDI;
 	hdr.oid = vid_to_vdi_oid(ai->inode.vdi_id);
 
-	ret = do_req(ai->fd, (struct sheepdog_req *)&hdr, NULL, &wlen, &rlen);
+	fd = get_my_fd(ai);
+	if (fd < 0)
+		return -1;
+
+	ret = do_req(fd, (struct sheepdog_req *)&hdr, NULL, &wlen, &rlen);
 	if (ret) {
 		eprintf("failed to send a request to the sheep\n");
 		return -1;
@@ -605,6 +690,7 @@ static int update_inode(struct sheepdog_access_info *ai)
 	int ret = 0;
 	uint64_t oid = vid_to_vdi_oid(ai->inode.vdi_id);
 	uint32_t min, max, offset, data_len;
+	int fd;
 
 	min = ai->min_dirty_data_idx;
 	max = ai->max_dirty_data_idx;
@@ -616,7 +702,12 @@ static int update_inode(struct sheepdog_access_info *ai)
 		min * sizeof(ai->inode.data_vdi_id[0]);
 	data_len = (max - min + 1) * sizeof(ai->inode.data_vdi_id[0]);
 
-	ret = write_object(ai->fd, (char *)&ai->inode + offset, oid,
+	fd = get_my_fd(ai);
+	if (fd < 0) {
+		ret = -1;
+		goto end;
+	}
+	ret = write_object(fd, (char *)&ai->inode + offset, oid,
 			   ai->inode.nr_copies, data_len, offset,
 			   0, 0, 0, NULL);
 	if (ret < 0)
@@ -643,6 +734,16 @@ static int sd_io(struct sheepdog_access_info *ai, int write, char *buf, int len,
 	uint16_t flags = 0;
 	int need_update_inode = 0, need_reload_inode;
 	int nr_copies = ai->inode.nr_copies;
+	int fd;
+
+	fd = get_my_fd(ai);
+	if (fd < 0)
+		return -1;
+
+	if (write)
+		pthread_rwlock_wrlock(&ai->inode_lock);
+	else
+		pthread_rwlock_rdlock(&ai->inode_lock);
 
 	for (; idx < max; idx++) {
 		size = SD_DATA_OBJ_SIZE - obj_offset;
@@ -676,7 +777,7 @@ retry:
 			}
 
 			need_reload_inode = 0;
-			ret = write_object(ai->fd, buf + (len - rest),
+			ret = write_object(fd, buf + (len - rest),
 					   oid, nr_copies, size,
 					   obj_offset, create,
 					   old_oid, flags, &need_reload_inode);
@@ -698,7 +799,7 @@ retry:
 				goto done;
 			}
 
-			ret = read_object(ai->fd, buf + (len - rest),
+			ret = read_object(fd, buf + (len - rest),
 					  oid, nr_copies, size,
 					  obj_offset);
 		}
@@ -715,6 +816,8 @@ done:
 
 	if (need_update_inode)
 		ret = update_inode(ai);
+
+	pthread_rwlock_unlock(&ai->inode_lock);
 
 	return ret;
 }
@@ -780,13 +883,11 @@ static int sd_open(struct sheepdog_access_info *ai, char *filename, int flags)
 	if (ret)
 		goto out;
 
-	fd = connect_to_sdog(NULL, NULL);
+	fd = get_my_fd(ai);
 	if (fd < 0) {
 		eprintf("failed to connect\n");
 		goto out;
 	}
-
-	ai->fd = fd;
 
 	ai->min_dirty_data_idx = UINT32_MAX;
 	ai->max_dirty_data_idx = 0;
@@ -808,19 +909,26 @@ static void sd_close(struct sheepdog_access_info *ai)
 	struct sheepdog_vdi_rsp *rsp = (struct sheepdog_vdi_rsp *)&hdr;
 	unsigned int wlen = 0, rlen;
 	int ret;
+	int fd;
 
 	memset(&hdr, 0, sizeof(hdr));
 
 	hdr.opcode = SD_OP_RELEASE_VDI;
 	hdr.vdi_id = ai->inode.vdi_id;
 
-	ret = do_req(ai->fd, (struct sheepdog_req *)&hdr, NULL, &wlen, &rlen);
+	fd = get_my_fd(ai);
+	if (fd < 0) {
+		eprintf("couldn't acquire fd for closing sheepdog VDI\n");
+		return;
+	}
+
+	ret = do_req(fd, (struct sheepdog_req *)&hdr, NULL, &wlen, &rlen);
 
 	if (!ret && rsp->result != SD_RES_SUCCESS &&
 	    rsp->result != SD_RES_VDI_NOT_LOCKED)
 		eprintf("%s, %s", sd_strerror(rsp->result), ai->inode.name);
 
-	close(ai->fd);
+	close_my_fd(ai, fd);
 }
 
 static void set_medium_error(int *result, uint8_t *key, uint16_t *asc)
@@ -913,15 +1021,31 @@ static void bs_sheepdog_close(struct scsi_lu *lu)
 static tgtadm_err bs_sheepdog_init(struct scsi_lu *lu)
 {
 	struct bs_thread_info *info = BS_THREAD_I(lu);
+	struct sheepdog_access_info *ai =
+		(struct sheepdog_access_info *)(info + 1);
 
-	return bs_thread_open(info, bs_sheepdog_request, 1);
+	INIT_LIST_HEAD(&ai->fd_list_head);
+	pthread_rwlock_init(&ai->fd_list_lock, NULL);
+	pthread_rwlock_init(&ai->inode_lock, NULL);
+
+	return bs_thread_open(info, bs_sheepdog_request, nr_iothreads);
 }
 
 static void bs_sheepdog_exit(struct scsi_lu *lu)
 {
 	struct bs_thread_info *info = BS_THREAD_I(lu);
+	struct sheepdog_access_info *ai =
+		(struct sheepdog_access_info *)(info + 1);
+
+	struct sheepdog_fd_list *p;
 
 	bs_thread_close(info);
+
+	list_for_each_entry(p, &ai->fd_list_head, list) {
+		close(p->fd);
+		list_del(&p->list);
+		free(p);
+	}
 }
 
 static struct backingstore_template sheepdog_bst = {
