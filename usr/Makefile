@@ -19,7 +19,8 @@ endif
 
 ifneq ($(shell test -e /usr/include/sys/eventfd.h && test -e /usr/include/libaio.h && echo 1),)
 CFLAGS += -DUSE_EVENTFD
-MODULES += bs_aio.so
+TGTD_OBJS += bs_aio.o
+LIBS += -laio
 endif
 
 ifneq ($(ISCSI_RDMA),)
@@ -83,9 +84,6 @@ tgtimg: $(TGTIMG_OBJS)
 
 %.so: %.c
 	$(CC) -shared $(CFLAGS) $*.c -o $*.so
-
-bs_aio.so: bs_aio.c
-	$(CC) -shared $(CFLAGS) bs_aio.c -o bs_aio.so -laio
 
 bs_rbd.so: bs_rbd.c
 	$(CC) -shared $(CFLAGS) bs_rbd.c -o bs_rbd.so -lrados -lrbd
