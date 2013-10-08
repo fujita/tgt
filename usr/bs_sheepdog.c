@@ -32,6 +32,9 @@
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <pthread.h>
+#include <limits.h>
+#include <ctype.h>
+#include <sys/un.h>
 
 #include "list.h"
 #include "tgtd.h"
@@ -43,7 +46,7 @@
 #define SD_PROTO_VER 0x01
 
 #define SD_DEFAULT_ADDR "localhost"
-#define SD_DEFAULT_PORT "7000"
+#define SD_DEFAULT_PORT 7000
 
 #define SD_OP_CREATE_AND_WRITE_OBJ  0x01
 #define SD_OP_READ_OBJ       0x02
@@ -217,7 +220,21 @@ struct sheepdog_fd_list {
 	struct list_head list;
 };
 
+#define UNIX_PATH_MAX (108 + 1)
+
 struct sheepdog_access_info {
+	int is_unix;
+
+	/* tcp */
+	char hostname[HOST_NAME_MAX + 1];
+	int port;
+
+	/* unix domain socket */
+	char uds_path[UNIX_PATH_MAX];
+
+	/* if the opened VDI is a snapshot, write commands cannot be issued */
+	int is_snapshot;
+
 	/*
 	 * maximum length of fd_list_head: nr_iothreads + 1
 	 * (+ 1 is for main thread)
@@ -313,21 +330,25 @@ static const char *sd_strerror(int err)
 	return "Invalid error code";
 }
 
-static int connect_to_sdog(const char *addr, const char *port)
+static int connect_to_sdog_tcp(const char *addr, int port)
 {
 	char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
 	int fd, ret;
 	struct addrinfo hints, *res, *res0;
+	char port_s[6];
 
 	if (!addr) {
 		addr = SD_DEFAULT_ADDR;
 		port = SD_DEFAULT_PORT;
 	}
 
+	memset(port_s, 0, 6);
+	snprintf(port_s, 5, "%d", port);
+
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_socktype = SOCK_STREAM;
 
-	ret = getaddrinfo(addr, port, &hints, &res0);
+	ret = getaddrinfo(addr, port_s, &hints, &res0);
 	if (ret) {
 		eprintf("unable to get address info %s, %s\n",
 			addr, strerror(errno));
@@ -354,13 +375,38 @@ reconnect:
 			break;
 		}
 
-		dprintf("connected to %s:%s\n", addr, port);
+		dprintf("connected to %s:%d\n", addr, port);
 		goto success;
 	}
 	fd = -1;
-	eprintf("failed connect to %s:%s\n", addr, port);
+	eprintf("failed connect to %s:%d\n", addr, port);
 success:
 	freeaddrinfo(res0);
+	return fd;
+}
+
+static int connect_to_sdog_unix(const char *path)
+{
+	int fd, ret;
+	struct sockaddr_un un;
+
+	fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (fd < 0) {
+		eprintf("socket() failed: %m\n");
+		return -1;
+	}
+
+	memset(&un, 0, sizeof(un));
+	un.sun_family = AF_UNIX;
+	strncpy(un.sun_path, path, UNIX_PATH_MAX);
+
+	ret = connect(fd, (const struct sockaddr *)&un, (socklen_t)sizeof(un));
+	if (ret < 0) {
+		eprintf("connect() failed: %m\n");
+		close(fd);
+		return -1;
+	}
+
 	return fd;
 }
 
@@ -379,7 +425,10 @@ static int get_my_fd(struct sheepdog_access_info *ai)
 	}
 	pthread_rwlock_unlock(&ai->fd_list_lock);
 
-	fd = connect_to_sdog(NULL, NULL);
+	if (ai->is_unix)
+		fd = connect_to_sdog_unix(ai->uds_path);
+	else
+		fd = connect_to_sdog_tcp(ai->hostname, ai->port);
 	if (fd < 0)
 		return -1;
 
@@ -857,13 +906,142 @@ out:
 
 static int sd_open(struct sheepdog_access_info *ai, char *filename, int flags)
 {
-	int ret;
+	int ret = 0, i, len;
 	uint32_t vid = 0;
-	char tag[SD_MAX_VDI_TAG_LEN];
+	char *orig_filename;
+
+	uint32_t snapid = -1;
+	char tag[SD_MAX_VDI_TAG_LEN + 1];
+	char vdi_name[SD_MAX_VDI_LEN + 1];
+	char *saveptr, *result;
+	enum {
+		EXPECT_PROTO,
+		EXPECT_PATH,
+		EXPECT_VDI,
+		EXPECT_HOST_OR_PORT,
+		EXPECT_PORT,
+		EXPECT_TAG_OR_SNAP,
+		EXPECT_NOTHING,
+	} parse_state = EXPECT_PROTO;
 
 	memset(tag, 0, sizeof(tag));
+	memset(vdi_name, 0, sizeof(vdi_name));
 
-	ret = find_vdi_name(ai, filename, CURRENT_VDI_ID, tag, &vid, 0);
+	orig_filename = strdup(filename);
+	if (!orig_filename) {
+		eprintf("saving original filename failed\n");
+		return -1;
+	}
+
+	/*
+	 * expected form of filename:
+	 *
+	 * unix:<path_of_unix_domain_socket>:<vdi>
+	 * unix:<path_of_unix_domain_socket>:<vdi>:<tag>
+	 * unix:<path_of_unix_domain_socket>:<vdi>:<snapid>
+	 * tcp:<host>:<port>:<vdi>
+	 * tcp:<host>:<port>:<vdi>:<tag>
+	 * tcp:<host>:<port>:<vdi>:<snapid>
+	 * tcp:<port>:<vdi>
+	 * tcp:<port>:<vdi>:<tag>
+	 * tcp:<port>:<vdi>:<snapid>
+	 */
+
+	result = strtok_r(filename, ":", &saveptr);
+
+	do {
+		switch (parse_state) {
+		case EXPECT_PROTO:
+			if (!strcmp("unix", result)) {
+				ai->is_unix = 1;
+				parse_state = EXPECT_PATH;
+			} else if (!strcmp("tcp", result)) {
+				ai->is_unix = 0;
+				parse_state = EXPECT_HOST_OR_PORT;
+			} else {
+				eprintf("unknown protocol of sheepdog vdi:"\
+					" %s\n", result);
+				return -1;
+			}
+			break;
+		case EXPECT_PATH:
+			strncpy(ai->uds_path, result, UNIX_PATH_MAX);
+			parse_state = EXPECT_VDI;
+			break;
+		case EXPECT_HOST_OR_PORT:
+			len = strlen(result);
+			for (i = 0; i < len; i++) {
+				if (!isdigit(result[i])) {
+					/* result is a hostname */
+					strncpy(ai->hostname, result,
+						HOST_NAME_MAX);
+					parse_state = EXPECT_PORT;
+					goto next_token;
+				}
+			}
+
+			/* result is a port, use localhost as hostname */
+			strncpy(ai->hostname, "localhost", strlen("localhost"));
+set_port:
+			ai->port = atoi(result);
+			parse_state = EXPECT_VDI;
+			break;
+		case EXPECT_PORT:
+			goto set_port;
+		case EXPECT_VDI:
+			strncpy(vdi_name, result, SD_MAX_VDI_LEN);
+			parse_state = EXPECT_TAG_OR_SNAP;
+			break;
+		case EXPECT_TAG_OR_SNAP:
+			len = strlen(result);
+			for (i = 0; i < len; i++) {
+				if (!isdigit(result[i])) {
+					/* result is a tag */
+					strncpy(tag, result,
+						SD_MAX_VDI_TAG_LEN);
+					goto trans_to_expect_nothing;
+				}
+			}
+
+			snapid = atoi(result);
+trans_to_expect_nothing:
+			parse_state = EXPECT_NOTHING;
+			break;
+		case EXPECT_NOTHING:
+			eprintf("invalid VDI path of sheepdog, unexpected"\
+				" token: %s (entire: %s)\n",
+				result, orig_filename);
+			goto out;
+		default:
+			eprintf("BUG: invalid state of parser: %d\n",
+				parse_state);
+			exit(1);
+		}
+
+next_token:;
+	} while ((result = strtok_r(NULL, ":", &saveptr)) != NULL);
+
+	if (parse_state != EXPECT_NOTHING &&
+	    parse_state != EXPECT_TAG_OR_SNAP) {
+		eprintf("invalid VDI path of sheepdog: %s (state: %d)\n",
+			orig_filename, parse_state);
+		goto out;
+	}
+
+	dprintf("protocol: %s\n", ai->is_unix ? "unix" : "tcp");
+	if (ai->is_unix)
+		dprintf("path of unix domain socket: %s\n", ai->uds_path);
+	else
+		dprintf("hostname: %s, port: %d\n", ai->hostname, ai->port);
+
+	if (snapid == -1)
+		dprintf("tag: %s\n", tag);
+	else
+		dprintf("snapid: %d\n", snapid);
+
+	ai->is_snapshot = !(snapid == -1) && strlen(tag);
+	ret = find_vdi_name(ai, vdi_name, snapid == -1 ? 0 : snapid, tag, &vid,
+			    ai->is_snapshot);
 	if (ret)
 		goto out;
 
@@ -872,13 +1050,15 @@ static int sd_open(struct sheepdog_access_info *ai, char *filename, int flags)
 
 	ret = read_object(ai, (char *)&ai->inode, vid_to_vdi_oid(vid),
 			  0, SD_INODE_SIZE, 0);
-
 	if (ret)
 		goto out;
 
-	return 0;
+	ret = 0;
 out:
-	return -1;
+	strcpy(filename, orig_filename);
+	free(orig_filename);
+
+	return ret;
 }
 
 static void sd_close(struct sheepdog_access_info *ai)
@@ -929,9 +1109,13 @@ static void bs_sheepdog_request(struct scsi_cmd *cmd)
 	case WRITE_10:
 	case WRITE_12:
 	case WRITE_16:
-		length = scsi_get_out_length(cmd);
-		ret = sd_io(ai, 1, scsi_get_out_buffer(cmd),
-			    length, cmd->offset);
+		if (ai->is_snapshot) {
+			length = scsi_get_out_length(cmd);
+			ret = sd_io(ai, 1, scsi_get_out_buffer(cmd),
+				    length, cmd->offset);
+		} else
+			ret = -1;
+
 		if (ret)
 			set_medium_error(&result, &key, &asc);
 		break;
