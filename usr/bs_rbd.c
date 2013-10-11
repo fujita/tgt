@@ -45,13 +45,12 @@
 #include "rados/librados.h"
 #include "rbd/librbd.h"
 
-/* one cluster connection only */
-rados_t cluster;
 
 struct active_rbd {
 	char *poolname;
 	char *imagename;
 	char *snapname;
+	rados_t cluster;
 	rados_ioctx_t ioctx;
 	rbd_image_t rbd_image;
 };
@@ -432,7 +431,8 @@ static int bs_rbd_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 	eprintf("bs_rbd_open: pool: %s image: %s snap: %s\n",
 		poolname, imagename, snapname);
 
-	if ((ret == rados_ioctx_create(cluster, poolname, &rbd->ioctx)) < 0) {
+	if ((ret == rados_ioctx_create(rbd->cluster, poolname, &rbd->ioctx))
+	    < 0) {
 		eprintf("bs_rbd_open: rados_ioctx_create: %d\n", ret);
 		return -EIO;
 	}
@@ -471,24 +471,25 @@ static tgtadm_err bs_rbd_init(struct scsi_lu *lu)
 	tgtadm_err ret = TGTADM_UNKNOWN_ERR;
 	int rados_ret;
 	struct bs_thread_info *info = BS_THREAD_I(lu);
+	struct active_rbd *rbd = RBDP(lu);
 
-	rados_ret = rados_create(&cluster, NULL);
+	rados_ret = rados_create(&rbd->cluster, NULL);
 	if (rados_ret < 0) {
 		eprintf("bs_rbd_init: rados_create: %d\n", rados_ret);
 		return ret;
 	}
 	/* read config from environment and then default files */
-	rados_ret = rados_conf_parse_env(cluster, NULL);
+	rados_ret = rados_conf_parse_env(rbd->cluster, NULL);
 	if (rados_ret < 0) {
 		eprintf("bs_rbd_init: rados_conf_parse_env: %d\n", rados_ret);
 		goto fail;
 	}
-	rados_ret = rados_conf_read_file(cluster, NULL);
+	rados_ret = rados_conf_read_file(rbd->cluster, NULL);
 	if (rados_ret < 0) {
 		eprintf("bs_rbd_init: rados_conf_read_file: %d\n", rados_ret);
 		goto fail;
 	}
-	rados_ret = rados_connect(cluster);
+	rados_ret = rados_connect(rbd->cluster);
 	if (rados_ret < 0) {
 		eprintf("bs_rbd_init: rados_connect: %d\n", rados_ret);
 		goto fail;
@@ -503,9 +504,10 @@ fail:
 static void bs_rbd_exit(struct scsi_lu *lu)
 {
 	struct bs_thread_info *info = BS_THREAD_I(lu);
+	struct active_rbd *rbd = RBDP(lu);
 
 	bs_thread_close(info);
-	rados_shutdown(&cluster);
+	rados_shutdown(rbd->cluster);
 }
 
 static struct backingstore_template rbd_bst = {
