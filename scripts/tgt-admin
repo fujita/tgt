@@ -479,14 +479,16 @@ sub add_backing_direct {
 	my $data_key_ref = $_[2];
 	my $direct_store = $_[3];
 	my $driver = $$target_options_ref{"driver"};
+	my $bstype = $$target_options_ref{"bs-type"};
 
 	# Is the device in use?
 	my $can_alloc = 1;
-	if ($force != 1 && $$target_options_ref{'allow-in-use'} ne "yes") {
+	if ($bstype !~ "rbd" && $force != 1 && $$target_options_ref{'allow-in-use'} ne "yes") {
 		$can_alloc = check_device($backing_store,$data_key_ref);
 	}
 
-	if (-e $backing_store && ! -d $backing_store && $can_alloc == 1) {
+	if ($can_alloc == 1 &&
+	   ($bstype =~ "rbd" || (-e $backing_store && ! -d $backing_store))) {
 		my @exec_commands;
 		my $device_type;
 		my $bs_type;
