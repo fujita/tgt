@@ -1306,6 +1306,10 @@ sub check_device {
 		return 1;
 	}
 
+	if (! -e $backing_store) {
+		return 1;
+	}
+
 	# Check if the system uses this device
 	use Fcntl qw(O_RDONLY O_EXCL);
 	use Errno;
