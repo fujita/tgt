@@ -1319,7 +1319,7 @@ sub check_device {
 	# Check if userspace uses this device
 	my $lsof_check = check_exe("lsof");
 	if ($lsof_check ne 1) {
-		system("lsof $backing_store &>/dev/null");
+		system("lsof $backing_store >/dev/null 2>&1");
 		my $exit_value  = $? >> 8;
 		if ($exit_value eq 0) {
 			execute("# Device $backing_store is used (already tgtd target?).");
