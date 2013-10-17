@@ -1233,15 +1233,20 @@ static void bs_sheepdog_exit(struct scsi_lu *lu)
 	struct sheepdog_access_info *ai =
 		(struct sheepdog_access_info *)(info + 1);
 
-	struct sheepdog_fd_list *p;
+	struct sheepdog_fd_list *p, *next;
 
 	bs_thread_close(info);
 
-	list_for_each_entry(p, &ai->fd_list_head, list) {
+	list_for_each_entry_safe(p, next, &ai->fd_list_head, list) {
 		close(p->fd);
 		list_del(&p->list);
 		free(p);
 	}
+
+	pthread_rwlock_destroy(&ai->fd_list_lock);
+	pthread_rwlock_destroy(&ai->inode_lock);
+
+	dprintf("cleaned logical unit %p safely\n", lu);
 }
 
 static struct backingstore_template sheepdog_bst = {
