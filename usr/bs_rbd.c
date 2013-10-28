@@ -466,7 +466,7 @@ static void bs_rbd_close(struct scsi_lu *lu)
 	}
 }
 
-static tgtadm_err bs_rbd_init(struct scsi_lu *lu)
+static tgtadm_err bs_rbd_init(struct scsi_lu *lu, char *bsopts)
 {
 	tgtadm_err ret = TGTADM_UNKNOWN_ERR;
 	int rados_ret;
@@ -474,6 +474,7 @@ static tgtadm_err bs_rbd_init(struct scsi_lu *lu)
 	struct active_rbd *rbd = RBDP(lu);
 
 	rados_ret = rados_create(&rbd->cluster, NULL);
+	eprintf("bs_rbd_init bsopts=%s\n", bsopts);
 	if (rados_ret < 0) {
 		eprintf("bs_rbd_init: rados_create: %d\n", rados_ret);
 		return ret;

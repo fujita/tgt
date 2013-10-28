@@ -420,7 +420,7 @@ static int init_sg_device(int fd)
 	return 0;
 }
 
-static tgtadm_err bs_sg_init(struct scsi_lu *lu)
+static tgtadm_err bs_sg_init(struct scsi_lu *lu, char *bsopts)
 {
 	/*
 	 * Setup struct scsi_lu->cmd_perform() passthrough pointer

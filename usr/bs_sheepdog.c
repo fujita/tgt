@@ -1245,7 +1245,7 @@ static void bs_sheepdog_close(struct scsi_lu *lu)
 	sd_close(ai);
 }
 
-static tgtadm_err bs_sheepdog_init(struct scsi_lu *lu)
+static tgtadm_err bs_sheepdog_init(struct scsi_lu *lu, char *bsopts)
 {
 	struct bs_thread_info *info = BS_THREAD_I(lu);
 	struct sheepdog_access_info *ai =

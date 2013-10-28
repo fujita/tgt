@@ -112,6 +112,7 @@ struct option const long_options[] = {
 	{"value", required_argument, NULL, 'v'},
 	{"backing-store", required_argument, NULL, 'b'},
 	{"bstype", required_argument, NULL, 'E'},
+	{"bsopts", required_argument, NULL, 'S'},
 	{"bsoflags", required_argument, NULL, 'f'},
 	{"blocksize", required_argument, NULL, 'y'},
 	{"targetname", required_argument, NULL, 'T'},
@@ -130,7 +131,7 @@ struct option const long_options[] = {
 };
 
 static char *short_options =
-		"dhVL:o:m:t:s:c:l:n:v:b:E:f:y:T:I:Q:u:p:H:F:P:B:Y:O:C:";
+		"dhVL:o:m:t:s:c:l:n:v:b:E:f:y:T:I:Q:u:p:H:F:P:B:Y:O:C:S:";
 
 static void usage(int status)
 {
@@ -161,12 +162,13 @@ static void usage(int status)
 		"--lld <driver> --mode target --op unbind --tid <id> --initiator-name <name>\n"
 		"\tdisable the specific permitted initiators.\n"
 		"--lld <driver> --mode logicalunit --op new --tid <id> --lun <lun>\n"
-		"  --backing-store <path> --bstype <type> --bsoflags <options>\n"
+		"  --backing-store <path> --bstype <type> --bsopts <bs options> --bsoflags <options>\n"
 		"\tadd a new logical unit with <lun> to the specific\n"
 		"\ttarget with <id>. The logical unit is offered\n"
 		"\tto the initiators. <path> must be block device files\n"
 		"\t(including LVM and RAID devices) or regular files.\n"
 		"\tbstype option is optional.\n"
+		"\tbsopts are specific to the bstype.\n"
 		"\tbsoflags supported options are sync and direct\n"
 		"\t(sync:direct for both).\n"
 		"--lld <driver> --mode logicalunit --op delete --tid <id> --lun <lun>\n"
@@ -484,7 +486,7 @@ int main(int argc, char **argv)
 	uint32_t cid, hostno;
 	uint64_t sid, lun, force;
 	char *name, *value, *path, *targetname, *address, *iqnname, *targetOps;
-	char *portalOps, *bstype;
+	char *portalOps, *bstype, *bsopts;
 	char *bsoflags;
 	char *blocksize;
 	char *user, *password;
@@ -499,7 +501,7 @@ int main(int argc, char **argv)
 	dev_type = TYPE_DISK;
 	ac_dir = ACCOUNT_TYPE_INCOMING;
 	name = value = path = targetname = address = iqnname = NULL;
-	targetOps = portalOps = bstype = NULL;
+	targetOps = portalOps = bstype = bsopts = NULL;
 	bsoflags = blocksize = user = password = NULL;
 	force = 0;
 
@@ -586,6 +588,9 @@ int main(int argc, char **argv)
 			break;
 		case 'E':
 			bstype = optarg;
+			break;
+		case 'S':
+			bsopts = optarg;
 			break;
 		case 'Y':
 			dev_type = str_to_device_type(optarg);
@@ -809,7 +814,7 @@ int main(int argc, char **argv)
 		}
 		switch (op) {
 		case OP_NEW:
-			rc = verify_mode_params(argc, argv, "LmofytlbEYC");
+			rc = verify_mode_params(argc, argv, "LmofytlbEYCS");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
@@ -935,6 +940,9 @@ int main(int argc, char **argv)
 	else if (bstype)
 		concat_printf(&b, "%sbstype=%s", concat_delim(&b, ","),
 			      bstype);
+	if (bsopts)
+		concat_printf(&b, "%sbsopts=%s", concat_delim(&b, ","),
+			      bsopts);
 	if (bsoflags)
 		concat_printf(&b, "%sbsoflags=%s", concat_delim(&b, ","),
 			      bsoflags);

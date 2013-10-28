@@ -1869,7 +1869,7 @@ enum {
 	Opt_optimal_xfer_gran, Opt_optimal_xfer_len,
 	Opt_removable, Opt_readonly, Opt_online,
 	Opt_mode_page,
-	Opt_path,
+	Opt_path, Opt_bsopts,
 	Opt_bsoflags, Opt_thinprovisioning,
 	Opt_err,
 };
@@ -1890,6 +1890,7 @@ static match_table_t tokens = {
 	{Opt_online, "online=%s"},
 	{Opt_mode_page, "mode_page=%s"},
 	{Opt_path, "path=%s"},
+	{Opt_bsopts, "bsopts=%s"},
 	{Opt_bsoflags, "bsoflags=%s"},
 	{Opt_thinprovisioning, "thin_provisioning=%s"},
 	{Opt_err, NULL},

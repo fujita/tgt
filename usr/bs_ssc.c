@@ -610,7 +610,7 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 			cmd, cmd->scb[0], ret, length, cmd->offset);
 }
 
-static tgtadm_err bs_ssc_init(struct scsi_lu *lu)
+static tgtadm_err bs_ssc_init(struct scsi_lu *lu, char *bsopts)
 {
 	struct bs_thread_info *info = BS_THREAD_I(lu);
 	return bs_thread_open(info, tape_rdwr_request, 1);

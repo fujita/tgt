@@ -457,12 +457,13 @@ __device_lookup(int tid, uint64_t lun, struct target **t)
 }
 
 enum {
-	Opt_path, Opt_bstype, Opt_bsoflags, Opt_blocksize, Opt_err,
+	Opt_path, Opt_bstype, Opt_bsopts, Opt_bsoflags, Opt_blocksize, Opt_err,
 };
 
 static match_table_t device_tokens = {
 	{Opt_path, "path=%s"},
 	{Opt_bstype, "bstype=%s"},
+	{Opt_bsopts, "bsopts=%s"},
 	{Opt_bsoflags, "bsoflags=%s"},
 	{Opt_blocksize, "blocksize=%s"},
 	{Opt_err, NULL},
@@ -473,7 +474,7 @@ static void __cmd_done(struct target *, struct scsi_cmd *);
 tgtadm_err tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 		      int backing)
 {
-	char *p, *path = NULL, *bstype = NULL;
+	char *p, *path = NULL, *bstype = NULL, *bsopts = NULL;
 	char *bsoflags = NULL, *blocksize = NULL;
 	int lu_bsoflags = 0;
 	tgtadm_err adm_err = TGTADM_SUCCESS;
@@ -499,6 +500,9 @@ tgtadm_err tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 			break;
 		case Opt_bstype:
 			bstype = match_strdup(&args[0]);
+			break;
+		case Opt_bsopts:
+			bsopts = match_strdup(&args[0]);
 			break;
 		case Opt_bsoflags:
 			bsoflags = match_strdup(&args[0]);
@@ -618,7 +622,9 @@ tgtadm_err tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	}
 
 	if (lu->bst->bs_init) {
-		adm_err = lu->bst->bs_init(lu);
+		if (bsopts)
+			dprintf("bsopts=%s\n", bsopts);
+		adm_err = lu->bst->bs_init(lu, bsopts);
 		if (adm_err)
 			goto fail_lu_init;
 	}

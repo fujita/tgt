@@ -26,6 +26,7 @@
 		<arg choice="opt">-l --lun &lt;lun&gt;</arg>
 		<arg choice="opt">-b --backing-store &lt;path&gt;</arg>
 		<arg choice="opt">-f --bsoflags {direct|sync}</arg>
+		<arg choice="opt">-S --bsopts {backing-store opt string}</arg>
 		<arg choice="opt">-E --bstype &lt;type&gt;</arg>
 		<arg choice="opt">-I --initiator-address &lt;address&gt;</arg>
 		<arg choice="opt">-Q --initiator-name &lt;name&gt;</arg>
@@ -153,16 +154,28 @@ Possible backend types are:
         </listitem>
       </varlistentry>
 
-      <varlistentry><term><option>--lld &lt;driver&gt; --op new --mode logicalunit --tid &lt;id&gt; --lun &lt;lun&gt; --backing-store &lt;path&gt;</option></term>
+      <varlistentry><term><option>--lld &lt;driver&gt; --op new --mode logicalunit --tid &lt;id&gt; --lun &lt;lun&gt; --backing-store &lt;path&gt; --bsopts=&lt;backing store options&gt;</option></term>
         <listitem>
           <para>
 	    Add a new logical unit with &lt;lun&gt; to specific target with &lt;id&gt;. The
 	    logical unit is offered to the initiators. &lt;path&gt; must be block device
 	    files (including LVM and RAID devices) or regular files, or an RBD image or
-	    snapshot name for --driver rbd. lun0 is reserved for a special device
+	    snapshot name for --bstype rbd. lun0 is reserved for a special device
 	    automatically created.
           </para>
-        </listitem>
+	  <screen format="linespecific">
+Example:
+If tgt is compiled with the bs_rbd backing store for
+Ceph RBD images (see tgtadm --mode system --op show to
+verify), set up a target mapping the rbd image named
+"rbdimage", and pass options to bs_rbd:
+
+tgtadm --lld iscsi --op new --mode logicalunit --tid 1 \
+--lun 1 --bstype=rbd --backing-store=rbdimage \
+--bsopts="conf=/etc/ceph/ceph.conf;id=tgt"
+
+	   </screen>
+	</listitem>
       </varlistentry>
 
       <varlistentry><term><option>--lld &lt;driver&gt; --op delete --mode logicalunit --tid &lt;id&gt; --lun &lt;lun&gt;</option></term>
@@ -607,6 +620,7 @@ Example:
 Open the backing file with O_SYNC.
 
 tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 1 --bsoflags="sync" --backing-store=/data/100m_image.raw
+
     </screen>
 
   </refsect1>

@@ -380,7 +380,7 @@ static void bs_aio_close(struct scsi_lu *lu)
 	close(lu->fd);
 }
 
-static tgtadm_err bs_aio_init(struct scsi_lu *lu)
+static tgtadm_err bs_aio_init(struct scsi_lu *lu, char *bsopts)
 {
 	struct bs_aio_info *info = BS_AIO_I(lu);
 	int i;
