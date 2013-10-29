@@ -577,11 +577,11 @@ int main(int argc, char **argv)
 
 	spare_args = optind < argc ? argv[optind] : NULL;
 
-	err = ipc_init();
-	if (err)
+	if (is_daemon && daemon(0, 0))
 		exit(1);
 
-	if (is_daemon && daemon(0, 0))
+	err = ipc_init();
+	if (err)
 		exit(1);
 
 	err = log_init(program_name, LOG_SPACE_SIZE, is_daemon, is_debug);
