@@ -962,7 +962,8 @@ static int sd_open(struct sheepdog_access_info *ai, char *filename, int flags)
 			} else {
 				eprintf("unknown protocol of sheepdog vdi:"\
 					" %s\n", result);
-				return -1;
+				ret = -1;
+				goto out;
 			}
 			break;
 		case EXPECT_PATH:
@@ -979,7 +980,8 @@ static int sd_open(struct sheepdog_access_info *ai, char *filename, int flags)
 				if (!isdigit(result[i])) {
 					eprintf("invalid tcp port number:"\
 						" %s\n", result);
-					return -1;
+					ret = -1;
+					goto out;
 				}
 			}
 
