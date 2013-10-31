@@ -845,7 +845,7 @@ retry:
 
 		if (ret) {
 			eprintf("%lu %d\n", idx, ret);
-			return -1;
+			goto out;
 		}
 
 done:
@@ -856,6 +856,7 @@ done:
 	if (need_update_inode)
 		ret = update_inode(ai);
 
+out:
 	pthread_rwlock_unlock(&ai->inode_lock);
 
 	return ret;
