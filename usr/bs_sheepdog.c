@@ -1184,7 +1184,7 @@ static void bs_sheepdog_request(struct scsi_cmd *cmd)
 					" snapshot failed\n");
 				set_medium_error(&result, &key, &asc);
 
-				return;
+				break;
 			}
 			ai->is_snapshot = 0;
 		}
