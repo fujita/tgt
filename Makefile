@@ -1,4 +1,4 @@
-VERSION ?= 1.0.40
+VERSION ?= 1.0.41
 
 CHECK_CC = cgcc
 CHECK_CC_FLAGS = '$(CHECK_CC) -Wbitwise -Wno-return-void -no-compile $(ARCH)'
