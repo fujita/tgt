@@ -398,7 +398,7 @@ static int connect_to_sdog_unix(const char *path)
 
 	memset(&un, 0, sizeof(un));
 	un.sun_family = AF_UNIX;
-	strncpy(un.sun_path, path, UNIX_PATH_MAX);
+	strncpy(un.sun_path, path, UNIX_PATH_MAX - 1);
 
 	ret = connect(fd, (const struct sockaddr *)&un, (socklen_t)sizeof(un));
 	if (ret < 0) {
