@@ -739,6 +739,9 @@ static int report_opcodes_all(struct scsi_cmd *cmd, int rctd,
 		if (ops[i].cmd_perform == spc_illegal_op)
 			continue;
 
+		if (!is_bs_support_opcode(cmd->dev->bst, i))
+			continue;
+
 		/* this command does not take a service action, so just
 		   report the opcode
 		*/
@@ -825,6 +828,9 @@ static int report_opcode_one(struct scsi_cmd *cmd, int rctd, uint8_t opcode,
 	int cdb_length;
 
 	ops = cmd->dev->dev_type_template.ops;
+
+	if (!is_bs_support_opcode(cmd->dev->bst, opcode))
+		return SAM_STAT_CHECK_CONDITION;
 
 	if ((is_service_action && !ops[opcode].service_actions)
 	||  (!is_service_action && ops[opcode].service_actions)) {
