@@ -735,7 +735,7 @@ static int report_opcodes_all(struct scsi_cmd *cmd, int rctd,
 	data = &buf[4];
 
 	ops = cmd->dev->dev_type_template.ops;
-	for (i = 0; i < 256; i++) {
+	for (i = 0; i < NR_SCSI_OPCODES; i++) {
 		if (ops[i].cmd_perform == spc_illegal_op)
 			continue;
 

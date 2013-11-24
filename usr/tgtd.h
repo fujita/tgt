@@ -153,7 +153,7 @@ struct device_type_template {
 	tgtadm_err (*lu_offline)(struct scsi_lu *lu);
 	int (*cmd_passthrough)(int, struct scsi_cmd *);
 
-	struct device_type_operations ops[256];
+	struct device_type_operations ops[NR_SCSI_OPCODES];
 
 	struct list_head device_type_siblings;
 };
