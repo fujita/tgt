@@ -425,5 +425,52 @@ static struct backingstore_template rdwr_bst = {
 
 __attribute__((constructor)) static void bs_rdwr_constructor(void)
 {
+	unsigned char opcodes[] = {
+		ALLOW_MEDIUM_REMOVAL,
+		COMPARE_AND_WRITE,
+		FORMAT_UNIT,
+		INQUIRY,
+		MAINT_PROTOCOL_IN,
+		MODE_SELECT,
+		MODE_SELECT_10,
+		MODE_SENSE,
+		MODE_SENSE_10,
+		ORWRITE_16,
+		PERSISTENT_RESERVE_IN,
+		PERSISTENT_RESERVE_OUT,
+		PRE_FETCH_10,
+		PRE_FETCH_16,
+		READ_10,
+		READ_12,
+		READ_16,
+		READ_6,
+		READ_CAPACITY,
+		RELEASE,
+		REPORT_LUNS,
+		REQUEST_SENSE,
+		RESERVE,
+		SEND_DIAGNOSTIC,
+		SERVICE_ACTION_IN,
+		START_STOP,
+		SYNCHRONIZE_CACHE,
+		SYNCHRONIZE_CACHE_16,
+		TEST_UNIT_READY,
+		UNMAP,
+		VERIFY_10,
+		VERIFY_12,
+		VERIFY_16,
+		WRITE_10,
+		WRITE_12,
+		WRITE_16,
+		WRITE_6,
+		WRITE_SAME,
+		WRITE_SAME_16,
+		WRITE_VERIFY,
+		WRITE_VERIFY_12,
+		WRITE_VERIFY_16
+	};
+
+	bs_create_opcode_map(&rdwr_bst, opcodes, ARRAY_SIZE(opcodes));
+
 	register_backingstore_template(&rdwr_bst);
 }

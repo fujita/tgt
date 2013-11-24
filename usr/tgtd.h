@@ -7,6 +7,8 @@
 
 struct concat_buf;
 
+#define NR_SCSI_OPCODES		256
+
 #define SCSI_ID_LEN		36
 #define SCSI_SN_LEN		36
 
@@ -165,6 +167,7 @@ struct backingstore_template {
 	void (*bs_exit)(struct scsi_lu *dev);
 	int (*bs_cmd_submit)(struct scsi_cmd *cmd);
 	int bs_oflags_supported;
+	unsigned long bs_supported_ops[NR_SCSI_OPCODES / __WORDSIZE];
 
 	struct list_head backingstore_siblings;
 };
@@ -369,6 +372,9 @@ extern tgtadm_err dtd_check_removable(int tid, uint64_t lun);
 
 extern int register_backingstore_template(struct backingstore_template *bst);
 extern struct backingstore_template *get_backingstore_template(const char *name);
+extern void bs_create_opcode_map(struct backingstore_template *bst,
+				 unsigned char *opcodes, int num);
+extern int is_bs_support_opcode(struct backingstore_template *bst, int op);
 
 extern int lld_init_one(int lld_index);
 

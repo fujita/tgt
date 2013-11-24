@@ -492,6 +492,11 @@ int scsi_cmd_perform(int host_no, struct scsi_cmd *cmd)
 	if (spc_access_check(cmd))
 		return SAM_STAT_RESERVATION_CONFLICT;
 
+	if (!is_bs_support_opcode(cmd->dev->bst, op)) {
+		sense_data_build(cmd, ILLEGAL_REQUEST, ASC_INVALID_OP_CODE);
+		return SAM_STAT_CHECK_CONDITION;
+	}
+
 	return cmd->dev->dev_type_template.ops[op].cmd_perform(host_no, cmd);
 }
 

@@ -1296,5 +1296,39 @@ static struct backingstore_template sheepdog_bst = {
 
 __attribute__((constructor)) static void __constructor(void)
 {
+	unsigned char opcodes[] = {
+		ALLOW_MEDIUM_REMOVAL,
+		FORMAT_UNIT,
+		INQUIRY,
+		MAINT_PROTOCOL_IN,
+		MODE_SELECT,
+		MODE_SELECT_10,
+		MODE_SENSE,
+		MODE_SENSE_10,
+		PERSISTENT_RESERVE_IN,
+		PERSISTENT_RESERVE_OUT,
+		READ_10,
+		READ_12,
+		READ_16,
+		READ_6,
+		READ_CAPACITY,
+		RELEASE,
+		REPORT_LUNS,
+		REQUEST_SENSE,
+		RESERVE,
+		SEND_DIAGNOSTIC,
+		SERVICE_ACTION_IN,
+		START_STOP,
+		SYNCHRONIZE_CACHE,
+		SYNCHRONIZE_CACHE_16,
+		TEST_UNIT_READY,
+		WRITE_10,
+		WRITE_12,
+		WRITE_16,
+		WRITE_6
+	};
+
+	bs_create_opcode_map(&sheepdog_bst, opcodes, ARRAY_SIZE(opcodes));
+
 	register_backingstore_template(&sheepdog_bst);
 }

@@ -45,6 +45,7 @@
 #include "tgtadm_error.h"
 #include "util.h"
 #include "bs_thread.h"
+#include "scsi.h"
 
 LIST_HEAD(bst_list);
 
@@ -62,6 +63,28 @@ static pthread_t ack_thread;
 /* protected by pipe */
 static LIST_HEAD(ack_list);
 static pthread_cond_t finished_cond;
+
+
+void bs_create_opcode_map(struct backingstore_template *bst,
+			  unsigned char *opcodes, int num)
+{
+	int i;
+
+	for (i = 0; i < num; i++)
+		set_bit(opcodes[i], bst->bs_supported_ops);
+}
+
+int is_bs_support_opcode(struct backingstore_template *bst, int op)
+{
+	/*
+	 * assumes that this bs doesn't support supported_ops yet so
+	 * returns success for the compatibility.
+	 */
+	if (!test_bit(TEST_UNIT_READY, bst->bs_supported_ops))
+		return 1;
+
+	return test_bit(op, bst->bs_supported_ops);
+}
 
 int register_backingstore_template(struct backingstore_template *bst)
 {
@@ -463,3 +486,4 @@ int bs_thread_cmd_submit(struct scsi_cmd *cmd)
 
 	return 0;
 }
+
