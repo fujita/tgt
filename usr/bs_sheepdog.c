@@ -917,7 +917,7 @@ static int sd_open(struct sheepdog_access_info *ai, char *filename, int flags)
 	uint32_t snapid = -1;
 	char tag[SD_MAX_VDI_TAG_LEN + 1];
 	char vdi_name[SD_MAX_VDI_LEN + 1];
-	char *saveptr, *result;
+	char *saveptr = NULL, *result;
 	enum {
 		EXPECT_PROTO,
 		EXPECT_PATH,
