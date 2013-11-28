@@ -679,7 +679,7 @@ static int read_write_object(struct sheepdog_access_info *ai, char *buf,
 			*need_reload = 1;
 		return 0;
 	default:
-		eprintf("%s (oid: %lx, old_oid: %lx)\n",
+		eprintf("%s (oid: %" PRIx64 ", old_oid: %" PRIx64 ")\n",
 			sd_strerror(rsp->result), oid, old_oid);
 		return -1;
 	}
