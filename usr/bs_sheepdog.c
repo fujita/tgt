@@ -220,7 +220,7 @@ struct sheepdog_fd_list {
 	struct list_head list;
 };
 
-#define UNIX_PATH_MAX (108 + 1)
+#define UNIX_PATH_MAX 108
 
 struct sheepdog_access_info {
 	int is_unix;
@@ -398,7 +398,7 @@ static int connect_to_sdog_unix(const char *path)
 
 	memset(&un, 0, sizeof(un));
 	un.sun_family = AF_UNIX;
-	strncpy(un.sun_path, path, UNIX_PATH_MAX - 1);
+	strncpy(un.sun_path, path, sizeof(un.sun_path) - 1);
 
 	ret = connect(fd, (const struct sockaddr *)&un, (socklen_t)sizeof(un));
 	if (ret < 0) {
@@ -967,7 +967,7 @@ static int sd_open(struct sheepdog_access_info *ai, char *filename, int flags)
 			}
 			break;
 		case EXPECT_PATH:
-			strncpy(ai->uds_path, result, UNIX_PATH_MAX);
+			strncpy(ai->uds_path, result, UNIX_PATH_MAX - 1);
 			parse_state = EXPECT_VDI;
 			break;
 		case EXPECT_HOST:
