@@ -743,6 +743,10 @@ tgtadm_err tgt_device_destroy(int tid, uint64_t lun, int force)
 					 itn_itl_info_siblings) {
 			if (itn_lu->lu == lu) {
 				ua_sense_pending_del(itn_lu);
+
+				list_del(&itn_lu->itn_itl_info_siblings);
+				list_del(&itn_lu->lu_itl_info_siblings);
+				free(itn_lu);
 				break;
 			}
 		}
