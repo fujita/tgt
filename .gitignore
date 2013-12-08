@@ -31,4 +31,5 @@ usr/tgtd
 usr/tgtadm
 usr/tgtimg
 
-
+# cscope files
+cscope.*

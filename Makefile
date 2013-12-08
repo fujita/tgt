@@ -93,3 +93,7 @@ check32:
 check64: override ARCH=-m64
 check64:
 	CC=$(CHECK_CC_FLAGS) $(MAKE) all
+
+cscope:
+	find -name '*.[ch]' > cscope.files
+	cscope -bq
