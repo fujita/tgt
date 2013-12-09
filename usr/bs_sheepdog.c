@@ -873,8 +873,8 @@ static int find_vdi_name(struct sheepdog_access_info *ai, char *filename,
 	char buf[SD_MAX_VDI_LEN + SD_MAX_VDI_TAG_LEN];
 
 	memset(buf, 0, sizeof(buf));
-	strncpy(buf, filename, SD_MAX_VDI_LEN);
-	strncpy(buf + SD_MAX_VDI_LEN, tag, SD_MAX_VDI_TAG_LEN);
+	strncpy(buf, filename, SD_MAX_VDI_LEN - 1);
+	strncpy(buf + SD_MAX_VDI_LEN, tag, SD_MAX_VDI_TAG_LEN - 1);
 
 	memset(&hdr, 0, sizeof(hdr));
 	if (for_snapshot)
