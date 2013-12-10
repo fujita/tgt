@@ -479,6 +479,8 @@ static tgtadm_err mtask_execute(struct mgmt_task *mtask)
 	int lld_no;
 	tgtadm_err adm_err = TGTADM_INVALID_REQUEST;
 
+	req->lld[TGT_LLD_NAME_LEN - 1] = '\0';
+
 	if (!strlen(req->lld))
 		lld_no = 0;
 	else {
