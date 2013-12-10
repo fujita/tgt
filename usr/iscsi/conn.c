@@ -106,7 +106,7 @@ void conn_close(struct iscsi_connection *conn)
 	if (!conn->session)
 		goto done;
 
-	eprintf("sesson %p %d\n", conn->session, conn->session->refcount);
+	eprintf("session %p %d\n", conn->session, conn->session->refcount);
 
 	/*
 	 * We just closed the ep so we are not going to send/recv anything.
