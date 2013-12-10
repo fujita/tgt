@@ -159,7 +159,7 @@ struct signalfd_siginfo {
 #define str_to_int_gt(str, val, minv)   		\
 ({      						\
 	int ret = str_to_int(str, val); 		\
-	if (!ret && (val < minv))       		\
+	if (!ret && (val <= minv))       		\
 		ret = ERANGE;   			\
 	ret;						\
 })
@@ -177,7 +177,7 @@ struct signalfd_siginfo {
 #define str_to_int_lt(str, val, maxv)   		\
 ({      						\
 	int ret = str_to_int(str, val); 		\
-	if (!ret && (val > maxv))       		\
+	if (!ret && (val >= maxv))       		\
 		ret = ERANGE;				\
 	ret;						\
 })
