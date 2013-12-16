@@ -372,6 +372,7 @@ reconnect:
 			if (errno == EINTR)
 				goto reconnect;
 
+			close(fd);
 			break;
 		}
 
