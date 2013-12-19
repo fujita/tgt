@@ -1116,6 +1116,7 @@ static int create_branch(struct sheepdog_access_info *ai)
 	unsigned int wlen = 0, rlen;
 	int ret;
 
+	memset(&hdr, 0, sizeof(hdr));
 	hdr.opcode = SD_OP_DEL_VDI;
 	hdr.vdi_id = ai->inode.vdi_id;
 	hdr.flags = SD_FLAG_CMD_WRITE;
