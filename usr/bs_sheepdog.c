@@ -708,7 +708,7 @@ static int sd_sync(struct sheepdog_access_info *ai)
 	int ret;
 	struct sheepdog_obj_req hdr;
 	struct sheepdog_obj_rsp *rsp = (struct sheepdog_obj_rsp *)&hdr;
-	unsigned int wlen = 0, rlen;
+	unsigned int wlen = 0, rlen = 0;
 
 	memset(&hdr, 0, sizeof(hdr));
 
@@ -1087,7 +1087,7 @@ static void sd_close(struct sheepdog_access_info *ai)
 {
 	struct sheepdog_vdi_req hdr;
 	struct sheepdog_vdi_rsp *rsp = (struct sheepdog_vdi_rsp *)&hdr;
-	unsigned int wlen = 0, rlen;
+	unsigned int wlen = 0, rlen = 0;
 	int ret;
 
 	memset(&hdr, 0, sizeof(hdr));
@@ -1121,6 +1121,7 @@ static int create_branch(struct sheepdog_access_info *ai)
 	hdr.vdi_id = ai->inode.vdi_id;
 	hdr.flags = SD_FLAG_CMD_WRITE;
 	wlen = SD_MAX_VDI_LEN;
+	rlen = 0;
 	hdr.data_length = wlen;
 
 	ret = do_req(ai, (struct sheepdog_req *)&hdr, ai->inode.name,
@@ -1136,6 +1137,7 @@ static int create_branch(struct sheepdog_access_info *ai)
 
 	hdr.flags = SD_FLAG_CMD_WRITE;
 	wlen = SD_MAX_VDI_LEN;
+	rlen = 0;
 	hdr.data_length = wlen;
 	hdr.vdi_size = ai->inode.vdi_size;
 	ret = do_req(ai, (struct sheepdog_req *)&hdr, ai->inode.name,
