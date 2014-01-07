@@ -1116,6 +1116,16 @@ static int create_branch(struct sheepdog_access_info *ai)
 	unsigned int wlen = 0, rlen;
 	int ret;
 
+	ret = pthread_rwlock_wrlock(&ai->inode_lock);
+	if (ret) {
+		eprintf("failed to get inode lock %s\n", strerror(ret));
+		return -1;
+	}
+
+	if (!ai->is_snapshot)
+		/* check again the snapshot flag to avoid race condition */
+		goto out;
+
 	memset(&hdr, 0, sizeof(hdr));
 	hdr.opcode = SD_OP_DEL_VDI;
 	hdr.vdi_id = ai->inode.vdi_id;
@@ -1128,7 +1138,7 @@ static int create_branch(struct sheepdog_access_info *ai)
 		     &wlen, &rlen);
 	if (ret) {
 		eprintf("deleting snapshot VDI for creating branch failed\n");
-		return -1;
+		goto out;
 	}
 
 	memset(&hdr, 0, sizeof(hdr));
@@ -1144,19 +1154,22 @@ static int create_branch(struct sheepdog_access_info *ai)
 		     &wlen, &rlen);
 	if (ret) {
 		eprintf("creating new VDI for creating branch failed\n");
-		return -1;
+		goto out;
 	}
 
 	ret = read_object(ai, (char *)&ai->inode, vid_to_vdi_oid(rsp->vdi_id),
 			  ai->inode.nr_copies, SD_INODE_SIZE, 0);
 	if (ret) {
 		eprintf("reloading new inode object failed");
-		return -1;
+		goto out;
 	}
 
+	ai->is_snapshot = 0;
 	dprintf("creating branch from snapshot, new VDI ID: %x\n", rsp->vdi_id);
+out:
+	pthread_rwlock_unlock(&ai->inode_lock);
 
-	return 0;
+	return ret;
 }
 
 static void bs_sheepdog_request(struct scsi_cmd *cmd)
@@ -1190,7 +1203,6 @@ static void bs_sheepdog_request(struct scsi_cmd *cmd)
 
 				break;
 			}
-			ai->is_snapshot = 0;
 		}
 
 		length = scsi_get_out_length(cmd);
