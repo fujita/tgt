@@ -537,7 +537,7 @@ int main(int argc, char **argv)
 			is_daemon = 0;
 			break;
 		case 'C':
-			ret = str_to_int_gt(optarg, control_port, 0);
+			ret = str_to_int_ge(optarg, control_port, 0);
 			if (ret)
 				bad_optarg(ret, ch, optarg);
 			break;

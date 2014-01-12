@@ -600,7 +600,7 @@ int main(int argc, char **argv)
 			ac_dir = ACCOUNT_TYPE_OUTGOING;
 			break;
 		case 'C':
-			rc = str_to_int_gt(optarg, control_port, 0);
+			rc = str_to_int_ge(optarg, control_port, 0);
 			if (rc)
 				bad_optarg(rc, ch, optarg);
 			break;
