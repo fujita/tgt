@@ -25,7 +25,7 @@ The following example creates a target with id 1 (the iqn is
 iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz) and adds a
 logical unit (backed by /dev/hdc1) with lun 1.
 
-Let's create one target devce.
+Let's create one target device.
 
 host:~/tgt$ su
 host:~/tgt# ./usr/tgtadm --lld iscsi --op new --mode target --tid 1 -T iqn.2001-04.com.example:storage.disk2.amiens.sys1.xyz
@@ -113,7 +113,7 @@ Note "ACL information" section. "ALL" means that this target accepts
 any initiators. The ACL feature also provides the access control based
 on initiators' addresses.
 
-First, let's remove "ALL" options:
+First, let's remove "ALL" option:
 
 host:~/tgt# ./usr/tgtadm --lld iscsi --op unbind --mode target --tid 1 -I ALL
 host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target
@@ -224,12 +224,12 @@ IFMarkInt=Reject
 MaxConnections=1
 
 
-You can chage iSCSI parameters like the folloing (e.g. set
+You can change iSCSI parameters like the following (e.g. set
 MaxRecvDataSegmentLength to 16384):
 
 host:~/tgt# ./usr/tgtadm --lld iscsi --mode target --op update --tid 1 --name MaxRecvDataSegmentLength --value 16384
 
-You can get iSCSI parameters again to see it change:
+You can get iSCSI parameters again to see its change:
 
 host:~/tgt# ./usr/tgtadm --lld iscsi --op show --mode target --tid 1
 MaxRecvDataSegmentLength=16384
