@@ -493,6 +493,7 @@ int main(int argc, char **argv)
 	char *user, *password;
 	struct tgtadm_req adm_req = {0}, *req = &adm_req;
 	struct concat_buf b;
+	char *op_name;
 
 	op = tid = mode = -1;
 	cid = hostno = sid = 0;
@@ -503,7 +504,7 @@ int main(int argc, char **argv)
 	ac_dir = ACCOUNT_TYPE_INCOMING;
 	name = value = path = targetname = address = iqnname = NULL;
 	targetOps = portalOps = bstype = bsopts = NULL;
-	bsoflags = blocksize = user = password = NULL;
+	bsoflags = blocksize = user = password = op_name = NULL;
 	force = 0;
 
 	optind = 1;
@@ -516,6 +517,7 @@ int main(int argc, char **argv)
 			break;
 		case 'o':
 			op = str_to_op(optarg);
+			op_name = optarg;
 			break;
 		case 'm':
 			mode = str_to_mode(optarg);
@@ -653,7 +655,8 @@ int main(int argc, char **argv)
 		case OP_STATS:
 			break;
 		default:
-			eprintf("option %d not supported in system mode\n", op);
+			eprintf("operation %s not supported in system mode\n",
+				op_name);
 			exit(EINVAL);
 			break;
 		}
@@ -709,8 +712,8 @@ int main(int argc, char **argv)
 			}
 			if (!address && !iqnname && !hostno) {
 				eprintf("%s operation requires"
-					" initiator-address, initiator-name or bus\n",
-					op == OP_BIND ? "bind" : "unbind");
+					" initiator-address, initiator-name"
+					"or bus\n", op_name);
 				exit(EINVAL);
 			}
 			break;
@@ -728,7 +731,8 @@ int main(int argc, char **argv)
 			}
 			break;
 		default:
-			eprintf("option %d not supported in target mode\n", op);
+			eprintf("operation %s not supported in target mode\n",
+				op_name);
 			exit(EINVAL);
 			break;
 		}
@@ -794,8 +798,8 @@ int main(int argc, char **argv)
 				tid = GLOBAL_TID;
 			break;
 		default:
-			eprintf("option %d not supported in account mode\n",
-				op);
+			eprintf("operation %s not supported in account mode\n",
+				op_name);
 			exit(EINVAL);
 			break;
 		}
@@ -847,8 +851,8 @@ int main(int argc, char **argv)
 			}
 			break;
 		default:
-			eprintf("option %d not supported in "
-				"logicalunit mode\n", op);
+			eprintf("operation %s not supported in "
+				"logicalunit mode\n", op_name);
 			exit(EINVAL);
 			break;
 		}
@@ -891,8 +895,8 @@ int main(int argc, char **argv)
 			}
 			break;
 		default:
-			eprintf("option %d not supported in "
-					"portal mode\n", op);
+			eprintf("operation %s not supported in portal mode\n",
+				op_name);
 			exit(EINVAL);
 			break;
 		}
