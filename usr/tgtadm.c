@@ -739,7 +739,7 @@ int main(int argc, char **argv)
 		case OP_NEW:
 			rc = verify_mode_params(argc, argv, "LmoupfC");
 			if (rc) {
-				eprintf("logicalunit mode: option '-%c' is "
+				eprintf("account mode: option '-%c' is "
 					"not allowed/supported\n", rc);
 				exit(EINVAL);
 			}
@@ -752,7 +752,7 @@ int main(int argc, char **argv)
 		case OP_SHOW:
 			rc = verify_mode_params(argc, argv, "LmoC");
 			if (rc) {
-				eprintf("target mode: option '-%c' is not "
+				eprintf("account mode: option '-%c' is not "
 					"allowed/supported\n", rc);
 				exit(EINVAL);
 			}
@@ -760,7 +760,7 @@ int main(int argc, char **argv)
 		case OP_DELETE:
 			rc = verify_mode_params(argc, argv, "LmouC");
 			if (rc) {
-				eprintf("target mode: option '-%c' is not "
+				eprintf("account mode: option '-%c' is not "
 					"allowed/supported\n", rc);
 				exit(EINVAL);
 			}
@@ -768,7 +768,7 @@ int main(int argc, char **argv)
 		case OP_BIND:
 			rc = verify_mode_params(argc, argv, "LmotuOC");
 			if (rc) {
-				eprintf("target mode: option '-%c' is not "
+				eprintf("account mode: option '-%c' is not "
 					"allowed/supported\n", rc);
 				exit(EINVAL);
 			}
@@ -782,7 +782,7 @@ int main(int argc, char **argv)
 		case OP_UNBIND:
 			rc = verify_mode_params(argc, argv, "LmotuOC");
 			if (rc) {
-				eprintf("target mode: option '-%c' is not "
+				eprintf("account mode: option '-%c' is not "
 					"allowed/supported\n", rc);
 				exit(EINVAL);
 			}
@@ -817,7 +817,7 @@ int main(int argc, char **argv)
 		case OP_NEW:
 			rc = verify_mode_params(argc, argv, "LmofytlbEYCS");
 			if (rc) {
-				eprintf("target mode: option '-%c' is not "
+				eprintf("logicalunit mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
 				exit(EINVAL);
 			}
@@ -833,7 +833,7 @@ int main(int argc, char **argv)
 		case OP_STATS:
 			rc = verify_mode_params(argc, argv, "LmotlC");
 			if (rc) {
-				eprintf("target mode: option '-%c' is not "
+				eprintf("logicalunit mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
 				exit(EINVAL);
 			}
@@ -905,7 +905,7 @@ int main(int argc, char **argv)
 		case OP_SHOW:
 			rc = verify_mode_params(argc, argv, "LmoC");
 			if (rc) {
-				eprintf("system mode: option '-%c' is not "
+				eprintf("lld mode: option '-%c' is not "
 					"allowed/supported\n", rc);
 				exit(EINVAL);
 			}
