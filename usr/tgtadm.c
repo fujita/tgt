@@ -234,7 +234,8 @@ static int ipc_mgmt_connect(int *fd)
 static int ipc_mgmt_rsp(int fd, struct tgtadm_req *req)
 {
 	struct tgtadm_rsp rsp;
-	int err, rest, len;
+	int err, len, done;
+	char *buf;
 
 retry:
 	err = recv(fd, &rsp, sizeof(rsp), MSG_WAITALL);
@@ -278,22 +279,31 @@ retry:
 		}
 	}
 
-	rest = rsp.len - sizeof(rsp);
-	if (!rest)
+	len = rsp.len - sizeof(rsp);
+	if (!len)
 		return 0;
 
-	while (rest) {
-		char buf[BUFSIZE];
-		memset(buf, 0, sizeof(buf));
-		len = min_t(int, sizeof(buf) - 1, rest);
-		err = read(fd, buf, len);
-		if (err <= 0) {
-			eprintf("\ncan't get the full response, %m\n");
-			return errno;
-		}
-		fputs(buf, stdout);
-		rest -= len;
+	buf = malloc(len);
+	if (!buf) {
+		fprintf(stderr, "failed to allocate %d bytes", len);
+		return -ENOMEM;
 	}
+	done = 0;
+	while (len > done) {
+		int ret;
+		ret = read(fd, buf + done, len - done);
+		if (ret < 0) {
+			if (errno == EAGAIN)
+				continue;
+			fprintf(stderr, "failed to read from tgtd, %d", errno);
+			break;
+		}
+		done += ret;
+	}
+
+	if (done == len)
+		fputs(buf, stdout);
+	free(buf);
 
 	return 0;
 }
