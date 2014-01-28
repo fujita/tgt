@@ -2597,7 +2597,9 @@ static int iser_task_delivery(struct iser_task *task)
 		break;
 	case ISCSI_OP_TEXT:
 		err = iser_text_exec(&conn->h, &task->pdu, &conn->text_tx_task->pdu);
+		schedule_resp_tx(conn->text_tx_task, conn);
 		break;
+
 	default:
 		eprintf("Internal error: Unexpected op:0x%x\n", task->opcode);
 		err = -EINVAL;
@@ -2829,6 +2831,8 @@ static void iser_rx_handler(struct iser_work_req *rxd)
 			break;
 		case ISCSI_OP_TEXT:
 			dprintf("text rx\n");
+			err = iser_task_delivery(task);
+			queue_task = 0;
 			break;
 		case ISCSI_OP_SNACK:
 			eprintf("Cannot handle SNACK yet\n");
