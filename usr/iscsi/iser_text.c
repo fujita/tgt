@@ -832,6 +832,7 @@ static void iser_text_scan(struct iscsi_connection *iscsi_conn,
 			struct sockaddr_storage ss;
 			socklen_t slen, blen;
 			char *p, buf[NI_MAXHOST + 128];
+			int port;
 
 			if (value[0] == 0)
 				continue;
@@ -857,7 +858,14 @@ static void iser_text_scan(struct iscsi_connection *iscsi_conn,
 			if (ss.ss_family == AF_INET6)
 				 *p++ = ']';
 
-			sprintf(p, ":%d,1", ISCSI_LISTEN_PORT);
+			if (ss.ss_family == AF_INET6)
+				port = ntohs(((struct sockaddr_in6 *)
+						&ss)->sin6_port);
+			else
+				port = ntohs(((struct sockaddr_in *)
+						&ss)->sin_port);
+
+			sprintf(p, ":%d,1", port);
 			iser_target_list_build(iscsi_conn, tx_pdu, buf,
 					  strcmp(value, "All") ? value : NULL);
 		} else
