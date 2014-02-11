@@ -517,17 +517,21 @@ static tgtadm_err bs_rbd_init(struct scsi_lu *lu, char *bsopts)
 	struct active_rbd *rbd = RBDP(lu);
 	char *confname = NULL;
 	char *clientid = NULL;
+	char *clustername = NULL;
+	char clientid_full[128];
 	char *ignore = NULL;
 
 	dprintf("bs_rbd_init bsopts: \"%s\"\n", bsopts);
 
-	// look for conf= or id=
+	// look for conf= or id= or cluster=
 
 	while (bsopts && strlen(bsopts)) {
 		if (is_opt("conf", bsopts))
 			confname = slurp_value(&bsopts);
 		else if (is_opt("id", bsopts))
 			clientid = slurp_value(&bsopts);
+		else if (is_opt("cluster", bsopts))
+			clustername = slurp_value(&bsopts);
 		else {
 			ignore = slurp_to_semi(&bsopts);
 			eprintf("bs_rbd: ignoring unknown option \"%s\"\n",
@@ -541,10 +545,27 @@ static tgtadm_err bs_rbd_init(struct scsi_lu *lu, char *bsopts)
 		eprintf("bs_rbd_init: clientid %s\n", clientid);
 	if (confname)
 		eprintf("bs_rbd_init: confname %s\n", confname);
+	if (clustername)
+		eprintf("bs_rbd_init: clustername %s\n", clustername);
 
 	eprintf("bs_rbd_init bsopts=%s\n", bsopts);
-	/* clientid may be set by -i/--id */
-	rados_ret = rados_create(&rbd->cluster, clientid);
+	/*
+	 * clientid may be set by -i/--id. If clustername is set, then
+	 * we use rados_create2, else rados_create
+	 */
+	if (clustername) {
+		/* rados_create2 wants the full client name */
+		if (clientid)
+			snprintf(clientid_full, sizeof clientid_full,
+				 "client.%s", clientid);
+		else /* if not specified, default to client.admin */
+			snprintf(clientid_full, sizeof clientid_full,
+				 "client.admin");
+		rados_ret = rados_create2(&rbd->cluster, clustername,
+					  clientid_full, 0);
+	} else {
+		rados_ret = rados_create(&rbd->cluster, clientid);
+	}
 	if (rados_ret < 0) {
 		eprintf("bs_rbd_init: rados_create: %d\n", rados_ret);
 		return ret;

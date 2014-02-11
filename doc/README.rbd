@@ -43,7 +43,13 @@ something like "tgt" so that the name of the ceph client is
 for the tgt client compared to others, and sets the default log path, etc.
 See the Ceph documentation regarding client names.
 
-To specify both options, separate them with ';', and since you are,
+cluster=<cluster name>
+
+This sets the Ceph cluster name, if you have multiple clusters or
+if your cluster name is anything other than "ceph".
+This is in turn used by librados to find the conf file and key files.
+
+To specify multiple options, separate them with ';', and since you are,
 make sure to quote the option string to protect the semicolon from
 the shell:
 
