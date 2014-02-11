@@ -480,6 +480,9 @@ static char *slurp_to_semi(char **p)
 	strncpy(ret, *p, len);
 	ret[len] = '\0';
 	*p = end;
+	/* Jump past the semicolon, if we stopped at one */
+	if (**p == ';')
+		*p = end + 1;
 	return ret;
 }
 
