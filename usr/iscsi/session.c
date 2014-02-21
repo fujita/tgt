@@ -106,8 +106,7 @@ int session_create(struct iscsi_connection *conn)
 	session->info = zalloc(1024);
 	if (!session->info) {
 		free(session->initiator);
-		if (session->initiator_alias)
-			free(session->initiator_alias);
+		free(session->initiator_alias);
 		free(session);
 		return -ENOMEM;
 	}
@@ -124,6 +123,7 @@ int session_create(struct iscsi_connection *conn)
 	err = it_nexus_create(target->tid, tsih, 0, session->info);
 	if (err) {
 		free(session->initiator);
+		free(session->initiator_alias);
 		free(session->info);
 		free(session);
 		return err;
@@ -174,6 +174,7 @@ static void session_destroy(struct iscsi_session *session)
 	list_del(&session->hlist);
 
 	free(session->initiator);
+	free(session->initiator_alias);
 	free(session->info);
 	free(session);
 }
