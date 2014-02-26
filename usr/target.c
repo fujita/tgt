@@ -1581,7 +1581,6 @@ static tgtadm_err __inaccount_bind(struct target *target, int aid)
 		}
 
 		target->account.in_aids[i] = aid;
-		target->account.nr_inaccount++;
 	} else {
 		int new_max = target->account.max_inaccount << 1;
 		int *buf;
@@ -1597,6 +1596,7 @@ static tgtadm_err __inaccount_bind(struct target *target, int aid)
 		target->account.in_aids[target->account.max_inaccount] = aid;
 		target->account.max_inaccount = new_max;
 	}
+	target->account.nr_inaccount++;
 
 	return TGTADM_SUCCESS;
 }
