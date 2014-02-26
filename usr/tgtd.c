@@ -212,7 +212,7 @@ static struct event_data *tgt_event_lookup(int fd)
 	return NULL;
 }
 
-int event_need_refresh;
+static int event_need_refresh;
 
 void tgt_event_del(int fd)
 {
