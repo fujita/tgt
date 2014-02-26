@@ -212,6 +212,8 @@ static struct event_data *tgt_event_lookup(int fd)
 	return NULL;
 }
 
+int event_need_refresh;
+
 void tgt_event_del(int fd)
 {
 	struct event_data *tev;
@@ -229,6 +231,8 @@ void tgt_event_del(int fd)
 
 	list_del(&tev->e_list);
 	free(tev);
+
+	event_need_refresh = 1;
 }
 
 int tgt_event_modify(int fd, int events)
@@ -426,6 +430,11 @@ retry:
 		for (i = 0; i < nevent; i++) {
 			tev = (struct event_data *) events[i].data.ptr;
 			tev->handler(tev->fd, events[i].events, tev->data);
+
+			if (event_need_refresh) {
+				event_need_refresh = 0;
+				goto retry;
+			}
 		}
 	}
 
