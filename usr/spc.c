@@ -145,6 +145,12 @@ static void update_vpd_83(struct scsi_lu *lu, void *id)
 	struct vpd *vpd_pg = lu->attrs.lu_vpd[PCODE_OFFSET(0x83)];
 	uint8_t	*data = vpd_pg->data;
 
+	char *id_str = id;
+	char substring[] = "0";
+	uint64_t a = 0;
+	uint64_t b = 0;
+	uint64_t c;
+
 	data[0] = INQ_CODE_ASCII;
 	data[1] = DESG_T10;
 	data[3] = SCSI_ID_LEN;
@@ -160,6 +166,30 @@ static void update_vpd_83(struct scsi_lu *lu, void *id)
 
 	put_unaligned_be64(lu->attrs.numeric_id, data);
 	data[0] |= NAA_LOCAL << 4;
+
+	data += NAA_DESG_LEN;
+	data[0] = INQ_CODE_BIN;
+	data[1] = DESG_NAA;
+	data[3] = NAA_DESG_LEN_EXTD;
+	data += DESG_HDR_LEN;
+	/*
+	 * The NAA_DESG_LEN_EXTD field is a 128 bit field
+	 * which contains a numeric value. This loop converts
+	 * the string pointed to by 'id_str' into a right
+	 * adjusted numeric value.
+	 */
+	while (*id_str) {
+		substring[0] = *id_str++;
+		c = a >> 60;
+		a <<= 4;
+		b <<= 4;
+		b |= c;
+		a |= strtoul(substring, NULL, 16);
+	}
+	put_unaligned_be64(b, data);
+	put_unaligned_be64(a, data + 8);
+	data[0] &= 0x0F;
+	data[0] |= NAA_IEEE_REGD_EXTD << 4;
 }
 
 static void update_vpd_b2(struct scsi_lu *lu, void *id)
@@ -2060,7 +2090,7 @@ int spc_lu_init(struct scsi_lu *lu)
 
 	/* VPD page 0x83 */
 	pg = PCODE_OFFSET(0x83);
-	lu_vpd[pg] = alloc_vpd(2*DESG_HDR_LEN + NAA_DESG_LEN + SCSI_ID_LEN);
+	lu_vpd[pg] = alloc_vpd(3*DESG_HDR_LEN + NAA_DESG_LEN + SCSI_ID_LEN + NAA_DESG_LEN_EXTD);
 	if (!lu_vpd[pg])
 		return -ENOMEM;
 	lu_vpd[pg]->vpd_update = update_vpd_83;
