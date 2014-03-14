@@ -17,6 +17,10 @@ ifneq ($(CEPH_RBD),)
 MODULES += bs_rbd.so
 endif
 
+ifneq ($(GLFS_BD),)
+MODULES += bs_glfs.so
+endif
+
 ifneq ($(shell test -e /usr/include/sys/eventfd.h && test -e /usr/include/libaio.h && echo 1),)
 CFLAGS += -DUSE_EVENTFD
 TGTD_OBJS += bs_aio.o
@@ -87,6 +91,9 @@ tgtimg: $(TGTIMG_OBJS)
 
 bs_rbd.so: bs_rbd.c
 	$(CC) -shared $(CFLAGS) bs_rbd.c -o bs_rbd.so -lrados -lrbd
+
+bs_glfs.so: bs_glfs.c
+	$(CC) -I/usr/include/glusterfs/api -shared $(CFLAGS) bs_glfs.c -o bs_glfs.so -lgfapi
 
 .PHONY: install
 install: $(PROGRAMS) $(MODULES)
