@@ -1454,7 +1454,7 @@ enum mgmt_req_result target_mgmt_request(int tid, uint64_t itn_id,
 	}
 
 	if (err)
-		return err;
+		return MGMT_REQ_FAILED;
 	else if (send)
 		return MGMT_REQ_DONE;
 
