@@ -547,6 +547,16 @@ tgtadm_err tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	if ((!strncmp(bst->bs_name, "bsg", 3) ||
 	     !strncmp(bst->bs_name, "sg", 2)) &&
 	    dev_type != TYPE_PT) {
+		eprintf("Must set device type to pt for bsg/sg bstype\n");
+		adm_err = TGTADM_INVALID_REQUEST;
+		goto out;
+	}
+
+	if (!(!strncmp(bst->bs_name, "bsg", 3) ||
+	     !strncmp(bst->bs_name, "sg", 2)) &&
+	    dev_type == TYPE_PT) {
+		eprintf("Must set bstype to bsg or sg for devicetype pt, not %s\n",
+			bst->bs_name);
 		adm_err = TGTADM_INVALID_REQUEST;
 		goto out;
 	}
