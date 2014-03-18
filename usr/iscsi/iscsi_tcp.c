@@ -108,7 +108,7 @@ static void iscsi_tcp_nop_work_handler(void *data)
 		if (tcp_conn->nop_inflight_count > tcp_conn->nop_count) {
 			eprintf("tcp connection timed out after %d failed " \
 				"NOP-OUT\n", tcp_conn->nop_count);
-			iscsi_tcp_release(&tcp_conn->iscsi_conn);
+			conn_close(&tcp_conn->iscsi_conn);
 			/* cant/shouldnt delete tcp_conn from within the loop */
 			break;
 		}
