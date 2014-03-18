@@ -1428,6 +1428,11 @@ static int iscsi_tm_done(struct mgmt_req *mreq)
 		task->result = ISCSI_TMF_RSP_REJECTED;
 		break;
 	}
+
+	if (task->conn->state == STATE_CLOSE) {
+		iscsi_free_task(task);
+		return 0;
+	}
 	list_add_tail(&task->c_list, &task->conn->tx_clist);
 	task->conn->tp->ep_event_modify(task->conn, EPOLLIN | EPOLLOUT);
 	return 0;
