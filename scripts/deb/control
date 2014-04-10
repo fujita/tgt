@@ -4,7 +4,7 @@ Section: net
 Priority: optional
 Standards-Version: 3.9.1
 Build-Depends: debhelper (>= 8), dpkg-dev (>= 1.13.19), bash-completion,
-    librdmacm-dev, libibverbs-dev, xsltproc
+    librdmacm-dev, libibverbs-dev, xsltproc, docbook-xsl
 Homepage: http://stgt.berlios.de/
 
 Package: tgt
