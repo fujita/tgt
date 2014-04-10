@@ -25,6 +25,9 @@
 
 #include "iscsid.h"
 
+#include <infiniband/verbs.h>
+#include <rdma/rdma_cma.h>
+
 extern short control_port;
 
 /*

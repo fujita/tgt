@@ -31,8 +31,6 @@
 #include <assert.h>
 #include <netdb.h>
 #include <sys/epoll.h>
-#include <infiniband/verbs.h>
-#include <rdma/rdma_cma.h>
 
 #include "util.h"
 #include "iscsid.h"

@@ -30,18 +30,16 @@
 #include <assert.h>
 #include <netdb.h>
 #include <sys/epoll.h>
-#include <infiniband/verbs.h>
-#include <rdma/rdma_cma.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
 
 #include "util.h"
 #include "iscsid.h"
 #include "target.h"
-#include "iser.h"
 #include "driver.h"
 #include "scsi.h"
 #include "work.h"
+#include "iser.h"
 
 #if defined(HAVE_VALGRIND) && !defined(NDEBUG)
 #include <valgrind/memcheck.h>
