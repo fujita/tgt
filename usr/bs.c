@@ -228,9 +228,6 @@ static void *bs_thread_worker_fn(void *arg)
 	sigfillset(&set);
 	sigprocmask(SIG_BLOCK, &set, NULL);
 
-	pthread_mutex_lock(&info->startup_lock);
-	dprintf("started this thread\n");
-	pthread_mutex_unlock(&info->startup_lock);
 
 	while (1) {
 		pthread_mutex_lock(&info->pending_lock);
@@ -420,9 +417,7 @@ tgtadm_err bs_thread_open(struct bs_thread_info *info, request_func_t *rfn,
 
 	pthread_cond_init(&info->pending_cond, NULL);
 	pthread_mutex_init(&info->pending_lock, NULL);
-	pthread_mutex_init(&info->startup_lock, NULL);
 
-	pthread_mutex_lock(&info->startup_lock);
 	for (i = 0; i < nr_threads; i++) {
 		ret = pthread_create(&info->worker_thread[i], NULL,
 				     bs_thread_worker_fn, info);
@@ -434,22 +429,21 @@ tgtadm_err bs_thread_open(struct bs_thread_info *info, request_func_t *rfn,
 				goto destroy_threads;
 		}
 	}
-	pthread_mutex_unlock(&info->startup_lock);
 	info->nr_worker_threads = nr_threads;
 
 	return TGTADM_SUCCESS;
 destroy_threads:
 
-	pthread_mutex_unlock(&info->startup_lock);
 	for (; i > 0; i--) {
-		pthread_cancel(info->worker_thread[i - 1]);
-		pthread_join(info->worker_thread[i - 1], NULL);
-		eprintf("stopped the worker thread %d\n", i - 1);
+		if (info->worker_thread[i - 1]) {
+			pthread_cancel(info->worker_thread[i - 1]);
+			pthread_join(info->worker_thread[i - 1], NULL);
+			eprintf("stopped the worker thread %d\n", i - 1);
+		}
 	}
 
 	pthread_cond_destroy(&info->pending_cond);
 	pthread_mutex_destroy(&info->pending_lock);
-	pthread_mutex_destroy(&info->startup_lock);
 	free(info->worker_thread);
 
 	return TGTADM_NOMEM;
@@ -468,7 +462,6 @@ void bs_thread_close(struct bs_thread_info *info)
 
 	pthread_cond_destroy(&info->pending_cond);
 	pthread_mutex_destroy(&info->pending_lock);
-	pthread_mutex_destroy(&info->startup_lock);
 	free(info->worker_thread);
 }
 
