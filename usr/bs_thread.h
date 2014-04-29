@@ -13,8 +13,6 @@ struct bs_thread_info {
 
 	pthread_mutex_t startup_lock;
 
-	int stop;
-
 	request_func_t *request_fn;
 };
 

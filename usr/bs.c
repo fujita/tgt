@@ -213,6 +213,12 @@ static void bs_sig_request_done(int fd, int events, void *data)
 	}
 }
 
+/* Unlock mutex even if thread is cancelled */
+static void mutex_cleanup(void *mutex)
+{
+	pthread_mutex_unlock(mutex);
+}
+
 static void *bs_thread_worker_fn(void *arg)
 {
 	struct bs_thread_info *info = arg;
@@ -226,15 +232,13 @@ static void *bs_thread_worker_fn(void *arg)
 	dprintf("started this thread\n");
 	pthread_mutex_unlock(&info->startup_lock);
 
-	while (!info->stop) {
+	while (1) {
 		pthread_mutex_lock(&info->pending_lock);
+		pthread_cleanup_push(mutex_cleanup, &info->pending_lock);
+
 	retest:
 		if (list_empty(&info->pending_list)) {
 			pthread_cond_wait(&info->pending_cond, &info->pending_lock);
-			if (info->stop) {
-				pthread_mutex_unlock(&info->pending_lock);
-				pthread_exit(NULL);
-			}
 			goto retest;
 		}
 
@@ -242,7 +246,7 @@ static void *bs_thread_worker_fn(void *arg)
 				       struct scsi_cmd, bs_list);
 
 		list_del(&cmd->bs_list);
-		pthread_mutex_unlock(&info->pending_lock);
+		pthread_cleanup_pop(1); /* Unlock pending_lock mutex */
 
 		info->request_fn(cmd);
 
@@ -435,10 +439,10 @@ tgtadm_err bs_thread_open(struct bs_thread_info *info, request_func_t *rfn,
 
 	return TGTADM_SUCCESS;
 destroy_threads:
-	info->stop = 1;
 
 	pthread_mutex_unlock(&info->startup_lock);
 	for (; i > 0; i--) {
+		pthread_cancel(info->worker_thread[i - 1]);
 		pthread_join(info->worker_thread[i - 1], NULL);
 		eprintf("stopped the worker thread %d\n", i - 1);
 	}
@@ -455,18 +459,17 @@ void bs_thread_close(struct bs_thread_info *info)
 {
 	int i;
 
-	info->stop = 1;
 	pthread_cond_broadcast(&info->pending_cond);
 
-	for (i = 0; i < info->nr_worker_threads && info->worker_thread[i]; i++)
+	for (i = 0; i < info->nr_worker_threads && info->worker_thread[i]; i++) {
+		pthread_cancel(info->worker_thread[i]);
 		pthread_join(info->worker_thread[i], NULL);
+	}
 
 	pthread_cond_destroy(&info->pending_cond);
 	pthread_mutex_destroy(&info->pending_lock);
 	pthread_mutex_destroy(&info->startup_lock);
 	free(info->worker_thread);
-
-	info->stop = 0;
 }
 
 int bs_thread_cmd_submit(struct scsi_cmd *cmd)
