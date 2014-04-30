@@ -448,8 +448,6 @@ void bs_thread_close(struct bs_thread_info *info)
 {
 	int i;
 
-	pthread_cond_broadcast(&info->pending_cond);
-
 	for (i = 0; i < info->nr_worker_threads && info->worker_thread[i]; i++) {
 		pthread_cancel(info->worker_thread[i]);
 		pthread_join(info->worker_thread[i], NULL);
