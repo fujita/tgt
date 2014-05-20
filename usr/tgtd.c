@@ -617,6 +617,10 @@ int main(int argc, char **argv)
 
 	bs_init();
 
+#ifdef USE_SYSTEMD
+	sd_notify(0, "READY=1\nSTATUS=Starting event loop...");
+#endif
+
 	event_loop();
 
 	lld_exit();
