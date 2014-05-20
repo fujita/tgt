@@ -21,6 +21,10 @@ ifneq ($(GLFS_BD),)
 MODULES += bs_glfs.so
 endif
 
+ifneq ($(SD_NOTIFY),)
+CFLAGS += -DUSE_SYSTEMD
+endif
+
 ifneq ($(shell test -e /usr/include/sys/eventfd.h && test -e /usr/include/libaio.h && echo 1),)
 CFLAGS += -DUSE_EVENTFD
 TGTD_OBJS += bs_aio.o
@@ -46,6 +50,10 @@ CFLAGS += -DTGT_VERSION=\"$(VERSION)$(EXTRAVERSION)\"
 CFLAGS += -DBSDIR=\"$(DESTDIR)$(libdir)/backing-store\"
 
 LIBS += -lpthread -ldl
+
+ifneq ($(SD_NOTIFY),)
+LIBS += -lsystemd-daemon
+endif
 
 PROGRAMS += tgtd tgtadm tgtimg
 TGTD_OBJS += tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o \
