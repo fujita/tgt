@@ -5,6 +5,10 @@
 #include "scsi_cmnd.h"
 #include "tgtadm_error.h"
 
+#ifdef USE_SYSTEMD
+#include <systemd/sd-daemon.h>
+#endif
+
 struct concat_buf;
 
 #define NR_SCSI_OPCODES		256
