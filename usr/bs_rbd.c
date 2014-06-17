@@ -517,6 +517,9 @@ static tgtadm_err bs_rbd_init(struct scsi_lu *lu, char *bsopts)
 	struct active_rbd *rbd = RBDP(lu);
 	char *confname = NULL;
 	char *clientid = NULL;
+	char *virsecretuuid = NULL;
+	char *given_cephx_key = NULL;
+	char disc_cephx_key[256];
 	char *clustername = NULL;
 	char clientid_full[128];
 	char *ignore = NULL;
@@ -532,6 +535,10 @@ static tgtadm_err bs_rbd_init(struct scsi_lu *lu, char *bsopts)
 			clientid = slurp_value(&bsopts);
 		else if (is_opt("cluster", bsopts))
 			clustername = slurp_value(&bsopts);
+		else if (is_opt("virsecretuuid", bsopts))
+			virsecretuuid = slurp_value(&bsopts);
+		else if (is_opt("cephx_key", bsopts))
+			given_cephx_key = slurp_value(&bsopts);
 		else {
 			ignore = slurp_to_semi(&bsopts);
 			eprintf("bs_rbd: ignoring unknown option \"%s\"\n",
@@ -547,6 +554,41 @@ static tgtadm_err bs_rbd_init(struct scsi_lu *lu, char *bsopts)
 		eprintf("bs_rbd_init: confname %s\n", confname);
 	if (clustername)
 		eprintf("bs_rbd_init: clustername %s\n", clustername);
+	if (virsecretuuid)
+		eprintf("bs_rbd_init: virsecretuuid %s\n", virsecretuuid);
+	if (given_cephx_key)
+		eprintf("bs_rbd_init: given_cephx_key %s\n", given_cephx_key);
+
+	/* virsecretuuid && given_cephx_key are conflicting options. */
+	if (virsecretuuid && given_cephx_key) {
+		eprintf("Conflicting options virsecretuuid=[%s] cephx_key=[%s]",
+			virsecretuuid, given_cephx_key);
+		goto fail;
+	}
+
+	/* Get stored key from secret uuid. */
+	if (virsecretuuid) {
+		char libvir_uuid_file_path_buf[256] = "/etc/libvirt/secrets/";
+		strcat(libvir_uuid_file_path_buf, virsecretuuid);
+		strcat(libvir_uuid_file_path_buf, ".base64");
+
+		FILE *fp;
+		fp = fopen(libvir_uuid_file_path_buf , "r");
+		if (fp == NULL) {
+			eprintf("bs_rbd_init: Unable to read %s\n",
+				libvir_uuid_file_path_buf);
+			goto fail;
+		}
+		if (fgets(disc_cephx_key, 256, fp) == NULL) {
+			eprintf("bs_rbd_init: Unable to read %s\n",
+				libvir_uuid_file_path_buf);
+			goto fail;
+		}
+		fclose(fp);
+		strtok(disc_cephx_key, "\n");
+
+		eprintf("bs_rbd_init: disc_cephx_key %s\n", disc_cephx_key);
+	}
 
 	eprintf("bs_rbd_init bsopts=%s\n", bsopts);
 	/*
@@ -570,6 +612,7 @@ static tgtadm_err bs_rbd_init(struct scsi_lu *lu, char *bsopts)
 		eprintf("bs_rbd_init: rados_create: %d\n", rados_ret);
 		return ret;
 	}
+
 	/*
 	 * Read config from environment, then conf file(s) which may
 	 * be set by conf=
@@ -584,6 +627,23 @@ static tgtadm_err bs_rbd_init(struct scsi_lu *lu, char *bsopts)
 		eprintf("bs_rbd_init: rados_conf_read_file: %d\n", rados_ret);
 		goto fail;
 	}
+
+	/* Set given key */
+	if (virsecretuuid) {
+		if (rados_conf_set(rbd->cluster, "key", disc_cephx_key) < 0) {
+			eprintf("bs_rbd_init: failed to set cephx_key: %s\n",
+				disc_cephx_key);
+			goto fail;
+		}
+	}
+	if (given_cephx_key) {
+		if (rados_conf_set(rbd->cluster, "key", given_cephx_key) < 0) {
+			eprintf("bs_rbd_init: failed to set cephx_key: %s\n",
+				given_cephx_key);
+			goto fail;
+		}
+	}
+
 	rados_ret = rados_connect(rbd->cluster);
 	if (rados_ret < 0) {
 		eprintf("bs_rbd_init: rados_connect: %d\n", rados_ret);
@@ -595,6 +655,10 @@ fail:
 		free(confname);
 	if (clientid)
 		free(clientid);
+	if (virsecretuuid)
+		free(virsecretuuid);
+	if (given_cephx_key)
+		free(given_cephx_key);
 
 	return ret;
 }
