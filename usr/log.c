@@ -61,7 +61,7 @@ static int logarea_init (int size)
 	}
 
 	la = shmat(shmid, NULL, 0);
-	if (!la) {
+	if (((void *) -1) == la) {
 		syslog(LOG_ERR, "shmat logarea failed %d", errno);
 		return 1;
 	}
