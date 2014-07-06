@@ -795,13 +795,19 @@ retry:
 		old_oid = 0;
 
 		if (write) {
+			/*
+			 * tgt doesn't affect semantics of caching, so we can
+			 * always turn on cache of sheep layer
+			 */
+			flags = SD_FLAG_CMD_CACHE;
+
 			if (ai->inode.data_vdi_id[idx] != vid) {
 				create = 1;
 
 				if (ai->inode.data_vdi_id[idx]) {
 					/* COW */
 					old_oid = oid;
-					flags = SD_FLAG_CMD_COW;
+					flags |= SD_FLAG_CMD_COW;
 				}
 
 				oid = vid_to_data_oid(ai->inode.vdi_id, idx);
