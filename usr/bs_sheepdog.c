@@ -193,6 +193,19 @@ struct sheepdog_vdi_rsp {
 	uint32_t pad[5];
 };
 
+/*
+ * Historical notes: previous version of sheepdog (< v0.9.0) has a limit of
+ * maximum number of children which can be created from single VDI. So the inode
+ * object has an array for storing the IDs of the child VDIs. The constant
+ * OLD_MAX_CHILDREN represents it. Current sheepdog doesn't have the limitation,
+ * so we are recycling the area (4 * OLD_MAX_CHILDREN = 4KB) for storing new
+ * metadata.
+ *
+ * users of the released area:
+ * - uint32_t btree_counter
+ */
+#define OLD_MAX_CHILDREN 1024U
+
 struct sheepdog_inode {
 	char name[SD_MAX_VDI_LEN];
 	char tag[SD_MAX_VDI_TAG_LEN];
@@ -201,13 +214,17 @@ struct sheepdog_inode {
 	uint64_t vm_clock_nsec;
 	uint64_t vdi_size;
 	uint64_t vm_state_size;
-	uint16_t copy_policy;
+	uint8_t  copy_policy;
+	uint8_t  store_policy;
 	uint8_t nr_copies;
 	uint8_t block_size_shift;
 	uint32_t snap_id;
 	uint32_t vdi_id;
 	uint32_t parent_vdi_id;
-	uint32_t child_vdi_id[MAX_CHILDREN];
+
+	uint32_t btree_counter;
+	uint32_t __unused[OLD_MAX_CHILDREN - 1];
+
 	uint32_t data_vdi_id[MAX_DATA_OBJS];
 };
 
