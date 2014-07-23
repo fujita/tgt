@@ -431,8 +431,8 @@ static int bs_rbd_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 	eprintf("bs_rbd_open: pool: %s image: %s snap: %s\n",
 		poolname, imagename, snapname);
 
-	if ((ret == rados_ioctx_create(rbd->cluster, poolname, &rbd->ioctx))
-	    < 0) {
+	ret = rados_ioctx_create(rbd->cluster, poolname, &rbd->ioctx);
+	if (ret < 0) {
 		eprintf("bs_rbd_open: rados_ioctx_create: %d\n", ret);
 		return -EIO;
 	}
