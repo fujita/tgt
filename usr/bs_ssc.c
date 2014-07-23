@@ -435,7 +435,7 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 	struct ssc_info *ssc = dtype_priv(cmd->dev);
 	struct blk_header_info *h = &ssc->c_blk;
 	int ret, code;
-	uint32_t length, i, transfer_length, residue;
+	uint32_t length, i;
 	int result = SAM_STAT_GOOD;
 	uint8_t *buf;
 	int32_t count;
@@ -446,8 +446,6 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 	ret = 0;
 	length = 0;
 	i = 0;
-	transfer_length = 0;
-	residue = 0;
 	code = 0;
 	ssc = dtype_priv(cmd->dev);
 
