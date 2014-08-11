@@ -171,8 +171,8 @@ struct sheepdog_obj_rsp {
 	uint32_t pad[6];
 };
 
-#define LOCK_TYPE_NORMAL 1
-#define LOCK_TYPE_SHARED 2      /* for iSCSI multipath */
+#define LOCK_TYPE_NORMAL 0
+#define LOCK_TYPE_SHARED 1      /* for iSCSI multipath */
 
 struct sheepdog_vdi_req {
 	uint8_t proto_ver;
