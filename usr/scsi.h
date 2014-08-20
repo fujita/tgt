@@ -62,12 +62,17 @@
 #define WRITE_SAME            0x41
 #define UNMAP		      0x42
 #define READ_TOC              0x43
+#define GET_CONFIGURATION     0x46
 #define LOG_SELECT            0x4c
 #define LOG_SENSE             0x4d
+#define READ_DISK_INFO        0x51
+#define READ_TRACK_INFO       0x52
 #define MODE_SELECT_10        0x55
 #define RESERVE_10            0x56
 #define RELEASE_10            0x57
 #define MODE_SENSE_10         0x5a
+#define CLOSE_TRACK           0x5b
+#define READ_BUFFER_CAP       0x5c
 #define PERSISTENT_RESERVE_IN 0x5e
 #define PERSISTENT_RESERVE_OUT 0x5f
 #define VARLEN_CDB            0x7f
@@ -89,6 +94,8 @@
 #define EXCHANGE_MEDIUM       0xa6
 #define READ_12               0xa8
 #define WRITE_12              0xaa
+#define GET_PERFORMACE        0xac
+#define READ_DVD_STRUCTURE    0xad
 #define WRITE_VERIFY_12       0xae
 #define VERIFY_12	      0xaf
 #define SEARCH_HIGH_12        0xb0
@@ -96,6 +103,8 @@
 #define SEARCH_LOW_12         0xb2
 #define READ_ELEMENT_STATUS   0xb8
 #define SEND_VOLUME_TAG       0xb6
+#define SET_STREAMING         0xb6
+#define SET_CD_SPEED          0xbb
 #define WRITE_LONG_2          0xea
 
 /* Service actions for opcode 0xa3 */

@@ -2207,10 +2207,10 @@ static tgtadm_err mmc_lu_init(struct scsi_lu *lu)
 	if (spc_lu_init(lu))
 		return TGTADM_NOMEM;
 
-	/* MMC devices always use rdwr backingstore */
-	bst = get_backingstore_template("rdwr");
+	/* MMC devices always use mmc backingstore */
+	bst = get_backingstore_template("mmc");
 	if (!bst) {
-		eprintf("failed to find bstype, rdwr\n");
+		eprintf("failed to find bstype, mmc\n");
 		return TGTADM_INVALID_REQUEST;
 	}
 	lu->bst = bst;

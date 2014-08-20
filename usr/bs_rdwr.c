@@ -423,9 +423,20 @@ static struct backingstore_template rdwr_bst = {
 	.bs_oflags_supported    = O_SYNC | O_DIRECT,
 };
 
+static struct backingstore_template mmc_bst = {
+	.bs_name		= "mmc",
+	.bs_datasize		= sizeof(struct bs_thread_info),
+	.bs_open		= bs_rdwr_open,
+	.bs_close		= bs_rdwr_close,
+	.bs_init		= bs_rdwr_init,
+	.bs_exit		= bs_rdwr_exit,
+	.bs_cmd_submit		= bs_thread_cmd_submit,
+	.bs_oflags_supported    = O_SYNC | O_DIRECT,
+};
+
 __attribute__((constructor)) static void bs_rdwr_constructor(void)
 {
-	unsigned char opcodes[] = {
+	unsigned char sbc_opcodes[] = {
 		ALLOW_MEDIUM_REMOVAL,
 		COMPARE_AND_WRITE,
 		FORMAT_UNIT,
@@ -469,8 +480,43 @@ __attribute__((constructor)) static void bs_rdwr_constructor(void)
 		WRITE_VERIFY_12,
 		WRITE_VERIFY_16
 	};
-
-	bs_create_opcode_map(&rdwr_bst, opcodes, ARRAY_SIZE(opcodes));
-
+	bs_create_opcode_map(&rdwr_bst, sbc_opcodes, ARRAY_SIZE(sbc_opcodes));
 	register_backingstore_template(&rdwr_bst);
+
+	unsigned char mmc_opcodes[] = {
+		ALLOW_MEDIUM_REMOVAL,
+		CLOSE_TRACK,
+		GET_CONFIGURATION,
+		GET_PERFORMACE,
+		INQUIRY,
+		MODE_SELECT,
+		MODE_SELECT_10,
+		MODE_SENSE,
+		MODE_SENSE_10,
+		PERSISTENT_RESERVE_IN,
+		PERSISTENT_RESERVE_OUT,
+		READ_10,
+		READ_12,
+		READ_BUFFER_CAP,
+		READ_CAPACITY,
+		READ_DISK_INFO,
+		READ_DVD_STRUCTURE,
+		READ_TOC,
+		READ_TRACK_INFO,
+		RELEASE,
+		REPORT_LUNS,
+		REQUEST_SENSE,
+		RESERVE,
+		SET_CD_SPEED,
+		SET_STREAMING,
+		START_STOP,
+		SYNCHRONIZE_CACHE,
+		TEST_UNIT_READY,
+		VERIFY_10,
+		WRITE_10,
+		WRITE_12,
+		WRITE_VERIFY,
+	};
+	bs_create_opcode_map(&mmc_bst, mmc_opcodes, ARRAY_SIZE(mmc_opcodes));
+	register_backingstore_template(&mmc_bst);
 }
