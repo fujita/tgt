@@ -50,6 +50,7 @@
 #define SYNCHRONIZE_CACHE     0x35
 #define LOCK_UNLOCK_CACHE     0x36
 #define READ_DEFECT_DATA      0x37
+#define INITIALIZE_ELEMENT_STATUS_WITH_RANGE 0x37
 #define MEDIUM_SCAN           0x38
 #define COMPARE               0x39
 #define COPY_VERIFY           0x3a

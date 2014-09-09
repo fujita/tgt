@@ -500,6 +500,7 @@ sense:
 
 static tgtadm_err smc_lu_init(struct scsi_lu *lu)
 {
+	struct backingstore_template *bst;
 	struct smc_info *smc;
 	tgtadm_err adm_err;
 
@@ -511,6 +512,14 @@ static tgtadm_err smc_lu_init(struct scsi_lu *lu)
 
 	if (spc_lu_init(lu))
 		return TGTADM_NOMEM;
+
+	/* SMC devices always use smc backingstore */
+	bst = get_backingstore_template("smc");
+	if (!bst) {
+		eprintf("failed to find bstype, smc\n");
+		return TGTADM_INVALID_REQUEST;
+	}
+	lu->bst = bst;
 
 	strncpy(lu->attrs.product_id, "VIRTUAL-CHANGER",
 						sizeof(lu->attrs.product_id));

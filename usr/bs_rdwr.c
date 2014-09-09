@@ -434,6 +434,17 @@ static struct backingstore_template mmc_bst = {
 	.bs_oflags_supported    = O_SYNC | O_DIRECT,
 };
 
+static struct backingstore_template smc_bst = {
+	.bs_name		= "smc",
+	.bs_datasize		= sizeof(struct bs_thread_info),
+	.bs_open		= bs_rdwr_open,
+	.bs_close		= bs_rdwr_close,
+	.bs_init		= bs_rdwr_init,
+	.bs_exit		= bs_rdwr_exit,
+	.bs_cmd_submit		= bs_thread_cmd_submit,
+	.bs_oflags_supported    = O_SYNC | O_DIRECT,
+};
+
 __attribute__((constructor)) static void bs_rdwr_constructor(void)
 {
 	unsigned char sbc_opcodes[] = {
@@ -519,4 +530,26 @@ __attribute__((constructor)) static void bs_rdwr_constructor(void)
 	};
 	bs_create_opcode_map(&mmc_bst, mmc_opcodes, ARRAY_SIZE(mmc_opcodes));
 	register_backingstore_template(&mmc_bst);
+
+	unsigned char smc_opcodes[] = {
+		INITIALIZE_ELEMENT_STATUS,
+		INITIALIZE_ELEMENT_STATUS_WITH_RANGE,
+		INQUIRY,
+		MAINT_PROTOCOL_IN,
+		MODE_SELECT,
+		MODE_SELECT_10,
+		MODE_SENSE,
+		MODE_SENSE_10,
+		MOVE_MEDIUM,
+		PERSISTENT_RESERVE_IN,
+		PERSISTENT_RESERVE_OUT,
+		REQUEST_SENSE,
+		TEST_UNIT_READY,
+		READ_ELEMENT_STATUS,
+		RELEASE,
+		REPORT_LUNS,
+		RESERVE,
+	};
+	bs_create_opcode_map(&smc_bst, smc_opcodes, ARRAY_SIZE(smc_opcodes));
+	register_backingstore_template(&smc_bst);
 }
