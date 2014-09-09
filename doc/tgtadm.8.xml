@@ -497,7 +497,18 @@ Slot types:
       <varlistentry><term><option>barcode=&lt;string&gt;</option></term>
         <listitem>
           <para>
-	    This is used to assign a barcode to an element.
+	    This is used to assign a barcode to an element. Barcodes are limited
+	    to 10 characters in tgtd.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry><term><option>volume_tag=&lt;string&gt;</option></term>
+        <listitem>
+          <para>
+	    This is used to assign a volume tag to SMC storage elements.
+	    If no volume tag is specified tgtd will use fall back to the
+	    barcode. The volume tag can be up to 32 characters.
           </para>
         </listitem>
       </varlistentry>
@@ -559,11 +570,11 @@ tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params eleme
 # slot 1
 # Create empty writeable virtual DVD-R media
 tgtimg --op new --device-type cd --type dvd+r --file ${VTL}/DISK_001
-tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params element_type=2,address=1024,barcode=DISK_001,sides=1
+tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params element_type=2,address=1024,barcode=DISK_001,volume_tag="A blank disk",sides=1
 
 # slot 2
 tgtimg --op new --device-type cd --type dvd+r --file ${VTL}/DISK_002
-tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params element_type=2,address=1025,barcode=DISK_002,sides=1
+tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 2 --params element_type=2,address=1025,barcode=DISK_002,volume_tag="My second blank disk",sides=1
 
 # Allow ALL initiators to connect to this target
 tgtadm --lld iscsi --mode target --op bind --tid 1 --initiator-address ALL

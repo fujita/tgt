@@ -74,6 +74,7 @@ static void set_slot_empty(struct slot *s)
 	s->status &= 0xfe;
 	s->last_addr = 0;
 	memset(s->barcode, ' ', sizeof(s->barcode));
+	memset(s->volume_tag, ' ', sizeof(s->volume_tag));
 	if (s->element_type == ELEMENT_DATA_TRANSFER)
 		dtd_load_unload(s->drive_tid, s->drive_lun, UNLOAD, NULL);
 }
@@ -86,7 +87,7 @@ static int test_slot_full(struct slot *s)
 /**
  * determine_element_sz  --  read element status
  * @dvcid	Device ID - true, return device ID information
- * @voltag	true, return Volume Tag (barcode)
+ * @voltag	true, return Volume Tag (volume_tag)
  *
  * Ref: Working Draft SCSI Media Changer-3 (smc3r06.pdf), chapter 6.10
  *
@@ -106,7 +107,7 @@ static int determine_element_sz(uint8_t dvcid, uint8_t voltag)
  * element_status_data_hdr  --  Fill in Element Status Header
  * @data	uint8_t * - data pointer
  * @dvcid	Device ID - true, return device ID information
- * @voltag	true, return Volume Tag (barcode)
+ * @voltag	true, return Volume Tag (volume_tag)
  * @start	Start searching from slot 'start'
  * @count	and return 'count' elements
  *
@@ -159,10 +160,12 @@ static int add_element_descriptor(uint8_t *data, struct slot *s,
 
 	i = 12;
 	if (voltag) {
-		if (s->barcode[0] == ' ')
-			memset(&data[i], 0x20, 32);
-		else
+		if (s->volume_tag[0] != ' ' && s->volume_tag[0] != '\0')
+			snprintf((char *)&data[i], 32, "%-32s", s->volume_tag);
+		else if (s->barcode[0] != ' ' && s->barcode[0] != '\0')
 			snprintf((char *)&data[i], 32, "%-32s", s->barcode);
+		else
+			memset(&data[i], 0x20, 32);
 
 		/* Reserve additional 4 bytes if dvcid is set */
 		i += (dvcid) ? 36 : 32;
@@ -192,7 +195,7 @@ static int add_element_descriptor(uint8_t *data, struct slot *s,
  * @first:	Return address of first slot found
  * @start;	Start processing from this element #
  * @dvcid;	Device ID
- * @voltag;	Volume tag (barcode)
+ * @voltag;	Volume tag (volume_tag)
  *
  * Fill each Element Descriptor for slot *s
  * Return number of elements
@@ -459,6 +462,8 @@ static int smc_move_medium(int host_no, struct scsi_cmd *cmd)
 	}
 
 	memcpy(&dest_slot->barcode, &src_slot->barcode, sizeof(s->barcode));
+	memcpy(&dest_slot->volume_tag, &src_slot->volume_tag,
+	       sizeof(s->volume_tag));
 	if (dest_slot->element_type == ELEMENT_DATA_TRANSFER) {
 		char path[128];
 		int sz;
@@ -469,6 +474,8 @@ static int smc_move_medium(int host_no, struct scsi_cmd *cmd)
 			key = ILLEGAL_REQUEST;
 			asc = ASC_INTERNAL_TGT_FAILURE;
 			memset(&dest_slot->barcode, ' ', sizeof(s->barcode));
+			memset(&dest_slot->volume_tag, ' ',
+			       sizeof(s->volume_tag));
 			goto sense;
 		}
 
@@ -608,6 +615,7 @@ static void slot_dump(struct list_head *head)
 			dprintf("  Last Addr: %d\n", s->last_addr);
 			dprintf("  Type: %d\n", s->element_type);
 			dprintf("  Barcode: %s\n", s->barcode);
+			dprintf("  Volume Tag: %s\n", s->volume_tag);
 			if (s->drive_tid) {
 				dprintf("  TID : %d\n", s->drive_tid);
 				dprintf("  LUN : %" PRIu64 "\n", s->drive_lun);
@@ -711,6 +719,7 @@ static tgtadm_err config_slot(struct scsi_lu *lu, struct tmp_param *tmp)
 			break;
 		}
 		strncpy(s->barcode, tmp->barcode, sizeof(s->barcode));
+		strncpy(s->volume_tag, tmp->volume_tag, sizeof(s->volume_tag));
 		set_slot_full(s, 0, NULL);
 		adm_err = TGTADM_SUCCESS;
 		break;
@@ -775,6 +784,10 @@ static tgtadm_err __smc_lu_config(struct scsi_lu *lu, char *params)
 		case Opt_barcode:
 			match_strncpy(sv_param.barcode, &args[0],
 				      sizeof(sv_param.barcode));
+			break;
+		case Opt_volumetag:
+			match_strncpy(sv_param.volume_tag, &args[0],
+				      sizeof(sv_param.volume_tag));
 			break;
 		case Opt_tid:
 			match_strncpy(buf, &args[0], sizeof(buf));

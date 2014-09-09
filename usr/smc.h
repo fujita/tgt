@@ -60,6 +60,7 @@ struct slot {
 	char barcode[11];
 	uint8_t drive_tid;
 	uint64_t drive_lun;
+	char volume_tag[32];
 };
 
 /**
@@ -80,7 +81,7 @@ enum {
 	Opt_tid, Opt_lun,
 	Opt_type, Opt_dump,
 	Opt_media_home,
-	Opt_err,
+	Opt_err, Opt_volumetag,
 };
 
 static match_table_t tokens = {
@@ -96,6 +97,7 @@ static match_table_t tokens = {
 	{Opt_type, "type=%s"},
 	{Opt_dump, "dump=%s"},
 	{Opt_media_home, "media_home=%s"},
+	{Opt_volumetag, "volume_tag=%s"},
 	{Opt_err, NULL},
 };
 
@@ -118,6 +120,7 @@ struct tmp_param {
 	char barcode[20];
 	int sides;
 	int clear_slot;
+	char volume_tag[32];
 } sv_param;
 
 #endif // _SMC_H_

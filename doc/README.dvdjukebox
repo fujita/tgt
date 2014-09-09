@@ -9,18 +9,8 @@
 # the medium changer will have one slot for each ISO image found.
 # Use the 'mtx' tool to load/unload media.
 #
-# By default, any ISO images found will be populated with a barcode of
-# DVD_????. These are the barcodes that mtx will show when you list the
-# status of the changer.
-# To have more human readable names you can provide a $TRANSLATE file
-# to set explicit barcodes for each ISO image.
-# The format of this file is one line for each mapping consisting of
-# <ISO image minus .iso suffix> SPACE <barcode>
-#
-# Example:
-# utopic-desktop-amd64 Ubuntu14
-#
-# Note that a barcode can have at most 8 characters.
+# By default, any ISO images found will be populated with a barcode of the
+# form DVD_%04d and a volume_tag based on the filename.
 #
 # CON: This is the connection index for TGTD. This is needed if you run
 # multiple instances of TGTD on the same host. Each instance must use a unique
@@ -29,19 +19,15 @@
 # TARGETNAME: The iSCSI name to use for the target.
 #
 # TARGETPORT: The TCP port that this target will be hosted from.
-#
-# TRANSLATE: Optional. A file providing mapping between the iso image filenames
-# and the barcode to assign for these images.
 
 CON=1
 TARGETNAME=iqn.ronnie.iso:distros
 TARGETPORT=3261
-TRANSLATE=translate
-
 
 nc -z 127.0.0.1 $TARGETPORT || {
 	echo "Starting iSCSI target on port $TARGETPORT"
 	tgtd -C $CON --iscsi portal=0.0.0.0:$TARGETPORT
+	sleep 3
 }
 
 tgtadm -C $CON --op delete --mode target --tid 1 --force 2>/dev/null
@@ -86,12 +72,9 @@ tgtadm -C $CON --mode logicalunit --op update --tid 1 --lun 2 --params element_t
 # Populate the slots
 SLOT=0
 ls *.iso | sed -e "s/.iso$//" | while read ISO; do
-	BARCODE=`egrep "^${ISO} " $TRANSLATE | sed -e "s/^[^ ]* *//"`
-	[ -z "$BARCODE" ] && {
-		BARCODE=`echo $SLOT | awk '{printf "DVD_%04d", $1}'`
-	}
-	ln `pwd`/${ISO}.iso ${VTL}/$BARCODE
-	tgtadm -C $CON --mode logicalunit --op update --tid 1 --lun 2 --params element_type=2,address=`expr "1024" "+" "$SLOT"`,barcode="$BARCODE",sides=1
+	BARCODE=`echo $SLOT | awk '{printf "DVD_%04d", $1}'`
+	ln `pwd`/${ISO}.iso ${VTL}/${BARCODE}
+	tgtadm -C $CON --mode logicalunit --op update --tid 1 --lun 2 --params element_type=2,address=`expr "1024" "+" "$SLOT"`,barcode="${BARCODE}",volume_tag="${ISO}",sides=1
 
 	SLOT=`expr "$SLOT" "+" "1"`
 done
