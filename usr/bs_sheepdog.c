@@ -346,6 +346,7 @@ static const char *sd_strerror(int err)
 		{SD_RES_JOIN_FAILED, "Target node had failed to join sheepdog"},
 		{SD_RES_HALT, "Sheepdog is stopped serving IO request"},
 		{SD_RES_READONLY, "Object is read-only"},
+		{SD_RES_INODE_INVALIDATED, "Inode object is invalidated"},
 	};
 
 	for (i = 0; i < ARRAY_SIZE(errors); ++i) {
@@ -766,7 +767,7 @@ static int sd_sync(struct sheepdog_access_info *ai)
 
 static int update_inode(struct sheepdog_access_info *ai)
 {
-	int ret = 0;
+	int ret = 0, need_reload_inode = 0;
 	uint64_t oid = vid_to_vdi_oid(ai->inode.vdi_id);
 	uint32_t min, max, offset, data_len;
 
@@ -776,15 +777,28 @@ static int update_inode(struct sheepdog_access_info *ai)
 	if (max < min)
 		goto end;
 
+	goto update;
+
+reload:
+	reload_inode(ai);
+	need_reload_inode = 0;
+
+update:
 	offset = sizeof(ai->inode) - sizeof(ai->inode.data_vdi_id) +
 		min * sizeof(ai->inode.data_vdi_id[0]);
 	data_len = (max - min + 1) * sizeof(ai->inode.data_vdi_id[0]);
 
 	ret = write_object(ai, (char *)&ai->inode + offset, oid,
 			   ai->inode.nr_copies, data_len, offset,
-			   0, 0, 0, NULL);
+			   0, 0, 0, &need_reload_inode);
 	if (ret < 0)
 		eprintf("sync inode failed\n");
+
+	if (need_reload_inode) {
+		dprintf("reloading inode is required in the path"
+			" of update_inode()\n");
+		goto reload;
+	}
 
 end:
 	ai->min_dirty_data_idx = UINT32_MAX;
