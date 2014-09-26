@@ -66,6 +66,9 @@
 #define SD_FLAG_CMD_COW      0x02
 #define SD_FLAG_CMD_CACHE    0x04 /* Writeback mode for cache */
 #define SD_FLAG_CMD_DIRECT   0x08 /* Don't use cache */
+/* return something back while sending something to sheep */
+#define SD_FLAG_CMD_PIGGYBACK   0x10
+#define SD_FLAG_CMD_TGT   0x20
 
 #define SD_RES_SUCCESS       0x00 /* Success */
 #define SD_RES_UNKNOWN       0x01 /* Unknown error */
@@ -693,6 +696,7 @@ static int read_write_object(struct sheepdog_access_info *ai, char *buf,
 	hdr.data_length = datalen;
 	hdr.offset = offset;
 	hdr.copies = copies;
+	hdr.flags |= SD_FLAG_CMD_TGT;
 
 	ret = do_req(ai, (struct sheepdog_req *)&hdr, buf, &wlen, &rlen);
 	if (ret) {
@@ -1171,6 +1175,7 @@ trans_to_expect_nothing:
 	ai->min_dirty_data_idx = UINT32_MAX;
 	ai->max_dirty_data_idx = 0;
 
+retry:
 	ret = read_object(ai, (char *)&ai->inode, vid_to_vdi_oid(vid),
 			  0, SD_INODE_SIZE, 0, &need_reload);
 	if (ret)
