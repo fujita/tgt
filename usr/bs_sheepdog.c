@@ -642,22 +642,37 @@ static int read_object(struct sheepdog_access_info *ai, char *buf, uint64_t oid,
 		       int copies, unsigned int datalen, uint64_t offset,
 		       int *need_reload);
 
-static int reload_inode(struct sheepdog_access_info *ai)
+static int reload_inode(struct sheepdog_access_info *ai, int is_snapshot)
 {
 	int ret, need_reload = 0;
 	char tag[SD_MAX_VDI_TAG_LEN];
 	uint32_t vid;
 
-	memset(tag, 0, sizeof(tag));
+	if (is_snapshot) {
+		memset(tag, 0, sizeof(tag));
 
-	ret = find_vdi_name(ai, ai->inode.name, CURRENT_VDI_ID, tag, &vid, 0);
-	if (ret)
-		return -1;
+		ret = find_vdi_name(ai, ai->inode.name, CURRENT_VDI_ID, tag,
+				    &vid, 0);
+		if (ret)
+			return -1;
 
-	ret = read_object(ai, (char *)&ai->inode, vid_to_vdi_oid(vid),
-			  ai->inode.nr_copies, SD_INODE_SIZE, 0, &need_reload);
-	if (ret)
-		return -1;
+		ret = read_object(ai, (char *)&ai->inode, vid_to_vdi_oid(vid),
+				  ai->inode.nr_copies,
+				  offsetof(struct sheepdog_inode, data_vdi_id),
+				  0, &need_reload);
+		if (ret)
+			return -1;
+	} else {
+		ret = read_object(ai, (char *)&ai->inode,
+				  vid_to_vdi_oid(ai->inode.vdi_id),
+				  ai->inode.nr_copies, SD_INODE_SIZE, 0,
+				  &need_reload);
+		if (ret)
+			return -1;
+	}
+
+	ai->min_dirty_data_idx = UINT32_MAX;
+	ai->max_dirty_data_idx = 0;
 
 	return 0;
 }
@@ -709,6 +724,8 @@ static int read_write_object(struct sheepdog_access_info *ai, char *buf,
 		return 0;
 	case SD_RES_INODE_INVALIDATED:
 		dprintf("inode object is invalidated\n");
+		*need_reload = 2;
+		return 0;
 	case SD_RES_READONLY:
 		*need_reload = 1;
 		return 0;
@@ -784,7 +801,7 @@ static int update_inode(struct sheepdog_access_info *ai)
 	goto update;
 
 reload:
-	reload_inode(ai);
+	reload_inode(ai, 0);
 	need_reload_inode = 0;
 
 update:
@@ -853,7 +870,7 @@ reload_in_read_path:
 	pthread_rwlock_unlock(&ai->inode_lock); /* unlock current read lock */
 
 	pthread_rwlock_wrlock(&ai->inode_lock);
-	ret = reload_inode(ai);
+	ret = reload_inode(ai, 0);
 	if (ret) {
 		eprintf("failed to reload in read path\n");
 		goto out;
@@ -911,7 +928,13 @@ retry:
 					   old_oid, flags, &need_reload_inode);
 			if (!ret) {
 				if (need_reload_inode) {
-					ret = reload_inode(ai);
+					/* If need_reload_inode is 1,
+					 * snapshot was created.
+					 * If it is 2, inode object is
+					 * invalidated
+					 */
+					ret = reload_inode(ai,
+						   need_reload_inode == 1);
 					if (!ret)
 						goto retry;
 				}
