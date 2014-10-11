@@ -1196,7 +1196,6 @@ trans_to_expect_nothing:
 	ai->min_dirty_data_idx = UINT32_MAX;
 	ai->max_dirty_data_idx = 0;
 
-retry:
 	ret = read_object(ai, (char *)&ai->inode, vid_to_vdi_oid(vid),
 			  0, SD_INODE_SIZE, 0, &need_reload);
 	if (ret)
