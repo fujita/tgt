@@ -342,8 +342,8 @@ static int iser_login_check_params(struct iscsi_connection *iscsi_conn,
 		if (p[i].state == KEY_STATE_START && p[i].val != session_keys[i].def) {
 			if (iscsi_conn->state == STATE_LOGIN) {
 				if (i >= ISCSI_PARAM_FIRST_LOCAL) {
-					if (p[i].val > session_keys[i].def)
-						p[i].val = session_keys[i].def;
+					if (p[i].val > session_keys[i].max)
+						p[i].val = session_keys[i].max;
 					p[i].state = KEY_STATE_DONE;
 					continue;
 				}
