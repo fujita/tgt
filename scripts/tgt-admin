@@ -483,12 +483,12 @@ sub add_backing_direct {
 
 	# Is the device in use?
 	my $can_alloc = 1;
-	if ($bstype !~ "rbd" && $force != 1 && $$target_options_ref{'allow-in-use'} ne "yes") {
+	if ($bstype !~ "rbd" && $bstype !~ "sheepdog" && $force != 1 && $$target_options_ref{'allow-in-use'} ne "yes") {
 		$can_alloc = check_device($backing_store,$data_key_ref);
 	}
 
 	if ($can_alloc == 1 &&
-	   ($bstype =~ "rbd" || (-e $backing_store && ! -d $backing_store))) {
+	   ($bstype =~ "rbd" || $bstype =~ "sheepdog" || (-e $backing_store && ! -d $backing_store))) {
 		my @exec_commands;
 		my $device_type;
 		my $bs_type;
