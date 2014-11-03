@@ -60,8 +60,8 @@ The central resource for tgt development is the mailing list
 First, please read the following documents (in short, follow Linux
 kernel development rules):
 
-http://lxr.linux.no/source/Documentation/CodingStyle
-http://lxr.linux.no/source/Documentation/SubmittingPatches
+https://www.kernel.org/doc/Documentation/CodingStyle
+https://www.kernel.org/doc/Documentation/SubmittingPatches
 
 Then, check your patches with the patch style checker prior to
 submission (scripts/checkpatch.pl) like the following example.
