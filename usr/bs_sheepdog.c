@@ -858,7 +858,7 @@ static int sd_io(struct sheepdog_access_info *ai, int write, char *buf, int len,
 		(offset + len + (SD_DATA_OBJ_SIZE - 1)) / SD_DATA_OBJ_SIZE;
 	unsigned obj_offset = offset % SD_DATA_OBJ_SIZE;
 	size_t orig_size, size, rest = len;
-	int ret = 0, create = 0;
+	int ret = 0, create;
 	uint64_t oid, old_oid;
 	uint16_t flags = 0;
 	int need_update_inode = 0, need_reload_inode;
@@ -899,6 +899,7 @@ retry:
 			 * always turn on cache of sheep layer
 			 */
 			flags = SD_FLAG_CMD_CACHE;
+			create = 0;
 
 			if (ai->inode.data_vdi_id[idx] != vid) {
 				create = 1;
