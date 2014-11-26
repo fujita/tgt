@@ -152,7 +152,7 @@ static tgtadm_err target_mgmt(int lld_no, struct mgmt_task *mtask)
 			p = strstr(mtask->req_buf, "initiator-name=");
 			if (p) {
 				p += strlen("initiator-name=");
-				adm_err = iqn_acl_del(req->tid, p + strlen("initiator-name="));
+				adm_err = iqn_acl_del(req->tid, p);
 				if (adm_err != TGTADM_SUCCESS) {
 					eprintf("Failed to unbind by name: %s\n", p);
 					break;
