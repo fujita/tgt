@@ -120,27 +120,28 @@ static int sbc_mode_select(int host_no, struct scsi_cmd *cmd)
 static int sbc_mode_sense(int host_no, struct scsi_cmd *cmd)
 {
 	int ret;
+	uint8_t device_specific = 0x10; /* DPOFUA */
+	uint8_t mode6, *data;
 
 	ret = spc_mode_sense(host_no, cmd);
+	if (ret != SAM_STAT_GOOD)
+		return ret;
 
 	/*
-	 * If this is a read-only lun, we must modify the data and set the
-	 * write protect bit
+	 * If this is a read-only lun, we must set the write protect bit
 	 */
-	if ((cmd->dev->attrs.readonly || cmd->dev->attrs.swp)
-	&& ret == SAM_STAT_GOOD) {
-		uint8_t *data, mode6;
+	if (cmd->dev->attrs.readonly || cmd->dev->attrs.swp)
+		device_specific |= 0x80;
 
-		mode6 = (cmd->scb[0] == 0x1a);
-		data = scsi_get_in_buffer(cmd);
+	data = scsi_get_in_buffer(cmd);
 
-		if (mode6)
-			data[2] |= 0x80;
-		else
-			data[3] |= 0x80;
-	}
+	mode6 = (cmd->scb[0] == 0x1a);
+	if (mode6)
+		data[2] = device_specific;
+	else
+		data[3] = device_specific;
 
-	return ret;
+	return SAM_STAT_GOOD;
 }
 
 static int sbc_format_unit(int host_no, struct scsi_cmd *cmd)
