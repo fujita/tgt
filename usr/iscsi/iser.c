@@ -1644,7 +1644,27 @@ static void iser_cm_timewait_exit(struct rdma_cm_event *ev)
 	struct rdma_cm_id *cm_id = ev->id;
 	struct iser_conn *conn = cm_id->context;
 
-	eprintf("conn:%p cm_id:%p\n", &conn->h, cm_id);
+	eprintf("conn:%p refcnt:%d cm_id:%p\n",
+		&conn->h, conn->h.refcount, cm_id);
+
+	if (conn->h.state == STATE_CLOSE) {
+		/*
+		 * Tasks sitting in the conn->tx_list are stuck there after we
+		 * close the conn and since each holds a reference on the conn
+		 * we need to clean them up explicitly now.  Otherwise they will
+		 * prevent the conn from being cleaned up (since the refcount
+		 * won't reach zero).  If the conn doesn't get cleaned up, then
+		 * along with leaking the conn itself (and all its resources),
+		 * we'll also leak any rdma_buf's associated with the tasks.
+		 * Since the rdma_buf pool is associated with the iser_device
+		 * and so gets reused when a new iser_conn connection is
+		 * established, leaking too many of those bufs will eventually
+		 * clear the pool.
+		 */
+		iser_ib_clear_tx_list(conn);
+		eprintf("conn:%p refcnt:%d cm_id:%p (after cleanup)\n",
+			&conn->h, conn->h.refcount, cm_id);
+	}
 
 	/* Refcount was incremented just before accepting the connection,
 	   typically this is the last decrement and the connection will be
