@@ -1181,6 +1181,9 @@ static int iscsi_r2t_build(struct iscsi_task *task)
 	rsp->data_offset = cpu_to_be32(task->offset);
 	/* return next statsn for this conn w/o advancing it */
 	rsp->statsn = cpu_to_be32(conn->stat_sn);
+	rsp->exp_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn);
+	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn +
+				     conn->session->max_queue_cmd);
 	rsp->ttt = (unsigned long) task;
 	length = min_t(uint32_t, task->r2t_count,
 		       conn->session_param[ISCSI_PARAM_MAX_BURST].val);
