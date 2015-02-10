@@ -52,7 +52,7 @@ CFLAGS += -DBSDIR=\"$(DESTDIR)$(libdir)/backing-store\"
 LIBS += -lpthread -ldl
 
 ifneq ($(SD_NOTIFY),)
-LIBS += -lsystemd-daemon
+LIBS += -lsystemd
 endif
 
 PROGRAMS += tgtd tgtadm tgtimg
