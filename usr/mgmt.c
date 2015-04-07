@@ -569,7 +569,7 @@ static int ipc_perm(int fd)
 		return -1;
 	}
 
-	if (cred.uid || cred.gid)
+	if (cred.uid != getuid() || cred.gid != getgid())
 		return -EPERM;
 
 	return 0;
