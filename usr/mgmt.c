@@ -765,6 +765,11 @@ int ipc_init(void)
 	extern short control_port;
 	int fd = 0, err;
 	struct sockaddr_un addr;
+	struct stat st = {0};
+
+	if (stat(TGT_IPC_DIR, &st) == -1) {
+		mkdir(TGT_IPC_DIR, 0755);
+	}
 
 	sprintf(mgmt_lock_path, "%s.%d.lock", TGT_IPC_NAMESPACE, control_port);
 	ipc_lock_fd = open(mgmt_lock_path, O_WRONLY | O_CREAT,
