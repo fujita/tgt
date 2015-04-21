@@ -876,6 +876,7 @@ static int sd_io(struct sheepdog_access_info *ai, int write, char *buf, int len,
 	uint16_t flags = 0;
 	int need_update_inode = 0, need_reload_inode;
 	int nr_copies = ai->inode.nr_copies;
+	int need_write_lock, check_idx;
 
 	goto do_req;
 
@@ -891,7 +892,18 @@ reload_in_read_path:
 	pthread_rwlock_unlock(&ai->inode_lock);
 
 do_req:
-	if (write)
+	need_write_lock = 0;
+	vid = ai->inode.vdi_id;
+
+	for (check_idx = idx; check_idx < max; check_idx++) {
+		if (ai->inode.data_vdi_id[check_idx] == vid)
+			continue;
+
+		need_write_lock = 1;
+		break;
+	}
+
+	if (need_write_lock)
 		pthread_rwlock_wrlock(&ai->inode_lock);
 	else
 		pthread_rwlock_rdlock(&ai->inode_lock);
