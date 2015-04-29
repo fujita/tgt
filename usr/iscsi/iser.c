@@ -3452,9 +3452,13 @@ static int iser_ib_init(void)
 
 	for (res = res0; res; res = res->ai_next) {
 		err = iser_add_portal(res, port);
-		if (err)
+		if (err) {
+		    freeaddrinfo(res0);
 		    return err;
+		}
 	}
+
+	freeaddrinfo(res0);
 
 	dprintf("listening for iser connections on port %d\n", port);
 	err = tgt_event_add(rdma_evt_channel->fd, EPOLLIN,
