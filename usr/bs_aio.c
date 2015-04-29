@@ -152,6 +152,13 @@ static int bs_aio_submit_dev_batch(struct bs_aio_info *info)
 				", err: %d\n",
 				nsubmit, info->lu->tgt->tid,
 				info->lu->lun, -nsuccess);
+			for (i = nsubmit - 1; i >= 0; i--) {
+				cmd = info->iocb_arr[i].data;
+				clear_cmd_async(cmd);
+				info->nwaiting--;
+				if (!info->nwaiting)
+					list_del(&info->dev_list_entry);
+			}
 			return nsuccess;
 		}
 	}
