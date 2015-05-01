@@ -766,12 +766,15 @@ int ipc_init(void)
 	int fd = 0, err;
 	struct sockaddr_un addr;
 	struct stat st = {0};
+	char *path;
 
-	if (stat(TGT_IPC_DIR, &st) == -1) {
-		mkdir(TGT_IPC_DIR, 0755);
+	if ((path = getenv("TGT_IPC_SOCKET")) == NULL) {
+		path = TGT_IPC_NAMESPACE;
+		if (stat(TGT_IPC_DIR, &st) == -1)
+			mkdir(TGT_IPC_DIR, 0755);
 	}
 
-	sprintf(mgmt_lock_path, "%s.%d.lock", TGT_IPC_NAMESPACE, control_port);
+	sprintf(mgmt_lock_path, "%s.%d.lock", path, control_port);
 	ipc_lock_fd = open(mgmt_lock_path, O_WRONLY | O_CREAT,
 			   S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 	if (ipc_lock_fd < 0) {
@@ -794,7 +797,7 @@ int ipc_init(void)
 		goto close_lock_fd;
 	}
 
-	sprintf(mgmt_path, "%s.%d", TGT_IPC_NAMESPACE, control_port);
+	snprintf(mgmt_path, sizeof(mgmt_path), "%s.%d", path, control_port);
 	unlink(mgmt_path);
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_LOCAL;

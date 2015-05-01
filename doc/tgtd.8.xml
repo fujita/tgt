@@ -162,6 +162,15 @@
   </refsect1>
 
 
+  <refsect1><title>ENVIRONMENT VARIABLES</title>
+    <refsect2><title>TGT_IPC_SOCKET=&lt;path&gt;</title>
+      <para>
+	When set tgtd and tgtadm will use the specified path as the
+	IPC socket instead of the default '/var/run/tgtd/socket.0'
+      </para>
+    </refsect2>
+  </refsect1>
+
   <refsect1><title>SEE ALSO</title>
     <para>
       tgtadm(8), tgt-admin(8), tgtimg(8), tgt-setup-lun(8).
