@@ -937,14 +937,6 @@ retry:
 
 				oid = vid_to_data_oid(ai->inode.vdi_id, idx);
 
-				ai->min_dirty_data_idx =
-					min_t(uint32_t,
-					      idx, ai->min_dirty_data_idx);
-				ai->max_dirty_data_idx =
-					max_t(uint32_t,
-					      idx, ai->max_dirty_data_idx);
-
-				ai->inode.data_vdi_id[idx] = vid;
 			}
 
 			need_reload_inode = 0;
@@ -966,6 +958,14 @@ retry:
 				}
 
 				if (create) {
+					ai->min_dirty_data_idx =
+						min_t(uint32_t, idx,
+						      ai->min_dirty_data_idx);
+					ai->max_dirty_data_idx =
+						max_t(uint32_t, idx,
+						      ai->max_dirty_data_idx);
+					ai->inode.data_vdi_id[idx] = vid;
+
 					need_update_inode = 1;
 					create = 0;
 				}
