@@ -1279,6 +1279,7 @@ void iser_conn_close(struct iser_conn *conn)
 	if (err)
 		eprintf("conn:%p rdma_disconnect failed, %m\n", &conn->h);
 
+	iser_ib_clear_tx_list(conn);
 	list_del(&conn->conn_list);
 
 	tgt_remove_sched_event(&conn->sched_buf_alloc);
