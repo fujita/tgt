@@ -1747,7 +1747,6 @@ static void iser_handle_rdmacm(int fd __attribute__ ((unused)),
 static int iser_logout_exec(struct iser_task *task)
 {
 	struct iser_conn *conn = task->conn;
-	struct iscsi_session *session = conn->h.session;
 	struct iscsi_logout_rsp *rsp_bhs =
 		(struct iscsi_logout_rsp *) task->pdu.bhs;
 
@@ -1757,10 +1756,8 @@ static int iser_logout_exec(struct iser_task *task)
 	rsp_bhs->response = ISCSI_LOGOUT_SUCCESS;
 	rsp_bhs->itt = task->tag;
 	rsp_bhs->statsn = cpu_to_be32(conn->h.stat_sn++);
-
-	if (session->exp_cmd_sn == task->cmd_sn && !task->is_immediate)
-		session->exp_cmd_sn++;
-	iser_set_rsp_stat_sn(session, task->pdu.bhs);
+	rsp_bhs->exp_cmdsn = cpu_to_be32(conn->h.exp_cmd_sn);
+	rsp_bhs->max_cmdsn = cpu_to_be32(conn->h.max_cmd_sn);
 
 	task->pdu.ahssize = 0;
 	task->pdu.membuf.size = 0;
