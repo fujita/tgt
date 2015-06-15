@@ -82,7 +82,7 @@ clean-pkg:
 clean: clean-programs clean-doc clean-conf clean-scripts clean-pkg
 
 .PHONY:check
-check: ARCH=$(shell sh script/checkarch.sh)
+check: ARCH=$(shell sh scripts/checkarch.sh)
 check:
 	CC=$(CHECK_CC_FLAGS) $(MAKE) all
 
