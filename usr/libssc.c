@@ -19,6 +19,7 @@
  * 02110-1301 USA
  */
 
+#include <fcntl.h>
 #include <stdint.h>
 #include <string.h>
 #include <unistd.h>
