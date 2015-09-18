@@ -40,12 +40,15 @@ INCLUDES += -I.
 
 CFLAGS += -D_GNU_SOURCE
 CFLAGS += $(INCLUDES)
+ifneq ($(OPTFLAGS),)
+CFLAGS += $(OPTFLAGS)
 ifneq ($(DEBUG),)
 CFLAGS += -g -O0 -ggdb -rdynamic
 else
 CFLAGS += -g -O2 -fno-strict-aliasing
 endif
 CFLAGS += -Wall -Wstrict-prototypes -fPIC
+endif
 CFLAGS += -DTGT_VERSION=\"$(VERSION)$(EXTRAVERSION)\"
 CFLAGS += -DBSDIR=\"$(DESTDIR)$(libdir)/backing-store\"
 
