@@ -369,9 +369,11 @@ void target_list_build(struct iscsi_connection *conn, char *addr, char *name)
 struct iscsi_target *target_find_by_name(const char *name)
 {
 	struct iscsi_target *target;
+	char *tname;
 
 	list_for_each_entry(target, &iscsi_targets_list, tlist) {
-		if (!strcmp(tgt_targetname(target->tid), name))
+		tname = tgt_targetname(target->tid);
+		if (tname && !strcmp(tname, name))
 			return target;
 	}
 
