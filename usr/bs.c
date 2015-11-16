@@ -263,7 +263,8 @@ static int bs_init_signalfd(void)
 
 	dir = opendir(BSDIR);
 	if (dir == NULL) {
-		eprintf("could not open backing-store module directory %s\n",
+		/* not considered an error if there are no modules */
+		dprintf("could not open backing-store module directory %s\n",
 			BSDIR);
 	} else {
 		struct dirent *dirent;
