@@ -50,8 +50,7 @@
         <listitem>
           <para>
 	    Defines a the start of a target definition. IQN is an ISCSI Qualified
-	    Name such as "iqn.2001-04.com.example:storage1". See "ISCSI" on
-	    Wikipedia for more information on IQNs.
+	    Name such as "iqn.2001-04.com.example:storage1".
           </para>
 	  <para>
 	    Within this block should be target-level directives, as
