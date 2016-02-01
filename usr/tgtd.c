@@ -604,7 +604,7 @@ int main(int argc, char **argv)
 	}
 
 	err = oom_adjust();
-	if (err && getuid() == 0)
+	if (err && (errno != EACCES) && getuid() == 0)
 		exit(1);
 
 	err = nr_file_adjust();
