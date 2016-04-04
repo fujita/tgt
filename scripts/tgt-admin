@@ -488,7 +488,7 @@ sub add_backing_direct {
 	}
 
 	if ($can_alloc == 1 &&
-	   ($bstype =~ "rbd" || (-e $backing_store && ! -d $backing_store))) {
+	   ($bstype =~ "glfs" || $bstype =~ "rbd" || (-e $backing_store && ! -d $backing_store))) {
 		my @exec_commands;
 		my $device_type;
 		my $bs_type;
