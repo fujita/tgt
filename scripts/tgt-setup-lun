@@ -24,7 +24,7 @@ usage()
 {
 	name=$(basename $0);
 	echo "usage:";
-	echo -e "\t$name -n tgt_name -d dev -b bs_name -t transport -C control_port [initiator_IP1 initiator_IP2 ...]";
+	echo -e "\t$name -n tgt_name -d dev -b bs_name -B block_size -t transport -C control_port [initiator_IP1 initiator_IP2 ...]";
 	echo "defaults:";
 	echo -e "\tbacking store: rdwr";
 	echo -e "\ttransport: iscsi";
@@ -34,6 +34,8 @@ usage()
 	echo -e "\t$name -n tgt-1 -d /dev/sdb1 192.168.1.2";
 	echo -e "\t$name -n tgt-2 -d /tmp/null -b null -t iser";
 	echo -e "\t$name -n tgt-3 -d ~/disk3.bin -b rdwr 192.168.1.2 192.168.1.3";
+	echo -e "WARNING:"
+	echo -e "\tPlease remember to set blocksize to 4096 for newer Advanced Format (4K) disks larger than 2TB. Otherwise, your existing filesystems will not be readable."
 }
 
 verify_params()
@@ -197,7 +199,7 @@ TGTADM="tgtadm"
 lld_name="iscsi"
 control_port=""
 
-while getopts "d:n:b:t:h:C:" opt
+while getopts "d:n:b:B:t:h:C:" opt
 do
 	case ${opt} in
 	d)
@@ -206,6 +208,8 @@ do
 		tgt_name=$OPTARG;;
 	b)
 		bs_type=$OPTARG;;
+	B)
+		block_size=$OPTARG;;
 	t)
 		lld_name=$OPTARG;;
         C)
@@ -277,7 +281,7 @@ if [ $bs_type ]; then
 	echo "Setting backing store type: $bs_type"
 	bs_opt="-E $bs_type"
 fi
-$TGTADM --lld $lld_name --op new --mode logicalunit --tid $tid --lun $lun -b $dev $bs_opt
+$TGTADM --lld $lld_name --op new --mode logicalunit --tid $tid --lun $lun --blocksize $block_size -b $dev $bs_opt
 res=$?
 
 if [ $res -ne 0 ]; then
