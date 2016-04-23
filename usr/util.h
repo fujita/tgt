@@ -148,7 +148,7 @@ struct signalfd_siginfo {
 	unsigned long long ull_val;     		\
 	ull_val = strtoull(str, &ptr, 0);       	\
 	val = (typeof(val)) ull_val;    		\
-	if (errno || ptr == str)			\
+	if (ull_val == ULONG_MAX || ptr == str)		\
 		ret = EINVAL;   			\
 	else if (val != ull_val)			\
 		ret = ERANGE;   			\
