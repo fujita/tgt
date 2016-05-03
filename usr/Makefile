@@ -5,7 +5,7 @@ ifneq ($(shell test -e /usr/include/linux/signalfd.h && echo 1),)
 CFLAGS += -DUSE_SIGNALFD
 endif
 
-ifneq ($(shell test -e /usr/include/sys/timerfd.h && echo 1),)
+ifneq ($(shell test -n $(shell find /usr/include -name "timerfd.h" | head -n1) && echo 1),)
 CFLAGS += -DUSE_TIMERFD
 endif
 

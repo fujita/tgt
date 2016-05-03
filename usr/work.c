@@ -59,7 +59,7 @@ static void work_timer_schedule_evt(void)
 	unsigned int n = 0;
 	int err;
 
-	if (timer_pending)
+	if (timer_pending || timer_fd[1] < 0)
 		return;
 
 	timer_pending = 1;
