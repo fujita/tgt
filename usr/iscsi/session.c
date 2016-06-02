@@ -98,6 +98,7 @@ int session_create(struct iscsi_connection *conn)
 	if (conn->initiator_alias) {
 		session->initiator_alias = strdup(conn->initiator_alias);
 		if (!session->initiator_alias) {
+			free(session->initiator);
 			free(session);
 			return -ENOMEM;
 		}
