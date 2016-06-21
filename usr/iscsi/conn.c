@@ -151,6 +151,22 @@ void conn_close(struct iscsi_connection *conn)
 			else
 				iscsi_free_task(task);
 			break;
+		case ISCSI_OP_NOOP_IN:
+			/* NOOP_IN req is allocated within iscsi_tcp
+			 * by a direct call to the transport
+			 * allocation routine, unaccounted in the
+			 * connection refcount and not added to
+			 * task_list, hence it should be freed when
+			 * it's done by a similar direct call.
+			 *
+			 * We're overprotective here by checking tp's
+			 * free_task pointer, avoiding interference
+			 * with iser (I'm unsure if it's relevant
+			 * though).
+			 */
+			if (task->conn->tp->free_task)
+				task->conn->tp->free_task(task);
+			break;
 		case ISCSI_OP_NOOP_OUT:
 		case ISCSI_OP_LOGOUT:
 		case ISCSI_OP_SCSI_TMFUNC:
