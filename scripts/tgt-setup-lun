@@ -281,7 +281,10 @@ if [ $bs_type ]; then
 	echo "Setting backing store type: $bs_type"
 	bs_opt="-E $bs_type"
 fi
-$TGTADM --lld $lld_name --op new --mode logicalunit --tid $tid --lun $lun --blocksize $block_size -b $dev $bs_opt
+if [ $block_size ]; then
+  blksz_opt="--blocksize $block_size"
+fi
+$TGTADM --lld $lld_name --op new --mode logicalunit --tid $tid --lun $lun $blksz_opt -b $dev $bs_opt
 res=$?
 
 if [ $res -ne 0 ]; then
