@@ -3583,6 +3583,9 @@ static int iser_param_parser(char *p)
 	int err = 0;
 	char *q;
 
+	if (!p)
+	    return 0;
+
 	while (*p) {
 		if (!strncmp(p, lld_param_port, strlen(lld_param_port))) {
 			short int port_val;
