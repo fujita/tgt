@@ -611,7 +611,7 @@ tgtadm_err tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	lu->blk_shift = 0;
 	if (blocksize) {
 		unsigned int bsize;
-		unsigned int bshift;
+		int bshift;
 
 		dprintf("blocksize=%s\n", blocksize);
 		bsize = strtoul(blocksize, NULL, 0);
