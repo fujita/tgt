@@ -1227,6 +1227,9 @@ void iscsi_free_task(struct iscsi_task *task)
 
 	list_del(&task->c_siblings);
 
+	if (task_opcode(task) == ISCSI_OP_SCSI_CMD)
+		list_del(&task->c_hlist);
+
 	conn->tp->free_data_buf(conn, scsi_get_in_buffer(&task->scmd));
 	conn->tp->free_data_buf(conn, scsi_get_out_buffer(&task->scmd));
 
@@ -1251,7 +1254,6 @@ void iscsi_free_cmd_task(struct iscsi_task *task)
 {
 	target_cmd_done(&task->scmd);
 
-	list_del(&task->c_hlist);
 	iscsi_free_task(task);
 }
 

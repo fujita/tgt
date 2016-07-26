@@ -60,6 +60,8 @@
 
 #define sid_to_tsih(sid) ((sid) >> 48)
 
+#define task_opcode(task) ((task)->req.opcode & ISCSI_OPCODE_MASK)
+
 struct iscsi_pdu {
 	struct iscsi_hdr bhs;
 	void *ahs;
