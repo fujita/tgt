@@ -1227,6 +1227,11 @@ void iscsi_free_task(struct iscsi_task *task)
 
 	list_del(&task->c_siblings);
 
+	if (task->c_hlist.prev && task->c_hlist.next
+	    && !list_empty(&task->c_hlist)) {
+		list_del(&task->c_hlist);
+	}
+
 	conn->tp->free_data_buf(conn, scsi_get_in_buffer(&task->scmd));
 	conn->tp->free_data_buf(conn, scsi_get_out_buffer(&task->scmd));
 
