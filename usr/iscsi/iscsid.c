@@ -1597,7 +1597,6 @@ static int iscsi_task_queue(struct iscsi_task *task)
 	struct iscsi_hdr *req = (struct iscsi_hdr *) &task->req;
 	uint32_t cmd_sn;
 	struct iscsi_task *ent;
-	int err;
 
 	dprintf("%x %x %x\n", be32_to_cpu(req->statsn), session->exp_cmd_sn,
 		req->opcode);
@@ -1611,7 +1610,7 @@ static int iscsi_task_queue(struct iscsi_task *task)
 		session->exp_cmd_sn = ++cmd_sn;
 
 		/* Should we close the connection... */
-		err = iscsi_task_execute(task);
+		iscsi_task_execute(task);
 
 		if (list_empty(&session->pending_cmd_list))
 			return 0;
@@ -1960,13 +1959,12 @@ static int iscsi_scsi_cmd_tx_done(struct iscsi_connection *conn)
 static int iscsi_task_tx_done(struct iscsi_connection *conn)
 {
 	struct iscsi_task *task = conn->tx_task;
-	int err;
 	uint8_t op;
 
 	op = task->req.opcode & ISCSI_OPCODE_MASK;
 	switch (op) {
 	case ISCSI_OP_SCSI_CMD:
-		err = iscsi_scsi_cmd_tx_done(conn);
+		iscsi_scsi_cmd_tx_done(conn);
 		break;
 	case ISCSI_OP_NOOP_IN:
 		/* NOOP_IN req is allocated within iscsi_tcp

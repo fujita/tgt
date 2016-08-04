@@ -45,7 +45,7 @@ CFLAGS += -g -O0 -ggdb -rdynamic
 else
 CFLAGS += -g -O2 -fno-strict-aliasing
 endif
-CFLAGS += -Wall -Wstrict-prototypes -fPIC
+CFLAGS += -Wall -Wstrict-prototypes -Werror -fPIC
 CFLAGS += -DTGT_VERSION=\"$(VERSION)$(EXTRAVERSION)\"
 CFLAGS += -DBSDIR=\"$(DESTDIR)$(libdir)/backing-store\"
 

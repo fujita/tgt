@@ -2196,7 +2196,6 @@ static void iser_sched_rdma_rd(struct event_data *evt)
 	struct iser_task *prev_task = NULL;
 	struct iser_task *task = NULL;
 	int num_reqs = 0;
-	int err;
 
 	if (unlikely(conn->h.state != STATE_FULL)) {
 		dprintf("conn:%p closing, ignoring rdma_rd\n", conn);
@@ -2220,7 +2219,7 @@ static void iser_sched_rdma_rd(struct event_data *evt)
 	if (prev_task) {
 		prev_task->rdmad.send_wr.next = NULL;
 		/* submit the chain of rdma-rd requests, start from the first */
-		err = iser_post_send(conn, first_wr, num_reqs);
+		iser_post_send(conn, first_wr, num_reqs);
 
 		/* ToDo: error handling */
 	}
@@ -2234,7 +2233,6 @@ static void iser_sched_tx(struct event_data *evt)
 	struct iser_task *task;
 	struct iser_work_req *cur_send_wr;
 	int num_reqs = 0;
-	int err;
 
 	if (unlikely(conn->h.state == STATE_CLOSE)) {
 		dprintf("conn:%p closing, ignoring tx\n", conn);
@@ -2267,7 +2265,7 @@ static void iser_sched_tx(struct event_data *evt)
 	if (prev_task) {
 		prev_task->txd.send_wr.next = NULL;
 		/* submit the chain of rdma-wr & tx reqs, start from the first */
-		err = iser_post_send(conn, first_wr, num_reqs);
+		iser_post_send(conn, first_wr, num_reqs);
 
 		/* ToDo: error handling */
 	}
@@ -2280,7 +2278,6 @@ static void iser_sched_post_recv(struct event_data *evt)
 	struct iser_task *prev_task = NULL;
 	struct iser_task *task;
 	int num_recv_bufs = 0;
-	int err;
 
 	if (unlikely(conn->h.state != STATE_FULL)) {
 		dprintf("conn:%p closing, ignoring post recv\n", conn);
@@ -2304,7 +2301,7 @@ static void iser_sched_post_recv(struct event_data *evt)
 	if (prev_task) {
 		prev_task->rxd.recv_wr.next = NULL;
 		/* post the chain of recv buffers, start from the first */
-		err = iser_post_recv(conn, first_task, num_recv_bufs);
+		iser_post_recv(conn, first_task, num_recv_bufs);
 
 		/* ToDo: error handling */
 	}
@@ -2802,7 +2799,7 @@ static int iser_rx_handler_non_ff(struct iser_task *task)
 			conn, conn->h.state);
 		break;
 	}
-	return 0;
+	return err;
 }
 
 static void iser_rx_handler(struct iser_work_req *rxd)

@@ -65,7 +65,6 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 	int result = SAM_STAT_GOOD;
 	uint8_t key;
 	uint16_t asc;
-	uint32_t info = 0;
 	char *tmpbuf;
 	size_t blocksize;
 	uint64_t offset = cmd->offset;
@@ -149,7 +148,6 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 			for (pos = 0; pos < length && *spos++ == *dpos++;
 			     pos++)
 				;
-			info = pos;
 			result = SAM_STAT_CHECK_CONDITION;
 			key = MISCOMPARE;
 			asc = ASC_MISCOMPARE_DURING_VERIFY_OPERATION;
