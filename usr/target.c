@@ -29,6 +29,7 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/time.h>
+#include <ctype.h>
 
 #include "list.h"
 #include "util.h"
@@ -2137,6 +2138,13 @@ tgtadm_err tgt_target_create(int lld, int tid, char *args)
 				eprintf("Unknow option %s\n", q);
 		}
 	};
+
+	for (p = targetname; *p != '\0'; p++) {
+	    if (isalnum(*p) || *p == ':' || *p == '.' || *p == '-')
+		continue;
+	    eprintf("Target name %s has invalid characters\n", targetname);
+	    return TGTADM_INVALID_REQUEST;
+	}
 
 	if (!targetname)
 		return TGTADM_INVALID_REQUEST;
