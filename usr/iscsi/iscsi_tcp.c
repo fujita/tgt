@@ -508,6 +508,8 @@ static size_t iscsi_tcp_close(struct iscsi_connection *conn)
 	struct iscsi_tcp_connection *tcp_conn = TCP_CONN(conn);
 
 	tgt_event_del(tcp_conn->fd);
+	conn->state = STATE_CLOSE;
+	tcp_conn->nop_interval = 0;
 	return 0;
 }
 
