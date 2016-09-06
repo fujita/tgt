@@ -905,6 +905,7 @@ static int sd_io(struct sheepdog_access_info *ai, int write, char *buf, int len,
 	int need_update_inode = 0, need_reload_inode;
 	int nr_copies = ai->inode.nr_copies;
 	int need_write_lock, check_idx;
+	int read_reload_snap = 0;
 
 	goto do_req;
 
@@ -912,7 +913,7 @@ reload_in_read_path:
 	pthread_rwlock_unlock(&ai->inode_lock); /* unlock current read lock */
 
 	pthread_rwlock_wrlock(&ai->inode_lock);
-	ret = reload_inode(ai, 0);
+	ret = reload_inode(ai, read_reload_snap);
 	if (ret) {
 		eprintf("failed to reload in read path\n");
 		goto out;
@@ -1008,6 +1009,8 @@ retry:
 					dprintf("reload in read path for not"\
 						" written area\n");
 					size = orig_size;
+					read_reload_snap =
+						need_reload_inode == 1;
 					goto reload_in_read_path;
 				}
 			}
@@ -1019,6 +1022,7 @@ retry:
 			if (need_reload_inode) {
 				dprintf("reload in ordinal read path\n");
 				size = orig_size;
+				read_reload_snap = need_reload_inode == 1;
 				goto reload_in_read_path;
 			}
 		}
