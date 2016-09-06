@@ -750,6 +750,7 @@ static int read_write_object(struct sheepdog_access_info *ai, char *buf,
 	unsigned int wlen, rlen;
 	int ret;
 
+retry:
 	memset(&hdr, 0, sizeof(hdr));
 
 	hdr.proto_ver = SD_PROTO_VER;
@@ -791,6 +792,17 @@ static int read_write_object(struct sheepdog_access_info *ai, char *buf,
 	case SD_RES_READONLY:
 		*need_reload = 1;
 		return 0;
+	case SD_RES_NO_OBJ:
+		if (!write && oid & (UINT64_C(1) << 63))
+			/*
+			 * sheepdog doesn't provide a mechanism of metadata
+			 * transaction, so tgt can see an inconsistent state
+			 * like this (old working VDI became snapshot already
+			 * but an inode object of new working VDI isn't
+			 * created yet).
+			 */
+			goto retry;
+		return -1;
 	default:
 		eprintf("%s (oid: %" PRIx64 ", old_oid: %" PRIx64 ")\n",
 			sd_strerror(rsp->result), oid, old_oid);
