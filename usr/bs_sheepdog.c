@@ -286,9 +286,6 @@ struct sheepdog_access_info {
 	struct list_head fd_list_head;
 	pthread_rwlock_t fd_list_lock;
 
-	uint32_t min_dirty_data_idx;
-	uint32_t max_dirty_data_idx;
-
 	struct sheepdog_inode inode;
 	pthread_rwlock_t inode_lock;
 
@@ -734,9 +731,6 @@ static int reload_inode(struct sheepdog_access_info *ai, int is_snapshot)
 		}
 	}
 
-	ai->min_dirty_data_idx = UINT32_MAX;
-	ai->max_dirty_data_idx = 0;
-
 	inode_version++;
 	ai->inode_version = inode_version;
 
@@ -854,14 +848,11 @@ static int sd_sync(struct sheepdog_access_info *ai)
 	}
 }
 
-static int update_inode(struct sheepdog_access_info *ai)
+static int update_inode(struct sheepdog_access_info *ai, uint32_t min, uint32_t max)
 {
 	int ret = 0, need_reload_inode = 0;
 	uint64_t oid = vid_to_vdi_oid(ai->inode.vdi_id);
-	uint32_t min, max, offset, data_len;
-
-	min = ai->min_dirty_data_idx;
-	max = ai->max_dirty_data_idx;
+	uint32_t offset, data_len;
 
 	if (max < min)
 		goto end;
@@ -890,8 +881,6 @@ update:
 	}
 
 end:
-	ai->min_dirty_data_idx = UINT32_MAX;
-	ai->max_dirty_data_idx = 0;
 
 	return ret;
 }
@@ -934,6 +923,7 @@ static int sd_io(struct sheepdog_access_info *ai, int write, char *buf, int len,
 	int nr_copies = ai->inode.nr_copies;
 	int need_write_lock, check_idx;
 	int read_reload_snap = 0;
+	uint32_t min_dirty_data_idx = UINT32_MAX, max_dirty_data_idx = 0;
 
 	goto do_req;
 
@@ -1015,12 +1005,12 @@ retry:
 				}
 
 				if (create) {
-					ai->min_dirty_data_idx =
+					min_dirty_data_idx =
 						min_t(uint32_t, idx,
-						      ai->min_dirty_data_idx);
-					ai->max_dirty_data_idx =
+						      min_dirty_data_idx);
+					max_dirty_data_idx =
 						max_t(uint32_t, idx,
-						      ai->max_dirty_data_idx);
+						      max_dirty_data_idx);
 					ai->inode.data_vdi_id[idx] = vid;
 
 					need_update_inode = 1;
@@ -1066,7 +1056,7 @@ done:
 	}
 
 	if (need_update_inode)
-		ret = update_inode(ai);
+		ret = update_inode(ai, min_dirty_data_idx, max_dirty_data_idx);
 
 out:
 	pthread_rwlock_unlock(&ai->inode_lock);
@@ -1278,9 +1268,6 @@ trans_to_expect_nothing:
 			    ai->is_snapshot);
 	if (ret)
 		goto out;
-
-	ai->min_dirty_data_idx = UINT32_MAX;
-	ai->max_dirty_data_idx = 0;
 
 	ret = read_object(ai, (char *)&ai->inode, vid_to_vdi_oid(vid),
 			  0, SD_INODE_SIZE, 0, &need_reload);
