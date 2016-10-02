@@ -245,6 +245,7 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 	int ret;
 	uint64_t lba;
 	uint32_t tl;
+	size_t blocksize = 1 << cmd->dev->blk_shift;
 	unsigned char key = ILLEGAL_REQUEST;
 	uint16_t asc = ASC_LUN_NOT_SUPPORTED;
 	struct scsi_lu *lu = cmd->dev;
@@ -304,6 +305,13 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 		if ((cmd->scb[1] & 0x06) == 0x06) {
 			key = ILLEGAL_REQUEST;
 			asc = ASC_INVALID_FIELD_IN_CDB;
+			goto sense;
+		}
+		/* Fail of DataOut is neither ==0 or ==blocksize */
+		if (scsi_get_out_length(cmd) &&
+		    blocksize != scsi_get_out_length(cmd)) {
+			key = ILLEGAL_REQUEST;
+			asc = ASC_PARAMETER_LIST_LENGTH_ERR;
 			goto sense;
 		}
 		break;
