@@ -260,6 +260,9 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 		goto sense;
 	}
 
+	lba = scsi_rw_offset(cmd->scb);
+	tl  = scsi_rw_count(cmd->scb);
+
 	switch (cmd->scb[0]) {
 	case READ_10:
 	case READ_12:
@@ -314,6 +317,10 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 			asc = ASC_PARAMETER_LIST_LENGTH_ERR;
 			goto sense;
 		}
+		/* TL == 0 means all LBAs until end of device */
+		if (tl == 0)
+			tl = (lu->size >> cmd->dev->blk_shift) - lba;
+
 		break;
 	}
 
@@ -338,9 +345,6 @@ static int sbc_rw(int host_no, struct scsi_cmd *cmd)
 			break;
 		}
 	}
-
-	lba = scsi_rw_offset(cmd->scb);
-	tl  = scsi_rw_count(cmd->scb);
 
 	/* Verify that we are not doing i/o beyond
 	   the end-of-lun */
