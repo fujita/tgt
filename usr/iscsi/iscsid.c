@@ -266,11 +266,12 @@ static void login_security_done(struct iscsi_connection *conn)
 			struct iscsi_connection *ent, *next;
 
 			/* do session reinstatement */
-
+			session_get(session);
 			list_for_each_entry_safe(ent, next, &session->conn_list,
 						 clist) {
 				conn_close(ent);
 			}
+			session_put(session);
 
 			session = NULL;
 		} else if (req->tsih != session->tsih) {
