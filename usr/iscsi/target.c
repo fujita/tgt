@@ -410,9 +410,11 @@ void iscsi_target_destroy(int tid, int force)
 	}
 
 	list_for_each_entry_safe(session, stmp, &target->sessions_list, slist) {
+		session_get(session);
 		list_for_each_entry_safe(conn, ctmp, &session->conn_list, clist) {
 			conn_close(conn);
 		}
+		session_put(session);
 	}
 
 	if (!list_empty(&target->sessions_list)) {
