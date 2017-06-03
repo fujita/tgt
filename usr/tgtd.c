@@ -310,7 +310,7 @@ int call_program(const char *cmd, void (*callback)(void *data, int result),
 	pos = arg;
 	str_spacecpy(&pos, cmd);
 	if (strchr(cmd, ' ')) {
-		while (pos != '\0')
+		while (*pos != '\0')
 			argv[i++] = strsep(&pos, " ");
 	} else
 		argv[i++] = arg;
