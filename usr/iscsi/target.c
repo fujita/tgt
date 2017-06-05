@@ -674,6 +674,13 @@ static tgtadm_err iscsi_target_show_portals(struct iscsi_target *target, uint64_
 	return adm_err;
 }
 
+static tgtadm_err show_nop_info(struct iscsi_target *target, struct concat_buf *b)
+{
+	concat_printf(b, "nop_interval=%d\n", target->nop_interval);
+	concat_printf(b, "nop_count=%d\n", target->nop_count);
+	return TGTADM_SUCCESS;
+}
+
 static tgtadm_err show_redirect_info(struct iscsi_target *target, struct concat_buf *b)
 {
 	tgtadm_err adm_err = TGTADM_SUCCESS;
@@ -718,8 +725,10 @@ tgtadm_err iscsi_target_show(int mode, int tid, uint64_t sid, uint32_t cid, uint
 			adm_err = show_redirect_callback(target, b);
 		else if (strlen(target->redirect_info.addr))
 			adm_err = show_redirect_info(target, b);
-		else
+		else {
+			adm_err = show_nop_info(target, b);
 			adm_err = show_iscsi_param(target->session_param, b);
+		}
 		break;
 	case MODE_SESSION:
 		adm_err = iscsi_target_show_session(target, sid, b);
