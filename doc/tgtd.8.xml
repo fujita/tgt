@@ -173,7 +173,7 @@
 
   <refsect1><title>SEE ALSO</title>
     <para>
-      tgtadm(8), tgt-admin(8), tgtimg(8), tgt-setup-lun(8).
+      targets.conf(5), tgtadm(8), tgt-admin(8), tgtimg(8), tgt-setup-lun(8).
       <ulink url="http://stgt.sourceforge.net/"/>
     </para>
   </refsect1>
