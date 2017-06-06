@@ -61,7 +61,7 @@ static int logarea_init (int size)
 	}
 
 	la = shmat(shmid, NULL, 0);
-	if (!la) {
+	if (((void *) -1) == la) {
 		syslog(LOG_ERR, "shmat logarea failed %d", errno);
 		return 1;
 	}
@@ -79,7 +79,7 @@ static int logarea_init (int size)
 	}
 
 	la->start = shmat(shmid, NULL, 0);
-	if (!la->start) {
+	if (((void *) -1) == la->start) {
 		syslog(LOG_ERR, "shmat msg failed %d", errno);
 		shmdt(la);
 		return 1;
@@ -101,7 +101,7 @@ static int logarea_init (int size)
 		return 1;
 	}
 	la->buff = shmat(shmid, NULL, 0);
-	if (!la->buff) {
+	if (((void *) -1) == la->buff) {
 		syslog(LOG_ERR, "shmat logmsgfailed %d", errno);
 		shmdt(la->start);
 		shmdt(la);
