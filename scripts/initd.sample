@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # This is an example init.d script for stopping/starting/reconfiguring tgtd.
 
 # chkconfig: 345 20 80
