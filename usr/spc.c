@@ -2069,7 +2069,7 @@ int spc_lu_init(struct scsi_lu *lu)
 	lu->attrs.sense_format = 0;
 
 	snprintf(lu->attrs.vendor_id, sizeof(lu->attrs.vendor_id),
-		 "%-16s", VENDOR_ID);
+		 "%-s", VENDOR_ID);
 	snprintf(lu->attrs.product_rev, sizeof(lu->attrs.product_rev),
 		 "%s", "0001");
 	snprintf(lu->attrs.scsi_id, sizeof(lu->attrs.scsi_id),
