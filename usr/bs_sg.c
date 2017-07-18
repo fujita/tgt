@@ -35,6 +35,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/epoll.h>
+#include <sys/sysmacros.h>
 #include <scsi/sg.h>
 
 #include "bsg.h" /* Copied from include/linux/bsg.h */
