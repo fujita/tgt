@@ -240,4 +240,18 @@ static __always_inline int test_bit(unsigned int nr, const unsigned long *addr)
 		(((unsigned long *)addr)[nr / BITS_PER_LONG])) != 0;
 }
 
+static inline int scsi_sprintf(char *str, size_t size, const char *format, ...)
+{
+	va_list args;
+	char buf[size + 1];
+	int n;
+
+	memset(buf, 0, sizeof(buf));
+	va_start(args, format);
+	n = snprintf(buf, sizeof(buf), format, args);
+	va_end(args);
+	memcpy(str, buf, size);
+	return n;
+}
+
 #endif
