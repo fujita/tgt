@@ -44,8 +44,6 @@
 #define NO_LOGGING
 #include "log.h"
 
-#define BUFSIZE 4096
-
 static const char program_name[] = "tgtadm";
 static int debug;
 
@@ -992,7 +990,7 @@ int main(int argc, char **argv)
 			      portalOps);
 
 	if (b.err) {
-		eprintf("BUFSIZE (%d bytes) isn't long enough\n", BUFSIZE);
+		eprintf("BUFSIZE (%zu bytes) isn't long enough\n", b.size + 1);
 		return EINVAL;
 	}
 
