@@ -40,6 +40,13 @@ INCLUDES += -I.
 
 CFLAGS += -D_GNU_SOURCE
 CFLAGS += $(INCLUDES)
+
+RESTSERVER_INCLUDE = -I/home/rohan/CacheBoxInc/hyc-storage-layer/src/RestServer/include
+CFLAGS += $(RESTSERVER_INCLUDE)
+
+HYC_STORAGE_LAYER_INCLUDE = -I/home/rohan/CacheBoxInc/hyc-storage-layer/src/include
+CFLAGS += $(HYC_STORAGE_LAYER_INCLUDE)
+
 ifneq ($(DEBUG),)
 CFLAGS += -g -O0 -ggdb -rdynamic
 else
@@ -49,7 +56,7 @@ CFLAGS += -Wall -Wstrict-prototypes -Werror -fPIC
 CFLAGS += -DTGT_VERSION=\"$(VERSION)$(EXTRAVERSION)\"
 CFLAGS += -DBSDIR=\"$(DESTDIR)$(libdir)/backing-store\"
 
-LIBS += -lpthread -ldl
+LIBS += -lpthread -ldl -lStorageLayer -lRestServer
 
 ifneq ($(SD_NOTIFY),)
 LIBS += -lsystemd
