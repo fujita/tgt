@@ -26,6 +26,7 @@
 #include <string.h>
 #include <sys/eventfd.h>
 #include <sys/epoll.h>
+#include <assert.h>
 
 #include "list.h"
 #include "tgtd.h"
@@ -115,6 +116,11 @@ static tgtadm_err bs_hyc_init(struct scsi_lu *lup, char *bsoptsp)
 	memset(infop, 0, sizeof(*infop));
 
 	infop->lup = lup;
+
+	assert(lup->tgt);
+	assert(lup->tgt->vmid);
+
+	infop->vmid = lup->tgt->vmid;
 
 	e = TGTADM_SUCCESS;
 	return e;

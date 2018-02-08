@@ -2121,7 +2121,7 @@ char *tgt_targetname(int tid)
 tgtadm_err tgt_target_create(int lld, int tid, char *args)
 {
 	struct target *target, *pos;
-	char *p, *q, *targetname = NULL;
+	char *p, *q, *targetname = NULL, *vmid = NULL;
 	struct backingstore_template *bst;
 
 	p = args;
@@ -2132,10 +2132,13 @@ tgtadm_err tgt_target_create(int lld, int tid, char *args)
 		if (str) {
 			*str++ = '\0';
 
-			if (!strcmp("targetname", q))
+			if (!strcmp("targetname", q)) {
 				targetname = str;
-			else
+			} else if (!strcmp("vmid", q)) {
+				vmid = str;
+			} else {
 				eprintf("Unknow option %s\n", q);
+			}
 		}
 	};
 
@@ -2147,6 +2150,9 @@ tgtadm_err tgt_target_create(int lld, int tid, char *args)
 	}
 
 	if (!targetname)
+		return TGTADM_INVALID_REQUEST;
+
+	if(!vmid)
 		return TGTADM_INVALID_REQUEST;
 
 	target = target_lookup(tid);
@@ -2170,6 +2176,13 @@ tgtadm_err tgt_target_create(int lld, int tid, char *args)
 
 	target->name = strdup(targetname);
 	if (!target->name) {
+		free(target);
+		return TGTADM_NOMEM;
+	}
+
+	target->vmid = strdup(vmid);
+	if (!target->vmid) {
+		free(target->name);
 		free(target);
 		return TGTADM_NOMEM;
 	}

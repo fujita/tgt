@@ -114,6 +114,7 @@ struct option const long_options[] = {
 	{"bsoflags", required_argument, NULL, 'f'},
 	{"blocksize", required_argument, NULL, 'y'},
 	{"targetname", required_argument, NULL, 'T'},
+	{"vmid", required_argument, NULL, 'X'},
 	{"initiator-address", required_argument, NULL, 'I'},
 	{"initiator-name", required_argument, NULL, 'Q'},
 	{"user", required_argument, NULL, 'u'},
@@ -499,6 +500,7 @@ int main(int argc, char **argv)
 	uint32_t cid, hostno;
 	uint64_t sid, lun, force;
 	char *name, *value, *path, *targetname, *address, *iqnname, *targetOps;
+	char *vmid;
 	char *portalOps, *bstype, *bsopts;
 	char *bsoflags;
 	char *blocksize;
@@ -514,7 +516,7 @@ int main(int argc, char **argv)
 	rc = 0;
 	dev_type = TYPE_DISK;
 	ac_dir = ACCOUNT_TYPE_INCOMING;
-	name = value = path = targetname = address = iqnname = NULL;
+	name = value = path = targetname = address = iqnname = vmid = NULL;
 	targetOps = portalOps = bstype = bsopts = NULL;
 	bsoflags = blocksize = user = password = op_name = NULL;
 	force = 0;
@@ -571,6 +573,9 @@ int main(int argc, char **argv)
 			break;
 		case 'T':
 			targetname = optarg;
+			break;
+		case 'X':
+			vmid = optarg;
 			break;
 		case 'I':
 			address = optarg;
@@ -685,7 +690,7 @@ int main(int argc, char **argv)
 		}
 		switch (op) {
 		case OP_NEW:
-			rc = verify_mode_params(argc, argv, "LmotTC");
+			rc = verify_mode_params(argc, argv, "LmotTCX");
 			if (rc) {
 				eprintf("target mode: option '-%c' is not "
 					"allowed/supported\n", rc);
@@ -694,6 +699,11 @@ int main(int argc, char **argv)
 			if (!targetname) {
 				eprintf("creating new target requires "
 					"a name, use --targetname\n");
+				exit(EINVAL);
+			}
+			if (!vmid) {
+				eprintf("creating new target requires "
+					"a vmid, use --vmid\n");
 				exit(EINVAL);
 			}
 			break;
@@ -969,6 +979,9 @@ int main(int argc, char **argv)
 	if (targetname)
 		concat_printf(&b, "%stargetname=%s", concat_delim(&b, ","),
 			      targetname);
+	if (vmid)
+		concat_printf(&b, "%svmid=%s", concat_delim(&b, ","),
+			      vmid);
 	if (address)
 		concat_printf(&b, "%sinitiator-address=%s",
 			      concat_delim(&b, ","), address);

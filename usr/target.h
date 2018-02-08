@@ -22,6 +22,7 @@ struct tgt_account {
 
 struct target {
 	char *name;
+	char *vmid; /** Each target is associated with a VM */
 
 	int tid;
 	int lid;
