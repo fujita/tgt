@@ -121,6 +121,7 @@ static tgtadm_err bs_hyc_init(struct scsi_lu *lup, char *bsoptsp)
 	assert(lup->tgt->vmid);
 
 	infop->vmid = lup->tgt->vmid;
+	infop->vmdkid = lup->vmdkid;
 
 	e = TGTADM_SUCCESS;
 	return e;

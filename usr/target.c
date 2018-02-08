@@ -461,7 +461,8 @@ __device_lookup(int tid, uint64_t lun, struct target **t)
 }
 
 enum {
-	Opt_path, Opt_bstype, Opt_bsopts, Opt_bsoflags, Opt_blocksize, Opt_err,
+	Opt_path, Opt_bstype, Opt_bsopts, Opt_bsoflags, Opt_blocksize,
+	Opt_vmdkid, Opt_err,
 };
 
 static match_table_t device_tokens = {
@@ -470,6 +471,7 @@ static match_table_t device_tokens = {
 	{Opt_bsopts, "bsopts=%s"},
 	{Opt_bsoflags, "bsoflags=%s"},
 	{Opt_blocksize, "blocksize=%s"},
+	{Opt_vmdkid, "vmdkid=%s"},
 	{Opt_err, NULL},
 };
 
@@ -479,7 +481,7 @@ tgtadm_err tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 		      int backing)
 {
 	char *p, *path = NULL, *bstype = NULL, *bsopts = NULL;
-	char *bsoflags = NULL, *blocksize = NULL;
+	char *bsoflags = NULL, *blocksize = NULL, *vmdkid = NULL;
 	int lu_bsoflags = 0;
 	tgtadm_err adm_err = TGTADM_SUCCESS;
 	struct target *target;
@@ -514,6 +516,9 @@ tgtadm_err tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 		case Opt_blocksize:
 			blocksize = match_strdup(&args[0]);
 			break;
+		case Opt_vmdkid:
+			vmdkid = match_strdup(&args[0]);
+
 		default:
 			break;
 		}
@@ -529,6 +534,12 @@ tgtadm_err tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 	if (lu) {
 		eprintf("device %" PRIu64 " already exists\n", lun);
 		adm_err = TGTADM_LUN_EXIST;
+		goto out;
+	}
+
+	if (backing && !vmdkid) {
+		eprintf("vmdkid for this lun %" PRIu64 " is not provided\n", lun);
+		adm_err = TGTADM_INVALID_REQUEST;
 		goto out;
 	}
 
@@ -654,6 +665,13 @@ tgtadm_err tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 			goto fail_bs_init;
 	}
 
+	if (backing && vmdkid) {
+		lu->vmdkid = strdup(vmdkid);
+		if (!lu->vmdkid) {
+			adm_err = TGTADM_NOMEM;
+			goto fail_bs_init;
+		}
+	}
 	if (tgt_drivers[target->lid]->lu_create)
 		tgt_drivers[target->lid]->lu_create(lu);
 
@@ -704,6 +722,8 @@ out:
 		free(path);
 	if (bsoflags)
 		free(bsoflags);
+	if (vmdkid)
+		free(vmdkid);
 	return adm_err;
 
 fail_bs_init:
@@ -748,6 +768,10 @@ tgtadm_err tgt_device_destroy(int tid, uint64_t lun, int force)
 
 	if (lu->bst->bs_exit)
 		lu->bst->bs_exit(lu);
+
+	if (lu->vmdkid) {
+		free(lu->vmdkid);
+	}
 
 	list_for_each_entry(itn, &target->it_nexus_list, nexus_siblings) {
 		list_for_each_entry_safe(itn_lu, next, &itn->itn_itl_info_list,
@@ -2190,6 +2214,7 @@ tgtadm_err tgt_target_create(int lld, int tid, char *args)
 	target->account.in_aids = zalloc(DEFAULT_NR_ACCOUNT * sizeof(int));
 	if (!target->account.in_aids) {
 		free(target->name);
+		free(target->vmid);
 		free(target);
 		return TGTADM_NOMEM;
 	}
@@ -2274,6 +2299,7 @@ tgtadm_err tgt_target_destroy(int lld_no, int tid, int force)
 
 	free(target->account.in_aids);
 	free(target->name);
+	free(target->vmid);
 	free(target);
 
 	return TGTADM_SUCCESS;

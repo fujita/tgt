@@ -8,6 +8,6 @@ hyc tgt :
 		--targetname disk1 --vmid vmid_str
 3. Create a new LUN for this new target.
 	sudo ./tgtadm --lld iscsi --mode logicalunit --op new --tid 1 \
-		--lun 1 -b /var/tmp/iscsi-disk1 --bstype hyc
+		--lun 1 -b /var/tmp/iscsi-disk1 --bstype hyc --vmdkid vmdkid_str
 	NOTE: bstype indicates, backing store type, we have our own named "hyc".
 

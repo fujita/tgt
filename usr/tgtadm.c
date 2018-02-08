@@ -115,6 +115,7 @@ struct option const long_options[] = {
 	{"blocksize", required_argument, NULL, 'y'},
 	{"targetname", required_argument, NULL, 'T'},
 	{"vmid", required_argument, NULL, 'X'},
+	{"vmdkid", required_argument, NULL, 'Z'},
 	{"initiator-address", required_argument, NULL, 'I'},
 	{"initiator-name", required_argument, NULL, 'Q'},
 	{"user", required_argument, NULL, 'u'},
@@ -500,7 +501,7 @@ int main(int argc, char **argv)
 	uint32_t cid, hostno;
 	uint64_t sid, lun, force;
 	char *name, *value, *path, *targetname, *address, *iqnname, *targetOps;
-	char *vmid;
+	char *vmid, *vmdkid;
 	char *portalOps, *bstype, *bsopts;
 	char *bsoflags;
 	char *blocksize;
@@ -516,7 +517,7 @@ int main(int argc, char **argv)
 	rc = 0;
 	dev_type = TYPE_DISK;
 	ac_dir = ACCOUNT_TYPE_INCOMING;
-	name = value = path = targetname = address = iqnname = vmid = NULL;
+	name = value = path = targetname = address = iqnname = vmid = vmdkid = NULL;
 	targetOps = portalOps = bstype = bsopts = NULL;
 	bsoflags = blocksize = user = password = op_name = NULL;
 	force = 0;
@@ -576,6 +577,9 @@ int main(int argc, char **argv)
 			break;
 		case 'X':
 			vmid = optarg;
+			break;
+		case 'Z':
+			vmdkid = optarg;
 			break;
 		case 'I':
 			address = optarg;
@@ -841,7 +845,7 @@ int main(int argc, char **argv)
 		}
 		switch (op) {
 		case OP_NEW:
-			rc = verify_mode_params(argc, argv, "LmofytlbEYCS");
+			rc = verify_mode_params(argc, argv, "LmofytlbEYCSZ");
 			if (rc) {
 				eprintf("logicalunit mode: option '-%c' is not "
 					  "allowed/supported\n", rc);
@@ -852,6 +856,11 @@ int main(int argc, char **argv)
 			    && dev_type != TYPE_DISK) {
 				eprintf("'backing-store' option "
 						"is necessary\n");
+				exit(EINVAL);
+			}
+			if (!vmdkid) {
+				eprintf("creating new LUN requires "
+					"a vmdkid, use --vmdkid\n");
 				exit(EINVAL);
 			}
 			break;
@@ -982,6 +991,9 @@ int main(int argc, char **argv)
 	if (vmid)
 		concat_printf(&b, "%svmid=%s", concat_delim(&b, ","),
 			      vmid);
+	if (vmdkid)
+		concat_printf(&b, "%svmdkid=%s", concat_delim(&b, ","),
+			      vmdkid);
 	if (address)
 		concat_printf(&b, "%sinitiator-address=%s",
 			      concat_delim(&b, ","), address);
