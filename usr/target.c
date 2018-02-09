@@ -646,6 +646,14 @@ tgtadm_err tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 			goto fail_lu_init;
 	}
 
+	if (backing && vmdkid) {
+		lu->vmdkid = strdup(vmdkid);
+		if (!lu->vmdkid) {
+			adm_err = TGTADM_NOMEM;
+			goto fail_bs_init;
+		}
+	}
+
 	if (lu->bst->bs_init) {
 		if (bsopts)
 			dprintf("bsopts=%s\n", bsopts);
@@ -665,13 +673,6 @@ tgtadm_err tgt_device_create(int tid, int dev_type, uint64_t lun, char *params,
 			goto fail_bs_init;
 	}
 
-	if (backing && vmdkid) {
-		lu->vmdkid = strdup(vmdkid);
-		if (!lu->vmdkid) {
-			adm_err = TGTADM_NOMEM;
-			goto fail_bs_init;
-		}
-	}
 	if (tgt_drivers[target->lid]->lu_create)
 		tgt_drivers[target->lid]->lu_create(lu);
 

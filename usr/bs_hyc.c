@@ -264,6 +264,11 @@ static int bs_hyc_open(struct scsi_lu *lup, char *pathp,
 
 	infop->done_eventfd = efd;
 
+	assert(infop->vmdk != kInvalidVmdkHandle);
+	rc = SetVmdkEventFd(infop->vmdk, infop->done_eventfd);
+	if (rc < 0) {
+		goto error;
+	}
 error:
 	if (efd >= 0) {
 		close(efd);
