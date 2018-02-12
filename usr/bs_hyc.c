@@ -168,6 +168,10 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 	bufp = scsi_cmd_buffer(cmdp);
 	set_cmd_async(cmdp);
 
+	pthread_mutex_lock(&infop->lock);
+	DLL_ADD(&infop->sched_cmd_list, &hcmdp->list);
+	pthread_mutex_unlock(&infop->lock);
+
 	switch (op) {
 	case READ:
 		reqid = ScheduleRead(infop->vmdk, hcmdp, bufp, length, offset);
@@ -187,17 +191,12 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 		hcmdp->reqid = reqid;
 	}
 
-	pthread_mutex_lock(&infop->lock);
-	DLL_ADD(&infop->sched_cmd_list, &hcmdp->list);
-	pthread_mutex_unlock(&infop->lock);
-
 	return 0;
 }
 
 static void bs_hyc_handle_completion(int fd, int events, void *datap)
 {
 	struct bs_hyc_info   *infop;
-	dll_t                 list;
 	uint64_t              c;
 	struct RequestResult *resultsp = NULL;
 	bool                  has_more = true; /** True for the first cmd completion */
@@ -208,7 +207,6 @@ static void bs_hyc_handle_completion(int fd, int events, void *datap)
 	infop = datap;
 
 	resultsp = infop->request_resultsp;
-	DLL_INIT(&list);
 
 	rc = eventfd_read(fd, &c);
 	assert(rc == 0);
@@ -223,8 +221,10 @@ static void bs_hyc_handle_completion(int fd, int events, void *datap)
 
 			assert(resultsp[i].result == 0);
 			target_cmd_io_done(hcmdp->cmdp, SAM_STAT_GOOD);
+			DLL_REM(&hcmdp->list);
 			free(hcmdp);
 		}
+		memset(resultsp, 0, sizeof (*resultsp) * infop->nr_results);
 	}
 }
 
