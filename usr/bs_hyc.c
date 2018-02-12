@@ -189,6 +189,13 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 	/* If we got reqid, set it in hyc_cmd */
 	if (reqid != kInvalidRequestID) {
 		hcmdp->reqid = reqid;
+	} else {
+		eprintf("request submission got err invalid request\n");
+		pthread_mutex_lock(&infop->lock);
+		DLL_REM(&hcmdp->list);
+		pthread_mutex_unlock(&infop->lock);
+		target_cmd_io_done(hcmdp->cmdp, SAM_STAT_CHECK_CONDITION);
+		free(hcmdp);
 	}
 
 	return 0;
@@ -214,6 +221,7 @@ static void bs_hyc_handle_completion(int fd, int events, void *datap)
 	while (has_more == true) {
 		uint32_t nr_results = GetCompleteRequests(infop->vmdk, resultsp,
 						infop->nr_results, &has_more);
+		pthread_mutex_lock(&infop->lock);
 		/* Process completed request commands */
 		for (i = 0; i < nr_results; ++i) {
 			struct hyc_cmd *hcmdp = (struct hyc_cmd *)resultsp[i].privatep;
@@ -221,9 +229,11 @@ static void bs_hyc_handle_completion(int fd, int events, void *datap)
 
 			assert(resultsp[i].result == 0);
 			target_cmd_io_done(hcmdp->cmdp, SAM_STAT_GOOD);
+
 			DLL_REM(&hcmdp->list);
 			free(hcmdp);
 		}
+		pthread_mutex_unlock(&infop->lock);
 		memset(resultsp, 0, sizeof (*resultsp) * infop->nr_results);
 	}
 }
@@ -269,6 +279,8 @@ static int bs_hyc_open(struct scsi_lu *lup, char *pathp,
 	if (rc < 0) {
 		goto error;
 	}
+
+	return 0;
 error:
 	if (efd >= 0) {
 		close(efd);
