@@ -36,12 +36,14 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
-
 #include "list.h"
 #include "tgtd.h"
 #include "driver.h"
 #include "work.h"
 #include "util.h"
+
+#include "TgtInterface.h"
+#include "HycRestServer.h"
 
 unsigned long pagesize, pageshift;
 
@@ -621,7 +623,22 @@ int main(int argc, char **argv)
 	sd_notify(0, "READY=1\nSTATUS=Starting event loop...");
 #endif
 
+	ret = InitializeLibrary();
+	if (ret) {
+		fprintf(stderr, "HYC Storage library initialize failed"
+			" with rc: %d\n", ret);
+		exit(1);
+	}
+
+	ret = HycRestServerStart();
+	if (ret) {
+		fprintf(stderr, "RestServer start failed with rc: %d\n", ret);
+		exit(1);
+	}
+
 	event_loop();
+
+	HycRestServerStop();
 
 	lld_exit();
 
