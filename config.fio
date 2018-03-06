@@ -1,0 +1,20 @@
+[global]
+group_reporting=1
+exitall
+runtime=1m
+time_based=1
+
+# writers, will repeatedly randomly write and verify data
+[writers]
+rw=randwrite
+bsrange=4k-16k
+ioengine=libaio
+iodepth=128
+filename=/dev/sdb
+verify=crc32c
+verify_backlog=1024
+verify_backlog_batch=512
+verify_interval=512
+numjobs=1
+create_serialize=0
+
