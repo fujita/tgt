@@ -622,8 +622,6 @@ int main(int argc, char **argv)
 
 	event_loop();
 
-	HycRestServerStop();
-
 	lld_exit();
 
 	work_timer_stop();
