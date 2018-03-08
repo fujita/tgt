@@ -28,6 +28,11 @@ Cmd_present curl
 Cmd_present iscsiadm
 Cmd_present fio
 
+function cleanup() {
+	rm -rf $DISK1
+	killall -9 tgtd
+}
+
 if [ -f "$DISK1" ]; then
 	echo "File $DISK1 already present."
 	exit 1
@@ -39,14 +44,16 @@ dd if=/dev/zero of=$DISK1 bs=1G count=1
 
 if [ ! $? -eq 0 ]; then
 	echo "File creation of $DISK1 failed"
+	cleanup
 	exit $?
 fi
 
 # Start the tgtd
-./tgtd
+tgtd
 
 if [ ! $? -eq 0 ]; then
 	echo "Starting tgtd failed"
+	cleanup
 	exit $?
 fi
 
@@ -57,6 +64,7 @@ curl  -s -XPOST 'http://localhost:1984/new_vm/1' \
 
 if [ ! $? -eq 0 ]; then
 	echo "Create new VM REST API failed"
+	cleanup
 	exit $?
 else
 	echo "New VM with vmid 1, rest api successful"
@@ -69,6 +77,7 @@ curl  -s -XPOST 'http://localhost:1984/vm/1/new_vmdk/1' \
 
 if [ ! $? -eq 0 ]; then
 	echo "Create new VMDK REST API failed"
+	cleanup
 	exit $?
 else
 	echo "New VMDK with vmdkid 1, rest api successful"
@@ -79,16 +88,21 @@ tgtadm --lld iscsi --op bind --mode target --tid 1 -I ALL
 
 if [ ! $? -eq 0 ]; then
 	echo "Target discoverable command failed"
+	cleanup
 	exit $?
 else
 	echo "Target with tid 1 is now discoverable"
 fi
+
+# Discover
+iscsiadm --mode discovery --type sendtargets --portal 127.0.0.1
 
 # Login through iscsi on this target
 iscsiadm --mode node --targetname disk1 --portal 127.0.0.1:3260 --login
 
 if [ ! $? -eq 0 ]; then
 	echo "iscsi login to target tid 1 failed"
+	cleanup
 	exit $?
 else
 	echo "iscsi login to target tid 1 successful"
@@ -101,6 +115,7 @@ mkdir $FIO_PATH
 
 if [ ! $? -eq 0 ]; then
 	echo "mkdir $FIO_PATH failed"
+	cleanup
 	exit $?
 else
 	echo "FIO logs with be at $FIO_PATH"
@@ -116,4 +131,8 @@ else
 	echo "fio run succeeded"
 fi
 
+# logout
+iscsiadm --mode node --targetname disk1 --portal 127.0.0.1:3260 --logout
+
+cleanup
 
