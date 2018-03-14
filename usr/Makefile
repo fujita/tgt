@@ -51,7 +51,20 @@ CFLAGS += -Wall -Wstrict-prototypes -Werror -fPIC
 CFLAGS += -DTGT_VERSION=\"$(VERSION)$(EXTRAVERSION)\"
 CFLAGS += -DBSDIR=\"$(DESTDIR)$(libdir)/backing-store\"
 
-LIBS += -lpthread -ldl
+
+LIBS_GRP_START += -Wl,--start-group
+LIBS_GRP_END += -Wl,--end-group
+HYC_LIBS += -lHycClientLib -lStorRpcLib -lHycStorCommon
+FOLLY_LIBS += -lfolly -lglog -lstdc++ -lm -levent -ldouble-conversion
+C++_LIBS += -lstdc++ -lboost_system -lboost_context -lboost_thread
+COMPRESSION_LIBS += -lz -lsnappy -llz4 -llzma
+MISC_LIBS += -lpthread -ldl -lgflags -lcrypto -lssl
+THRIFT_LIBS += -lthrift-core -lprotocol -lconcurrency -ltransport -lasync
+THRIFT_LIBS += -lsecurity -lserver -lthriftfrozen2 -lthriftprotocol
+THRIFT_LIBS += -lthriftcpp2 -lwangle
+
+LIBS += $(LIBS_GRP_START) $(HYC_LIBS) $(FOLLY_LIBS) $(THRIFT_LIBS) $(C++_LIBS)
+LIBS += $(COMPRESSION_LIBS) $(MISC_LIBS) $(LIBS_GRP_END)
 
 ifneq ($(SD_NOTIFY),)
 LIBS += -lsystemd

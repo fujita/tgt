@@ -22,6 +22,7 @@
 
 #include "bs_hyc.h"
 
+#include "TgtTypes.h"
 #include "TgtInterface.h"
 
 static inline struct bs_hyc_info *BS_HYC_I(struct scsi_lu *lu)
@@ -158,10 +159,10 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 
 	switch (op) {
 	case READ:
-		reqid = ScheduleRead(infop->vmdk, hcmdp, bufp, length, offset);
+		reqid = HycScheduleRead(infop->vmdk, hcmdp, bufp, length, offset);
 		break;
 	case WRITE:
-		reqid = ScheduleWrite(infop->vmdk, hcmdp, bufp, length, offset);
+		reqid = HycScheduleWrite(infop->vmdk, hcmdp, bufp, length, offset);
 		break;
 	case WRITE_SAME_OP:
 		/** TODO */
@@ -203,7 +204,7 @@ static void bs_hyc_handle_completion(int fd, int events, void *datap)
 	assert(rc == 0);
 
 	while (has_more == true) {
-		uint32_t nr_results = GetCompleteRequests(infop->vmdk, resultsp,
+		uint32_t nr_results = HycGetCompleteRequests(infop->vmdk, resultsp,
 						infop->nr_results, &has_more);
 		pthread_mutex_lock(&infop->lock);
 		/* Process completed request commands */
@@ -259,7 +260,7 @@ static int bs_hyc_open(struct scsi_lu *lup, char *pathp,
 	infop->done_eventfd = efd;
 
 	assert(infop->vmdk != kInvalidVmdkHandle);
-	rc = SetVmdkEventFd(infop->vmdk, infop->done_eventfd);
+	rc = HycOpenVmdk(infop->vmdk, NULL, NULL, infop->done_eventfd);
 	if (rc < 0) {
 		goto error;
 	}
@@ -343,7 +344,7 @@ static tgtadm_err bs_hyc_init(struct scsi_lu *lup, char *bsoptsp)
 
 	infop->vmid = vmid;
 	infop->vmdkid = vmdkid;
-	infop->vmdk = GetVmdkHandle(vmdkid);
+	//infop->vmdk = GetVmdkHandle(vmdkid);
 	assert(infop->vmdk != kInvalidVmdkHandle);
 
 	rc = pthread_mutex_init(&infop->lock, NULL);
