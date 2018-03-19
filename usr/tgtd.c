@@ -36,12 +36,13 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
-
 #include "list.h"
 #include "tgtd.h"
 #include "driver.h"
 #include "work.h"
 #include "util.h"
+
+#include "TgtInterface.h"
 
 unsigned long pagesize, pageshift;
 
@@ -525,6 +526,7 @@ int main(int argc, char **argv)
 	int err, ch, longindex, nr_lld = 0;
 	int is_daemon = 1, is_debug = 0;
 	int ret;
+	char *hyc_argv[1] = {"tgtd"};
 
 	sa_new.sa_handler = signal_catch;
 	sigemptyset(&sa_new.sa_mask);
@@ -538,6 +540,8 @@ int main(int argc, char **argv)
 			break;
 
 	opterr = 0;
+
+	HycStorInitialize(1, hyc_argv);
 
 	while ((ch = getopt_long(argc, argv, short_options, long_options,
 				 &longindex)) >= 0) {
@@ -620,7 +624,6 @@ int main(int argc, char **argv)
 #ifdef USE_SYSTEMD
 	sd_notify(0, "READY=1\nSTATUS=Starting event loop...");
 #endif
-
 	event_loop();
 
 	lld_exit();

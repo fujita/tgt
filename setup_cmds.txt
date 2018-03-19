@@ -1,0 +1,35 @@
+Following are the list of commands in order that has to be run to configure
+hyc tgt :
+...........................................................................
+
+1. Start the tgtd.
+2. Create new VM through Rest API
+	# curl  -v -XPOST 'http://localhost:1984/new_vm/1' -d '{"vmid":"1"}' \
+		-H'Content-Type: application/json'
+3. Create new VMDK through Rest API
+	# curl  -v -XPOST 'http://localhost:1984/vm/1/new_vmdk/1' \
+	-d '{"VmID":"1","VmdkID":"1","BlockSize":"4096",\
+	"Compression":{"Enabled":"false"},"Encryption":{"Enabled":"false"},\
+	"RamCache":{"Enabled":"true","MemoryInMB":"1024"},\
+	"FileCache":{"Enabled":"false"},"SuccessHandler":{"Enabled":"true"}}'\
+	-H'Content-Type: application/json'
+
+4. Create new target.
+	# sudo ./tgtadm --lld iscsi --mode target --op new --tid=1 \
+		--targetname disk1
+
+5. Create a new LUN for this new target.
+	# sudo ./tgtadm --lld iscsi --mode logicalunit --op new --tid 1 \
+		--lun 1 -b /var/tmp/iscsi-disk1 --bstype hyc \
+		--bsopts vmid=1:vmdkid:1
+	NOTE: bstype indicates, backing store type, we have our own named "hyc".
+
+6. Make this target discoverable
+	# sudo ./tgtadm --lld iscsi --op bind --mode target --tid 1 -I ALL
+
+7. Discover this target from iscsi client
+	# iscsiadm --mode discovery --type sendtargets --portal 127.0.0.1
+
+8. Login to this target from iscsi client
+	# iscsiadm --mode node --targetname disk1 --portal 127.0.0.1:3260 --login
+
