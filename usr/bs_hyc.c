@@ -200,12 +200,13 @@ static void bs_hyc_handle_completion(int fd, int events, void *datap)
 
 	resultsp = infop->request_resultsp;
 
-	rc = eventfd_read(fd, &c);
-	assert(rc == 0);
-
 	while (has_more == true) {
+		rc = eventfd_read(fd, &c);
+		assert(rc == 0);
+
 		uint32_t nr_results = HycGetCompleteRequests(infop->rpc_con, resultsp,
 						infop->nr_results, &has_more);
+		fprintf(stdout, "nr_results: %u\n", nr_results);
 		pthread_mutex_lock(&infop->lock);
 		/* Process completed request commands */
 		for (i = 0; i < nr_results; ++i) {
