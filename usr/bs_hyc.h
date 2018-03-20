@@ -14,27 +14,13 @@ typedef enum {
 
 /** This structure is per LUN/VMDK */
 struct bs_hyc_info {
-	struct {
-		dll_t           sched_cmd_list;
-		pthread_mutex_t lock;
-	};
 	struct scsi_lu        *lup;
 	char                  *vmid;
 	char                  *vmdkid;
-	VmdkHandle             vmdk;
+	RpcConnectHandle       rpc_con;
 	int                    done_eventfd;
 	struct RequestResult  *request_resultsp;
 	uint32_t               nr_results;
-};
-
-struct hyc_cmd {
-	dll_t               list;
-	struct scsi_cmd    *cmdp;
-	struct bs_hyc_info *infop;
-	int                 result;
-	io_type_t           op;
-	RequestID           reqid;
-	bool                done;
 };
 
 #endif
