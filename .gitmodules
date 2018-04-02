@@ -1,0 +1,3 @@
+[submodule "thirdparty/ha-lib"]
+	path = thirdparty/ha-lib
+	url = git@github.com:CacheboxInc/ha-lib.git
