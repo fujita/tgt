@@ -38,6 +38,8 @@ endif
 
 INCLUDES += -I.
 INCLUDES +=-I/usr/local/include/hyc/include/
+INCLUDES += -I/$(TGT_DIR)/thirdparty/ha-lib/src/
+INCLUDES += -I/$(TGT_DIR)/thirdparty/ha-lib/third-party/include/
 
 CFLAGS += -D_GNU_SOURCE
 CFLAGS += $(INCLUDES)
@@ -64,8 +66,11 @@ THRIFT_LIBS += -lthrift-core -lprotocol -lconcurrency -ltransport -lasync
 THRIFT_LIBS += -lsecurity -lserver -lthriftfrozen2 -lthriftprotocol
 THRIFT_LIBS += -lthriftcpp2 -lwangle
 
+HA_DEP_LIBS += -lbase64 -lcurl -ljansson -lmicrohttpd -lorcania -lulfius -lyder
+HA_LIB += -lha $(HA_DEP_LIBS)
+
 LIBS += $(LIBS_GRP_START) $(HYC_LIBS) $(FOLLY_LIBS) $(THRIFT_LIBS) $(C++_LIBS)
-LIBS += $(COMPRESSION_LIBS) $(MISC_LIBS) $(LIBS_GRP_END)
+LIBS += $(COMPRESSION_LIBS) $(MISC_LIBS) $(HA_LIB) $(LIBS_GRP_END)
 
 ASAN_LIB :=
 ifneq ($(DEBUG), )
@@ -86,7 +91,8 @@ TGTD_OBJS += tgtd.o mgmt.o target.o scsi.o log.o driver.o util.o work.o \
 TGTD_DEP = $(TGTD_OBJS:.o=.d)
 
 LDFLAGS = -Wl,-E,-rpath=$(libdir)
-LDFLAGS += -L/usr/lib/hyc
+LDFLAGS += -L/usr/lib/hyc -L/$(TGT_DIR)/thirdparty/ha-lib/build/src/
+LDFLAGS += -L$(TGT_DIR)/thirdparty/ha-lib/third-party/lib
 
 .PHONY:all
 all: $(PROGRAMS) $(MODULES)
