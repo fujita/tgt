@@ -56,6 +56,8 @@ static LIST_HEAD(tgt_sched_events_list);
 
 static pthread_t ha_hb_tid;
 static struct _ha_instance *ha;
+static bool ha_thread_init = false;
+static pthread_mutex_t ha_mutex;
 
 static struct option const long_options[] = {
 	{"foreground", no_argument, 0, 'f'},
@@ -545,6 +547,9 @@ void *ha_heartbeat(void *arg)
 		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, 0);
 		sleep(60);
 	}
+	pthread_mutex_lock(&ha_mutex);
+	ha_thread_init = false;
+	pthread_mutex_unlock(&ha_mutex);
 }
 
 enum tgt_svc_err {
@@ -557,6 +562,8 @@ enum tgt_svc_err {
 	TGT_ERR_INVALID_VMID,
 	TGT_ERR_INVALID_VMDKID,
 	TGT_ERR_LUN_CREATE,
+	TGT_ERR_TOO_LONG,
+	TGT_ERR_TARGET_BIND,
 };
 
 static void set_err_msg(_ha_response *resp, enum tgt_svc_err err,
@@ -624,15 +631,38 @@ static int target_create(const _ha_request *reqp,
 	}
 
 	memset(cmd, 0, sizeof(cmd));
-	snprintf(cmd, sizeof(cmd), "tgtadm --lld iscsi --mode target --op new"
-		" --tid=%s --targetname=%s", tid, json_string_value(tname));
-	rc = exec(cmd);
 
+	int len = snprintf(cmd, sizeof(cmd),
+		"tgtadm --lld iscsi --mode target --op new"
+		" --tid=%s --targetname=%s", tid, json_string_value(tname));
+	if (len >= sizeof(cmd)) {
+		set_err_msg(resp, TGT_ERR_TOO_LONG,
+			"tgt cmd too long");
+		return HA_CALLBACK_CONTINUE;
+	}
+	rc = exec(cmd);
 	if (rc) {
 		set_err_msg(resp, TGT_ERR_TARGET_CREATE,
 			"target create failed");
 		return HA_CALLBACK_CONTINUE;
 	}
+
+	memset(cmd, 0, sizeof(cmd));
+	len = snprintf(cmd, sizeof(cmd),
+		"tgtadm --lld iscsi --op bind --mode target --tid 1 -I ALL");
+	if (len >= sizeof(cmd)) {
+		set_err_msg(resp, TGT_ERR_TOO_LONG,
+			"tgt cmd too long");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	rc = exec(cmd);
+	if (rc) {
+		set_err_msg(resp, TGT_ERR_TARGET_BIND,
+			"target bind failed");
+		return HA_CALLBACK_CONTINUE;
+	}
+
 	ha_set_empty_response_body(resp, HTTP_STATUS_OK);
 
 	return HA_CALLBACK_CONTINUE;
@@ -698,10 +728,17 @@ static int lun_create(const _ha_request *reqp,
 	}
 
 	memset(cmd, 0, sizeof(cmd));
-	snprintf(cmd, sizeof(cmd), "tgtadm --lld iscsi --mode logicalunit --op new"
+	int len = snprintf(cmd, sizeof(cmd),
+		"tgtadm --lld iscsi --mode logicalunit --op new"
 		" --tid=%s --lun=%s -b %s --bstype hyc --bsopts vmid=%s:vmdkid=%s",
 		tid, lid, json_string_value(dev_path), json_string_value(vmid),
 		json_string_value(vmdkid));
+	if (len >= sizeof(cmd)) {
+		set_err_msg(resp, TGT_ERR_TOO_LONG,
+			"tgt cmd too long");
+		return HA_CALLBACK_CONTINUE;
+	}
+
 	rc = exec(cmd);
 
 	if (rc) {
@@ -719,16 +756,31 @@ int tgt_ha_start_cb(const _ha_request *reqp,
 {
 	struct _ha_instance *hap = (struct _ha_instance *) userp;
 
-	pthread_create(&ha_hb_tid, NULL, &ha_heartbeat, (void *)hap);
+	pthread_mutex_lock(&ha_mutex);
+	if (!ha_thread_init) {
+		int rc = pthread_create(&ha_hb_tid, NULL,
+				&ha_heartbeat, (void *)hap);
+		if (rc) {
+			pthread_mutex_unlock(&ha_mutex);
+			return HA_CALLBACK_ERROR;
+		}
+		ha_thread_init = true;
+	}
+	pthread_mutex_unlock(&ha_mutex);
 	return HA_CALLBACK_CONTINUE;
 }
 
 int tgt_ha_stop_cb(const _ha_request *reqp,
 	_ha_response *resp, void *userp)
 {
-	pthread_cancel(ha_hb_tid);
+	pthread_mutex_lock(&ha_mutex);
 
-	pthread_join(ha_hb_tid, NULL);
+	if (ha_thread_init) {
+		pthread_cancel(ha_hb_tid);
+		pthread_join(ha_hb_tid, NULL);
+	}
+	pthread_mutex_unlock(&ha_mutex);
+
 	return HA_CALLBACK_CONTINUE;
 }
 
@@ -763,6 +815,9 @@ int main(int argc, char **argv)
 			break;
 
 	opterr = 0;
+
+	if (pthread_mutex_init(&ha_mutex, NULL) != 0)
+		exit(1);
 
 	ep_handlers->ha_endpoints[0].ha_http_method = POST;
 	strncpy(ep_handlers->ha_endpoints[0].ha_url_endpoint, "target_create",
