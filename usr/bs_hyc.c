@@ -57,7 +57,7 @@ io_type_t scsi_cmd_operation(struct scsi_cmd *cmdp)
 			op = UNKNOWN;
 			goto out;
 		}
-		op = WRITE_SAME_OP;
+		op = UNKNOWN;
 		break;
 	case SYNCHRONIZE_CACHE:
 	case SYNCHRONIZE_CACHE_16:
