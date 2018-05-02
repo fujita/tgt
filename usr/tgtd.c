@@ -909,7 +909,7 @@ int main(int argc, char **argv)
 	HycStorInitialize(1, hyc_argv, stord_ip, stord_port);
 
 	ha = ha_initialize(ha_svc_port, etcd_ip, svc_label, tgt_version, 120,
-			ep_handlers, tgt_ha_start_cb, tgt_ha_stop_cb);
+			ep_handlers, tgt_ha_start_cb, tgt_ha_stop_cb, 0 , NULL);
 
 	if (ha == NULL) {
 		fprintf(stderr, "ha_initilize failed\n");
