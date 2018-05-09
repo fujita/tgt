@@ -558,12 +558,15 @@ enum tgt_svc_err {
 	TGT_ERR_NO_DATA,
 	TGT_ERR_INVALID_JSON,
 	TGT_ERR_INVALID_TARGET_NAME,
-	TGT_ERR_INVALID_LUN_PATH,
+	TGT_ERR_INVALID_DEV_NAME,
 	TGT_ERR_INVALID_VMID,
 	TGT_ERR_INVALID_VMDKID,
 	TGT_ERR_LUN_CREATE,
 	TGT_ERR_TOO_LONG,
 	TGT_ERR_TARGET_BIND,
+	TGT_ERR_SPARSE_FILE_DIR_CREATE,
+	TGT_ERR_INVALID_LUN_SIZE,
+	TGT_ERR_SPARSE_FILE_CREATE,
 };
 
 static void set_err_msg(_ha_response *resp, enum tgt_svc_err err,
@@ -706,10 +709,17 @@ static int lun_create(const _ha_request *reqp,
 		return HA_CALLBACK_CONTINUE;
 	}
 
-	json_t *dev_path = json_object_get(root, "DevPath");
-	if (!json_is_string(dev_path)) {
-		set_err_msg(resp, TGT_ERR_INVALID_LUN_PATH,
-			"DevPath is not string");
+	json_t *dev_name = json_object_get(root, "DevName");
+	if (!json_is_string(dev_name)) {
+		set_err_msg(resp, TGT_ERR_INVALID_DEV_NAME,
+			"DevName is not string");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	json_t *lun_size = json_object_get(root, "LunSize");
+	if (!json_is_string(lun_size)) {
+		set_err_msg(resp, TGT_ERR_INVALID_LUN_SIZE,
+			"Lun size is not json string");
 		return HA_CALLBACK_CONTINUE;
 	}
 
@@ -728,10 +738,66 @@ static int lun_create(const _ha_request *reqp,
 	}
 
 	memset(cmd, 0, sizeof(cmd));
+
+	/* Create sparse file directory if not already created */
+	const char *hyc_sparse_files_loc = "/var/hyc";
+
 	int len = snprintf(cmd, sizeof(cmd),
+		"mkdir -p %s", hyc_sparse_files_loc);
+	if (len >= sizeof(cmd)) {
+		set_err_msg(resp, TGT_ERR_TOO_LONG,
+			"mkdir cmd too long");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	rc = exec(cmd);
+	if (rc) {
+		set_err_msg(resp, TGT_ERR_SPARSE_FILE_DIR_CREATE,
+			"sparse files dir create failed");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	/* Reset cmd, for future use */
+	memset(cmd, 0, sizeof(cmd));
+	len = 0;
+
+	/* Create sparse file for this LUN */
+	len = snprintf(cmd, sizeof(cmd),
+		"dd if=/dev/zero of=%s/%s bs=1 count=0 seek=%sG",
+		hyc_sparse_files_loc, json_string_value(dev_name),
+		json_string_value(lun_size));
+	if (len >= sizeof(cmd)) {
+		set_err_msg(resp, TGT_ERR_TOO_LONG,
+			"spare file create cmd too long");
+		return HA_CALLBACK_CONTINUE;
+	}
+	rc = exec(cmd);
+	if (rc) {
+		set_err_msg(resp, TGT_ERR_SPARSE_FILE_CREATE,
+			"sparse file create failed");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	/* Reset cmd, for future use */
+	memset(cmd, 0, sizeof(cmd));
+	len = 0;
+
+	char dev_path[512];
+
+	memset(dev_path, 0, sizeof(dev_path));
+
+	len = snprintf(dev_path, sizeof(dev_path), "%s/%s", hyc_sparse_files_loc,
+		json_string_value(dev_name));
+	if (len >= sizeof(dev_path)) {
+		set_err_msg(resp, TGT_ERR_TOO_LONG,
+			"dev_path too long");
+		return HA_CALLBACK_CONTINUE;
+	}
+	len = 0;
+	len = snprintf(cmd, sizeof(cmd),
 		"tgtadm --lld iscsi --mode logicalunit --op new"
 		" --tid=%s --lun=%s -b %s --bstype hyc --bsopts vmid=%s:vmdkid=%s",
-		tid, lid, json_string_value(dev_path), json_string_value(vmid),
+		tid, lid, dev_path, json_string_value(vmid),
 		json_string_value(vmdkid));
 	if (len >= sizeof(cmd)) {
 		set_err_msg(resp, TGT_ERR_TOO_LONG,
