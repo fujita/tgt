@@ -545,7 +545,7 @@ void *ha_heartbeat(void *arg)
 		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, 0);
 		ha_healthupdate(hap);
 		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, 0);
-		sleep(60);
+		sleep(20);
 	}
 	pthread_mutex_lock(&ha_mutex);
 	ha_thread_init = false;
@@ -652,7 +652,7 @@ static int target_create(const _ha_request *reqp,
 
 	memset(cmd, 0, sizeof(cmd));
 	len = snprintf(cmd, sizeof(cmd),
-		"tgtadm --lld iscsi --op bind --mode target --tid 1 -I ALL");
+		"tgtadm --lld iscsi --op bind --mode target --tid %s -I ALL", tid);
 	if (len >= sizeof(cmd)) {
 		set_err_msg(resp, TGT_ERR_TOO_LONG,
 			"tgt cmd too long");
