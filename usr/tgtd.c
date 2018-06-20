@@ -70,8 +70,8 @@ static struct option const long_options[] = {
 	{"svc_label", required_argument, 0, 's'},
 	{"version_for_ha", required_argument, 0, 'v'},
 	{"ha_svc_port", required_argument, 0, 'p'},
-	{"stord_ip", required_argument, 0, 'D'},
-	{"stord_port", required_argument, 0, 'P'},
+	{"stord_ip", optional_argument, 0, 'D'},
+	{"stord_port", optional_argument, 0, 'P'},
 	{0, 0, 0, 0},
 };
 
@@ -567,6 +567,8 @@ enum tgt_svc_err {
 	TGT_ERR_SPARSE_FILE_DIR_CREATE,
 	TGT_ERR_INVALID_LUN_SIZE,
 	TGT_ERR_SPARSE_FILE_CREATE,
+	TGT_ERR_INVALID_STORD_IP,
+	TGT_ERR_INVALID_STORD_PORT,
 };
 
 static void set_err_msg(_ha_response *resp, enum tgt_svc_err err,
@@ -817,6 +819,61 @@ static int lun_create(const _ha_request *reqp,
 	return HA_CALLBACK_CONTINUE;
 }
 
+static int new_stord(const _ha_request *reqp,
+	_ha_response *resp, void *userp)
+{
+	char *data = NULL;
+
+	char *hyc_argv[1]   = {"tgtd"};
+	uint16_t stord_port = 0;
+
+	data = ha_get_data(reqp);
+	if (data == NULL) {
+		set_err_msg(resp, TGT_ERR_NO_DATA,
+			"json config not given");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	json_error_t error;
+	json_auto_t *root = json_loads(data, 0, &error);
+
+	free(data);
+
+	if (root == NULL) {
+		set_err_msg(resp, TGT_ERR_INVALID_JSON,
+			"json config is incorrect");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	json_t *sip = json_object_get(root, "StordIp");
+	if (!json_is_string(sip)) {
+		set_err_msg(resp, TGT_ERR_INVALID_STORD_IP,
+			"StordIp is not string");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	json_t *sport = json_object_get(root, "StordPort");
+	if (!json_is_string(sport)) {
+		set_err_msg(resp, TGT_ERR_INVALID_STORD_PORT,
+			"StordPort is not string");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	int ret = str_to_int_range((char *)json_string_value(sport),
+			stord_port, 1, 32768);
+	if (ret) {
+		set_err_msg(resp, TGT_ERR_INVALID_STORD_PORT,
+			"StordPort out of range");
+		return HA_CALLBACK_CONTINUE;
+
+	}
+
+	HycStorInitialize(1, hyc_argv, (char *)json_string_value(sip),
+			stord_port);
+
+	ha_set_empty_response_body(resp, HTTP_STATUS_OK);
+	return HA_CALLBACK_CONTINUE;
+}
 int tgt_ha_start_cb(const _ha_request *reqp,
 	_ha_response *resp, void *userp)
 {
@@ -857,9 +914,8 @@ int main(int argc, char **argv)
 	int err, ch, longindex, nr_lld = 0;
 	int is_daemon = 1, is_debug = 0;
 	int ret;
-	char *hyc_argv[1] = {"tgtd"};
 	struct ha_handlers *ep_handlers = malloc(sizeof(struct ha_handlers) +
-		2 * sizeof(struct ha_endpoint_handlers));
+		3 * sizeof(struct ha_endpoint_handlers));
 	char *etcd_ip = NULL;
 	char *svc_label = NULL;
 	char *tgt_version = NULL;
@@ -897,6 +953,13 @@ int main(int argc, char **argv)
 		strlen("lun_create") + 1);
 	ep_handlers->ha_endpoints[1].callback_function = lun_create;
 	ep_handlers->ha_endpoints[1].ha_user_data = NULL;
+	ep_handlers->ha_count += 1;
+
+	ep_handlers->ha_endpoints[2].ha_http_method = POST;
+	strncpy(ep_handlers->ha_endpoints[2].ha_url_endpoint, "new_stord",
+		strlen("new_stord") + 1);
+	ep_handlers->ha_endpoints[2].callback_function = new_stord;
+	ep_handlers->ha_endpoints[2].ha_user_data = NULL;
 	ep_handlers->ha_count += 1;
 
 	while ((ch = getopt_long(argc, argv, short_options, long_options,
@@ -961,8 +1024,7 @@ int main(int argc, char **argv)
 	}
 
 	if ((etcd_ip == NULL) || (svc_label == NULL) ||
-		(tgt_version == NULL) || (ha_svc_port == 0) ||
-		(stord_ip == NULL) || (stord_port == 0)) {
+		(tgt_version == NULL) || (ha_svc_port == 0)) {
 		free(etcd_ip);
 		free(svc_label);
 		free(tgt_version);
@@ -971,8 +1033,6 @@ int main(int argc, char **argv)
 		usage(0);
 		exit(1);
 	}
-
-	HycStorInitialize(1, hyc_argv, stord_ip, stord_port);
 
 	ha = ha_initialize(ha_svc_port, etcd_ip, svc_label, tgt_version, 120,
 			ep_handlers, tgt_ha_start_cb, tgt_ha_stop_cb, 0 , NULL);
