@@ -569,6 +569,10 @@ enum tgt_svc_err {
 	TGT_ERR_SPARSE_FILE_CREATE,
 	TGT_ERR_INVALID_STORD_IP,
 	TGT_ERR_INVALID_STORD_PORT,
+	TGT_ERR_INVALID_DELETE_FORCE,
+	TGT_ERR_TARGET_DELETE,
+	TGT_ERR_INVALID_LUNID,
+	TGT_ERR_LUN_DELETE,
 };
 
 static void set_err_msg(_ha_response *resp, enum tgt_svc_err err,
@@ -880,6 +884,107 @@ static int new_stord(const _ha_request *reqp,
 	ha_set_empty_response_body(resp, HTTP_STATUS_OK);
 	return HA_CALLBACK_CONTINUE;
 }
+
+static int target_delete(const _ha_request *reqp,
+	_ha_response *resp, void *userp)
+{
+	char cmd[512];
+	const char *tid = ha_parameter_get(reqp, "tid");
+	const char *force_param = ha_parameter_get(reqp, "force");
+	int rc  = 0;
+	int len = 0;
+	int force = -1;
+
+	if (tid == NULL || force_param == NULL) {
+		set_err_msg(resp, TGT_ERR_INVALID_PARAM,
+			"tid param not given");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	memset(cmd, 0, sizeof(cmd));
+
+	rc = str_to_int(force_param, force);
+	if (rc) {
+		set_err_msg(resp, TGT_ERR_INVALID_DELETE_FORCE,
+			"Invalid value of force param");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	if (force) {
+		len = snprintf(cmd, sizeof(cmd),
+			"tgtadm --lld iscsi --mode target --op delete --force"
+			" --tid=%s", tid);
+	} else {
+		len = snprintf(cmd, sizeof(cmd),
+			"tgtadm --lld iscsi --mode target --op delete"
+			" --tid=%s", tid);
+	}
+
+	if (len >= sizeof(cmd)) {
+		set_err_msg(resp, TGT_ERR_TOO_LONG,
+			"tgt cmd too long");
+		return HA_CALLBACK_CONTINUE;
+	}
+	rc = exec(cmd);
+	if (rc) {
+		set_err_msg(resp, TGT_ERR_TARGET_DELETE,
+			"target delete failed");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	ha_set_empty_response_body(resp, HTTP_STATUS_OK);
+
+	return HA_CALLBACK_CONTINUE;
+}
+
+static int lun_delete(const _ha_request *reqp,
+	_ha_response *resp, void *userp)
+{
+	char cmd[512];
+	int  rc, len;
+	const char *tid, *lid;
+
+	rc = 0;
+
+	tid  = ha_parameter_get(reqp, "tid");
+	if (tid == NULL) {
+		set_err_msg(resp, TGT_ERR_INVALID_PARAM,
+			"tid param not given");
+		return HA_CALLBACK_CONTINUE;
+	}
+	lid  = ha_parameter_get(reqp, "lid");
+	if (tid == NULL) {
+		set_err_msg(resp, TGT_ERR_INVALID_PARAM,
+			"lid param not given");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	memset(cmd, 0, sizeof(cmd));
+
+	len = snprintf(cmd, sizeof(cmd),
+		"tgtadm --lld iscsi --mode logicalunit --op delete"
+		" --tid=%s --lun=%s", tid, lid);
+
+	if (len >= sizeof(cmd)) {
+		set_err_msg(resp, TGT_ERR_TOO_LONG,
+			"tgt cmd too long");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	rc = exec(cmd);
+	if (rc) {
+		set_err_msg(resp, TGT_ERR_LUN_DELETE,
+			"TGT lun delete failed");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	ha_set_empty_response_body(resp, HTTP_STATUS_OK);
+
+	return HA_CALLBACK_CONTINUE;
+}
+
+
+
 int tgt_ha_start_cb(const _ha_request *reqp,
 	_ha_response *resp, void *userp)
 {
@@ -921,14 +1026,14 @@ int main(int argc, char **argv)
 	int is_daemon = 1, is_debug = 0;
 	int ret;
 	struct ha_handlers *ep_handlers = malloc(sizeof(struct ha_handlers) +
-		3 * sizeof(struct ha_endpoint_handlers));
+		5 * sizeof(struct ha_endpoint_handlers));
 	char *etcd_ip = NULL;
 	char *svc_label = NULL;
 	char *tgt_version = NULL;
 	int ha_svc_port = 0;
 	char *stord_ip = NULL;
 	uint16_t stord_port = 0;
-	int ha_handler_idx;
+	int *ha_handler_idx;
 
 	if (ep_handlers == NULL)
 		exit(1);
@@ -949,29 +1054,41 @@ int main(int argc, char **argv)
 		exit(1);
 
 	ep_handlers->ha_count = 0;
-	ha_handler_idx = ep_handlers->ha_count;
+	ha_handler_idx = &ep_handlers->ha_count;
 
-	ep_handlers->ha_endpoints[ha_handler_idx].ha_http_method = POST;
-	strncpy(ep_handlers->ha_endpoints[ha_handler_idx].ha_url_endpoint,
+	ep_handlers->ha_endpoints[*ha_handler_idx].ha_http_method = POST;
+	strncpy(ep_handlers->ha_endpoints[*ha_handler_idx].ha_url_endpoint,
 			"target_create", strlen("target_create") + 1);
-	ep_handlers->ha_endpoints[ha_handler_idx].callback_function = target_create;
-	ep_handlers->ha_endpoints[ha_handler_idx].ha_user_data = NULL;
+	ep_handlers->ha_endpoints[*ha_handler_idx].callback_function = target_create;
+	ep_handlers->ha_endpoints[*ha_handler_idx].ha_user_data = NULL;
 	ep_handlers->ha_count += 1;
-	ha_handler_idx = ep_handlers->ha_count;
 
-	ep_handlers->ha_endpoints[ha_handler_idx].ha_http_method = POST;
-	strncpy(ep_handlers->ha_endpoints[ha_handler_idx].ha_url_endpoint, "lun_create",
+	ep_handlers->ha_endpoints[*ha_handler_idx].ha_http_method = POST;
+	strncpy(ep_handlers->ha_endpoints[*ha_handler_idx].ha_url_endpoint, "lun_create",
 		strlen("lun_create") + 1);
-	ep_handlers->ha_endpoints[ha_handler_idx].callback_function = lun_create;
-	ep_handlers->ha_endpoints[ha_handler_idx].ha_user_data = NULL;
+	ep_handlers->ha_endpoints[*ha_handler_idx].callback_function = lun_create;
+	ep_handlers->ha_endpoints[*ha_handler_idx].ha_user_data = NULL;
 	ep_handlers->ha_count += 1;
-	ha_handler_idx = ep_handlers->ha_count;
 
-	ep_handlers->ha_endpoints[ha_handler_idx].ha_http_method = POST;
-	strncpy(ep_handlers->ha_endpoints[ha_handler_idx].ha_url_endpoint, "new_stord",
+	ep_handlers->ha_endpoints[*ha_handler_idx].ha_http_method = POST;
+	strncpy(ep_handlers->ha_endpoints[*ha_handler_idx].ha_url_endpoint, "new_stord",
 		strlen("new_stord") + 1);
-	ep_handlers->ha_endpoints[ha_handler_idx].callback_function = new_stord;
-	ep_handlers->ha_endpoints[ha_handler_idx].ha_user_data = NULL;
+	ep_handlers->ha_endpoints[*ha_handler_idx].callback_function = new_stord;
+	ep_handlers->ha_endpoints[*ha_handler_idx].ha_user_data = NULL;
+	ep_handlers->ha_count += 1;
+
+	ep_handlers->ha_endpoints[*ha_handler_idx].ha_http_method = POST;
+	strncpy(ep_handlers->ha_endpoints[*ha_handler_idx].ha_url_endpoint, "target_delete",
+		strlen("target_delete") + 1);
+	ep_handlers->ha_endpoints[*ha_handler_idx].callback_function = target_delete;
+	ep_handlers->ha_endpoints[*ha_handler_idx].ha_user_data = NULL;
+	ep_handlers->ha_count += 1;
+
+	ep_handlers->ha_endpoints[*ha_handler_idx].ha_http_method = POST;
+	strncpy(ep_handlers->ha_endpoints[*ha_handler_idx].ha_url_endpoint, "lun_delete",
+		strlen("lun_delete") + 1);
+	ep_handlers->ha_endpoints[*ha_handler_idx].callback_function = lun_delete;
+	ep_handlers->ha_endpoints[*ha_handler_idx].ha_user_data = NULL;
 	ep_handlers->ha_count += 1;
 
 	while ((ch = getopt_long(argc, argv, short_options, long_options,
