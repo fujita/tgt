@@ -116,7 +116,6 @@ void conn_close(struct iscsi_connection *conn)
 				 c_list) {
 		if (task->conn != conn)
 			continue;
-
 		eprintf("Forcing release of pending task %p %" PRIx64 "\n",
 			task, task->tag);
 		list_del(&task->c_list);
@@ -191,6 +190,7 @@ void conn_close(struct iscsi_connection *conn)
 		 * This task is in SCSI. We need to wait for I/O
 		 * completion.
 		 */
+		
 		if (task_in_scsi(task))
 			continue;
 		iscsi_free_task(task);

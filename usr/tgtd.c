@@ -46,6 +46,9 @@
 
 #include "halib.h"
 
+#define RETRY 24
+#define DELAY 5
+
 unsigned long pagesize, pageshift;
 
 int system_active = 1;
@@ -573,6 +576,7 @@ enum tgt_svc_err {
 	TGT_ERR_TARGET_DELETE,
 	TGT_ERR_INVALID_LUNID,
 	TGT_ERR_LUN_DELETE,
+	TGT_ERR_STR_OUT_OF_RANGE,
 };
 
 static void set_err_msg(_ha_response *resp, enum tgt_svc_err err,
@@ -893,7 +897,10 @@ static int target_delete(const _ha_request *reqp,
 	const char *force_param = ha_parameter_get(reqp, "force");
 	int rc  = 0;
 	int len = 0;
-	int force = -1;
+	int force = 0;
+	int retry;
+
+	retry = RETRY;
 
 	if (tid == NULL || force_param == NULL) {
 		set_err_msg(resp, TGT_ERR_INVALID_PARAM,
@@ -910,6 +917,58 @@ static int target_delete(const _ha_request *reqp,
 		return HA_CALLBACK_CONTINUE;
 	}
 
+	/*Unbind before delete*/
+	len = snprintf(cmd, sizeof(cmd),
+			"tgtadm --lld iscsi --mode target --op unbind --tid=%s"
+			" -I ALL", tid);
+	if (len >= sizeof(cmd)) {
+		set_err_msg(resp, TGT_ERR_STR_OUT_OF_RANGE,
+			"tgt unbind cmd #characters out of range");
+		return HA_CALLBACK_CONTINUE;
+	}
+	//Ignoring error for now
+	rc = exec(cmd);
+	memset(cmd, 0, sizeof(cmd));
+#if 0
+	/*
+	 * Keeping the below code in place for now as it is needed later.
+	 * Actual code must find proper connections, luns and delete them.
+	 */
+
+	/*conn delete*/
+	for (int i = 0; i < 20; i++) {
+		len = snprintf(cmd, sizeof(cmd),
+				"tgtadm --lld iscsi --mode conn --op delete --tid=%s"
+				" --sid %d --cid 0", tid, i);
+		if (len >= sizeof(cmd)) {
+			set_err_msg(resp, TGT_ERR_TOO_LONG,
+				"tgt cmd too long");
+			return HA_CALLBACK_CONTINUE;
+		}
+
+		//Ignoring error for now
+		rc = exec(cmd);
+		memset(cmd, 0, sizeof(cmd));
+	}
+
+	/*lun delete*/
+	for (int i = 0; i < 20; i++) {
+		memset(cmd, 0, sizeof(cmd));
+		len = snprintf(cmd, sizeof(cmd),
+			"tgtadm --lld iscsi --mode logicalunit --op delete"
+			" --tid=%s --lun=%d", tid, i);
+		if (len >= sizeof(cmd)) {
+			set_err_msg(resp, TGT_ERR_TOO_LONG,
+				"tgt cmd too long");
+			return HA_CALLBACK_CONTINUE;
+		}
+
+		//Ignoring error for now
+		rc = exec(cmd);
+	}
+#endif
+	/*actual target delete*/
+	memset(cmd, 0, sizeof(cmd));
 	if (force) {
 		len = snprintf(cmd, sizeof(cmd),
 			"tgtadm --lld iscsi --mode target --op delete --force"
@@ -925,7 +984,19 @@ static int target_delete(const _ha_request *reqp,
 			"tgt cmd too long");
 		return HA_CALLBACK_CONTINUE;
 	}
-	rc = exec(cmd);
+	while (retry > 0) {
+		rc = exec(cmd);
+		if (rc == TGTADM_LUN_ACTIVE ||
+			rc == TGTADM_TARGET_ACTIVE ||
+			rc == TGTADM_DRIVER_ACTIVE ||
+			rc == TGTADM_UNSUPPORTED_OPERATION) {
+			fprintf(stderr, "Retrying for errno: %d\n", rc);
+			sleep(DELAY);
+			retry--;
+			continue;
+		}
+		break;
+	}
 	if (rc) {
 		set_err_msg(resp, TGT_ERR_TARGET_DELETE,
 			"target delete failed");

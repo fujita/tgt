@@ -1330,6 +1330,7 @@ static int abort_cmd(struct target *target, struct mgmt_req *mreq,
 		 * We'll send the tsk mgmt response when we get the
 		 * completion of this command.
 		 */
+
 		cmd->mreq = mreq;
 		err = -EBUSY;
 	} else {

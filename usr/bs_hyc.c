@@ -54,10 +54,8 @@ io_type_t scsi_cmd_operation(struct scsi_cmd *cmdp)
 		if (cmdp->scb[1] & 0x08) {
 			eprintf("Unmap with WRITE_SAME for hyc backend is not"
 				" supported yet.\n");
-			op = UNKNOWN;
-			goto out;
 		}
-		op = UNKNOWN;
+		op = WRITE_SAME_OP;
 		break;
 	case SYNCHRONIZE_CACHE:
 	case SYNCHRONIZE_CACHE_16:
@@ -65,7 +63,6 @@ io_type_t scsi_cmd_operation(struct scsi_cmd *cmdp)
 		eprintf("skipped cmd: %p op: %x\n", cmdp, scsi_op);
 		op = UNKNOWN;
 	}
-out:
 	return op;
 }
 
@@ -118,12 +115,31 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 	assert(infop->rpc_con != kInvalidRpcHandle);
 
 	op = scsi_cmd_operation(cmdp);
-	if (hyc_unlikely(op == UNKNOWN)) {
-		return -EINVAL;
+	if (hyc_unlikely(op == WRITE_SAME_OP)) {
+		return -1;
+	} else if (hyc_unlikely(op == UNKNOWN)) {
+		return 0;
 	}
 
 	offset = scsi_cmd_offset(cmdp);
 	length = scsi_cmd_length(cmdp);
+
+	/*
+	 * Simply returing from top for zero size IOs, we may need to handle
+	 * it later for the barrier IOs
+	 */
+
+	if(op == WRITE) {
+		if (!length) {
+			eprintf("Zero size write IO, returning from top :%lu\n", length);
+			return 0;
+		}
+	} else if(op == READ) {
+		if (!length) {
+			eprintf("Zero size read IO, returning from top :%lu\n", length);
+			return 0;
+		}
+	}
 
 	bufp = scsi_cmd_buffer(cmdp);
 	set_cmd_async(cmdp);
@@ -136,7 +152,6 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 		reqid = HycScheduleWrite(infop->rpc_con, cmdp, bufp, length, offset);
 		break;
 	case WRITE_SAME_OP:
-		/** TODO */
 	case UNKNOWN:
 	default:
 		assert(0);
@@ -144,8 +159,18 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 
 	/* If we got reqid, set it in hyc_cmd */
 	if (hyc_unlikely(reqid == kInvalidRequestID)) {
-		eprintf("request submission got err invalid request\n");
+		eprintf("request submission got error invalid request" 
+			" size: %lu offset : %"PRIu64" opcode :%u\n", 
+			length, offset, (unsigned int) cmdp->scb[0]);
+		/*
+		 *  TODO: This change requires further investigation we have seen core dumps
+		 *  with this change. Keeping it as todo, investigation will be done later.
+		 *  Reverting to the original path.
+		 */
+
+		//clear_cmd_async(cmdp);
 		target_cmd_io_done(cmdp, SAM_STAT_CHECK_CONDITION);
+		return -EINVAL;
 	}
 
 	return 0;
