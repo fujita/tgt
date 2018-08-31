@@ -17,7 +17,7 @@ struct bs_hyc_info {
 	struct scsi_lu        *lup;
 	char                  *vmid;
 	char                  *vmdkid;
-	RpcConnectHandle       rpc_con;
+	VmdkHandle             vmdk_handle;
 	int                    done_eventfd;
 	struct RequestResult  *request_resultsp;
 	uint32_t               nr_results;

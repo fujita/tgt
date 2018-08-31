@@ -1,6 +1,8 @@
 sbindir ?= $(PREFIX)/sbin
 libdir ?= $(PREFIX)/lib/tgt
 
+CFLAGS += -fPIC
+
 ifneq ($(shell test -e /usr/include/linux/signalfd.h && echo 1),)
 CFLAGS += -DUSE_SIGNALFD
 endif
@@ -64,7 +66,7 @@ COMPRESSION_LIBS += -lz -lsnappy -llz4 -llzma -lzstd -lbz2
 MISC_LIBS += -lpthread -ldl -lgflags -lcrypto -lssl
 THRIFT_LIBS += -lthrift-core -lprotocol -lconcurrency -ltransport -lasync
 THRIFT_LIBS += -lsecurity -lserver -lthriftfrozen2 -lthriftprotocol
-THRIFT_LIBS += -lthriftcpp2 -lwangle
+THRIFT_LIBS += -lthriftcpp2 -lwangle -latomic
 
 HA_DEP_LIBS += -lbase64 -lcurl -ljansson -lmicrohttpd -lorcania -lulfius -lyder
 HA_LIB += -lha $(HA_DEP_LIBS)

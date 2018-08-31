@@ -112,7 +112,7 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 	lup = cmdp->dev;
 	infop = BS_HYC_I(lup);
 
-	assert(infop->rpc_con != kInvalidRpcHandle);
+	assert(infop->vmdk_handle != kInvalidVmdkHandle);
 
 	op = scsi_cmd_operation(cmdp);
 	if (hyc_unlikely(op == WRITE_SAME_OP)) {
@@ -146,10 +146,10 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 
 	switch (op) {
 	case READ:
-		reqid = HycScheduleRead(infop->rpc_con, cmdp, bufp, length, offset);
+		reqid = HycScheduleRead(infop->vmdk_handle, cmdp, bufp, length, offset);
 		break;
 	case WRITE:
-		reqid = HycScheduleWrite(infop->rpc_con, cmdp, bufp, length, offset);
+		reqid = HycScheduleWrite(infop->vmdk_handle, cmdp, bufp, length, offset);
 		break;
 	case WRITE_SAME_OP:
 	case UNKNOWN:
@@ -188,8 +188,8 @@ static void bs_hyc_handle_completion(int fd, int events, void *datap)
 	has_more = true;
 
 	while (has_more == true) {
-		uint32_t nr_results = HycGetCompleteRequests(infop->rpc_con, resultsp,
-			infop->nr_results, &has_more);
+		uint32_t nr_results = HycGetCompleteRequests(infop->vmdk_handle,
+			resultsp, infop->nr_results, &has_more);
 
 		/* Process completed request commands */
 		for (uint32_t i = 0; i < nr_results; ++i) {
@@ -248,8 +248,8 @@ static int bs_hyc_open(struct scsi_lu *lup, char *pathp,
 
 	infop->done_eventfd = efd;
 
-	assert(infop->rpc_con != kInvalidRpcHandle);
-	rc = HycOpenVmdk(infop->rpc_con, infop->vmid, infop->vmdkid, infop->done_eventfd);
+	rc = HycOpenVmdk(infop->vmid, infop->vmdkid, infop->done_eventfd,
+		&infop->vmdk_handle);
 	if (rc < 0) {
 		goto error;
 	}
@@ -276,7 +276,7 @@ static void bs_hyc_close(struct scsi_lu *lup)
 	assert(infop->done_eventfd >= 0);
 
 	tgt_event_del(infop->done_eventfd);
-	HycCloseVmdk(infop->rpc_con);
+	HycCloseVmdk(infop->vmdk_handle);
 	close(infop->done_eventfd);
 	infop->done_eventfd = -1;
 
@@ -340,9 +340,6 @@ static tgtadm_err bs_hyc_init(struct scsi_lu *lup, char *bsoptsp)
 		e = TGTADM_NOMEM;
 		free(vmid);
 		free(vmdkid);
-	} else {
-		infop->rpc_con = HycStorRpcServerConnect();
-		assert(infop->rpc_con != kInvalidRpcHandle);
 	}
 	return e;
 }
@@ -353,7 +350,6 @@ static void bs_hyc_exit(struct scsi_lu *lup)
 
 	assert(infop);
 
-	HycStorRpcServerDisconnect(infop->rpc_con);
 	free(infop->request_resultsp);
 	free(infop->vmid);
 	free(infop->vmdkid);

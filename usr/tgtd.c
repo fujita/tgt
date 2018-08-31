@@ -31,6 +31,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <assert.h>
 #include <sys/resource.h>
 #include <sys/epoll.h>
 #include <sys/types.h>
@@ -269,9 +270,14 @@ int tgt_event_modify(int fd, int events)
 		return -EINVAL;
 	}
 
+	if (tev->events == events) {
+		return 0;
+	}
+
 	memset(&ev, 0, sizeof(ev));
 	ev.events = events;
 	ev.data.ptr = tev;
+	tev->events = events;
 
 	return epoll_ctl(ep_fd, EPOLL_CTL_MOD, fd, &ev);
 }
@@ -904,6 +910,8 @@ static int new_stord(const _ha_request *reqp,
 
 	ha_set_empty_response_body(resp, HTTP_STATUS_OK);
 	pthread_mutex_unlock(&ha_rest_mutex);
+	ret = HycStorRpcServerConnect();
+	assert(ret == 0);
 	return HA_CALLBACK_CONTINUE;
 }
 
