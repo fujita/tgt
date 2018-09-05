@@ -19,6 +19,7 @@
 #include "target.h"
 #include "util.h"
 #include "parser.h"
+#include "iscsi/iscsid.h"
 
 #include "bs_hyc.h"
 
@@ -176,13 +177,42 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 	return 0;
 }
 
+static inline struct iscsi_connection*
+scsi_cmd_to_iscsi_connection(struct scsi_cmd* cmdp)
+{
+	struct iscsi_task* taskp = container_of(cmdp, struct iscsi_task, scmd);
+	if (hyc_unlikely(taskp->conn->state == STATE_CLOSE)) {
+		return NULL;
+	}
+
+	return taskp->conn;
+}
+
+static void post_scsi_completion(struct iscsi_connection* connp)
+{
+	if (connp == NULL) {
+		return;
+	}
+
+	if (hyc_likely(connp->state == STATE_SCSI)) {
+		do {
+			int ret = iscsi_tx_handler(connp);
+			if (hyc_unlikely(ret)) {
+				break;
+			}
+		} while (connp->state == STATE_SCSI && !list_empty(&connp->tx_clist));
+	}
+}
+
 static void bs_hyc_handle_completion(int fd, int events, void *datap)
 {
 	struct bs_hyc_info *infop;
 	struct RequestResult *resultsp;
 	bool has_more;
+	struct iscsi_connection* connp;
 
 	assert(datap);
+	connp = NULL;
 	infop = datap;
 	resultsp = infop->request_resultsp;
 	has_more = true;
@@ -195,6 +225,12 @@ static void bs_hyc_handle_completion(int fd, int events, void *datap)
 		for (uint32_t i = 0; i < nr_results; ++i) {
 			struct scsi_cmd *cmdp = (struct scsi_cmd *) resultsp[i].privatep;
 			assert(cmdp);
+			struct iscsi_connection* cp = scsi_cmd_to_iscsi_connection(cmdp);
+
+			if (connp == NULL) {
+				connp = cp;
+			}
+			assert(connp == cp);
 
 			assert(resultsp[i].result == 0);
 			target_cmd_io_done(cmdp, SAM_STAT_GOOD);
@@ -210,6 +246,8 @@ static void bs_hyc_handle_completion(int fd, int events, void *datap)
 			has_more = c != 0;
 		}
 	}
+
+	post_scsi_completion(connp);
 }
 
 static int bs_hyc_open(struct scsi_lu *lup, char *pathp,

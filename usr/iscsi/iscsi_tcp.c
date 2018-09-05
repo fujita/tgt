@@ -281,7 +281,7 @@ static void iscsi_tcp_event_handler(int fd, int events, void *data)
 		dprintf("connection closed\n");
 
 	if (conn->state != STATE_CLOSE && events & EPOLLOUT) {
-		if (conn->tx_task && conn->state == STATE_SCSI) {
+		if (conn->state == STATE_SCSI) {
 			do {
 				int ret = iscsi_tx_handler(conn);
 				if (ret) {
