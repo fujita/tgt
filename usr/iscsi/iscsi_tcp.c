@@ -206,6 +206,20 @@ static int set_nodelay(int fd)
 	return ret;
 }
 
+static void dump_connection(const struct sockaddr_storage* fromp)
+{
+	socklen_t len = sizeof(*fromp);
+	char host[NI_MAXHOST];
+	char port[NI_MAXSERV];
+
+	int rc = getnameinfo((struct sockaddr *) fromp, len, host,
+			sizeof(host), port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
+
+	if (rc == 0) {
+		eprintf("New connection from %s %s\n", host, port);
+	}
+}
+
 static void accept_connection(int afd, int events, void *data)
 {
 	struct sockaddr_storage from;
@@ -263,7 +277,7 @@ static void accept_connection(int afd, int events, void *data)
 	}
 
 	list_add(&tcp_conn->tcp_conn_siblings, &iscsi_tcp_conn_list);
-
+	dump_connection(&from);
 	return;
 out:
 	close(fd);

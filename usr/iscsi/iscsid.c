@@ -570,6 +570,8 @@ static void login_start(struct iscsi_connection *conn)
 	dprintf("exp_cmd_sn: %d,%d\n", conn->exp_cmd_sn, req->cmdsn);
 
 	text_key_add(conn, "TargetPortalGroupTag", "1");
+	eprintf("Login from initiator: %s to target : %s\n",
+			conn->initiator, target_name);
 }
 
 static void login_finish(struct iscsi_connection *conn)
