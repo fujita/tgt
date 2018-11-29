@@ -48,18 +48,6 @@ static long nop_ttt;
 static int listen_fds[8];
 static struct iscsi_transport iscsi_tcp;
 
-struct iscsi_tcp_connection {
-	int fd;
-
-	struct list_head tcp_conn_siblings;
-	int nop_inflight_count;
-	int nop_interval;
-	int nop_tick;
-	int nop_count;
-	long ttt;
-
-	struct iscsi_connection iscsi_conn;
-};
 
 static inline struct iscsi_tcp_connection *TCP_CONN(struct iscsi_connection *conn)
 {
@@ -132,6 +120,18 @@ static void iscsi_tcp_nop_reply(long ttt)
 			continue;
 		tcp_conn->nop_inflight_count = 0;
 	}
+}
+
+struct iscsi_tcp_connection* find_tcp_connection(int tid) {
+	struct iscsi_tcp_connection *tcp_conn;
+
+	list_for_each_entry(tcp_conn, &iscsi_tcp_conn_list, tcp_conn_siblings) {
+		if (tcp_conn->iscsi_conn.tid != tid) {
+			continue;
+		}
+		return tcp_conn;
+	}
+	return NULL;
 }
 
 int iscsi_update_target_nop_count(int tid, int count)
@@ -294,18 +294,8 @@ static void iscsi_tcp_event_handler(int fd, int events, void *data)
 	if (conn->state == STATE_CLOSE)
 		dprintf("connection closed\n");
 
-	if (conn->state != STATE_CLOSE && events & EPOLLOUT) {
-		if (conn->state == STATE_SCSI) {
-			do {
-				int ret = iscsi_tx_handler(conn);
-				if (ret) {
-					break;
-				}
-			} while (conn->state == STATE_SCSI && !list_empty(&conn->tx_clist));
-		} else {
-			iscsi_tx_handler(conn);
-		}
-	}
+	if (conn->state != STATE_CLOSE && events & EPOLLOUT)
+		iscsi_tx_handler(conn);
 
 	if (conn->state == STATE_CLOSE) {
 		dprintf("connection closed %p\n", conn);

@@ -39,6 +39,7 @@
 #include <sys/stat.h>
 #include "list.h"
 #include "tgtd.h"
+#include "iscsi/iscsid.h"
 #include "driver.h"
 #include "work.h"
 #include "util.h"
@@ -605,6 +606,7 @@ static int exec(char *cmd)
 	int ret = 0;
 	int status = 0;
 
+	eprintf("Executing command: %s\n", cmd);
 	filp = popen(cmd, "r");
 	if (filp == NULL) {
 		return -1;
@@ -974,8 +976,35 @@ static int new_stord(const _ha_request *reqp,
 	return HA_CALLBACK_CONTINUE;
 }
 
-static int target_delete(const _ha_request *reqp,
-	_ha_response *resp, void *userp)
+static void thread_yield(pthread_mutex_t* mutexp, const int seconds) {
+	int rc;
+	struct timespec ts;
+	pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+
+	rc = clock_gettime(CLOCK_REALTIME, &ts);
+	assert(rc == 0);
+	ts.tv_sec += seconds;
+	rc = pthread_cond_timedwait(&cond, mutexp, &ts);
+	(void) rc;
+}
+
+static void close_tcp_connection_and_yield(pthread_mutex_t* mutexp, int tid) {
+	extern struct iscsi_tcp_connection* find_tcp_connection(int tid);
+	struct iscsi_tcp_connection* connp;
+
+	connp = find_tcp_connection(tid);
+	if (connp != NULL) {
+		int rc = shutdown(connp->fd, SHUT_RD);
+		if (rc < 0) {
+			eprintf("failed to close connetion fd %s\n", strerror(errno));
+		} else {
+			dprintf("closed read on socket tid = %d, fd = %d\n", tid, connp->fd);
+		}
+	}
+	thread_yield(mutexp, DELAY);
+}
+
+static int target_delete(const _ha_request *reqp, _ha_response *resp, void *userp)
 {
 	char cmd[512];
 	const char *tid = ha_parameter_get(reqp, "tid");
@@ -983,17 +1012,18 @@ static int target_delete(const _ha_request *reqp,
 	int rc  = 0;
 	int len = 0;
 	int force = 0;
-	int retry;
-
-	retry = RETRY;
+	int tid_int;
 
 	if (tid == NULL || force_param == NULL) {
 		set_err_msg(resp, TGT_ERR_INVALID_PARAM,
 			"tid param not given");
 		return HA_CALLBACK_CONTINUE;
 	}
-
-	memset(cmd, 0, sizeof(cmd));
+	if (disallow_rest_call()) {
+		set_err_msg(resp, TGT_ERR_HA_MAX_LIMIT,
+		"Too many pending requests at TGT. Retry after some time");
+		return HA_CALLBACK_CONTINUE;
+	}
 
 	rc = str_to_int(force_param, force);
 	if (rc) {
@@ -1002,7 +1032,16 @@ static int target_delete(const _ha_request *reqp,
 		return HA_CALLBACK_CONTINUE;
 	}
 
+	rc = str_to_int(tid, tid_int);
+	if (rc) {
+		set_err_msg(resp, TGT_ERR_INVALID_DELETE_FORCE,
+			"Invalid value for tid");
+		return HA_CALLBACK_CONTINUE;
+	}
+	assert(tid_int > 0);
+
 	/*Unbind before delete*/
+	memset(cmd, 0, sizeof(cmd));
 	len = snprintf(cmd, sizeof(cmd),
 			"tgtadm --lld iscsi --mode target --op unbind --tid=%s"
 			" -I ALL", tid);
@@ -1012,59 +1051,11 @@ static int target_delete(const _ha_request *reqp,
 		return HA_CALLBACK_CONTINUE;
 	}
 
-	if (disallow_rest_call()) {
-		set_err_msg(resp, TGT_ERR_HA_MAX_LIMIT,
-		"Too many pending requests at TGT. Retry after some time");
-		return HA_CALLBACK_CONTINUE;
-	}
-
 	pthread_mutex_lock(&ha_rest_mutex);
 
 	//Ignoring error for now
 	rc = exec(cmd);
-	memset(cmd, 0, sizeof(cmd));
-#if 0
-	/*
-	 * Keeping the below code in place for now as it is needed later.
-	 * Actual code must find proper connections, luns and delete them.
-	 */
 
-	/*conn delete*/
-	for (int i = 0; i < 20; i++) {
-		len = snprintf(cmd, sizeof(cmd),
-				"tgtadm --lld iscsi --mode conn --op delete --tid=%s"
-				" --sid %d --cid 0", tid, i);
-		if (len >= sizeof(cmd)) {
-			set_err_msg(resp, TGT_ERR_TOO_LONG,
-				"tgt cmd too long");
-			pthread_mutex_unlock(&ha_rest_mutex);
-			remove_rest_call();
-			return HA_CALLBACK_CONTINUE;
-		}
-
-		//Ignoring error for now
-		rc = exec(cmd);
-		memset(cmd, 0, sizeof(cmd));
-	}
-
-	/*lun delete*/
-	for (int i = 0; i < 20; i++) {
-		memset(cmd, 0, sizeof(cmd));
-		len = snprintf(cmd, sizeof(cmd),
-			"tgtadm --lld iscsi --mode logicalunit --op delete"
-			" --tid=%s --lun=%d", tid, i);
-		if (len >= sizeof(cmd)) {
-			set_err_msg(resp, TGT_ERR_TOO_LONG,
-				"tgt cmd too long");
-			pthread_mutex_unlock(&ha_rest_mutex);
-			remove_rest_call();
-			return HA_CALLBACK_CONTINUE;
-		}
-
-		//Ignoring error for now
-		rc = exec(cmd);
-	}
-#endif
 	/*actual target delete*/
 	memset(cmd, 0, sizeof(cmd));
 	if (force) {
@@ -1078,36 +1069,31 @@ static int target_delete(const _ha_request *reqp,
 	}
 
 	if (len >= sizeof(cmd)) {
-		set_err_msg(resp, TGT_ERR_TOO_LONG,
-			"tgt cmd too long");
+		set_err_msg(resp, TGT_ERR_TOO_LONG, "tgt cmd too long");
 		pthread_mutex_unlock(&ha_rest_mutex);
 		remove_rest_call();
 		return HA_CALLBACK_CONTINUE;
 	}
+
+	int retry = 2;
 	while (retry > 0) {
 		rc = exec(cmd);
-		if (rc == TGTADM_LUN_ACTIVE ||
-			rc == TGTADM_TARGET_ACTIVE ||
-			rc == TGTADM_DRIVER_ACTIVE ||
-			rc == TGTADM_UNSUPPORTED_OPERATION) {
-			fprintf(stderr, "Retrying for errno: %d\n", rc);
-			sleep(DELAY);
+		if (rc != 0) {
+			close_tcp_connection_and_yield(&ha_rest_mutex, tid_int);
 			retry--;
 			continue;
 		}
 		break;
 	}
 	if (rc) {
-		set_err_msg(resp, TGT_ERR_TARGET_DELETE,
-			"target delete failed");
+		set_err_msg(resp, TGT_ERR_TARGET_DELETE, "target delete failed");
 		pthread_mutex_unlock(&ha_rest_mutex);
 		remove_rest_call();
 		return HA_CALLBACK_CONTINUE;
 	}
 
-	ha_set_empty_response_body(resp, HTTP_STATUS_OK);
-
 	pthread_mutex_unlock(&ha_rest_mutex);
+	ha_set_empty_response_body(resp, HTTP_STATUS_OK);
 	remove_rest_call();
 	return HA_CALLBACK_CONTINUE;
 }
@@ -1118,9 +1104,15 @@ static int lun_delete(const _ha_request *reqp,
 	char cmd[512];
 	int  rc, len;
 	const char *tid, *lid;
+	int tid_int;
 
 	rc = 0;
 
+	if (disallow_rest_call()) {
+		set_err_msg(resp, TGT_ERR_HA_MAX_LIMIT,
+		"Too many pending requests at TGT. Retry after some time");
+		return HA_CALLBACK_CONTINUE;
+	}
 	tid  = ha_parameter_get(reqp, "tid");
 	if (tid == NULL) {
 		set_err_msg(resp, TGT_ERR_INVALID_PARAM,
@@ -1133,9 +1125,14 @@ static int lun_delete(const _ha_request *reqp,
 			"lid param not given");
 		return HA_CALLBACK_CONTINUE;
 	}
+	rc = str_to_int(tid, tid_int);
+	if (rc) {
+		set_err_msg(resp, TGT_ERR_INVALID_DELETE_FORCE,
+			"Invalid value for tid");
+		return HA_CALLBACK_CONTINUE;
+	}
 
 	memset(cmd, 0, sizeof(cmd));
-
 	len = snprintf(cmd, sizeof(cmd),
 		"tgtadm --lld iscsi --mode logicalunit --op delete"
 		" --tid=%s --lun=%s", tid, lid);
@@ -1146,17 +1143,19 @@ static int lun_delete(const _ha_request *reqp,
 		return HA_CALLBACK_CONTINUE;
 	}
 
-	if (disallow_rest_call()) {
-		set_err_msg(resp, TGT_ERR_HA_MAX_LIMIT,
-		"Too many pending requests at TGT. Retry after some time");
-		return HA_CALLBACK_CONTINUE;
-	}
-
 	pthread_mutex_lock(&ha_rest_mutex);
-	rc = exec(cmd);
+	int retry = 2;
+	while (retry > 0) {
+		rc = exec(cmd);
+		if (rc != 0) {
+			close_tcp_connection_and_yield(&ha_rest_mutex, tid_int);
+			--retry;
+			continue;
+		}
+		break;
+	}
 	if (rc) {
-		set_err_msg(resp, TGT_ERR_LUN_DELETE,
-			"TGT lun delete failed");
+		set_err_msg(resp, TGT_ERR_LUN_DELETE, "TGT lun delete failed");
 		pthread_mutex_unlock(&ha_rest_mutex);
 		remove_rest_call();
 		return HA_CALLBACK_CONTINUE;

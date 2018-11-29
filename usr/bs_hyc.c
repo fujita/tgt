@@ -177,48 +177,11 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 	return 0;
 }
 
-static inline struct iscsi_connection*
-scsi_cmd_to_iscsi_connection(struct scsi_cmd* cmdp)
-{
-	struct iscsi_task* taskp = container_of(cmdp, struct iscsi_task, scmd);
-	if (hyc_unlikely(taskp->conn->state == STATE_CLOSE)) {
-		return NULL;
-	}
-
-	return taskp->conn;
-}
-
-static void post_scsi_completion(struct iscsi_connection* connsp[], int count)
-{
-	struct iscsi_connection* connp;
-	int i;
-
-	for (i = 0; i < count; ++i) {
-		connp = connsp[i];
-		if (hyc_unlikely(connp == NULL || connp->state != STATE_SCSI)) {
-			continue;
-		}
-
-		do {
-			int ret = iscsi_tx_handler(connp);
-			if (hyc_unlikely(ret)) {
-				break;
-			}
-		} while (connp->state == STATE_SCSI && !list_empty(&connp->tx_clist));
-	}
-}
-
 static void bs_hyc_handle_completion(int fd, int events, void *datap)
 {
-	const int kConnections = 8;
 	struct bs_hyc_info *infop;
 	struct RequestResult *resultsp;
 	bool has_more;
-	struct {
-		struct iscsi_connection* array[kConnections];
-		int inserted;
-	} connections;
-	memset(&connections, 0, sizeof(connections));
 
 	assert(datap);
 	infop = datap;
@@ -233,20 +196,6 @@ static void bs_hyc_handle_completion(int fd, int events, void *datap)
 		for (uint32_t i = 0; i < nr_results; ++i) {
 			struct scsi_cmd *cmdp = (struct scsi_cmd *) resultsp[i].privatep;
 			assert(cmdp);
-			struct iscsi_connection* cp = scsi_cmd_to_iscsi_connection(cmdp);
-			bool found = false;
-
-			/* track connections for completed IOs */
-			for (int j = 0; j < connections.inserted; ++j) {
-				if (connections.array[j] == cp) {
-					found = true;
-					break;
-				}
-			}
-			if (found == false) {
-				assert(connections.inserted < kConnections);
-				connections.array[connections.inserted++] = cp;
-			}
 
 			assert(resultsp[i].result == 0);
 			target_cmd_io_done(cmdp, SAM_STAT_GOOD);
@@ -262,8 +211,6 @@ static void bs_hyc_handle_completion(int fd, int events, void *datap)
 			has_more = c != 0;
 		}
 	}
-
-	post_scsi_completion(connections.array, connections.inserted);
 }
 
 static int bs_hyc_open(struct scsi_lu *lup, char *pathp,

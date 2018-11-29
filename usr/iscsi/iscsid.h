@@ -211,6 +211,19 @@ struct iscsi_connection {
 	struct iscsi_stats stats;
 };
 
+struct iscsi_tcp_connection {
+	int fd;
+
+	struct list_head tcp_conn_siblings;
+	int nop_inflight_count;
+	int nop_interval;
+	int nop_tick;
+	int nop_count;
+	long ttt;
+
+	struct iscsi_connection iscsi_conn;
+};
+
 #define STATE_FREE		0
 #define STATE_SECURITY		1
 #define STATE_SECURITY_AUTH	2
