@@ -122,16 +122,15 @@ static void iscsi_tcp_nop_reply(long ttt)
 	}
 }
 
-struct iscsi_tcp_connection* find_tcp_connection(int tid) {
+void for_each_tcp_connection(tcp_conn_func_t funcp, void* datap) {
 	struct iscsi_tcp_connection *tcp_conn;
 
 	list_for_each_entry(tcp_conn, &iscsi_tcp_conn_list, tcp_conn_siblings) {
-		if (tcp_conn->iscsi_conn.tid != tid) {
+		if (funcp(tcp_conn, datap)) {
 			continue;
 		}
-		return tcp_conn;
+		break;
 	}
-	return NULL;
 }
 
 int iscsi_update_target_nop_count(int tid, int count)

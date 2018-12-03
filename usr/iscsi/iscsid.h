@@ -22,6 +22,7 @@
 #include <stdint.h>
 #include <inttypes.h>
 #include <netdb.h>
+#include <stdbool.h>
 
 #include "transport.h"
 #include "list.h"
@@ -396,4 +397,6 @@ extern int isns_scn_access(int tid, char *name);
 extern int isns_target_register(char *name);
 extern int isns_target_deregister(char *name);
 
+typedef bool (*tcp_conn_func_t)(struct iscsi_tcp_connection*, void*);
+extern void for_each_tcp_connection(tcp_conn_func_t funcp, void*);
 #endif	/* ISCSID_H */

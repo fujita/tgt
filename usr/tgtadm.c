@@ -697,6 +697,7 @@ int main(int argc, char **argv)
 				exit(EINVAL);
 			}
 			break;
+		case OP_STOP:
 		case OP_DELETE:
 			rc = verify_mode_params(argc, argv, "LmotCF");
 			if (rc) {

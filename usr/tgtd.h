@@ -275,6 +275,7 @@ extern tgtadm_err tgt_device_path_update(struct target *target, struct scsi_lu *
 
 extern tgtadm_err tgt_target_create(int lld, int tid, char *args);
 extern tgtadm_err tgt_target_destroy(int lld, int tid, int force);
+extern tgtadm_err tgt_target_close_connections(int tid);
 extern char *tgt_targetname(int tid);
 extern tgtadm_err tgt_target_show_all(struct concat_buf *b);
 tgtadm_err system_set_state(char *str);

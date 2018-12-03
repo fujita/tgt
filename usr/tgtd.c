@@ -988,19 +988,15 @@ static void thread_yield(pthread_mutex_t* mutexp, const int seconds) {
 	(void) rc;
 }
 
-static void close_tcp_connection_and_yield(pthread_mutex_t* mutexp, int tid) {
-	extern struct iscsi_tcp_connection* find_tcp_connection(int tid);
-	struct iscsi_tcp_connection* connp;
-
-	connp = find_tcp_connection(tid);
-	if (connp != NULL) {
-		int rc = shutdown(connp->fd, SHUT_RD);
-		if (rc < 0) {
-			eprintf("failed to close connetion fd %s\n", strerror(errno));
-		} else {
-			dprintf("closed read on socket tid = %d, fd = %d\n", tid, connp->fd);
-		}
+static void close_tcp_connection_and_yield(pthread_mutex_t* mutexp, const char* tidp) {
+	char cmd[512];
+	int len;
+	len = snprintf(cmd, sizeof(cmd),
+		"tgtadm --lld iscsi --mode target --op stop --tid=%s", tidp);
+	if (len >= sizeof(cmd)) {
+		return;
 	}
+	exec(cmd);
 	thread_yield(mutexp, DELAY);
 }
 
@@ -1012,7 +1008,6 @@ static int target_delete(const _ha_request *reqp, _ha_response *resp, void *user
 	int rc  = 0;
 	int len = 0;
 	int force = 0;
-	int tid_int;
 
 	if (tid == NULL || force_param == NULL) {
 		set_err_msg(resp, TGT_ERR_INVALID_PARAM,
@@ -1031,14 +1026,6 @@ static int target_delete(const _ha_request *reqp, _ha_response *resp, void *user
 			"Invalid value of force param");
 		return HA_CALLBACK_CONTINUE;
 	}
-
-	rc = str_to_int(tid, tid_int);
-	if (rc) {
-		set_err_msg(resp, TGT_ERR_INVALID_DELETE_FORCE,
-			"Invalid value for tid");
-		return HA_CALLBACK_CONTINUE;
-	}
-	assert(tid_int > 0);
 
 	/*Unbind before delete*/
 	memset(cmd, 0, sizeof(cmd));
@@ -1079,7 +1066,7 @@ static int target_delete(const _ha_request *reqp, _ha_response *resp, void *user
 	while (retry > 0) {
 		rc = exec(cmd);
 		if (rc != 0) {
-			close_tcp_connection_and_yield(&ha_rest_mutex, tid_int);
+			close_tcp_connection_and_yield(&ha_rest_mutex, tid);
 			retry--;
 			continue;
 		}
@@ -1148,7 +1135,7 @@ static int lun_delete(const _ha_request *reqp,
 	while (retry > 0) {
 		rc = exec(cmd);
 		if (rc != 0) {
-			close_tcp_connection_and_yield(&ha_rest_mutex, tid_int);
+			close_tcp_connection_and_yield(&ha_rest_mutex, tid);
 			--retry;
 			continue;
 		}

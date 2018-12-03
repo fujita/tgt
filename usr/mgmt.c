@@ -102,6 +102,9 @@ static tgtadm_err target_mgmt(int lld_no, struct mgmt_task *mtask)
 	case OP_NEW:
 		adm_err = tgt_target_create(lld_no, req->tid, mtask->req_buf);
 		break;
+	case OP_STOP:
+		adm_err = tgt_target_close_connections(req->tid);
+		break;
 	case OP_DELETE:
 		adm_err = tgt_target_destroy(lld_no, req->tid, req->force);
 		break;

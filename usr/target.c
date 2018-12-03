@@ -2214,6 +2214,37 @@ tgtadm_err tgt_target_create(int lld, int tid, char *args)
 	return TGTADM_SUCCESS;
 }
 
+static bool tcp_close(struct iscsi_tcp_connection* connp, void* datap) {
+	const int* const tidp = datap;
+	if (connp == NULL) {
+		eprintf("FATAL ERROR: connection NULL");
+		return false;
+	}
+	if (connp->iscsi_conn.tid != *tidp) {
+		return true;
+	}
+
+	int rc = shutdown(connp->fd, SHUT_RD);
+	if (rc < 0) {
+		eprintf("failed to close connetion fd %s\n", strerror(errno));
+	} else {
+		dprintf("closed read on socket tid = %d, fd = %d\n", *tidp, connp->fd);
+	}
+	return true;
+}
+
+tgtadm_err tgt_target_close_connections(int tid) {
+	struct target* targetp;
+
+	targetp = target_lookup(tid);
+	if (!targetp) {
+		return TGTADM_NO_TARGET;
+	}
+
+	for_each_tcp_connection(tcp_close, &tid);
+	return TGTADM_SUCCESS;
+}
+
 tgtadm_err tgt_target_destroy(int lld_no, int tid, int force)
 {
 	struct target *target;
