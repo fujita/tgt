@@ -197,8 +197,12 @@ static void bs_hyc_handle_completion(int fd, int events, void *datap)
 			struct scsi_cmd *cmdp = (struct scsi_cmd *) resultsp[i].privatep;
 			assert(cmdp);
 
-			assert(resultsp[i].result == 0);
-			target_cmd_io_done(cmdp, SAM_STAT_GOOD);
+			if (resultsp[i].result ==0) {
+				target_cmd_io_done(cmdp, SAM_STAT_GOOD);
+			} else {
+				sense_data_build(cmdp, MEDIUM_ERROR, 0);
+				target_cmd_io_done(cmdp, SAM_STAT_CHECK_CONDITION);
+			}
 		}
 		memset(resultsp, 0, sizeof(*resultsp) * nr_results);
 
