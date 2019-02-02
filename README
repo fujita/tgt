@@ -1,48 +1,46 @@
 Introduction
--------------
-Linux target framework (tgt) aims to simplify various SCSI target
-driver (iSCSI, Fibre Channel, SRP, etc) creation and maintenance.
+------------
+The Linux target framework (tgt) is a user space SCSI target framework
+that supports the iSCSI and iSER transport protocols and that also
+supports multiple methods for accessing block storage. Tgt consists of
+a user-space daemon and user-space tools.
 
-Currently, tgt supports the following target drivers:
-
+Currently, tgt supports the following SCSI transport protocols:
 - iSCSI software target driver for Ethernet NICs
-
 - iSER software target driver for Infiniband and RDMA NICs
 
-- IBM System p VIO server
+Tgt supports the following methods for accessing local storage:
+- aio, the asynchronous I/O interface also known as libaio.
+- rdwr, smc and mmc, synchronous I/O based on the pread() and pwrite()
+  system calls.
+- null, discards all data and reads zeroes.
+- ssc, SCSI tape support.
+- sg and bsg, SCSI pass-through.
+- glfs, the GlusterFS network filesystem.
+- rbd, Ceph's distributed-storage RADOS Block Device.
+- sheepdog, a distributed object storage system.
 
-- FCoE software target driver for Ethernet NICs (in progress)
-
-- Qlogic qla2xxx FC target driver (in progress)
-
-Tgt consists of kernel modules, user-space daemon, and user-space
-tools. iSCSI, iSER, and FCoE target drivers use only user-space daemon
-and tools (i.e. they are just user-space applications. They don't need
-any kernel support).
-
-tgt can emulate the following device types:
-
+Tgt can emulate the following SCSI device types:
 - SBC: a virtual disk drive that can use a file to store the content.
-
 - SMC: a virtual media jukebox that can be controlled by the "mtx"
-tool.
-
+  tool.
 - MMC: a virtual DVD drive that can read DVD-ROM iso files and create
-burnable DVD+R. It can be combined with SMC to provide a fully
-operational DVD jukebox.
-
+  burnable DVD+R. It can be combined with SMC to provide a fully
+  operational DVD jukebox.
 - SSC: a virtual tape device (aka VTL) that can use a file to store
-the content.
-
+  the content.
 - OSD: a virtual object-based storage device that can use a file to
-store the content (in progress).
-
-The code is under the GNU General Public License version 2.
+  store the content (in progress).
 
 
-Preparation
--------------
-Linux kernel 2.6.22 or newer are recommended because tgt can get
+License
+-------
+The code is released under the GNU General Public License version 2.
+
+
+Requirements
+------------
+Linux kernel version 2.6.22 or newer is recommended because tgt can get
 better performance with signalfd.
 
 Target drivers have their own ways to build, configure, etc. Please
@@ -54,7 +52,7 @@ http://stgt.sourceforge.net/
 
 Developer Notes
 -------------
-The central resource for tgt development is the mailing list
+The central communication channel for tgt development is the mailing list
 (stgt@vger.kernel.org).
 
 First, please read the following documents (in short, follow Linux
