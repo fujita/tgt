@@ -16,7 +16,7 @@ export GLFS_BD
 export SD_NOTIFY
 
 #top-level dir path
-TGT_DIR = $(PWD)
+TGT_DIR = $(CURDIR)
 export TGT_DIR
 
 .PHONY: all

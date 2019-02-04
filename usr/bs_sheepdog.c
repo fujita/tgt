@@ -294,18 +294,18 @@ struct sheepdog_access_info {
 	pthread_cond_t inflight_list_cond;
 };
 
-static inline int is_data_obj_writeable(struct sheepdog_inode *inode,
+inline int is_data_obj_writeable(struct sheepdog_inode *inode,
 					unsigned int idx)
 {
 	return inode->vdi_id == inode->data_vdi_id[idx];
 }
 
-static inline int is_data_obj(uint64_t oid)
+inline int is_data_obj(uint64_t oid)
 {
 	return !(VDI_BIT & oid);
 }
 
-static inline uint64_t data_oid_to_idx(uint64_t oid)
+inline uint64_t data_oid_to_idx(uint64_t oid)
 {
 	return oid & (MAX_DATA_OBJS - 1);
 }
@@ -315,7 +315,7 @@ static inline uint64_t vid_to_vdi_oid(uint32_t vid)
 	return VDI_BIT | ((uint64_t)vid << VDI_SPACE_SHIFT);
 }
 
-static inline uint64_t vid_to_vmstate_oid(uint32_t vid, uint32_t idx)
+inline uint64_t vid_to_vmstate_oid(uint32_t vid, uint32_t idx)
 {
 	return VMSTATE_BIT | ((uint64_t)vid << VDI_SPACE_SHIFT) | idx;
 }
