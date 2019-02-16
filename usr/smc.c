@@ -732,8 +732,13 @@ static tgtadm_err config_slot(struct scsi_lu *lu, struct tmp_param *tmp)
 			adm_err = TGTADM_SUCCESS;
 			break;
 		}
-		strncpy(s->barcode, tmp->barcode, sizeof(s->barcode));
-		strncpy(s->volume_tag, tmp->volume_tag, sizeof(s->volume_tag));
+		if (strlen(tmp->barcode) > sizeof(s->barcode) ||
+		    strlen(tmp->volume_tag) > sizeof(s->volume_tag)) {
+			eprintf("barcode or volume tag too large?");
+			break;
+		}
+		strcpy(s->barcode, tmp->barcode);
+		strcpy(s->volume_tag, tmp->volume_tag);
 		set_slot_full(s, 0, NULL);
 		adm_err = TGTADM_SUCCESS;
 		break;

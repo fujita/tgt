@@ -289,9 +289,12 @@ int spc_inquiry(int host_no, struct scsi_cmd *cmd)
 		data[7] = 0x02;
 
 		memset(data + 8, 0x20, 28);
-		strncpy((char *)data + 8, attrs->vendor_id, VENDOR_ID_LEN);
-		strncpy((char *)data + 16, attrs->product_id, PRODUCT_ID_LEN);
-		strncpy((char *)data + 32, attrs->product_rev, PRODUCT_REV_LEN);
+		scsi_sprintf((char *)data + 8, VENDOR_ID_LEN, "%-*s",
+			     VENDOR_ID_LEN, attrs->vendor_id);
+		scsi_sprintf((char *)data + 16, PRODUCT_ID_LEN, "%-*s",
+			     PRODUCT_ID_LEN, attrs->product_id);
+		scsi_sprintf((char *)data + 32, PRODUCT_REV_LEN, "%-*s",
+			     PRODUCT_REV_LEN, attrs->product_rev);
 
 		desc = (uint16_t *)(data + 58);
 		for (i = 0; i < ARRAY_SIZE(attrs->version_desc); i++)

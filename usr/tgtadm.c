@@ -224,7 +224,11 @@ static int ipc_mgmt_connect(int *fd)
 	snprintf(mgmt_path, sizeof(mgmt_path), "%s.%d",
 			 path, control_port);
 
-	strncpy(addr.sun_path, mgmt_path, sizeof(addr.sun_path));
+	if (strlen(mgmt_path) > (sizeof(addr.sun_path) - 1)) {
+		eprintf("management path too long: %s\n", mgmt_path);
+		return EINVAL;
+	}
+	strcpy(addr.sun_path, mgmt_path);
 
 	err = connect(*fd, (struct sockaddr *) &addr, sizeof(addr));
 	if (err < 0)

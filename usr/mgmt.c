@@ -797,11 +797,16 @@ int ipc_init(void)
 		goto close_lock_fd;
 	}
 
-	snprintf(mgmt_path, sizeof(mgmt_path), "%s.%d", path, control_port);
+	snprintf(mgmt_path, sizeof(mgmt_path) - 1, "%s.%d", path, control_port);
+	if (strlen(mgmt_path) > (sizeof(addr.sun_path) - 1)) {
+		eprintf("managment path too long: %s\n", mgmt_path);
+		goto close_ipc_fd;
+	}
 	unlink(mgmt_path);
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_LOCAL;
-	strncpy(addr.sun_path, mgmt_path, sizeof(addr.sun_path));
+	/* no need for strncpy because we already checked length */
+	strcpy(addr.sun_path, mgmt_path);
 
 	err = bind(fd, (struct sockaddr *) &addr, sizeof(addr));
 	if (err) {
