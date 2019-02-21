@@ -200,6 +200,8 @@ static void bs_hyc_handle_completion(int fd, int events, void *datap)
 			if (resultsp[i].result ==0) {
 				target_cmd_io_done(cmdp, SAM_STAT_GOOD);
 			} else {
+				eprintf("retry for vmid:%s, vmdkid:%s, path:%s, size:%lu", infop->vmid,
+					infop->vmdkid, infop->lup->path, infop->lup->size);
 				sense_data_build(cmdp, MEDIUM_ERROR, 0);
 				target_cmd_io_done(cmdp, SAM_STAT_CHECK_CONDITION);
 			}
