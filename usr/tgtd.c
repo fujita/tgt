@@ -576,6 +576,7 @@ enum tgt_svc_err {
 	TGT_ERR_INVALID_VMID,
 	TGT_ERR_INVALID_VMDKID,
 	TGT_ERR_LUN_CREATE,
+	TGT_ERR_LUN_UPDATE,
 	TGT_ERR_TOO_LONG,
 	TGT_ERR_TARGET_BIND,
 	TGT_ERR_SPARSE_FILE_DIR_CREATE,
@@ -892,6 +893,27 @@ static int lun_create(const _ha_request *reqp,
 	if (rc) {
 		set_err_msg(resp, TGT_ERR_LUN_CREATE,
 			"target create failed");
+		pthread_mutex_unlock(&ha_rest_mutex);
+		remove_rest_call();
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	len = snprintf(cmd, sizeof(cmd),
+		"tgtadm --op update --mode logicalunit --tid=%s --lun=%s --params thin_provisioning=1",
+		tid, lid);
+	if (len >= sizeof(cmd)) {
+		set_err_msg(resp, TGT_ERR_TOO_LONG,
+			"tgt cmd too long");
+		pthread_mutex_unlock(&ha_rest_mutex);
+		remove_rest_call();
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	rc = exec(cmd);
+
+	if (rc) {
+		set_err_msg(resp, TGT_ERR_LUN_UPDATE,
+			"setting thin_provisioning failed");
 		pthread_mutex_unlock(&ha_rest_mutex);
 		remove_rest_call();
 		return HA_CALLBACK_CONTINUE;
