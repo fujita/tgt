@@ -37,6 +37,8 @@ io_type_t scsi_cmd_operation(struct scsi_cmd *cmdp)
 	io_type_t           op = UNKNOWN;
 
 	switch (scsi_op) {
+	case UNMAP:
+		return TRUNCATE;
 	case WRITE_6:
 	case WRITE_10:
 	case WRITE_12:
@@ -80,7 +82,7 @@ static uint32_t scsi_cmd_length(struct scsi_cmd *cmdp)
 	case WRITE_SAME_OP:
 	case WRITE:
 		return scsi_get_out_transfer_len(cmdp);
-	case UNKNOWN:
+	default:
 		assert(0);
 	}
 	return 0;
@@ -100,6 +102,28 @@ static char *scsi_cmd_buffer(struct scsi_cmd *cmdp)
 	}
 }
 
+static int bs_hyc_unmap(struct bs_hyc_info* infop, struct scsi_lu* lup,
+		struct scsi_cmd* cmdp)
+{
+	size_t length;
+	char* bufp;
+
+	if (!lup->attrs.thinprovisioning) {
+		return -1;
+	}
+
+	length = scsi_get_out_length(cmdp);
+	bufp = scsi_get_out_buffer(cmdp);
+	if (length < 0 || bufp == NULL) {
+		return 0;
+	}
+
+	length -= 8;
+	bufp += 8;
+	set_cmd_async(cmdp);
+	return HycScheduleTruncate(infop->vmdk_handle, cmdp, bufp, length);
+}
+
 static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 {
 	struct scsi_lu     *lup = NULL;
@@ -116,9 +140,14 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 	assert(infop->vmdk_handle != kInvalidVmdkHandle);
 
 	op = scsi_cmd_operation(cmdp);
-	if (hyc_unlikely(op == WRITE_SAME_OP)) {
+	switch (op) {
+	default:
+		break;
+	case TRUNCATE:
+		return bs_hyc_unmap(infop, lup, cmdp);
+	case WRITE_SAME_OP:
 		return -1;
-	} else if (hyc_unlikely(op == UNKNOWN)) {
+	case UNKNOWN:
 		return 0;
 	}
 
@@ -257,8 +286,8 @@ static int bs_hyc_open(struct scsi_lu *lup, char *pathp,
 
 	infop->done_eventfd = efd;
 
-	rc = HycOpenVmdk(infop->vmid, infop->vmdkid, infop->done_eventfd,
-		&infop->vmdk_handle);
+	rc = HycOpenVmdk(infop->vmid, infop->vmdkid, *sizep, lup->blk_shift,
+		infop->done_eventfd, &infop->vmdk_handle);
 	if (rc < 0) {
 		goto error;
 	}
