@@ -35,19 +35,39 @@ io_type_t scsi_cmd_operation(struct scsi_cmd *cmdp)
 {
 	unsigned int        scsi_op = (unsigned int) cmdp->scb[0];
 	io_type_t           op = UNKNOWN;
+	struct mgmt_req     *mreq;
 
+	mreq = cmdp->mreq;
+	if (mreq) {
+		switch(mreq->function) {
+			case ABORT_TASK:
+				op = ABORT_TASK_OP;
+				break;
+			case ABORT_TASK_SET:
+				op = ABORT_TASK_SET_OP;
+				break;
+			default:
+				op = UNKNOWN;
+		}
+
+		eprintf("\n**** MTF: cmd: %p op: %x, function:%x\n", cmdp, scsi_op, op);
+		return op;
+	}
 	switch (scsi_op) {
 	case WRITE_6:
 	case WRITE_10:
 	case WRITE_12:
 	case WRITE_16:
 		op = WRITE;
+		eprintf("\nWRITE cmd: %p op: %x\n", cmdp, scsi_op);
+
 		break;
 	case READ_6:
 	case READ_10:
 	case READ_12:
 	case READ_16:
 		op = READ;
+		eprintf("\nREAD cmd: %p op: %x\n", cmdp, scsi_op);
 		break;
 	case WRITE_SAME:
 	case WRITE_SAME_16:
@@ -57,6 +77,7 @@ io_type_t scsi_cmd_operation(struct scsi_cmd *cmdp)
 				" supported yet.\n");
 		}
 		op = WRITE_SAME_OP;
+		eprintf("\nWRITESAME cmd: %p op: %x\n", cmdp, scsi_op);
 		break;
 	case SYNCHRONIZE_CACHE:
 	case SYNCHRONIZE_CACHE_16:
@@ -80,6 +101,9 @@ static uint32_t scsi_cmd_length(struct scsi_cmd *cmdp)
 	case WRITE_SAME_OP:
 	case WRITE:
 		return scsi_get_out_transfer_len(cmdp);
+	case ABORT_TASK_OP:
+	case ABORT_TASK_SET_OP:
+		return 0;
 	case UNKNOWN:
 		assert(0);
 	}
@@ -109,6 +133,7 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 	uint64_t            offset;
 	char               *bufp = NULL;
 	RequestID           reqid = kInvalidRequestID;
+	int                 rc = 0;
 
 	lup = cmdp->dev;
 	infop = BS_HYC_I(lup);
@@ -122,28 +147,33 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 		return 0;
 	}
 
-	offset = scsi_cmd_offset(cmdp);
-	length = scsi_cmd_length(cmdp);
+	if (op != ABORT_TASK_OP && op != ABORT_TASK_SET_OP) {
 
-	/*
-	 * Simply returing from top for zero size IOs, we may need to handle
-	 * it later for the barrier IOs
-	 */
+		offset = scsi_cmd_offset(cmdp);
+		length = scsi_cmd_length(cmdp);
 
-	if(op == WRITE) {
-		if (!length) {
-			eprintf("Zero size write IO, returning from top :%lu\n", length);
-			return 0;
+		/*
+	 	* Simply returing from top for zero size IOs, we may need to handle
+	 	* it later for the barrier IOs
+	 	*/
+
+		if(op == WRITE) {
+			if (!length) {
+				eprintf("Zero size write IO, returning from top :%lu\n", length);
+				return 0;
+			}
+		} else if(op == READ) {
+			if (!length) {
+				eprintf("Zero size read IO, returning from top :%lu\n", length);
+				return 0;
+			}
 		}
-	} else if(op == READ) {
-		if (!length) {
-			eprintf("Zero size read IO, returning from top :%lu\n", length);
-			return 0;
-		}
+
+		bufp = scsi_cmd_buffer(cmdp);
+		set_cmd_async(cmdp);
+	} else {
+		eprintf("\n### ABORT REQUEST RECEIVED");
 	}
-
-	bufp = scsi_cmd_buffer(cmdp);
-	set_cmd_async(cmdp);
 
 	switch (op) {
 	case READ:
@@ -152,6 +182,11 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 	case WRITE:
 		reqid = HycScheduleWrite(infop->vmdk_handle, cmdp, bufp, length, offset);
 		break;
+	case ABORT_TASK_OP:
+	case ABORT_TASK_SET_OP:
+		rc = HycScheduleAbort(infop->vmdk_handle, cmdp);
+		eprintf("\n ABORT REQUEST SENT to THRIFT CLIENT got reply rc:%d\n", rc);
+		return rc;
 	case WRITE_SAME_OP:
 	case UNKNOWN:
 	default:
@@ -174,7 +209,7 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 		return -EINVAL;
 	}
 
-	return 0;
+	return rc;
 }
 
 static inline struct iscsi_connection*

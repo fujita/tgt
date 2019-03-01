@@ -9,6 +9,8 @@ typedef enum {
 	WRITE,
 	/* Appending with *_OP, since just WRITE_SAME conflicts with scsi.h */
 	WRITE_SAME_OP,
+	ABORT_TASK_OP,
+	ABORT_TASK_SET_OP,
 	UNKNOWN,
 } io_type_t;
 

@@ -1163,7 +1163,6 @@ int target_cmd_perform(int tid, struct scsi_cmd *cmd)
 	enabled = cmd_enabled(q, cmd);
 	dprintf("%p %x %" PRIx64 " %d\n", cmd, cmd->scb[0], cmd->dev_id,
 		enabled);
-
 	if (enabled) {
 		result = scsi_cmd_perform(cmd->it_nexus->host_no, cmd);
 
@@ -1322,7 +1321,6 @@ static int abort_cmd(struct target *target, struct mgmt_req *mreq,
 {
 	int err = 0;
 
-	eprintf("found %" PRIx64 " %lx\n", cmd->tag, cmd->state);
 
 	if (cmd_processed(cmd)) {
 		/*
@@ -1332,8 +1330,10 @@ static int abort_cmd(struct target *target, struct mgmt_req *mreq,
 		 */
 
 		cmd->mreq = mreq;
-		err = -EBUSY;
+		eprintf("\n@@@In abort_cmd: cmd:%p %" PRIx64 " %lx\n", cmd, cmd->tag, cmd->state);
+		err = cmd->dev->cmd_perform(target->tid, cmd);
 	} else {
+		eprintf("\n@@@ In abort_cmd: Calling cmd_done %" PRIx64 " %lx\n", cmd->tag, cmd->state);
 		cmd->dev->cmd_done(target, cmd);
 		target_cmd_io_done(cmd, TASK_ABORTED);
 	}
