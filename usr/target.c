@@ -1321,6 +1321,7 @@ static int abort_cmd(struct target *target, struct mgmt_req *mreq,
 {
 	int err = 0;
 
+	eprintf("\nfound %" PRIx64 " %lx\n", cmd->tag, cmd->state);
 
 	if (cmd_processed(cmd)) {
 		/*
@@ -1330,13 +1331,15 @@ static int abort_cmd(struct target *target, struct mgmt_req *mreq,
 		 */
 
 		cmd->mreq = mreq;
-		eprintf("\n@@@In abort_cmd: cmd:%p %" PRIx64 " %lx\n", cmd, cmd->tag, cmd->state);
+		eprintf("\n%s: cmd:%p\n", __func__, cmd);
 		err = cmd->dev->cmd_perform(target->tid, cmd);
-	} else {
-		eprintf("\n@@@ In abort_cmd: Calling cmd_done %" PRIx64 " %lx\n", cmd->tag, cmd->state);
+	}
+
+	if (!err) {
 		cmd->dev->cmd_done(target, cmd);
 		target_cmd_io_done(cmd, TASK_ABORTED);
 	}
+
 	return err;
 }
 
@@ -1347,7 +1350,7 @@ static int abort_task_set(struct mgmt_req *mreq, struct target *target,
 	struct it_nexus *itn;
 	int err, count = 0;
 
-	eprintf("found %" PRIx64 " %d\n", tag, all);
+	eprintf("\nfound %" PRIx64 " %d\n", tag, all);
 
 	list_for_each_entry(itn, &target->it_nexus_list, nexus_siblings) {
 		list_for_each_entry_safe(cmd, tmp, &itn->cmd_list, c_hlist) {

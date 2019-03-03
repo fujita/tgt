@@ -59,15 +59,12 @@ io_type_t scsi_cmd_operation(struct scsi_cmd *cmdp)
 	case WRITE_12:
 	case WRITE_16:
 		op = WRITE;
-		eprintf("\nWRITE cmd: %p op: %x\n", cmdp, scsi_op);
-
 		break;
 	case READ_6:
 	case READ_10:
 	case READ_12:
 	case READ_16:
 		op = READ;
-		eprintf("\nREAD cmd: %p op: %x\n", cmdp, scsi_op);
 		break;
 	case WRITE_SAME:
 	case WRITE_SAME_16:
@@ -77,7 +74,6 @@ io_type_t scsi_cmd_operation(struct scsi_cmd *cmdp)
 				" supported yet.\n");
 		}
 		op = WRITE_SAME_OP;
-		eprintf("\nWRITESAME cmd: %p op: %x\n", cmdp, scsi_op);
 		break;
 	case SYNCHRONIZE_CACHE:
 	case SYNCHRONIZE_CACHE_16:
@@ -153,16 +149,16 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 		length = scsi_cmd_length(cmdp);
 
 		/*
-	 	* Simply returing from top for zero size IOs, we may need to handle
-	 	* it later for the barrier IOs
-	 	*/
+		* Simply returing from top for zero size IOs, we may need to handle
+		* it later for the barrier IOs
+		*/
 
-		if(op == WRITE) {
+		if (op == WRITE) {
 			if (!length) {
 				eprintf("Zero size write IO, returning from top :%lu\n", length);
 				return 0;
 			}
-		} else if(op == READ) {
+		} else if (op == READ) {
 			if (!length) {
 				eprintf("Zero size read IO, returning from top :%lu\n", length);
 				return 0;
@@ -171,8 +167,6 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 
 		bufp = scsi_cmd_buffer(cmdp);
 		set_cmd_async(cmdp);
-	} else {
-		eprintf("\n### ABORT REQUEST RECEIVED");
 	}
 
 	switch (op) {
