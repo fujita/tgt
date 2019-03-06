@@ -253,7 +253,9 @@ static void bs_hyc_handle_completion(int fd, int events, void *datap)
 		/* Process completed request commands */
 		for (uint32_t i = 0; i < nr_results; ++i) {
 			struct scsi_cmd *cmdp = (struct scsi_cmd *) resultsp[i].privatep;
-			assert(cmdp);
+			if (cmdp == NULL) {
+				continue;
+			}
 			struct iscsi_connection* cp = scsi_cmd_to_iscsi_connection(cmdp);
 
 			if (connp == NULL) {
