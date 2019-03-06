@@ -1335,11 +1335,6 @@ static int abort_cmd(struct target *target, struct mgmt_req *mreq,
 		err = cmd->dev->cmd_perform(target->tid, cmd);
 	}
 
-	if (!err) {
-		cmd->dev->cmd_done(target, cmd);
-		target_cmd_io_done(cmd, TASK_ABORTED);
-	}
-
 	return err;
 }
 
