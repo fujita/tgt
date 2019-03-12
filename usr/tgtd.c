@@ -1227,7 +1227,6 @@ static int get_vmdk_stats(const _ha_request *reqp,
 	json_object_set_new(jobj, "rpc_requests_scheduled", json_integer(vmdk_stats.rpc_requests_scheduled));
 
 	char *post_data = json_dumps(jobj, JSON_ENCODE_ANY);
-	json_object_clear(jobj);
 	json_decref(jobj);
 
 	ha_set_response_body(resp, HTTP_STATUS_OK, post_data, strlen(post_data));
