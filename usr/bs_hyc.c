@@ -125,8 +125,8 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 	struct scsi_lu     *lup = NULL;
 	struct bs_hyc_info *infop = NULL;
 	io_type_t           op;
-	size_t              length;
-	uint64_t            offset;
+	size_t              length = 0;
+	uint64_t            offset = 0;
 	char               *bufp = NULL;
 	RequestID           reqid = kInvalidRequestID;
 	int                 rc = 0;
