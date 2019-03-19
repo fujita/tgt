@@ -35,7 +35,24 @@ io_type_t scsi_cmd_operation(struct scsi_cmd *cmdp)
 {
 	unsigned int        scsi_op = (unsigned int) cmdp->scb[0];
 	io_type_t           op = UNKNOWN;
+	struct mgmt_req     *mreq;
 
+	mreq = cmdp->mreq;
+	if (mreq) {
+		switch(mreq->function) {
+			case ABORT_TASK:
+				op = ABORT_TASK_OP;
+				break;
+			case ABORT_TASK_SET:
+				op = ABORT_TASK_SET_OP;
+				break;
+			default:
+				op = UNKNOWN;
+		}
+
+		eprintf("\n**** MTF: cmd: %p op: %x, function:%x\n", cmdp, scsi_op, op);
+		return op;
+	}
 	switch (scsi_op) {
 	case UNMAP:
 		return TRUNCATE;
@@ -82,6 +99,9 @@ static uint32_t scsi_cmd_length(struct scsi_cmd *cmdp)
 	case WRITE_SAME_OP:
 	case WRITE:
 		return scsi_get_out_transfer_len(cmdp);
+	case ABORT_TASK_OP:
+	case ABORT_TASK_SET_OP:
+		return 0;
 	default:
 		assert(0);
 	}
@@ -129,10 +149,11 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 	struct scsi_lu     *lup = NULL;
 	struct bs_hyc_info *infop = NULL;
 	io_type_t           op;
-	size_t              length;
-	uint64_t            offset;
+	size_t              length = 0;
+	uint64_t            offset = 0;
 	char               *bufp = NULL;
 	RequestID           reqid = kInvalidRequestID;
+	int                 rc = 0;
 
 	lup = cmdp->dev;
 	infop = BS_HYC_I(lup);
@@ -151,28 +172,31 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 		return 0;
 	}
 
-	offset = scsi_cmd_offset(cmdp);
-	length = scsi_cmd_length(cmdp);
+	if (op != ABORT_TASK_OP && op != ABORT_TASK_SET_OP) {
 
-	/*
-	 * Simply returing from top for zero size IOs, we may need to handle
-	 * it later for the barrier IOs
-	 */
+		offset = scsi_cmd_offset(cmdp);
+		length = scsi_cmd_length(cmdp);
 
-	if(op == WRITE) {
-		if (!length) {
-			eprintf("Zero size write IO, returning from top :%lu\n", length);
-			return 0;
+		/*
+		* Simply returing from top for zero size IOs, we may need to handle
+		* it later for the barrier IOs
+		*/
+
+		if (op == WRITE) {
+			if (!length) {
+				eprintf("Zero size write IO, returning from top :%lu\n", length);
+				return 0;
+			}
+		} else if (op == READ) {
+			if (!length) {
+				eprintf("Zero size read IO, returning from top :%lu\n", length);
+				return 0;
+			}
 		}
-	} else if(op == READ) {
-		if (!length) {
-			eprintf("Zero size read IO, returning from top :%lu\n", length);
-			return 0;
-		}
+
+		bufp = scsi_cmd_buffer(cmdp);
+		set_cmd_async(cmdp);
 	}
-
-	bufp = scsi_cmd_buffer(cmdp);
-	set_cmd_async(cmdp);
 
 	switch (op) {
 	case READ:
@@ -181,6 +205,11 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 	case WRITE:
 		reqid = HycScheduleWrite(infop->vmdk_handle, cmdp, bufp, length, offset);
 		break;
+	case ABORT_TASK_OP:
+	case ABORT_TASK_SET_OP:
+		rc = HycScheduleAbort(infop->vmdk_handle, cmdp);
+		eprintf("\n ABORT REQUEST SENT to THRIFT CLIENT got reply rc:%d\n", rc);
+		return rc;
 	case WRITE_SAME_OP:
 	case UNKNOWN:
 	default:
@@ -203,7 +232,7 @@ static int bs_hyc_cmd_submit(struct scsi_cmd *cmdp)
 		return -EINVAL;
 	}
 
-	return 0;
+	return rc;
 }
 
 static void bs_hyc_handle_completion(int fd, int events, void *datap)
@@ -224,7 +253,9 @@ static void bs_hyc_handle_completion(int fd, int events, void *datap)
 		/* Process completed request commands */
 		for (uint32_t i = 0; i < nr_results; ++i) {
 			struct scsi_cmd *cmdp = (struct scsi_cmd *) resultsp[i].privatep;
-			assert(cmdp);
+			if (cmdp == NULL) {
+				continue;
+			}
 
 			if (resultsp[i].result ==0) {
 				target_cmd_io_done(cmdp, SAM_STAT_GOOD);
