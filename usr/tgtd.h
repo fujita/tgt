@@ -20,6 +20,7 @@ struct concat_buf;
 #define PRODUCT_ID_LEN		16
 #define PRODUCT_REV_LEN		4
 #define BLOCK_LIMITS_VPD_LEN	0x3C
+#define BDC_VPD_LEN		0x40
 #define LBP_VPD_LEN		4
 
 #define PCODE_SHIFT		7
@@ -89,6 +90,7 @@ struct lu_phy_attr {
 	char no_auto_lbppbe;    /* Do not update it automatically when the
 				   backing file changes */
 	uint16_t la_lba;	/* Lowest aligned LBA */
+	uint16_t rotation_rate;	/* Block rotation rate */
 
 	/* VPD pages 0x80 -> 0xff masked with 0x80*/
 	struct vpd *lu_vpd[1 << PCODE_SHIFT];

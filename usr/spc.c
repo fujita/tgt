@@ -192,6 +192,26 @@ static void update_vpd_83(struct scsi_lu *lu, void *id)
 	data[0] |= NAA_IEEE_REGD_EXTD << 4;
 }
 
+static void update_vpd_b1(struct scsi_lu *lu, void *id)
+{
+	struct vpd *vpd_pg = lu->attrs.lu_vpd[PCODE_OFFSET(0xb1)];
+	uint8_t	*data = vpd_pg->data;
+
+	if (lu->attrs.rotation_rate) {
+		data[0] = (lu->attrs.rotation_rate >> 8) & 0xff;
+		data[1] = lu->attrs.rotation_rate & 0xff;
+		data[2] = 0; /* PRODUCT TYPE */
+		data[3] = 0; /* WABEREQ | WACEREQ | NOMINAL FORM FACTOR */
+		data[4] = 0; /* VBULS */
+	} else {
+		data[0] = 0;
+		data[1] = 0;
+		data[2] = 0;
+		data[3] = 0;
+		data[4] = 0;
+	}
+}
+
 static void update_vpd_b2(struct scsi_lu *lu, void *id)
 {
 	struct vpd *vpd_pg = lu->attrs.lu_vpd[PCODE_OFFSET(0xb2)];
@@ -1910,6 +1930,7 @@ enum {
 	Opt_mode_page,
 	Opt_path, Opt_bsopts,
 	Opt_bsoflags, Opt_thinprovisioning,
+	Opt_rotation_rate,
 	Opt_err,
 };
 
@@ -1932,6 +1953,7 @@ static match_table_t tokens = {
 	{Opt_bsopts, "bsopts=%s"},
 	{Opt_bsoflags, "bsoflags=%s"},
 	{Opt_thinprovisioning, "thin_provisioning=%s"},
+	{Opt_rotation_rate, "rotation_rate=%s"},
 	{Opt_err, NULL},
 };
 
@@ -2030,6 +2052,12 @@ tgtadm_err lu_config(struct scsi_lu *lu, char *params, match_fn_t *fn)
 			lu_vpd[PCODE_OFFSET(0xb0)]->vpd_update(lu, NULL);
 			lu_vpd[PCODE_OFFSET(0xb2)]->vpd_update(lu, NULL);
 			break;
+		case Opt_rotation_rate:
+			match_strncpy(buf, &args[0], sizeof(buf));
+			attrs->rotation_rate = atoi(buf);
+			/* update the characteristics vpd page */
+			lu_vpd[PCODE_OFFSET(0xb1)]->vpd_update(lu, NULL);
+			break;
 		case Opt_online:
 			match_strncpy(buf, &args[0], sizeof(buf));
 			if (atoi(buf))
@@ -2105,6 +2133,14 @@ int spc_lu_init(struct scsi_lu *lu)
 	if (!lu_vpd[pg])
 		return -ENOMEM;
 	lu_vpd[pg]->vpd_update = update_vpd_b0;
+	lu_vpd[pg]->vpd_update(lu, NULL);
+
+	/* VPD page 0xb1 BLOCK DEVICE CHARACTERISTICS*/
+	pg = PCODE_OFFSET(0xb1);
+	lu_vpd[pg] = alloc_vpd(BDC_VPD_LEN);
+	if (!lu_vpd[pg])
+		return -ENOMEM;
+	lu_vpd[pg]->vpd_update = update_vpd_b1;
 	lu_vpd[pg]->vpd_update(lu, NULL);
 
 	/* VPD page 0xb2 LOGICAL BLOCK PROVISIONING*/
