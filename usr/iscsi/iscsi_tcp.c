@@ -578,7 +578,10 @@ static void iscsi_tcp_free_task(struct iscsi_task *task)
 
 static void *iscsi_tcp_alloc_data_buf(struct iscsi_connection *conn, size_t sz)
 {
-	return valloc(sz);
+	void *addr = NULL;
+
+	posix_memalign(&addr, sysconf(_SC_PAGESIZE), sz);
+	return addr;
 }
 
 static void iscsi_tcp_free_data_buf(struct iscsi_connection *conn, void *buf)
