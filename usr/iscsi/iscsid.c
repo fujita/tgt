@@ -2469,7 +2469,7 @@ int iscsi_param_parse_portals(char *p, int do_add,
 	while (*p) {
 		if (!strncmp(p, "portal", 6)) {
 			char *addr, *q;
-			int len = 0, port = 0;
+			int len = 0, port = ISCSI_LISTEN_PORT;
 
 			addr = p + 7;
 

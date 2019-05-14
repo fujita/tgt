@@ -298,7 +298,11 @@ int iscsi_tcp_init_portal(char *addr, int port, int tpgt)
 	char addrstr[64];
 	void *addrptr = NULL;
 
-	port = port ? port : ISCSI_LISTEN_PORT;
+	if (port < 0 || port > 65535) {
+		errno = EINVAL;
+		eprintf("port out of range, %m\n");
+		return -errno;
+	}
 
 	memset(servname, 0, sizeof(servname));
 	snprintf(servname, sizeof(servname), "%d", port);
@@ -355,6 +359,13 @@ int iscsi_tcp_init_portal(char *addr, int port, int tpgt)
 			continue;
 		}
 
+		ret = getsockname(fd, res->ai_addr, &res->ai_addrlen);
+		if (ret) {
+			close(fd);
+			eprintf("unable to get socket address, %m\n");
+			continue;
+		}
+
 		set_non_blocking(fd);
 		ret = tgt_event_add(fd, EPOLLIN, accept_connection, NULL);
 		if (ret)
@@ -369,10 +380,14 @@ int iscsi_tcp_init_portal(char *addr, int port, int tpgt)
 		case AF_INET:
 			addrptr = &((struct sockaddr_in *)
 				    res->ai_addr)->sin_addr;
+			port = ntohs(((struct sockaddr_in *)
+					res->ai_addr)->sin_port);
 			break;
 		case AF_INET6:
 			addrptr = &((struct sockaddr_in6 *)
 				    res->ai_addr)->sin6_addr;
+			port = ntohs(((struct sockaddr_in6 *)
+					res->ai_addr)->sin6_port);
 			break;
 		}
 		portal->addr = strdup(inet_ntop(res->ai_family, addrptr,
@@ -431,7 +446,7 @@ static int iscsi_tcp_init(void)
 	   for ipv4 and ipv6
 	*/
 	if (list_empty(&iscsi_portals_list)) {
-		iscsi_add_portal(NULL, 3260, 1);
+		iscsi_add_portal(NULL, ISCSI_LISTEN_PORT, 1);
 	}
 
 	INIT_LIST_HEAD(&iscsi_tcp_conn_list);
