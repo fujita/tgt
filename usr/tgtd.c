@@ -55,13 +55,14 @@ static struct option const long_options[] = {
 	{"foreground", no_argument, 0, 'f'},
 	{"control-port", required_argument, 0, 'C'},
 	{"nr_iothreads", required_argument, 0, 't'},
+	{"pid-file", required_argument, 0, 'p'},
 	{"debug", required_argument, 0, 'd'},
 	{"version", no_argument, 0, 'V'},
 	{"help", no_argument, 0, 'h'},
 	{0, 0, 0, 0},
 };
 
-static char *short_options = "fC:d:t:Vh";
+static char *short_options = "fC:d:t:p:Vh";
 static char *spare_args;
 
 static void usage(int status)
@@ -77,6 +78,7 @@ static void usage(int status)
 		"-f, --foreground        make the program run in the foreground\n"
 		"-C, --control-port NNNN use port NNNN for the mgmt channel\n"
 		"-t, --nr_iothreads NNNN specify the number of I/O threads\n"
+		"-p, --pid-file filename specify the pid file\n"
 		"-d, --debug debuglevel  print debugging information\n"
 		"-V, --version           print version and exit\n"
 		"-h, --help              display this help and exit\n",
@@ -172,6 +174,28 @@ set_rlimit:
 		fprintf(stderr, "can't adjust nr_open %d %m\n", max);
 
 	return 0;
+}
+
+void create_pid_file(const char *path)
+{
+	int fd, ret;
+	int mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+	char buf[32] = {0};
+
+	fd = open(path, O_RDWR | O_CREAT, mode);
+	if (fd < 0) {
+		eprintf("can't create %s, %m\n", path);
+		return;
+	}
+
+	snprintf(buf, sizeof(buf), "%d", getpid());
+	ret = write(fd, buf, strlen(buf));
+	close(fd);
+
+	if (ret < 0) {
+		eprintf("can't write and remove %s, %m\n", path);
+		unlink(path);
+	}
 }
 
 int tgt_event_add(int fd, int events, event_handler_t handler, void *data)
@@ -525,6 +549,7 @@ int main(int argc, char **argv)
 	int err, ch, longindex, nr_lld = 0;
 	int is_daemon = 1, is_debug = 0;
 	int ret;
+	char *pidfile = NULL;
 
 	sa_new.sa_handler = signal_catch;
 	sigemptyset(&sa_new.sa_mask);
@@ -554,6 +579,13 @@ int main(int argc, char **argv)
 			ret = str_to_int_gt(optarg, nr_iothreads, 0);
 			if (ret)
 				bad_optarg(ret, ch, optarg);
+			break;
+		case 'p':
+			pidfile = strdup(optarg);
+			if (pidfile == NULL) {
+				fprintf(stderr, "can't duplicate pid file\n");
+				exit(1);
+			}
 			break;
 		case 'd':
 			ret = str_to_int_range(optarg, is_debug, 0, 1);
@@ -621,6 +653,9 @@ int main(int argc, char **argv)
 	sd_notify(0, "READY=1\nSTATUS=Starting event loop...");
 #endif
 
+	if (is_daemon && pidfile)
+		create_pid_file(pidfile);
+
 	event_loop();
 
 	lld_exit();
@@ -630,6 +665,9 @@ int main(int argc, char **argv)
 	ipc_exit();
 
 	log_close();
+
+	if (is_daemon && pidfile)
+		unlink(pidfile);
 
 	return 0;
 }
