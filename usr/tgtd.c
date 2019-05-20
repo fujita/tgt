@@ -31,17 +31,25 @@
 #include <string.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <assert.h>
 #include <sys/resource.h>
 #include <sys/epoll.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
-
 #include "list.h"
 #include "tgtd.h"
 #include "driver.h"
 #include "work.h"
 #include "util.h"
+
+#include "TgtInterface.h"
+
+#include "halib.h"
+
+#define RETRY 24
+#define DELAY 5
+#define MAX_REST_CALLS 40
 
 unsigned long pagesize, pageshift;
 
@@ -51,6 +59,14 @@ static char program_name[] = "tgtd";
 static LIST_HEAD(tgt_events_list);
 static LIST_HEAD(tgt_sched_events_list);
 
+static pthread_t ha_hb_tid;
+static struct _ha_instance *ha;
+static bool ha_thread_init = false;
+static pthread_mutex_t ha_mutex;
+static pthread_mutex_t ha_rest_mutex;
+int active_rest_calls = 0;
+static pthread_mutex_t ha_active_call_cnt_mutex;
+
 static struct option const long_options[] = {
 	{"foreground", no_argument, 0, 'f'},
 	{"control-port", required_argument, 0, 'C'},
@@ -58,10 +74,16 @@ static struct option const long_options[] = {
 	{"debug", required_argument, 0, 'd'},
 	{"version", no_argument, 0, 'V'},
 	{"help", no_argument, 0, 'h'},
+	{"etcd_ip", required_argument, 0, 'e'},
+	{"svc_label", required_argument, 0, 's'},
+	{"version_for_ha", required_argument, 0, 'v'},
+	{"ha_svc_port", required_argument, 0, 'p'},
+	{"stord_ip", required_argument, 0, 'D'},
+	{"stord_port", required_argument, 0, 'P'},
 	{0, 0, 0, 0},
 };
 
-static char *short_options = "fC:d:t:Vh";
+static char *short_options = "fC:d:t:Vhe:s:v:p:D:P:";
 static char *spare_args;
 
 static void usage(int status)
@@ -79,6 +101,11 @@ static void usage(int status)
 		"-t, --nr_iothreads NNNN specify the number of I/O threads\n"
 		"-d, --debug debuglevel  print debugging information\n"
 		"-V, --version           print version and exit\n"
+		"-p, --ha_svc_port       HA service port number\n"
+		"-e, --etcd_ip           give etcd_ip to configure ha-lib with\n"
+		"-s, --svc_label         service label needed for ha-lib\n"
+		"-v, --version_for_ha    tgt version used by ha-lib\n"
+		"-D, --stord_ip          stord ip address to connect with\n"
 		"-h, --help              display this help and exit\n",
 		TGT_VERSION, program_name);
 	exit(0);
@@ -246,9 +273,14 @@ int tgt_event_modify(int fd, int events)
 		return -EINVAL;
 	}
 
+	if (tev->events == events) {
+		return 0;
+	}
+
 	memset(&ev, 0, sizeof(ev));
 	ev.events = events;
 	ev.data.ptr = tev;
+	tev->events = events;
 
 	return epoll_ctl(ep_fd, EPOLL_CTL_MOD, fd, &ev);
 }
@@ -518,6 +550,660 @@ static int parse_params(char *name, char *p)
 	return -1;
 }
 
+void *ha_heartbeat(void *arg)
+{
+	struct _ha_instance *hap = (struct _ha_instance *) arg;
+
+	while (1) {
+		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, 0);
+		ha_healthupdate(hap);
+		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, 0);
+		sleep(20);
+	}
+	pthread_mutex_lock(&ha_mutex);
+	ha_thread_init = false;
+	pthread_mutex_unlock(&ha_mutex);
+}
+
+enum tgt_svc_err {
+	TGT_ERR_INVALID_PARAM = 1,
+	TGT_ERR_TARGET_CREATE,
+	TGT_ERR_NO_DATA,
+	TGT_ERR_INVALID_JSON,
+	TGT_ERR_INVALID_TARGET_NAME,
+	TGT_ERR_INVALID_DEV_NAME,
+	TGT_ERR_INVALID_VMID,
+	TGT_ERR_INVALID_VMDKID,
+	TGT_ERR_LUN_CREATE,
+	TGT_ERR_TOO_LONG,
+	TGT_ERR_TARGET_BIND,
+	TGT_ERR_SPARSE_FILE_DIR_CREATE,
+	TGT_ERR_INVALID_LUN_SIZE,
+	TGT_ERR_SPARSE_FILE_CREATE,
+	TGT_ERR_INVALID_STORD_IP,
+	TGT_ERR_INVALID_STORD_PORT,
+	TGT_ERR_INVALID_DELETE_FORCE,
+	TGT_ERR_TARGET_DELETE,
+	TGT_ERR_INVALID_LUNID,
+	TGT_ERR_LUN_DELETE,
+	TGT_ERR_STR_OUT_OF_RANGE,
+	TGT_ERR_HA_MAX_LIMIT,
+};
+
+static void set_err_msg(_ha_response *resp, enum tgt_svc_err err,
+	char *msg)
+{
+	char *err_msg = ha_get_error_message(ha, err, msg);
+	ha_set_response_body(resp, HTTP_STATUS_ERR, err_msg,
+		strlen(err_msg) + 1);
+	free(err_msg);
+}
+
+static int exec(char *cmd)
+{
+	FILE *filp = NULL;
+	int ret = 0;
+	int status = 0;
+
+	filp = popen(cmd, "r");
+	if (filp == NULL) {
+		return -1;
+	}
+
+	ret = pclose(filp);
+	status = WEXITSTATUS(ret);
+
+	return status;
+}
+
+static int disallow_rest_call()
+{
+	int rc = 0;
+	pthread_mutex_lock(&ha_active_call_cnt_mutex);
+	if (active_rest_calls > MAX_REST_CALLS) {
+		rc = 1;
+		eprintf("Rejecting request\n");
+		pthread_mutex_unlock(&ha_active_call_cnt_mutex);
+		return rc;
+	}
+
+	++active_rest_calls;
+	pthread_mutex_unlock(&ha_active_call_cnt_mutex);
+	return rc;
+}
+
+static void remove_rest_call()
+{
+	pthread_mutex_lock(&ha_active_call_cnt_mutex);
+	--active_rest_calls;
+	pthread_mutex_unlock(&ha_active_call_cnt_mutex);
+}
+
+
+static int target_create(const _ha_request *reqp,
+	_ha_response *resp, void *userp)
+{
+	char cmd[512];
+	const char *tid = ha_parameter_get(reqp, "tid");
+	int rc = 0;
+	char *data = NULL;
+
+	if (tid == NULL) {
+		set_err_msg(resp, TGT_ERR_INVALID_PARAM,
+			"tid param not given");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	data = ha_get_data(reqp);
+	if (data == NULL) {
+		set_err_msg(resp, TGT_ERR_NO_DATA,
+			"json config not given");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	json_error_t error;
+	json_auto_t *root = json_loads(data, 0, &error);
+
+	free(data);
+	if (root == NULL) {
+		set_err_msg(resp, TGT_ERR_INVALID_JSON,
+			"json config is incorrect");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	json_t *tname = json_object_get(root, "TargetName");
+	if (!json_is_string(tname)) {
+		set_err_msg(resp, TGT_ERR_INVALID_TARGET_NAME,
+			"TargetName is not string");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	memset(cmd, 0, sizeof(cmd));
+
+	int len = snprintf(cmd, sizeof(cmd),
+		"tgtadm --lld iscsi --mode target --op new"
+		" --tid=%s --targetname=%s", tid, json_string_value(tname));
+	if (len >= sizeof(cmd)) {
+		set_err_msg(resp, TGT_ERR_TOO_LONG,
+			"tgt cmd too long");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	if (disallow_rest_call()) {
+		set_err_msg(resp, TGT_ERR_HA_MAX_LIMIT,
+		"Too many pending requests at TGT. Retry after some time");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	pthread_mutex_lock(&ha_rest_mutex);
+	rc = exec(cmd);
+	if (rc) {
+		set_err_msg(resp, TGT_ERR_TARGET_CREATE,
+			"target create failed");
+		pthread_mutex_unlock(&ha_rest_mutex);
+		remove_rest_call();
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	memset(cmd, 0, sizeof(cmd));
+	len = snprintf(cmd, sizeof(cmd),
+		"tgtadm --lld iscsi --op bind --mode target --tid %s -I ALL", tid);
+	if (len >= sizeof(cmd)) {
+		set_err_msg(resp, TGT_ERR_TOO_LONG,
+			"tgt cmd too long");
+		pthread_mutex_unlock(&ha_rest_mutex);
+		remove_rest_call();
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	rc = exec(cmd);
+	if (rc) {
+		set_err_msg(resp, TGT_ERR_TARGET_BIND,
+			"target bind failed");
+		pthread_mutex_unlock(&ha_rest_mutex);
+		remove_rest_call();
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	ha_set_empty_response_body(resp, HTTP_STATUS_OK);
+
+	pthread_mutex_unlock(&ha_rest_mutex);
+	remove_rest_call();
+	return HA_CALLBACK_CONTINUE;
+}
+
+static int lun_create(const _ha_request *reqp,
+	_ha_response *resp, void *userp)
+{
+	char cmd[512];
+	const char *tid = ha_parameter_get(reqp, "tid");
+	const char *lid = ha_parameter_get(reqp, "lid");
+	int rc = 0;
+	char *data = NULL;
+
+	if (tid == NULL) {
+		set_err_msg(resp, TGT_ERR_INVALID_PARAM,
+			"tid param not given");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	if (lid == NULL) {
+		set_err_msg(resp, TGT_ERR_INVALID_PARAM,
+			"lid param not given");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	data = ha_get_data(reqp);
+	if (data == NULL) {
+		set_err_msg(resp, TGT_ERR_NO_DATA,
+			"json config not given");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	json_error_t error;
+	json_auto_t *root = json_loads(data, 0, &error);
+
+	free(data);
+	if (root == NULL) {
+		set_err_msg(resp, TGT_ERR_INVALID_JSON,
+			"json config is incorrect");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	json_t *dev_name = json_object_get(root, "DevName");
+	if (!json_is_string(dev_name)) {
+		set_err_msg(resp, TGT_ERR_INVALID_DEV_NAME,
+			"DevName is not string");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	json_t *lun_size = json_object_get(root, "LunSize");
+	if (!json_is_string(lun_size)) {
+		set_err_msg(resp, TGT_ERR_INVALID_LUN_SIZE,
+			"Lun size is not json string");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	json_t *vmid = json_object_get(root, "VmID");
+	if (!json_is_string(vmid)) {
+		set_err_msg(resp, TGT_ERR_INVALID_VMID,
+			"VmID is not string");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	json_t *vmdkid = json_object_get(root, "VmdkID");
+	if (!json_is_string(vmdkid)) {
+		set_err_msg(resp, TGT_ERR_INVALID_VMDKID,
+			"VmdkID is not string");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	memset(cmd, 0, sizeof(cmd));
+
+	/* Create sparse file directory if not already created */
+	const char *hyc_sparse_files_loc = "/var/hyc";
+
+	int len = snprintf(cmd, sizeof(cmd),
+		"mkdir -p %s", hyc_sparse_files_loc);
+	if (len >= sizeof(cmd)) {
+		set_err_msg(resp, TGT_ERR_TOO_LONG,
+			"mkdir cmd too long");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	if (disallow_rest_call()) {
+		eprintf("Request rejected for %s\n", lid);
+		set_err_msg(resp, TGT_ERR_HA_MAX_LIMIT,
+		"Too many pending requests at TGT. Retry after some time");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	pthread_mutex_lock(&ha_rest_mutex);
+
+	rc = exec(cmd);
+	if (rc) {
+		set_err_msg(resp, TGT_ERR_SPARSE_FILE_DIR_CREATE,
+			"sparse files dir create failed");
+		pthread_mutex_unlock(&ha_rest_mutex);
+		remove_rest_call();
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	/* Reset cmd, for future use */
+	memset(cmd, 0, sizeof(cmd));
+	len = 0;
+
+	/* Create sparse file for this LUN */
+	len = snprintf(cmd, sizeof(cmd),
+		"dd if=/dev/zero of=%s/%s bs=1 count=0 seek=%sG",
+		hyc_sparse_files_loc, json_string_value(dev_name),
+		json_string_value(lun_size));
+	if (len >= sizeof(cmd)) {
+		set_err_msg(resp, TGT_ERR_TOO_LONG,
+			"spare file create cmd too long");
+		pthread_mutex_unlock(&ha_rest_mutex);
+		remove_rest_call();
+		return HA_CALLBACK_CONTINUE;
+	}
+	rc = exec(cmd);
+	if (rc) {
+		set_err_msg(resp, TGT_ERR_SPARSE_FILE_CREATE,
+			"sparse file create failed");
+		pthread_mutex_unlock(&ha_rest_mutex);
+		remove_rest_call();
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	/* Reset cmd, for future use */
+	memset(cmd, 0, sizeof(cmd));
+	len = 0;
+
+	char dev_path[512];
+
+	memset(dev_path, 0, sizeof(dev_path));
+
+	len = snprintf(dev_path, sizeof(dev_path), "%s/%s", hyc_sparse_files_loc,
+		json_string_value(dev_name));
+	if (len >= sizeof(dev_path)) {
+		set_err_msg(resp, TGT_ERR_TOO_LONG,
+			"dev_path too long");
+		pthread_mutex_unlock(&ha_rest_mutex);
+		remove_rest_call();
+		return HA_CALLBACK_CONTINUE;
+	}
+	len = 0;
+	len = snprintf(cmd, sizeof(cmd),
+		"tgtadm --lld iscsi --mode logicalunit --op new"
+		" --tid=%s --lun=%s -b %s --bstype hyc --bsopts vmid=%s:vmdkid=%s",
+		tid, lid, dev_path, json_string_value(vmid),
+		json_string_value(vmdkid));
+	if (len >= sizeof(cmd)) {
+		set_err_msg(resp, TGT_ERR_TOO_LONG,
+			"tgt cmd too long");
+		pthread_mutex_unlock(&ha_rest_mutex);
+		remove_rest_call();
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	rc = exec(cmd);
+
+	if (rc) {
+		set_err_msg(resp, TGT_ERR_LUN_CREATE,
+			"target create failed");
+		pthread_mutex_unlock(&ha_rest_mutex);
+		remove_rest_call();
+		return HA_CALLBACK_CONTINUE;
+	}
+	ha_set_empty_response_body(resp, HTTP_STATUS_OK);
+
+	pthread_mutex_unlock(&ha_rest_mutex);
+	remove_rest_call();
+	return HA_CALLBACK_CONTINUE;
+}
+
+static int new_stord(const _ha_request *reqp,
+	_ha_response *resp, void *userp)
+{
+	char *data = NULL;
+
+	char *hyc_argv[1]   = {"tgtd"};
+	uint16_t stord_port = 0;
+
+	data = ha_get_data(reqp);
+	if (data == NULL) {
+		set_err_msg(resp, TGT_ERR_NO_DATA,
+			"json config not given");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	json_error_t error;
+	json_auto_t *root = json_loads(data, 0, &error);
+
+	free(data);
+
+	if (root == NULL) {
+		set_err_msg(resp, TGT_ERR_INVALID_JSON,
+			"json config is incorrect");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	json_t *sip = json_object_get(root, "StordIp");
+	if (!json_is_string(sip)) {
+		set_err_msg(resp, TGT_ERR_INVALID_STORD_IP,
+			"StordIp is not string");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	json_t *sport = json_object_get(root, "StordPort");
+	if (!json_is_string(sport)) {
+		set_err_msg(resp, TGT_ERR_INVALID_STORD_PORT,
+			"StordPort is not string");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	/*
+	 * Linux allows user's to use ports 1 - 65535, but many
+	 * linux kernels use ephemeral ports from range 32768 to 61000
+	 * so we are keeping our range 1 - 32767
+	 */
+	int ret = str_to_int_range((char *)json_string_value(sport),
+			stord_port, 1, 32768);
+	if (ret) {
+		set_err_msg(resp, TGT_ERR_INVALID_STORD_PORT,
+			"StordPort out of range");
+		return HA_CALLBACK_CONTINUE;
+
+	}
+
+	//TODO: Add error handling for Stord init
+	if (disallow_rest_call()) {
+		set_err_msg(resp, TGT_ERR_HA_MAX_LIMIT,
+		"Too many pending requests at TGT. Retry after some time");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	pthread_mutex_lock(&ha_rest_mutex);
+	HycStorInitialize(1, hyc_argv, (char *)json_string_value(sip),
+			stord_port);
+
+	ha_set_empty_response_body(resp, HTTP_STATUS_OK);
+	pthread_mutex_unlock(&ha_rest_mutex);
+	ret = HycStorRpcServerConnect();
+	assert(ret == 0);
+	remove_rest_call();
+	return HA_CALLBACK_CONTINUE;
+}
+
+static int target_delete(const _ha_request *reqp,
+	_ha_response *resp, void *userp)
+{
+	char cmd[512];
+	const char *tid = ha_parameter_get(reqp, "tid");
+	const char *force_param = ha_parameter_get(reqp, "force");
+	int rc  = 0;
+	int len = 0;
+	int force = 0;
+	int retry;
+
+	retry = RETRY;
+
+	if (tid == NULL || force_param == NULL) {
+		set_err_msg(resp, TGT_ERR_INVALID_PARAM,
+			"tid param not given");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	memset(cmd, 0, sizeof(cmd));
+
+	rc = str_to_int(force_param, force);
+	if (rc) {
+		set_err_msg(resp, TGT_ERR_INVALID_DELETE_FORCE,
+			"Invalid value of force param");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	/*Unbind before delete*/
+	len = snprintf(cmd, sizeof(cmd),
+			"tgtadm --lld iscsi --mode target --op unbind --tid=%s"
+			" -I ALL", tid);
+	if (len >= sizeof(cmd)) {
+		set_err_msg(resp, TGT_ERR_STR_OUT_OF_RANGE,
+			"tgt unbind cmd #characters out of range");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	if (disallow_rest_call()) {
+		set_err_msg(resp, TGT_ERR_HA_MAX_LIMIT,
+		"Too many pending requests at TGT. Retry after some time");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	pthread_mutex_lock(&ha_rest_mutex);
+
+	//Ignoring error for now
+	rc = exec(cmd);
+	memset(cmd, 0, sizeof(cmd));
+#if 0
+	/*
+	 * Keeping the below code in place for now as it is needed later.
+	 * Actual code must find proper connections, luns and delete them.
+	 */
+
+	/*conn delete*/
+	for (int i = 0; i < 20; i++) {
+		len = snprintf(cmd, sizeof(cmd),
+				"tgtadm --lld iscsi --mode conn --op delete --tid=%s"
+				" --sid %d --cid 0", tid, i);
+		if (len >= sizeof(cmd)) {
+			set_err_msg(resp, TGT_ERR_TOO_LONG,
+				"tgt cmd too long");
+			pthread_mutex_unlock(&ha_rest_mutex);
+			remove_rest_call();
+			return HA_CALLBACK_CONTINUE;
+		}
+
+		//Ignoring error for now
+		rc = exec(cmd);
+		memset(cmd, 0, sizeof(cmd));
+	}
+
+	/*lun delete*/
+	for (int i = 0; i < 20; i++) {
+		memset(cmd, 0, sizeof(cmd));
+		len = snprintf(cmd, sizeof(cmd),
+			"tgtadm --lld iscsi --mode logicalunit --op delete"
+			" --tid=%s --lun=%d", tid, i);
+		if (len >= sizeof(cmd)) {
+			set_err_msg(resp, TGT_ERR_TOO_LONG,
+				"tgt cmd too long");
+			pthread_mutex_unlock(&ha_rest_mutex);
+			remove_rest_call();
+			return HA_CALLBACK_CONTINUE;
+		}
+
+		//Ignoring error for now
+		rc = exec(cmd);
+	}
+#endif
+	/*actual target delete*/
+	memset(cmd, 0, sizeof(cmd));
+	if (force) {
+		len = snprintf(cmd, sizeof(cmd),
+			"tgtadm --lld iscsi --mode target --op delete --force"
+			" --tid=%s", tid);
+	} else {
+		len = snprintf(cmd, sizeof(cmd),
+			"tgtadm --lld iscsi --mode target --op delete"
+			" --tid=%s", tid);
+	}
+
+	if (len >= sizeof(cmd)) {
+		set_err_msg(resp, TGT_ERR_TOO_LONG,
+			"tgt cmd too long");
+		pthread_mutex_unlock(&ha_rest_mutex);
+		remove_rest_call();
+		return HA_CALLBACK_CONTINUE;
+	}
+	while (retry > 0) {
+		rc = exec(cmd);
+		if (rc == TGTADM_LUN_ACTIVE ||
+			rc == TGTADM_TARGET_ACTIVE ||
+			rc == TGTADM_DRIVER_ACTIVE ||
+			rc == TGTADM_UNSUPPORTED_OPERATION) {
+			fprintf(stderr, "Retrying for errno: %d\n", rc);
+			sleep(DELAY);
+			retry--;
+			continue;
+		}
+		break;
+	}
+	if (rc) {
+		set_err_msg(resp, TGT_ERR_TARGET_DELETE,
+			"target delete failed");
+		pthread_mutex_unlock(&ha_rest_mutex);
+		remove_rest_call();
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	ha_set_empty_response_body(resp, HTTP_STATUS_OK);
+
+	pthread_mutex_unlock(&ha_rest_mutex);
+	remove_rest_call();
+	return HA_CALLBACK_CONTINUE;
+}
+
+static int lun_delete(const _ha_request *reqp,
+	_ha_response *resp, void *userp)
+{
+	char cmd[512];
+	int  rc, len;
+	const char *tid, *lid;
+
+	rc = 0;
+
+	tid  = ha_parameter_get(reqp, "tid");
+	if (tid == NULL) {
+		set_err_msg(resp, TGT_ERR_INVALID_PARAM,
+			"tid param not given");
+		return HA_CALLBACK_CONTINUE;
+	}
+	lid  = ha_parameter_get(reqp, "lid");
+	if (tid == NULL) {
+		set_err_msg(resp, TGT_ERR_INVALID_PARAM,
+			"lid param not given");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	memset(cmd, 0, sizeof(cmd));
+
+	len = snprintf(cmd, sizeof(cmd),
+		"tgtadm --lld iscsi --mode logicalunit --op delete"
+		" --tid=%s --lun=%s", tid, lid);
+
+	if (len >= sizeof(cmd)) {
+		set_err_msg(resp, TGT_ERR_TOO_LONG,
+			"tgt cmd too long");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	if (disallow_rest_call()) {
+		set_err_msg(resp, TGT_ERR_HA_MAX_LIMIT,
+		"Too many pending requests at TGT. Retry after some time");
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	pthread_mutex_lock(&ha_rest_mutex);
+	rc = exec(cmd);
+	if (rc) {
+		set_err_msg(resp, TGT_ERR_LUN_DELETE,
+			"TGT lun delete failed");
+		pthread_mutex_unlock(&ha_rest_mutex);
+		remove_rest_call();
+		return HA_CALLBACK_CONTINUE;
+	}
+
+	ha_set_empty_response_body(resp, HTTP_STATUS_OK);
+
+	pthread_mutex_unlock(&ha_rest_mutex);
+	remove_rest_call();
+	return HA_CALLBACK_CONTINUE;
+}
+
+
+
+int tgt_ha_start_cb(const _ha_request *reqp,
+	_ha_response *resp, void *userp)
+{
+	struct _ha_instance *hap = (struct _ha_instance *) userp;
+
+	pthread_mutex_lock(&ha_mutex);
+	if (!ha_thread_init) {
+		int rc = pthread_create(&ha_hb_tid, NULL,
+				&ha_heartbeat, (void *)hap);
+		if (rc) {
+			pthread_mutex_unlock(&ha_mutex);
+			return HA_CALLBACK_ERROR;
+		}
+		ha_thread_init = true;
+	}
+	pthread_mutex_unlock(&ha_mutex);
+	return HA_CALLBACK_CONTINUE;
+}
+
+int tgt_ha_stop_cb(const _ha_request *reqp,
+	_ha_response *resp, void *userp)
+{
+	pthread_mutex_lock(&ha_mutex);
+
+	if (ha_thread_init) {
+		pthread_cancel(ha_hb_tid);
+		pthread_join(ha_hb_tid, NULL);
+	}
+	pthread_mutex_unlock(&ha_mutex);
+
+	return HA_CALLBACK_CONTINUE;
+}
+
 int main(int argc, char **argv)
 {
 	struct sigaction sa_old;
@@ -525,7 +1211,18 @@ int main(int argc, char **argv)
 	int err, ch, longindex, nr_lld = 0;
 	int is_daemon = 1, is_debug = 0;
 	int ret;
+	struct ha_handlers *ep_handlers = malloc(sizeof(struct ha_handlers) +
+		5 * sizeof(struct ha_endpoint_handlers));
+	char *etcd_ip = NULL;
+	char *svc_label = NULL;
+	char *tgt_version = NULL;
+	int ha_svc_port = 0;
+	char *stord_ip = NULL;
+	uint16_t stord_port = 0;
+	int *ha_handler_idx;
 
+	if (ep_handlers == NULL)
+		exit(1);
 	sa_new.sa_handler = signal_catch;
 	sigemptyset(&sa_new.sa_mask);
 	sa_new.sa_flags = 0;
@@ -538,6 +1235,53 @@ int main(int argc, char **argv)
 			break;
 
 	opterr = 0;
+
+	if (pthread_mutex_init(&ha_mutex, NULL) != 0)
+		exit(1);
+
+	if (pthread_mutex_init(&ha_rest_mutex, NULL) != 0)
+		exit(1);
+
+	if (pthread_mutex_init(&ha_active_call_cnt_mutex, NULL) != 0)
+		exit(1);
+
+	ep_handlers->ha_count = 0;
+	ha_handler_idx = &ep_handlers->ha_count;
+
+	ep_handlers->ha_endpoints[*ha_handler_idx].ha_http_method = POST;
+	strncpy(ep_handlers->ha_endpoints[*ha_handler_idx].ha_url_endpoint,
+			"target_create", strlen("target_create") + 1);
+	ep_handlers->ha_endpoints[*ha_handler_idx].callback_function = target_create;
+	ep_handlers->ha_endpoints[*ha_handler_idx].ha_user_data = NULL;
+	ep_handlers->ha_count += 1;
+
+	ep_handlers->ha_endpoints[*ha_handler_idx].ha_http_method = POST;
+	strncpy(ep_handlers->ha_endpoints[*ha_handler_idx].ha_url_endpoint, "lun_create",
+		strlen("lun_create") + 1);
+	ep_handlers->ha_endpoints[*ha_handler_idx].callback_function = lun_create;
+	ep_handlers->ha_endpoints[*ha_handler_idx].ha_user_data = NULL;
+	ep_handlers->ha_count += 1;
+
+	ep_handlers->ha_endpoints[*ha_handler_idx].ha_http_method = POST;
+	strncpy(ep_handlers->ha_endpoints[*ha_handler_idx].ha_url_endpoint, "new_stord",
+		strlen("new_stord") + 1);
+	ep_handlers->ha_endpoints[*ha_handler_idx].callback_function = new_stord;
+	ep_handlers->ha_endpoints[*ha_handler_idx].ha_user_data = NULL;
+	ep_handlers->ha_count += 1;
+
+	ep_handlers->ha_endpoints[*ha_handler_idx].ha_http_method = POST;
+	strncpy(ep_handlers->ha_endpoints[*ha_handler_idx].ha_url_endpoint, "target_delete",
+		strlen("target_delete") + 1);
+	ep_handlers->ha_endpoints[*ha_handler_idx].callback_function = target_delete;
+	ep_handlers->ha_endpoints[*ha_handler_idx].ha_user_data = NULL;
+	ep_handlers->ha_count += 1;
+
+	ep_handlers->ha_endpoints[*ha_handler_idx].ha_http_method = POST;
+	strncpy(ep_handlers->ha_endpoints[*ha_handler_idx].ha_url_endpoint, "lun_delete",
+		strlen("lun_delete") + 1);
+	ep_handlers->ha_endpoints[*ha_handler_idx].callback_function = lun_delete;
+	ep_handlers->ha_endpoints[*ha_handler_idx].ha_user_data = NULL;
+	ep_handlers->ha_count += 1;
 
 	while ((ch = getopt_long(argc, argv, short_options, long_options,
 				 &longindex)) >= 0) {
@@ -566,6 +1310,28 @@ int main(int argc, char **argv)
 		case 'h':
 			usage(0);
 			break;
+		case 'p':
+			ret = str_to_int_range(optarg, ha_svc_port, 1, 32768);
+			if (ret)
+				bad_optarg(ret, ch, optarg);
+			break;
+		case 'e':
+			etcd_ip = strdup(optarg);
+			break;
+		case 's':
+			svc_label = strdup(optarg);
+			break;
+		case 'v':
+			tgt_version = strdup(optarg);
+			break;
+		case 'D':
+			stord_ip = strdup(optarg);
+			break;
+		case 'P':
+			ret = str_to_int_range(optarg, stord_port, 1, 32768);
+			if (ret)
+				bad_optarg(ret, ch, optarg);
+			break;
 		default:
 			if (strncmp(argv[optind - 1], "--", 2))
 				usage(1);
@@ -578,49 +1344,87 @@ int main(int argc, char **argv)
 		}
 	}
 
+	if ((etcd_ip == NULL) || (svc_label == NULL) ||
+		(tgt_version == NULL) || (ha_svc_port == 0)) {
+		free(etcd_ip);
+		free(svc_label);
+		free(tgt_version);
+		free(ep_handlers);
+		free(stord_ip);
+		usage(0);
+		exit(1);
+	}
+
+	ha = ha_initialize(ha_svc_port, etcd_ip, svc_label, tgt_version, 120,
+			ep_handlers, tgt_ha_start_cb, tgt_ha_stop_cb, 0 , NULL);
+
+	if (ha == NULL) {
+		fprintf(stderr, "ha_initilize failed\n");
+		free(etcd_ip);
+		free(svc_label);
+		free(tgt_version);
+		free(ep_handlers);
+		free(stord_ip);
+		exit(1);
+	}
+	
+
 	ep_fd = epoll_create(4096);
 	if (ep_fd < 0) {
 		fprintf(stderr, "can't create epoll fd, %m\n");
+		ha_deinitialize(ha);
 		exit(1);
 	}
 
 	spare_args = optind < argc ? argv[optind] : NULL;
 
-	if (is_daemon && daemon(0, 0))
+	if (is_daemon && daemon(0, 0)) {
+		ha_deinitialize(ha);
 		exit(1);
+	}
 
 	err = ipc_init();
-	if (err)
+	if (err) {
+		ha_deinitialize(ha);
 		exit(1);
+	}
 
 	err = log_init(program_name, LOG_SPACE_SIZE, is_daemon, is_debug);
-	if (err)
+	if (err) {
+		ha_deinitialize(ha);
 		exit(1);
+	}
 
 	nr_lld = lld_init();
 	if (!nr_lld) {
+		ha_deinitialize(ha);
 		fprintf(stderr, "No available low level driver!\n");
 		exit(1);
 	}
 
 	err = oom_adjust();
-	if (err && (errno != EACCES) && getuid() == 0)
+	if (err && (errno != EACCES) && getuid() == 0) {
+		ha_deinitialize(ha);
 		exit(1);
+	}
 
 	err = nr_file_adjust();
-	if (err)
+	if (err) {
+		ha_deinitialize(ha);
 		exit(1);
+	}
 
 	err = work_timer_start();
-	if (err)
+	if (err) {
+		ha_deinitialize(ha);
 		exit(1);
+	}
 
 	bs_init();
 
 #ifdef USE_SYSTEMD
 	sd_notify(0, "READY=1\nSTATUS=Starting event loop...");
 #endif
-
 	event_loop();
 
 	lld_exit();
@@ -629,7 +1433,15 @@ int main(int argc, char **argv)
 
 	ipc_exit();
 
+	free(etcd_ip);
+	free(svc_label);
+	free(tgt_version);
+	free(ep_handlers);
+	free(stord_ip);
+
 	log_close();
+
+	ha_deinitialize(ha);
 
 	return 0;
 }

@@ -397,6 +397,7 @@ struct event_data {
 		int fd;
 		int scheduled;
 	};
+	int events;
 	void *data;
 	struct list_head e_list;
 };

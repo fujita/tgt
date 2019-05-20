@@ -280,8 +280,18 @@ static void iscsi_tcp_event_handler(int fd, int events, void *data)
 	if (conn->state == STATE_CLOSE)
 		dprintf("connection closed\n");
 
-	if (conn->state != STATE_CLOSE && events & EPOLLOUT)
-		iscsi_tx_handler(conn);
+	if (conn->state != STATE_CLOSE && events & EPOLLOUT) {
+		if (conn->state == STATE_SCSI) {
+			do {
+				int ret = iscsi_tx_handler(conn);
+				if (ret) {
+					break;
+				}
+			} while (conn->state == STATE_SCSI && !list_empty(&conn->tx_clist));
+		} else {
+			iscsi_tx_handler(conn);
+		}
+	}
 
 	if (conn->state == STATE_CLOSE) {
 		dprintf("connection closed %p\n", conn);

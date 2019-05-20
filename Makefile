@@ -15,6 +15,10 @@ export CEPH_RBD
 export GLFS_BD
 export SD_NOTIFY
 
+#top-level dir path
+TGT_DIR = $(PWD)
+export TGT_DIR
+
 .PHONY: all
 all: programs doc conf scripts
 
