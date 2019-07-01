@@ -57,12 +57,13 @@ static struct option const long_options[] = {
 	{"nr_iothreads", required_argument, 0, 't'},
 	{"pid-file", required_argument, 0, 'p'},
 	{"debug", required_argument, 0, 'd'},
+	{"nodaemonize", no_argument, 0, 'D'},
 	{"version", no_argument, 0, 'V'},
 	{"help", no_argument, 0, 'h'},
 	{0, 0, 0, 0},
 };
 
-static char *short_options = "fC:d:t:p:Vh";
+static char *short_options = "fDC:d:t:p:Vh";
 static char *spare_args;
 
 static void usage(int status)
@@ -76,6 +77,7 @@ static void usage(int status)
 	printf("Linux SCSI Target framework daemon, version %s\n\n"
 		"Usage: %s [OPTION]\n"
 		"-f, --foreground        make the program run in the foreground\n"
+		"-D, --nodaemonize       make the program run in the foreground with logger\n"
 		"-C, --control-port NNNN use port NNNN for the mgmt channel\n"
 		"-t, --nr_iothreads NNNN specify the number of I/O threads\n"
 		"-p, --pid-file filename specify the pid file\n"
@@ -547,7 +549,7 @@ int main(int argc, char **argv)
 	struct sigaction sa_old;
 	struct sigaction sa_new;
 	int err, ch, longindex, nr_lld = 0;
-	int is_daemon = 1, is_debug = 0;
+	int is_daemon = 1, is_debug = 0, use_logger = 1;
 	int ret;
 	char *pidfile = NULL;
 
@@ -568,6 +570,10 @@ int main(int argc, char **argv)
 				 &longindex)) >= 0) {
 		switch (ch) {
 		case 'f':
+			is_daemon = 0;
+			use_logger = 0;
+			break;
+		case 'D':
 			is_daemon = 0;
 			break;
 		case 'C':
@@ -625,7 +631,7 @@ int main(int argc, char **argv)
 	if (err)
 		exit(1);
 
-	err = log_init(program_name, LOG_SPACE_SIZE, is_daemon, is_debug);
+	err = log_init(program_name, LOG_SPACE_SIZE, use_logger, is_debug);
 	if (err)
 		exit(1);
 
