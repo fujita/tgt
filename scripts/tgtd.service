@@ -13,15 +13,15 @@ Type=notify
 Environment=TGTD_CONFIG=/etc/tgt/targets.conf
 
 ExecStart=/usr/sbin/tgtd --foreground
-ExecStartPost=/usr/sbin/tgtadm --op update --mode sys --name State -v offline
-ExecStartPost=/usr/sbin/tgtadm --op update --mode sys --name State -v ready
-ExecStartPost=/usr/sbin/tgt-admin -e -c ${TGTD_CONFIG}
+ExecStartPost=/usr/sbin/tgtadm --op update --mode sys --name State --value offline
+ExecStartPost=/usr/sbin/tgtadm --op update --mode sys --name State --value ready
+ExecStartPost=/usr/sbin/tgt-admin --verbose --execute --conf ${TGTD_CONFIG}
 
-ExecReload=/usr/sbin/tgt-admin --update ALL -f -c ${TGTD_CONFIG}
+ExecReload=/usr/sbin/tgt-admin --verbose --update ALL --force --conf ${TGTD_CONFIG}
 
-ExecStop=/usr/sbin/tgtadm --op update --mode sys --name State -v offline
-ExecStop=/usr/sbin/tgt-admin --offline ALL
-ExecStop=/usr/sbin/tgt-admin --update ALL -c /dev/null -f
+ExecStop=/usr/sbin/tgtadm --op update --mode sys --name State --value offline
+ExecStop=/usr/sbin/tgt-admin --verbose --offline ALL
+ExecStop=/usr/sbin/tgt-admin --verbose --update ALL --force --conf /dev/null
 ExecStop=/usr/sbin/tgtadm  --op delete --mode system
 
 # Exit code: 107 tgtd not running
