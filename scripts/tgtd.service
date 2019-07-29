@@ -9,10 +9,10 @@ After=network.target
 ConditionPathExists=/etc/tgt/targets.conf
 
 [Service]
-Type=forking
+Type=notify
 Environment=TGTD_CONFIG=/etc/tgt/targets.conf
 
-ExecStart=/usr/sbin/tgtd
+ExecStart=/usr/sbin/tgtd --foreground
 ExecStartPost=/usr/sbin/tgtadm --op update --mode sys --name State -v offline
 ExecStartPost=/usr/sbin/tgtadm --op update --mode sys --name State -v ready
 ExecStartPost=/usr/sbin/tgt-admin -e -c ${TGTD_CONFIG}
