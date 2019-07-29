@@ -20,9 +20,9 @@ ExecStop=/usr/sbin/tgtadm --op update --mode sys --name State --value offline
 ExecStop=/usr/sbin/tgt-admin --verbose --offline ALL
 ExecStop=/usr/sbin/tgt-admin --verbose --update ALL --force --conf /dev/null
 ExecStop=/usr/sbin/tgtadm  --op delete --mode system
+ExecStop=/usr/sbin/kill -9 $MAINPID
 
-# Exit code: 107 tgtd not running
-
+# ExecStop exit code: 107 tgtd not running
 
 [Install]
 WantedBy=multi-user.target
