@@ -1,6 +1,6 @@
 [Unit]
 Description=iSCSI target framework daemon
-Documentation=man: tgtd(8)
+Documentation=man:tgtd(8)
 After=network.target
 
 # On systems without virtual consoles, don't start any getty. Note
