@@ -197,7 +197,7 @@ static int log_enqueue(int prio, const char *fmt, va_list ap)
 	}
 
 	/* not enough space on head : drop msg */
-	if (la->head > la->tail &&
+	if (la->head >= la->tail &&
 	    (len + sizeof(struct logmsg)) > (la->head - la->tail)) {
 		logdbg(stderr, "enqueue: log area overrun, drop msg\n");
 
