@@ -476,7 +476,7 @@ static int chap_initiator_auth_check_response(struct iscsi_connection *conn)
 		goto out;
 	}
 
-	conn->state = CHAP_AUTH_STATE_RESPONSE;
+	conn->auth_state = CHAP_AUTH_STATE_RESPONSE;
  out:
 	if (his_digest)
 		free(his_digest);
