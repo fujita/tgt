@@ -953,7 +953,7 @@ sub dump_config {
 		if (scalar(@acl_information) != 1 || $acl_information[0] ne "ALL") {
 			foreach my $ini_address (@acl_information) {
 				# determine here if acl is an IP or IQN
-				if ( $ini_address =~ /^[0-9,.E]+$/ ) {
+				if ( $ini_address =~ /^[0-9,.E\/]+$/ ) {
 					print "\tinitiator-address $ini_address\n";
 				} else {
 					print "\tinitiator-name $ini_address\n";
