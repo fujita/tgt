@@ -41,30 +41,19 @@
 #include "spc.h"
 #include "bs_thread.h"
 
-static void set_medium_error(int *result, uint8_t *key, uint16_t *asc)
+static void cmd_error_sense(struct scsi_cmd *cmd, uint8_t key, uint16_t asc)
 {
-	*result = SAM_STAT_CHECK_CONDITION;
-	*key = MEDIUM_ERROR;
-	*asc = ASC_READ_ERROR;
+	scsi_set_result(cmd, SAM_STAT_CHECK_CONDITION);
+	sense_data_build(cmd, key, asc);
 }
 
-static void bs_sync_sync_range(struct scsi_cmd *cmd, uint32_t length,
-			       int *result, uint8_t *key, uint16_t *asc)
-{
-	int ret;
-
-	ret = fdatasync(cmd->dev->fd);
-	if (ret)
-		set_medium_error(result, key, asc);
-}
+#define set_medium_error(cmd) cmd_error_sense(cmd, MEDIUM_ERROR, ASC_READ_ERROR)
 
 static void bs_rdwr_request(struct scsi_cmd *cmd)
 {
-	int ret, fd = cmd->dev->fd;
-	uint32_t length;
-	int result = SAM_STAT_GOOD;
-	uint8_t key;
-	uint16_t asc;
+	int ret = 0;
+	int fd = cmd->dev->fd;
+	uint32_t length = 0;
 	char *tmpbuf;
 	size_t blocksize;
 	uint64_t offset = cmd->offset;
@@ -73,8 +62,9 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 	int i;
 	char *ptr;
 	const char *write_buf = NULL;
-	ret = length = 0;
-	key = asc = 0;
+
+	/* overwritten on error */
+	scsi_set_result(cmd, SAM_STAT_GOOD);
 
 	switch (cmd->scb[0])
 	{
@@ -83,16 +73,15 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 
 		tmpbuf = malloc(length);
 		if (!tmpbuf) {
-			result = SAM_STAT_CHECK_CONDITION;
-			key = HARDWARE_ERROR;
-			asc = ASC_INTERNAL_TGT_FAILURE;
+			cmd_error_sense(cmd, HARDWARE_ERROR,
+					ASC_INTERNAL_TGT_FAILURE);
 			break;
 		}
 
 		ret = pread64(fd, tmpbuf, length, offset);
 
 		if (ret != length) {
-			set_medium_error(&result, &key, &asc);
+			set_medium_error(cmd);
 			free(tmpbuf);
 			break;
 		}
@@ -112,24 +101,22 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 		 */
 		length = scsi_get_out_length(cmd) / 2;
 		if (length != cmd->tl) {
-			result = SAM_STAT_CHECK_CONDITION;
-			key = ILLEGAL_REQUEST;
-			asc = ASC_INVALID_FIELD_IN_CDB;
+			cmd_error_sense(cmd, ILLEGAL_REQUEST,
+					ASC_INVALID_FIELD_IN_CDB);
 			break;
 		}
 
 		tmpbuf = malloc(length);
 		if (!tmpbuf) {
-			result = SAM_STAT_CHECK_CONDITION;
-			key = HARDWARE_ERROR;
-			asc = ASC_INTERNAL_TGT_FAILURE;
+			cmd_error_sense(cmd, HARDWARE_ERROR,
+					ASC_INTERNAL_TGT_FAILURE);
 			break;
 		}
 
 		ret = pread64(fd, tmpbuf, length, offset);
 
 		if (ret != length) {
-			set_medium_error(&result, &key, &asc);
+			set_medium_error(cmd);
 			free(tmpbuf);
 			break;
 		}
@@ -148,9 +135,8 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 			for (pos = 0; pos < length && *spos++ == *dpos++;
 			     pos++)
 				;
-			result = SAM_STAT_CHECK_CONDITION;
-			key = MISCOMPARE;
-			asc = ASC_MISCOMPARE_DURING_VERIFY_OPERATION;
+			cmd_error_sense(cmd, MISCOMPARE,
+					ASC_MISCOMPARE_DURING_VERIFY_OPERATION);
 			free(tmpbuf);
 			break;
 		}
@@ -169,11 +155,13 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 		length = (cmd->scb[0] == SYNCHRONIZE_CACHE) ? 0 : 0;
 
 		if (cmd->scb[1] & 0x2) {
-			result = SAM_STAT_CHECK_CONDITION;
-			key = ILLEGAL_REQUEST;
-			asc = ASC_INVALID_FIELD_IN_CDB;
-		} else
-			bs_sync_sync_range(cmd, length, &result, &key, &asc);
+			cmd_error_sense(cmd, ILLEGAL_REQUEST,
+					ASC_INVALID_FIELD_IN_CDB);
+		} else {
+			ret = fdatasync(fd);
+			if (ret)
+				set_medium_error(cmd);
+		}
 		break;
 	case WRITE_VERIFY:
 	case WRITE_VERIFY_12:
@@ -197,17 +185,18 @@ write:
 			 */
 			pg = find_mode_page(cmd->dev, 0x08, 0);
 			if (pg == NULL) {
-				result = SAM_STAT_CHECK_CONDITION;
-				key = ILLEGAL_REQUEST;
-				asc = ASC_INVALID_FIELD_IN_CDB;
+				cmd_error_sense(cmd, ILLEGAL_REQUEST,
+						ASC_INVALID_FIELD_IN_CDB);
 				break;
 			}
 			if (((cmd->scb[0] != WRITE_6) && (cmd->scb[1] & 0x8)) ||
-			    !(pg->mode_data[0] & 0x04))
-				bs_sync_sync_range(cmd, length, &result, &key,
-						   &asc);
+			    !(pg->mode_data[0] & 0x04)) {
+				ret = fdatasync(fd);
+				if (ret)
+					set_medium_error(cmd);
+			}
 		} else
-			set_medium_error(&result, &key, &asc);
+			set_medium_error(cmd);
 
 		if ((cmd->scb[0] != WRITE_6) && (cmd->scb[1] & 0x10))
 			posix_fadvise(fd, offset, length,
@@ -223,9 +212,8 @@ write:
 			if (ret != 0) {
 				eprintf("Failed to punch hole for WRITE_SAME"
 					" command\n");
-				result = SAM_STAT_CHECK_CONDITION;
-				key = HARDWARE_ERROR;
-				asc = ASC_INTERNAL_TGT_FAILURE;
+				cmd_error_sense(cmd, HARDWARE_ERROR,
+						ASC_INTERNAL_TGT_FAILURE);
 				break;
 			}
 			break;
@@ -246,7 +234,7 @@ write:
 
 			ret = pwrite64(fd, tmpbuf, blocksize, offset);
 			if (ret != blocksize)
-				set_medium_error(&result, &key, &asc);
+				set_medium_error(cmd);
 
 			offset += blocksize;
 			tl     -= blocksize;
@@ -261,7 +249,7 @@ write:
 			      offset);
 
 		if (ret != length)
-			set_medium_error(&result, &key, &asc);
+			set_medium_error(cmd);
 
 		if ((cmd->scb[0] != READ_6) && (cmd->scb[1] & 0x10))
 			posix_fadvise(fd, offset, length,
@@ -274,7 +262,7 @@ write:
 				POSIX_FADV_WILLNEED);
 
 		if (ret != 0)
-			set_medium_error(&result, &key, &asc);
+			set_medium_error(cmd);
 		break;
 	case VERIFY_10:
 	case VERIFY_12:
@@ -284,20 +272,18 @@ verify:
 
 		tmpbuf = malloc(length);
 		if (!tmpbuf) {
-			result = SAM_STAT_CHECK_CONDITION;
-			key = HARDWARE_ERROR;
-			asc = ASC_INTERNAL_TGT_FAILURE;
+			cmd_error_sense(cmd, HARDWARE_ERROR,
+					ASC_INTERNAL_TGT_FAILURE);
 			break;
 		}
 
 		ret = pread64(fd, tmpbuf, length, offset);
 
 		if (ret != length)
-			set_medium_error(&result, &key, &asc);
+			set_medium_error(cmd);
 		else if (memcmp(scsi_get_out_buffer(cmd), tmpbuf, length)) {
-			result = SAM_STAT_CHECK_CONDITION;
-			key = MISCOMPARE;
-			asc = ASC_MISCOMPARE_DURING_VERIFY_OPERATION;
+			cmd_error_sense(cmd, MISCOMPARE,
+					ASC_MISCOMPARE_DURING_VERIFY_OPERATION);
 		}
 
 		if (cmd->scb[1] & 0x10)
@@ -308,9 +294,8 @@ verify:
 		break;
 	case UNMAP:
 		if (!cmd->dev->attrs.thinprovisioning) {
-			result = SAM_STAT_CHECK_CONDITION;
-			key = ILLEGAL_REQUEST;
-			asc = ASC_INVALID_FIELD_IN_CDB;
+			cmd_error_sense(cmd, ILLEGAL_REQUEST,
+					ASC_INVALID_FIELD_IN_CDB);
 			break;
 		}
 
@@ -332,9 +317,8 @@ verify:
 
 			if (offset + tl > cmd->dev->size) {
 				eprintf("UNMAP beyond EOF\n");
-				result = SAM_STAT_CHECK_CONDITION;
-				key = ILLEGAL_REQUEST;
-				asc = ASC_LBA_OUT_OF_RANGE;
+				cmd_error_sense(cmd, ILLEGAL_REQUEST,
+						ASC_LBA_OUT_OF_RANGE);
 				break;
 			}
 
@@ -344,9 +328,8 @@ verify:
 						" UNMAP at offset:%" PRIu64
 						" length:%d\n",
 						offset, tl);
-					result = SAM_STAT_CHECK_CONDITION;
-					key = HARDWARE_ERROR;
-					asc = ASC_INTERNAL_TGT_FAILURE;
+					cmd_error_sense(cmd, HARDWARE_ERROR,
+						ASC_INTERNAL_TGT_FAILURE);
 					break;
 				}
 			}
@@ -361,12 +344,9 @@ verify:
 
 	dprintf("io done %p %x %d %u\n", cmd, cmd->scb[0], ret, length);
 
-	scsi_set_result(cmd, result);
-
-	if (result != SAM_STAT_GOOD) {
+	if (scsi_get_result(cmd) != SAM_STAT_GOOD) {
 		eprintf("io error %p %x %d %d %" PRIu64 ", %m\n",
 			cmd, cmd->scb[0], ret, length, offset);
-		sense_data_build(cmd, key, asc);
 	}
 }
 
