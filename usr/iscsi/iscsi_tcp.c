@@ -407,8 +407,14 @@ int iscsi_tcp_init_portal(char *addr, int port, int tpgt)
 
 int iscsi_add_portal(char *addr, int port, int tpgt)
 {
+	const char *addr_str = "";
+
 	if (iscsi_tcp_init_portal(addr, port, tpgt)) {
-		eprintf("failed to create/bind to portal %s:%d\n", addr, port);
+		if (addr) {
+			addr_str = addr;
+		}
+		eprintf("failed to create/bind to portal %s:%d\n",
+			addr_str, port);
 		return -1;
 	}
 
