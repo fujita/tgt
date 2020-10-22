@@ -29,6 +29,7 @@
 #include <syscall.h>
 #include <unistd.h>
 #include <linux/fs.h>
+#include <assert.h>
 
 #include "list.h"
 #include "util.h"
@@ -335,6 +336,28 @@ void sense_data_build(struct scsi_cmd *cmd, uint8_t key, uint16_t asc)
 		cmd->sense_buffer[12] = (asc >> 8) & 0xff;
 		cmd->sense_buffer[13] = asc & 0xff;
 		cmd->sense_len = len + 8;
+	}
+}
+
+void sense_data_build_with_info(struct scsi_cmd *cmd, uint8_t key, uint16_t asc,
+				uint64_t info)
+{
+	sense_data_build(cmd, key, asc);
+
+	if (cmd->dev->attrs.sense_format) {
+		/* descriptor format, append as first sense data descriptor */
+		assert(cmd->sense_buffer[7] == 0);
+		cmd->sense_buffer[7] = 12;	/* ADDITIONAL SENSE LENGTH */
+		uint8_t *sdd = &cmd->sense_buffer[8];
+		sdd[0] = 0x00;				/* DESCRIPTOR TYPE */
+		sdd[1] = 0x0a;				/* ADDITIONAL LENGTH */
+		sdd[2] = 0x80;				/* VALID */
+		put_unaligned_be64(info, &sdd[4]);	/* INFORMATION */
+	} else if (info <= UINT32_MAX) {
+		/* fixed format. info field is only 32-bit */
+		cmd->sense_buffer[0] |= 0x80;		/* VALID */
+		put_unaligned_be32((uint32_t)info,
+				&cmd->sense_buffer[3]);	/* INFORMATION */
 	}
 }
 
