@@ -122,7 +122,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 		}
 
 		if (memcmp(scsi_get_out_buffer(cmd), tmpbuf, length)) {
-			uint32_t pos = 0;
+			uint64_t pos = 0;
 			char *spos = scsi_get_out_buffer(cmd);
 			char *dpos = tmpbuf;
 
@@ -135,9 +135,10 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 			for (pos = 0; pos < length && *spos++ == *dpos++;
 			     pos++)
 				;
-			cmd_error_sense(cmd, MISCOMPARE,
-					ASC_MISCOMPARE_DURING_VERIFY_OPERATION);
 			free(tmpbuf);
+			scsi_set_result(cmd, SAM_STAT_CHECK_CONDITION);
+			sense_data_build_with_info(cmd, MISCOMPARE,
+				ASC_MISCOMPARE_DURING_VERIFY_OPERATION, pos);
 			break;
 		}
 
