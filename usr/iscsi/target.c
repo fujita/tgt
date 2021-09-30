@@ -197,25 +197,19 @@ static int iqn_match(struct iscsi_connection *conn, char *name)
 
 int iqn_acl(int tid, struct iscsi_connection *conn)
 {
-	int idx, enable, err;
+	int idx, err;
 	char *name;
 
-	enable = 0;
 	for (idx = 0;; idx++) {
 		name = iqn_acl_get(tid, idx);
 		if (!name)
 			break;
 
-		enable = 1;
 		err = iqn_match(conn, name);
 		if (!err)
 			return 0;
 	}
-
-	if (!enable)
-		return 0;
-	else
-		return -EPERM;
+	return -EPERM;
 }
 
 static int
@@ -352,10 +346,7 @@ void target_list_build(struct iscsi_connection *conn, char *addr, char *name)
 		if (name && strcmp(tgt_targetname(target->tid), name))
 			continue;
 
-		if (ip_acl(target->tid, conn))
-			continue;
-
-		if (iqn_acl(target->tid, conn))
+		if (ip_acl(target->tid, conn) && iqn_acl(target->tid, conn))
 			continue;
 
 		if (isns_scn_access(target->tid, conn->initiator))
