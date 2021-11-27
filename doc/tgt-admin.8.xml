@@ -238,7 +238,7 @@ Example usage:
   <refsect1><title>SEE ALSO</title>
     <para>
       targets.conf(5), tgtd(8), tgtadm(8), tgtimg(8), tgt-setup-lun(8).
-      <ulink url="http://stgt.sourceforge.net/"/>
+      <ulink url="https://github.com/fujita/tgt"/>
     </para>
   </refsect1>
 

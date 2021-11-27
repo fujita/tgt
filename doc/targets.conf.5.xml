@@ -451,7 +451,7 @@ Example configuration file:
   <refsect1><title>SEE ALSO</title>
     <para>
       tgtd(8), tgtadm(8), tgtimg(8), tgt-setup-lun(8).
-      <ulink url="http://stgt.sourceforge.net/"/>
+      <ulink url="https://github.com/fujita/tgt"/>
     </para>
   </refsect1>
 
