@@ -291,17 +291,11 @@ static void bs_sg_cmd_complete(int fd, int events, void *data)
 		return;
 
 	cmd = (struct scsi_cmd *)io_hdr.usr_ptr;
-	if (!io_hdr.status) {
-		actual_len = io_hdr.dxfer_len - io_hdr.resid;
-	} else {
-		/* NO SENSE | ILI (Incorrect Length Indicator) */
-		if (io_hdr.sbp[2] == 0x20)
-			actual_len = io_hdr.dxfer_len - io_hdr.resid;
-		else
-			actual_len = 0;
 
-		cmd->sense_len = io_hdr.sb_len_wr;
-	}
+
+	actual_len = io_hdr.dxfer_len - io_hdr.resid;
+	cmd->sense_len = io_hdr.sb_len_wr;
+
 	if (!actual_len || io_hdr.resid) {
 		if (io_hdr.dxfer_direction == SG_DXFER_TO_DEV)
 			scsi_set_out_resid_by_actual(cmd, actual_len);
