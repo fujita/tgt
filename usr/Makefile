@@ -114,4 +114,4 @@ endif
 
 .PHONY: clean
 clean:
-	rm -f *.[od] *.so $(PROGRAMS) iscsi/*.[od] ibmvio/*.[od] fc/*.[od]
+	rm -f *.[od] *.so $(PROGRAMS) iscsi/*.[od]
