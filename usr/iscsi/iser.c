@@ -1353,8 +1353,8 @@ void iser_conn_free(struct iser_conn *conn)
 		free(conn->self_name);
 
 	conn->h.state = STATE_INIT;
-	free(conn);
 	dprintf("conn:%p freed\n", &conn->h);
+	free(conn);
 }
 
 static void iser_sched_conn_free(struct event_data *evt)
