@@ -1,9 +1,8 @@
-Introduction
-------------
+## Introduction
 The Linux target framework (tgt) is a user space SCSI target framework
 that supports the iSCSI and iSER transport protocols and that also
 supports multiple methods for accessing block storage. Tgt consists of
-a user-space daemon and user-space tools.
+user-space daemon and tools.
 
 Currently, tgt supports the following SCSI transport protocols:
 - iSCSI software target driver for Ethernet NICs
@@ -33,25 +32,19 @@ Tgt can emulate the following SCSI device types:
   store the content (in progress).
 
 
-License
--------
+## License
 The code is released under the GNU General Public License version 2.
 
 
-Requirements
-------------
+## Requirements
 Linux kernel version 2.6.22 or newer is recommended because tgt can get
 better performance with signalfd.
 
 Target drivers have their own ways to build, configure, etc. Please
-find an appropriate documentation in the doc directory. You might find
-other useful information on tgt's site:
-
-http://stgt.sourceforge.net/
+find an appropriate documentation in the doc directory.
 
 
-Developer Notes
--------------
+## Developer Notes
 The central communication channel for tgt development is the mailing list
 (stgt@vger.kernel.org).
 

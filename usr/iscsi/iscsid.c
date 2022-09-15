@@ -531,14 +531,7 @@ static void login_start(struct iscsi_connection *conn)
 			return;
 		}
 
-		if (ip_acl(conn->tid, conn)) {
-			rsp->status_class = ISCSI_STATUS_CLS_INITIATOR_ERR;
-			rsp->status_detail = ISCSI_LOGIN_STATUS_TGT_NOT_FOUND;
-			conn->state = STATE_EXIT;
-			return;
-		}
-
-		if (iqn_acl(conn->tid, conn)) {
+		if (ip_acl(conn->tid, conn) && iqn_acl(conn->tid, conn)) {
 			rsp->status_class = ISCSI_STATUS_CLS_INITIATOR_ERR;
 			rsp->status_detail = ISCSI_LOGIN_STATUS_TGT_NOT_FOUND;
 			conn->state = STATE_EXIT;

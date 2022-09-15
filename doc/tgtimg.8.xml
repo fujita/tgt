@@ -186,7 +186,7 @@ Supported media types for tape devices are :
   <refsect1><title>SEE ALSO</title>
     <para>
       tgtd(8), tgtadm(8), tgt-admin(8), tgt-setup-lun(8).
-      <ulink url="http://stgt.sourceforge.net/"/>
+      <ulink url="https://github.com/fujita/tgt"/>
     </para>
   </refsect1>
 
