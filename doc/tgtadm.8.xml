@@ -429,6 +429,23 @@ tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 1 \
          --params thin_provisioning=1
       </screen>
 
+      <varlistentry><term><option>rotation_rate=&lt;uint32&gt;</option></term>
+        <listitem>
+          <para>
+        This sets the reported rotation rate in RPM of the LUN to
+        the initiator. Some operating systems assume a SSD type disk
+        when this parameter is zero.
+          </para>
+          <para>
+        This parameter only applies to DISK devices.
+          </para>
+        </listitem>
+      </varlistentry>
+      <screen format="linespecific">
+tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 1 \
+         --params rotation_rate=0
+      </screen>
+
     </variablelist>
   </refsect1>
 
