@@ -2235,7 +2235,7 @@ again:
 		if (errno != EINTR && errno != EAGAIN)
 			conn->state = STATE_CLOSE;
 		else if (errno == EINTR || errno == EAGAIN)
-			goto again;
+			conn->tp->ep_event_modify(conn, EPOLLIN | EPOLLOUT);
 
 		return -EIO;
 	}
