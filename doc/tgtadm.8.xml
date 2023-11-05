@@ -418,9 +418,14 @@ tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 1 \
 	    This parameter only applies to DISK devices.
           </para>
           <para>
-	    Thin-provisioning only works for LUNs stored on filesystems
+	    Thin-provisioning works for LUNs stored on filesystems
 	    that support FALLOC_FL_PUNCH_HOLE.
           </para>
+	  <para>
+	    When using thin-provisioning option with a block device such a
+	    SSD or ZVOL, UNMAP SCSI command discards the region from
+	    the block device.
+	  </para>
         </listitem>
       </varlistentry>
 
