@@ -15,6 +15,7 @@
 #include <string.h>
 #include <limits.h>
 #include <linux/types.h>
+#include <sys/ioctl.h>
 
 #include "be_byteshift.h"
 
@@ -215,7 +216,9 @@ static inline int unmap_file_region(int fd, off_t offset, off_t length)
 {
 	int err;
 	struct stat64 st;
+#ifdef BLKDISCARD
 	uint64_t range[2];
+#endif
 
 	err = fstat64(fd, &st);
 	if (err < 0)
