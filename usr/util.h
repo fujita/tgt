@@ -16,6 +16,9 @@
 #include <limits.h>
 #include <linux/types.h>
 #include <sys/ioctl.h>
+#include <linux/fs.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #include "be_byteshift.h"
 
