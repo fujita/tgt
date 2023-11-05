@@ -208,15 +208,32 @@ void concat_buf_release(struct concat_buf *b);
 
 
 /* If we have recent enough glibc to support PUNCH HOLE we try to unmap
- * the region.
+ * the region of file.
+ * If supported BLKDISCARD, try to unmap the region of block device.
  */
 static inline int unmap_file_region(int fd, off_t offset, off_t length)
 {
+	int err;
+	struct stat64 st;
+	uint64_t range[2];
+
+	err = fstat64(fd, &st);
+	if (err < 0)
+		return -1;
+	if (S_ISREG(st.st_mode)) {
 #ifdef FALLOC_FL_PUNCH_HOLE
-	if (fallocate(fd, FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE,
-			offset, length) == 0)
-		return 0;
+		if (fallocate(fd, FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE,
+				offset, length) == 0)
+			return 0;
 #endif
+	} else if (S_ISBLK(st.st_mode)) {
+#ifdef BLKDISCARD
+		range[0] = offset;
+		range[1] = length;
+		if (ioctl(fd, BLKDISCARD, &range) == 0)
+			return 0;
+#endif
+	}
 	return -1;
 }
 
