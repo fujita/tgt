@@ -217,14 +217,8 @@ void concat_buf_release(struct concat_buf *b);
  */
 static inline int unmap_file_region(int fd, off_t offset, off_t length)
 {
-	int err;
 	struct stat64 st;
-#ifdef BLKDISCARD
-	uint64_t range[2];
-#endif
-
-	err = fstat64(fd, &st);
-	if (err < 0)
+	if (fstat64(fd, &st) < 0)
 		return -1;
 	if (S_ISREG(st.st_mode)) {
 #ifdef FALLOC_FL_PUNCH_HOLE
@@ -234,8 +228,7 @@ static inline int unmap_file_region(int fd, off_t offset, off_t length)
 #endif
 	} else if (S_ISBLK(st.st_mode)) {
 #ifdef BLKDISCARD
-		range[0] = offset;
-		range[1] = length;
+		uint64_t range[] = { offset, length };
 		if (ioctl(fd, BLKDISCARD, &range) == 0)
 			return 0;
 #endif
