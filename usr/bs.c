@@ -311,7 +311,7 @@ static int bs_init_signalfd(void)
 	sigaddset(&mask, SIGUSR2);
 	sigprocmask(SIG_BLOCK, &mask, NULL);
 
-	sig_fd = __signalfd(-1, &mask, 0);
+	sig_fd = signalfd(-1, &mask, O_NONBLOCK);
 	if (sig_fd < 0)
 		return 1;
 

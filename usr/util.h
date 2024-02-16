@@ -14,11 +14,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <linux/fs.h>
 #include <linux/types.h>
 #include <sys/ioctl.h>
-#include <linux/fs.h>
-#include <sys/types.h>
+#include <sys/signalfd.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 
 #include "be_byteshift.h"
 
@@ -102,44 +103,6 @@ static inline int between(uint32_t seq1, uint32_t seq2, uint32_t seq3)
 }
 
 extern unsigned long pagesize, pageshift;
-
-#if defined(__NR_signalfd) && defined(USE_SIGNALFD)
-
-/*
- * workaround for broken linux/signalfd.h including
- * usr/include/linux/fcntl.h
- */
-#define _LINUX_FCNTL_H
-
-#include <linux/signalfd.h>
-
-static inline int __signalfd(int fd, const sigset_t *mask, int flags)
-{
-	int fd2, ret;
-
-	fd2 = syscall(__NR_signalfd, fd, mask, _NSIG / 8);
-	if (fd2 < 0)
-		return fd2;
-
-	ret = fcntl(fd2, F_GETFL);
-	if (ret < 0) {
-		close(fd2);
-		return -1;
-	}
-
-	ret = fcntl(fd2, F_SETFL, ret | O_NONBLOCK);
-	if (ret < 0) {
-		close(fd2);
-		return -1;
-	}
-
-	return fd2;
-}
-#else
-#define __signalfd(fd, mask, flags) (-1)
-struct signalfd_siginfo {
-};
-#endif
 
 /* convert string to integer, check for validity of the string numeric format
  * and the natural boundaries of the integer value type (first get a 64-bit
