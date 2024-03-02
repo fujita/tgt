@@ -499,14 +499,8 @@ static void iser_login_start(struct iscsi_connection *iscsi_conn,
 			return;
 		}
 
-		if (ip_acl(iscsi_conn->tid, iscsi_conn)) {
-			rsp_bhs->status_class = ISCSI_STATUS_CLS_INITIATOR_ERR;
-			rsp_bhs->status_detail = ISCSI_LOGIN_STATUS_TGT_NOT_FOUND;
-			iscsi_conn->state = STATE_EXIT;
-			return;
-		}
-
-		if (iqn_acl(iscsi_conn->tid, iscsi_conn)) {
+		if (ip_acl(iscsi_conn->tid, iscsi_conn) &&
+		    iqn_acl(iscsi_conn->tid, iscsi_conn)) {
 			rsp_bhs->status_class = ISCSI_STATUS_CLS_INITIATOR_ERR;
 			rsp_bhs->status_detail = ISCSI_LOGIN_STATUS_TGT_NOT_FOUND;
 			iscsi_conn->state = STATE_EXIT;
