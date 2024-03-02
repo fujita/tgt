@@ -116,7 +116,7 @@ status()
 {
 	# Don't name this script "tgtd"...
 	TGTD_PROC=$(ps -C tgtd | grep -c tgtd)
-	if [ "$TGTD_PROC" -eq 2 ] ; then
+	if [ "$TGTD_PROC" -gt 2 ] ; then
 	    echo "tgtd is running. Run 'tgt-admin -s' to see detailed target info."
 	else
 	    echo "tgtd is NOT running."
