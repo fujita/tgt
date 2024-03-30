@@ -1,6 +1,8 @@
 #ifndef __TARGET_DAEMON_H
 #define __TARGET_DAEMON_H
 
+#include <limits.h>
+
 #include "log.h"
 #include "scsi_cmnd.h"
 #include "tgtadm_error.h"
@@ -173,7 +175,7 @@ struct backingstore_template {
 	void (*bs_exit)(struct scsi_lu *dev);
 	int (*bs_cmd_submit)(struct scsi_cmd *cmd);
 	int bs_oflags_supported;
-	unsigned long bs_supported_ops[NR_SCSI_OPCODES / __WORDSIZE];
+	unsigned long bs_supported_ops[NR_SCSI_OPCODES / LONG_BIT];
 
 	struct list_head backingstore_siblings;
 };

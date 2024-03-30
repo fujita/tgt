@@ -199,7 +199,7 @@ static inline int unmap_file_region(int fd, off_t offset, off_t length)
 	return -1;
 }
 
-#define BITS_PER_LONG __WORDSIZE
+#define BITS_PER_LONG           LONG_BIT
 #define BITS_PER_BYTE           8
 #define BITS_TO_LONGS(nr)       DIV_ROUND_UP(nr, BITS_PER_BYTE * sizeof(long))
 
