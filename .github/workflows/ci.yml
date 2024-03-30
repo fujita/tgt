@@ -3,14 +3,29 @@ name: ci
 on: [pull_request]
 
 jobs:
-  build:
-    name: build
+  build_ubuntu:
+    name: build on Ubuntu
     runs-on: ubuntu-22.04
     steps:
       - name: checking out
         uses: actions/checkout@v3
         with:
           path: tgt
+      - name: build
+        working-directory: tgt
+        run: |
+          make
+  build_alpine:
+    name: build on Alpine Linux
+    runs-on: ubuntu-22.04
+    steps:
+      - name: checking out
+        uses: actions/checkout@v3
+        with:
+          path: tgt
+      - name: Setup Alpine Linux
+        uses: jirutka/setup-alpine@v1
+
       - name: build
         working-directory: tgt
         run: |
