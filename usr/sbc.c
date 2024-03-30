@@ -23,7 +23,6 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA
  */
-#define _FILE_OFFSET_BITS 64
 #define __USE_GNU
 
 #include <errno.h>
@@ -52,7 +51,7 @@ static unsigned int blk_shift = DEFAULT_BLK_SHIFT;
 static off_t find_next_data(struct scsi_lu *dev, off_t offset)
 {
 #ifdef SEEK_DATA
-	return lseek64(dev->fd, offset, SEEK_DATA);
+	return lseek(dev->fd, offset, SEEK_DATA);
 #else
 	return offset;
 #endif
@@ -60,7 +59,7 @@ static off_t find_next_data(struct scsi_lu *dev, off_t offset)
 static off_t find_next_hole(struct scsi_lu *dev, off_t offset)
 {
 #ifdef SEEK_HOLE
-	return lseek64(dev->fd, offset, SEEK_HOLE);
+	return lseek(dev->fd, offset, SEEK_HOLE);
 #else
 	return dev->size;
 #endif

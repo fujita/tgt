@@ -180,8 +180,8 @@ void concat_buf_release(struct concat_buf *b);
  */
 static inline int unmap_file_region(int fd, off_t offset, off_t length)
 {
-	struct stat64 st;
-	if (fstat64(fd, &st) < 0)
+	struct stat st;
+	if (fstat(fd, &st) < 0)
 		return -1;
 	if (S_ISREG(st.st_mode)) {
 #ifdef FALLOC_FL_PUNCH_HOLE

@@ -327,7 +327,7 @@ static int ssc_new(int op, char *path, char *barcode, char *capacity,
 	h->blk_type = BLK_EOD;
 	h->blk_num = 1;
 	h->prev = 0;
-	h->next = lseek64(fd, 0, SEEK_CUR);
+	h->next = lseek(fd, 0, SEEK_CUR);
 	h->curr = h->next;
 
 	ret = ssc_write_blkhdr(fd, h, h->next);

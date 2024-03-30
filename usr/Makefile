@@ -38,6 +38,7 @@ endif
 
 INCLUDES += -I.
 
+CFLAGS += -D_FILE_OFFSET_BITS=64
 CFLAGS += -D_GNU_SOURCE
 CFLAGS += $(INCLUDES)
 ifneq ($(DEBUG),)

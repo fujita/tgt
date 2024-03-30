@@ -85,7 +85,7 @@ int chrdev_open(char *modname, char *devpath, uint8_t minor, int *fd)
 int backed_file_open(char *path, int oflag, uint64_t *size, uint32_t *blksize)
 {
 	int fd, err;
-	struct stat64 st;
+	struct stat st;
 
 	fd = open(path, oflag);
 	if (fd < 0) {
@@ -93,7 +93,7 @@ int backed_file_open(char *path, int oflag, uint64_t *size, uint32_t *blksize)
 		return fd;
 	}
 
-	err = fstat64(fd, &st);
+	err = fstat(fd, &st);
 	if (err < 0) {
 		eprintf("Cannot get stat %d, %m\n", fd);
 		goto close_fd;

@@ -57,7 +57,7 @@ int ssc_read_mam_info(int fd, struct MAM_info *i)
 	if (ret != sizeof(struct MAM))
 		return 1;
 
-	if (lseek64(fd, SSC_1ST_HDR_OFFSET, SEEK_SET) != SSC_1ST_HDR_OFFSET)
+	if (lseek(fd, SSC_1ST_HDR_OFFSET, SEEK_SET) != SSC_1ST_HDR_OFFSET)
 		return 1;
 
 	SSC_GET_MAM_INFO_VAL(tape_fmt_version, 32);
@@ -176,7 +176,7 @@ int ssc_write_mam_info(int fd, struct MAM_info *i)
 	if (ret != sizeof(struct MAM))
 		return 1;
 
-	if (lseek64(fd, SSC_1ST_HDR_OFFSET, SEEK_SET) != SSC_1ST_HDR_OFFSET)
+	if (lseek(fd, SSC_1ST_HDR_OFFSET, SEEK_SET) != SSC_1ST_HDR_OFFSET)
 		return 1;
 
 	return  0;
@@ -188,7 +188,7 @@ int ssc_read_blkhdr(int fd, struct blk_header_info *i, loff_t offset)
 	struct blk_header h, *m = &h;
 	uint32_t crc = ~0;
 
-	count = pread64(fd, m, SSC_BLK_HDR_SIZE, offset);
+	count = pread(fd, m, SSC_BLK_HDR_SIZE, offset);
 	if (count != SSC_BLK_HDR_SIZE)
 		return 1;
 
@@ -225,7 +225,7 @@ int ssc_write_blkhdr(int fd, struct blk_header_info *i, loff_t offset)
 	crc = crc32c(crc, &m->ondisk_sz, SSC_BLK_HDR_SIZE - sizeof(m->h_csum));
 	*(uint32_t *)m->h_csum = ~crc;
 
-	count = pwrite64(fd, m, SSC_BLK_HDR_SIZE, offset);
+	count = pwrite(fd, m, SSC_BLK_HDR_SIZE, offset);
 	if (count != SSC_BLK_HDR_SIZE)
 		return 1;
 

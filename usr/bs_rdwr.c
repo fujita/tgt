@@ -78,7 +78,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 			break;
 		}
 
-		ret = pread64(fd, tmpbuf, length, offset);
+		ret = pread(fd, tmpbuf, length, offset);
 
 		if (ret != length) {
 			set_medium_error(cmd);
@@ -113,7 +113,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 			break;
 		}
 
-		ret = pread64(fd, tmpbuf, length, offset);
+		ret = pread(fd, tmpbuf, length, offset);
 
 		if (ret != length) {
 			set_medium_error(cmd);
@@ -175,7 +175,7 @@ static void bs_rdwr_request(struct scsi_cmd *cmd)
 		length = scsi_get_out_length(cmd);
 		write_buf = scsi_get_out_buffer(cmd);
 write:
-		ret = pwrite64(fd, write_buf, length,
+		ret = pwrite(fd, write_buf, length,
 			       offset);
 		if (ret == length) {
 			struct mode_pg *pg;
@@ -233,7 +233,7 @@ write:
 				break;
 			}
 
-			ret = pwrite64(fd, tmpbuf, blocksize, offset);
+			ret = pwrite(fd, tmpbuf, blocksize, offset);
 			if (ret != blocksize)
 				set_medium_error(cmd);
 
@@ -246,7 +246,7 @@ write:
 	case READ_12:
 	case READ_16:
 		length = scsi_get_in_length(cmd);
-		ret = pread64(fd, scsi_get_in_buffer(cmd), length,
+		ret = pread(fd, scsi_get_in_buffer(cmd), length,
 			      offset);
 
 		if (ret != length)
@@ -278,7 +278,7 @@ verify:
 			break;
 		}
 
-		ret = pread64(fd, tmpbuf, length, offset);
+		ret = pread(fd, tmpbuf, length, offset);
 
 		if (ret != length)
 			set_medium_error(cmd);
