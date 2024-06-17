@@ -162,7 +162,7 @@ _tgtadm() {
                 portal pt session sess connection conn account lld" -- "${cur}") )
             return 0;;
         --bstype|-E)
-            COMPREPLY=( $(compgen -W "rdwr aio rbd sg ssc" -- "${cur}") )
+            COMPREPLY=( $(compgen -W "rdwr aio rbd sg ssc io_uring" -- "${cur}") )
             return 0;;
         --bsoflags|-f)
             COMPREPLY=( $(compgen -W "direct sync" -- "${cur}") )
