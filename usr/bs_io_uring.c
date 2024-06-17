@@ -68,15 +68,33 @@ static void cmd_error_sense(struct scsi_cmd *cmd, uint8_t key, uint16_t asc)
 static void bs_io_uring_get_completions_helper(struct bs_io_uring_info *info) {
 	// printf("bs_io_uring_get_completions_helper called\n");
 	struct io_uring_cqe *cqe;
+	/* read from eventfd returns 8-byte int, fails with the error EINVAL
+	   if the size of the supplied buffer is less than 8 bytes */
+	uint64_t evts_complete;
 
 	struct __kernel_timespec ts;
 	ts.tv_nsec = 0;
 	ts.tv_sec = 0;
 
+retry_read:
+	int ret = read(info->evt_fd, &evts_complete, sizeof(evts_complete));
+	if (ret < 0) {
+		if (errno == EINTR) {
+			goto retry_read;
+		} else if (errno != EAGAIN) {
+			printf("e: failed to read IO_URING completions, %m\n");
+			return;
+		}
+		evts_complete = 0;
+	}
+
+	if (info->npending > 0 || evts_complete > 0)
+		printf("npending: %d, event_pending: %lu\n", info->npending, evts_complete);
+
 	while (true) {
 		int ret = io_uring_wait_cqe_timeout(&info->ring, &cqe, &ts);
 		if (ret == -ETIME) {
-			return;
+			break;
 		} else if (ret < 0) {
             printf("e: error waiting for completion: %s\n", strerror(-ret));
 			break;
@@ -85,7 +103,7 @@ static void bs_io_uring_get_completions_helper(struct bs_io_uring_info *info) {
 		struct scsi_cmd* cmd = (struct scsi_cmd*) io_uring_cqe_get_data(cqe);
 		int result = SAM_STAT_GOOD;
 
-		if (cqe->res < 0) {
+		if (unlikely(cqe->res < 0)) {
             printf("e: error in async operation: %s\n", strerror(-cqe->res));
 			sense_data_build(cmd, MEDIUM_ERROR, 0);
 			result = SAM_STAT_CHECK_CONDITION;
@@ -108,9 +126,9 @@ static int queue_read(struct bs_io_uring_info *info, struct scsi_cmd *cmd) {
         return 1;
     }
 
-	// io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
+	io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 	io_uring_sqe_set_data(sqe, cmd);
-	io_uring_prep_read(sqe, cmd->dev->fd, scsi_get_in_buffer(cmd), scsi_get_in_length(cmd), cmd->offset);
+	io_uring_prep_read(sqe, 0, scsi_get_in_buffer(cmd), scsi_get_in_length(cmd), cmd->offset);
 	set_cmd_async(cmd);
 
 	info->npending++;
@@ -129,9 +147,9 @@ static int queue_write(struct bs_io_uring_info *info, struct scsi_cmd *cmd) {
         return 1;
     }
 
-	// io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
+	io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 	io_uring_sqe_set_data(sqe, cmd);
-	io_uring_prep_write(sqe, cmd->dev->fd, scsi_get_out_buffer(cmd), scsi_get_out_length(cmd), cmd->offset);
+	io_uring_prep_write(sqe, 0, scsi_get_out_buffer(cmd), scsi_get_out_length(cmd), cmd->offset);
 	set_cmd_async(cmd);
 
 	info->npending++;
@@ -152,11 +170,12 @@ static int queue_sync(struct bs_io_uring_info *info, struct scsi_cmd *cmd) {
 
 	if (cmd->scb[0] == SYNCHRONIZE_CACHE_16) {
 		sqe->off = cmd->offset;
-		sqe->len =scsi_get_in_length(cmd);
+		sqe->len = scsi_get_in_length(cmd);
 	}
+	io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 	io_uring_sqe_set_data(sqe, cmd);
 	printf("d: fdatasync offset %llu len %u\n", sqe->off, sqe->len);
-	io_uring_prep_fsync(sqe, cmd->dev->fd, IORING_FSYNC_DATASYNC);
+	io_uring_prep_fsync(sqe, 0, IORING_FSYNC_DATASYNC);
 	set_cmd_async(cmd);
 
 	info->npending++;
@@ -170,16 +189,12 @@ static int queue_unmap(struct bs_io_uring_info *info, struct scsi_cmd *cmd) {
 
 	if (length < 8)
 		return 0;
-	
-	while (info->npending >= info->iodepth) {
-		bs_io_uring_get_completions_helper(info);
+
+	struct stat st;
+	if (fstat(cmd->dev->fd, &st) < 0) {
+		printf("fstat fail\n");
+		return -1;
 	}
-	
-	struct io_uring_sqe *sqe;
-	sqe = io_uring_get_sqe(&info->ring);
-    if (!sqe) {
-        return 1;
-    }
 
 	length -= 8;
 	tmpbuf += 8;
@@ -192,18 +207,46 @@ static int queue_unmap(struct bs_io_uring_info *info, struct scsi_cmd *cmd) {
 		tl = tl << cmd->dev->blk_shift;
 
 		if (offset + tl > cmd->dev->size) {
-			eprintf("UNMAP beyond EOF\n");
+			printf("e: UNMAP beyond EOF\n");
 			cmd_error_sense(cmd, ILLEGAL_REQUEST,
 					ASC_LBA_OUT_OF_RANGE);
 			break;
 		}
 
 		if (tl > 0) {
-			io_uring_sqe_set_data(sqe, cmd);
 			printf("d: unmap offset %lu length %u\n", offset, tl);
-			io_uring_prep_fallocate(sqe, cmd->dev->fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, offset, tl);
-			set_cmd_async(cmd);
-			info->npending++;
+
+			if (S_ISREG(st.st_mode)) {
+			#ifdef FALLOC_FL_PUNCH_HOLE
+				while (info->npending >= info->iodepth) {
+					bs_io_uring_get_completions_helper(info);
+				}
+				struct io_uring_sqe *sqe;
+				sqe = io_uring_get_sqe(&info->ring);
+				if (!sqe) {
+					return 1;
+				}
+				printf("d: sending fallocate\n");
+				io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
+				io_uring_sqe_set_data(sqe, cmd);
+				io_uring_prep_fallocate(sqe, 0, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, offset, tl);
+				set_cmd_async(cmd);
+				info->npending++;
+			#endif
+			} else if (S_ISBLK(st.st_mode)) {
+			#ifdef BLKDISCARD
+				// We have to send a sync request here
+				uint64_t range[] = { offset, tl };
+				printf("d: sending BLKDISCARD o: %lu l: %lu\n", range[0], range[1]);
+				int ret = ioctl(cmd->dev->fd, BLKDISCARD, &range);
+				if (ret) {
+					printf("e: BLKDISCARD got code %d %s\n", ret, strerror(-ret));
+					return ret;
+				}
+			#endif
+			} else {
+				return -1;
+			}
 		}
 
 		length -= 16;
@@ -262,7 +305,6 @@ static int bs_io_uring_cmd_submit(struct scsi_cmd *cmd)
 		printf("d: WRITE_SAME not yet supported for IO_URING backend.\n");
 		ret = -1;
 		break;
-
 	default:
 		printf("d: skipped cmd:%p op:%x\n", cmd, scsi_op);
 		ret = 0;
@@ -282,13 +324,13 @@ static int bs_io_uring_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *s
 {
 	struct bs_io_uring_info *info = BS_IO_URING_I(lu);
 	struct io_uring_params params;
-	int ret, afd;
+	int ret;
 	uint32_t blksize = 0;
 
 	memset(&params, 0, sizeof(params));
 	params.flags |= IORING_SETUP_SQPOLL;
-    params.sq_thread_idle = 2000;
-	
+    params.sq_thread_idle = 5000;
+
 	printf("e: create io_uring context for tgt:%d lun:%"PRId64 ", max iodepth:%d\n",
 		info->lu->tgt->tid, info->lu->lun, info->iodepth);
 
@@ -298,7 +340,7 @@ static int bs_io_uring_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *s
 		return ret;
 	}
 
-	afd = eventfd(0, O_NONBLOCK);
+	int afd = eventfd(0, O_NONBLOCK);
 	if (afd < 0) {
 		eprintf("failed to create eventfd for tgt:%d lun:%"PRId64 ", %m\n",
 			info->lu->tgt->tid, info->lu->lun);
