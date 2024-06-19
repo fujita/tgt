@@ -46,12 +46,19 @@
 
 #define IO_URING_MAX_IODEPTH 1024
 
+enum unmap_mode {
+	UNMAP_MODE_BLKDISCARD,
+	UNMAP_MODE_FALLOCATE,
+	UNMAP_MODE_NONE,
+};
+
 struct bs_io_uring_info {
 	struct io_uring ring;
 	struct scsi_lu *lu;
 	int evt_fd;
 	unsigned int npending;
 	unsigned int iodepth;
+	enum unmap_mode unmap_mode;
 };
 
 static inline struct bs_io_uring_info *BS_IO_URING_I(struct scsi_lu *lu)
@@ -66,7 +73,6 @@ static void cmd_error_sense(struct scsi_cmd *cmd, uint8_t key, uint16_t asc)
 }
 
 static void bs_io_uring_get_completions_helper(struct bs_io_uring_info *info) {
-	// printf("bs_io_uring_get_completions_helper called\n");
 	struct io_uring_cqe *cqe;
 	/* read from eventfd returns 8-byte int, fails with the error EINVAL
 	   if the size of the supplied buffer is less than 8 bytes */
@@ -88,7 +94,7 @@ retry_read:
 				// Still we want to continue in case some accounting error came up
 				break;
 			default:
-				printf("e: failed to read IO_URING completions, %m\n");
+				eprintf("failed to read IO_URING completions, %m\n");
 				return;
 		}
 	}
@@ -99,22 +105,24 @@ retry_read:
 			// We really do have nothing to read here, so bail out
 			return;
 		} else if (unlikely(ret < 0)) {
-            printf("e: error waiting for completion: %s\n", strerror(-ret));
+            eprintf("error waiting for completion: %s\n", strerror(-ret));
 			break;
         }
 
 		struct scsi_cmd* cmd = (struct scsi_cmd*) io_uring_cqe_get_data(cqe);
+		if (cmd != NULL) {
+			int result = SAM_STAT_GOOD;
+			if (unlikely(cqe->res < 0)) {
+				eprintf("error in async operation: %s\n", strerror(-cqe->res));
+				sense_data_build(cmd, MEDIUM_ERROR, 0);
+				result = SAM_STAT_CHECK_CONDITION;
+			}
 
-		int result = SAM_STAT_GOOD;
-		if (unlikely(cqe->res < 0)) {
-            printf("e: error in async operation: %s\n", strerror(-cqe->res));
-			sense_data_build(cmd, MEDIUM_ERROR, 0);
-			result = SAM_STAT_CHECK_CONDITION;
-        }
+			target_cmd_io_done(cmd, result);
+		}
 
-        io_uring_cqe_seen(&info->ring, cqe);
+		io_uring_cqe_seen(&info->ring, cqe);
 		info->npending--;
-		target_cmd_io_done(cmd, result);
 	}
 }
 
@@ -181,16 +189,13 @@ static int queue_unmap(struct bs_io_uring_info *info, struct scsi_cmd *cmd) {
 	if (length < 8)
 		return 0;
 
-	struct stat st;
-	if (fstat(cmd->dev->fd, &st) < 0) {
-		printf("fstat fail\n");
-		return -1;
-	}
-
 	length -= 8;
 	tmpbuf += 8;
 
-	while (length >= 16) {
+	int num_discards = length / 16;
+	printf("Will queue %d discards\n", num_discards);
+
+	while (num_discards > 0) {
 		uint64_t offset = get_unaligned_be64(&tmpbuf[0]);
 		offset = offset << cmd->dev->blk_shift;
 
@@ -198,53 +203,67 @@ static int queue_unmap(struct bs_io_uring_info *info, struct scsi_cmd *cmd) {
 		tl = tl << cmd->dev->blk_shift;
 
 		if (offset + tl > cmd->dev->size) {
-			printf("e: UNMAP beyond EOF\n");
+			eprintf("UNMAP beyond EOF\n");
 			cmd_error_sense(cmd, ILLEGAL_REQUEST,
 					ASC_LBA_OUT_OF_RANGE);
-			break;
+			return 0;
 		}
 
 		if (tl > 0) {
-			printf("d: unmap offset %lu length %u\n", offset, tl);
+			dprintf("unmap offset %lu length %u\n", offset, tl);
 
-			if (S_ISREG(st.st_mode)) {
-			#ifdef FALLOC_FL_PUNCH_HOLE
-				struct io_uring_sqe *sqe;
-				sqe = io_uring_get_sqe(&info->ring);
-				if (!sqe) {
-					return -1;
-				}
-				printf("d: sending fallocate\n");
-				io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
-				io_uring_sqe_set_data(sqe, cmd);
-				io_uring_prep_fallocate(sqe, 0, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, offset, tl);
-				info->npending++;
-				io_uring_submit(&info->ring);
-				set_cmd_async(cmd);
-			#endif
-			} else if (S_ISBLK(st.st_mode)) {
-			#ifdef BLKDISCARD
-				// We have to send a sync request here to use ioctl
-				uint64_t range[] = { offset, tl };
-				printf("d: sending BLKDISCARD o: %lu l: %lu\n", range[0], range[1]);
-				int ret = ioctl(cmd->dev->fd, BLKDISCARD, &range);
-				if (ret) {
-					printf("e: BLKDISCARD got code %d %s\n", ret, strerror(-ret));
-					cmd_error_sense(cmd, HARDWARE_ERROR,
-						ASC_INTERNAL_TGT_FAILURE);
-					return ret;
-				}
-			#endif
-			} else {
-				printf("DISCARD FAIL\n");
-				return -2;
+			switch (info->unmap_mode) {
+				case UNMAP_MODE_FALLOCATE:
+					#ifdef FALLOC_FL_PUNCH_HOLE
+						while (info->npending >= info->iodepth) {
+							bs_io_uring_get_completions_helper(info);
+						}
+						struct io_uring_sqe *sqe;
+						sqe = io_uring_get_sqe(&info->ring);
+						if (!sqe) {
+							return -1;
+						}
+						io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
+						if (num_discards == 1){
+							io_uring_sqe_set_data(sqe, cmd);
+						} else {
+							io_uring_sqe_set_data(sqe, NULL);
+							sqe->flags |= IOSQE_IO_LINK;
+						}
+						dprintf("sending fallocate o: %lu l %u\n", offset, tl);
+						io_uring_prep_fallocate(sqe, 0, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, offset, tl);
+						io_uring_submit(&info->ring);
+						info->npending++;
+					#endif
+					break;
+				case UNMAP_MODE_BLKDISCARD:
+					#ifdef BLKDISCARD
+						// We have to send a sync request here to use ioctl
+						uint64_t range[] = { offset, tl };
+						dprintf("sending BLKDISCARD o: %lu l: %lu\n", range[0], range[1]);
+						int ret = ioctl(cmd->dev->fd, BLKDISCARD, &range);
+						if (ret) {
+							eprintf("BLKDISCARD got code %d %s\n", ret, strerror(-ret));
+							cmd_error_sense(cmd, HARDWARE_ERROR,
+								ASC_INTERNAL_TGT_FAILURE);
+							return ret;
+						}
+					#endif
+					break;
+				default:
+					printf("Ignoring discard request\n");
+					break;
 			}
 		}
 
 		length -= 16;
 		tmpbuf += 16;
+		num_discards -= 1;
 	}
 
+	if (info->unmap_mode == UNMAP_MODE_FALLOCATE) {
+		set_cmd_async(cmd);
+	}
 	return 0;
 }
 
@@ -266,7 +285,7 @@ static int bs_io_uring_cmd_submit(struct scsi_cmd *cmd)
 	case WRITE_16:
 		ret = queue_write(info, cmd);
 
-		// printf("d: write offset: %lx\n", cmd->offset);
+		// dprintf("write offset: %lx\n", cmd->offset);
 		break;
 
 	case READ_6:
@@ -275,7 +294,7 @@ static int bs_io_uring_cmd_submit(struct scsi_cmd *cmd)
 	case READ_16:
 		ret = queue_read(info, cmd);
 
-		// printf("d: read offset: %lx\n", cmd->offset);
+		// dprintf("read offset: %lx\n", cmd->offset);
 		break;
 	case SYNCHRONIZE_CACHE:
 	case SYNCHRONIZE_CACHE_16:
@@ -297,16 +316,16 @@ static int bs_io_uring_cmd_submit(struct scsi_cmd *cmd)
 		break;
 	case WRITE_SAME:
 	case WRITE_SAME_16:
-		printf("d: WRITE_SAME not yet supported for IO_URING backend.\n");
+		dprintf("WRITE_SAME not yet supported for IO_URING backend.\n");
 		ret = -1;
 		break;
 	default:
-		printf("d: skipped cmd:%p op:%x\n", cmd, scsi_op);
+		dprintf("skipped cmd:%p op:%x\n", cmd, scsi_op);
 		ret = 0;
 	}
 
 	if (scsi_get_result(cmd) != SAM_STAT_GOOD) {
-		printf("e: io error %p %x %d, %m\n",
+		eprintf("io error %p %x %d, %m\n",
 			cmd, cmd->scb[0], ret);
 	}
 
@@ -315,7 +334,6 @@ static int bs_io_uring_cmd_submit(struct scsi_cmd *cmd)
 
 static void bs_io_uring_get_completions(int fd, int events, void *data)
 {
-	// printf("bs_io_uring_get_completions called\n");
 	struct bs_io_uring_info *info = data;
 	bs_io_uring_get_completions_helper(info);
 }
@@ -331,12 +349,12 @@ static int bs_io_uring_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *s
 	params.flags |= IORING_SETUP_SQPOLL;
     params.sq_thread_idle = 5000;
 
-	printf("e: create io_uring context for tgt:%d lun:%"PRId64 ", max iodepth:%d\n",
+	eprintf("create io_uring context for tgt:%d lun:%"PRId64 ", max iodepth:%d\n",
 		info->lu->tgt->tid, info->lu->lun, info->iodepth);
 
     ret = io_uring_queue_init_params(info->iodepth, &info->ring, &params);
     if (ret) {
-		printf("e: failed to init io_uring queue params, %m\n");
+		eprintf("failed to init io_uring queue params, %m\n");
 		return ret;
 	}
 
@@ -347,7 +365,7 @@ static int bs_io_uring_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *s
 		ret = afd;
 		goto close_ctx;
 	}
-	printf("d: eventfd:%d for tgt:%d lun:%"PRId64 "\n",
+	dprintf("eventfd:%d for tgt:%d lun:%"PRId64 "\n",
 		afd, info->lu->tgt->tid, info->lu->lun);
 
 	ret = tgt_event_add(afd, EPOLLIN, bs_io_uring_get_completions, info);
@@ -355,36 +373,50 @@ static int bs_io_uring_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *s
 		goto close_eventfd;
 	info->evt_fd = afd;
 
-	printf("e: open %s, RW for tgt:%d lun:%"PRId64 "\n",
+	eprintf("open %s, RW for tgt:%d lun:%"PRId64 "\n",
 		path, info->lu->tgt->tid, info->lu->lun);
 	*fd = backed_file_open(path, O_RDWR, size,
 				&blksize);
 	/* If we get access denied, try opening the file in readonly mode */
 	if (*fd == -1 && (errno == EACCES || errno == EROFS)) {
-		printf("e: open %s, READONLY for tgt:%d lun:%"PRId64 "\n",
+		eprintf("open %s, READONLY for tgt:%d lun:%"PRId64 "\n",
 			path, info->lu->tgt->tid, info->lu->lun);
 		*fd = backed_file_open(path, O_RDONLY,
 				       size, &blksize);
 		lu->attrs.readonly = 1;
 	}
 	if (*fd < 0) {
-		printf("e: failed to open %s, for tgt:%d lun:%"PRId64 ", %m\n",
+		eprintf("failed to open %s, for tgt:%d lun:%"PRId64 ", %m\n",
 			path, info->lu->tgt->tid, info->lu->lun);
 		ret = *fd;
 		goto remove_tgt_evt;
 	}
 
-	printf("e: %s opened successfully for tgt:%d lun:%"PRId64 "\n",
+	eprintf("%s opened successfully for tgt:%d lun:%"PRId64 "\n",
 		path, info->lu->tgt->tid, info->lu->lun);
+
+	struct stat st;
+	if (fstat(*fd, &st) < 0) {
+		printf("fstat fail\n");
+		return -1;
+	}
+
+	if (S_ISREG(st.st_mode)) {
+		info->unmap_mode = UNMAP_MODE_FALLOCATE;
+	} else if (S_ISBLK(st.st_mode)) {
+		info->unmap_mode = UNMAP_MODE_BLKDISCARD;
+	} else {
+		info->unmap_mode = UNMAP_MODE_NONE;
+	}
 	
 	ret = io_uring_register_files(&info->ring, fd, 1);
     if(ret) {
-        printf("failed to register buffers: %s\n", strerror(-ret));
+        eprintf("failed to register buffers: %s\n", strerror(-ret));
         goto remove_tgt_evt;
     }
 	ret = io_uring_register_eventfd(&info->ring, info->evt_fd);
 	if(ret) {
-        printf("failed to register eventfd: %s\n", strerror(-ret));
+        eprintf("failed to register eventfd: %s\n", strerror(-ret));
         goto remove_tgt_evt;
     }
 
