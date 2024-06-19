@@ -193,8 +193,6 @@ static int queue_unmap(struct bs_io_uring_info *info, struct scsi_cmd *cmd) {
 	tmpbuf += 8;
 
 	int num_discards = length / 16;
-	printf("Will queue %d discards\n", num_discards);
-
 	while (num_discards > 0) {
 		uint64_t offset = get_unaligned_be64(&tmpbuf[0]);
 		offset = offset << cmd->dev->blk_shift;
