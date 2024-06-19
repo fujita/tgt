@@ -72,37 +72,40 @@ static void bs_io_uring_get_completions_helper(struct bs_io_uring_info *info) {
 	   if the size of the supplied buffer is less than 8 bytes */
 	uint64_t evts_complete;
 
-	struct __kernel_timespec ts;
-	ts.tv_nsec = 0;
-	ts.tv_sec = 0;
+	struct __kernel_timespec ts = {
+		.tv_nsec = 0,
+		.tv_sec = 0,
+	};
 
 retry_read:
 	int ret = read(info->evt_fd, &evts_complete, sizeof(evts_complete));
 	if (ret < 0) {
-		if (errno == EINTR) {
-			goto retry_read;
-		} else if (errno != EAGAIN) {
-			printf("e: failed to read IO_URING completions, %m\n");
-			return;
+		switch (errno) {
+			case EINTR:
+				goto retry_read;
+			case EAGAIN:
+				// EAGAIN in non-blocking evt_fd means nothing is available
+				// Still we want to continue in case some accounting error came up
+				break;
+			default:
+				printf("e: failed to read IO_URING completions, %m\n");
+				return;
 		}
-		evts_complete = 0;
 	}
-
-	if (info->npending > 0 || evts_complete > 0)
-		printf("npending: %d, event_pending: %lu\n", info->npending, evts_complete);
 
 	while (true) {
 		int ret = io_uring_wait_cqe_timeout(&info->ring, &cqe, &ts);
 		if (ret == -ETIME) {
-			break;
-		} else if (ret < 0) {
+			// We really do have nothing to read here, so bail out
+			return;
+		} else if (unlikely(ret < 0)) {
             printf("e: error waiting for completion: %s\n", strerror(-ret));
 			break;
         }
 
 		struct scsi_cmd* cmd = (struct scsi_cmd*) io_uring_cqe_get_data(cqe);
-		int result = SAM_STAT_GOOD;
 
+		int result = SAM_STAT_GOOD;
 		if (unlikely(cqe->res < 0)) {
             printf("e: error in async operation: %s\n", strerror(-cqe->res));
 			sense_data_build(cmd, MEDIUM_ERROR, 0);
@@ -110,20 +113,16 @@ retry_read:
         }
 
         io_uring_cqe_seen(&info->ring, cqe);
-		target_cmd_io_done(cmd, result);
 		info->npending--;
+		target_cmd_io_done(cmd, result);
 	}
 }
 
 static int queue_read(struct bs_io_uring_info *info, struct scsi_cmd *cmd) {
-	while (info->npending >= info->iodepth) {
-		bs_io_uring_get_completions_helper(info);
-	}
-	
 	struct io_uring_sqe *sqe;
 	sqe = io_uring_get_sqe(&info->ring);
     if (!sqe) {
-        return 1;
+        return -1;
     }
 
 	io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
@@ -137,14 +136,10 @@ static int queue_read(struct bs_io_uring_info *info, struct scsi_cmd *cmd) {
 }
 
 static int queue_write(struct bs_io_uring_info *info, struct scsi_cmd *cmd) {
-	while (info->npending >= info->iodepth) {
-		bs_io_uring_get_completions_helper(info);
-	}
-
 	struct io_uring_sqe *sqe;
 	sqe = io_uring_get_sqe(&info->ring);
     if (!sqe) {
-        return 1;
+        return -1;
     }
 
 	io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
@@ -158,23 +153,19 @@ static int queue_write(struct bs_io_uring_info *info, struct scsi_cmd *cmd) {
 }
 
 static int queue_sync(struct bs_io_uring_info *info, struct scsi_cmd *cmd) {
-	while (info->npending >= info->iodepth) {
-		bs_io_uring_get_completions_helper(info);
-	}
-	
 	struct io_uring_sqe *sqe;
 	sqe = io_uring_get_sqe(&info->ring);
     if (!sqe) {
-        return 1;
+        return -1;
     }
 
 	if (cmd->scb[0] == SYNCHRONIZE_CACHE_16) {
 		sqe->off = cmd->offset;
 		sqe->len = scsi_get_in_length(cmd);
 	}
+
 	io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 	io_uring_sqe_set_data(sqe, cmd);
-	printf("d: fdatasync offset %llu len %u\n", sqe->off, sqe->len);
 	io_uring_prep_fsync(sqe, 0, IORING_FSYNC_DATASYNC);
 	set_cmd_async(cmd);
 
@@ -218,34 +209,35 @@ static int queue_unmap(struct bs_io_uring_info *info, struct scsi_cmd *cmd) {
 
 			if (S_ISREG(st.st_mode)) {
 			#ifdef FALLOC_FL_PUNCH_HOLE
-				while (info->npending >= info->iodepth) {
-					bs_io_uring_get_completions_helper(info);
-				}
 				struct io_uring_sqe *sqe;
 				sqe = io_uring_get_sqe(&info->ring);
 				if (!sqe) {
-					return 1;
+					return -1;
 				}
 				printf("d: sending fallocate\n");
 				io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 				io_uring_sqe_set_data(sqe, cmd);
 				io_uring_prep_fallocate(sqe, 0, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, offset, tl);
-				set_cmd_async(cmd);
 				info->npending++;
+				io_uring_submit(&info->ring);
+				set_cmd_async(cmd);
 			#endif
 			} else if (S_ISBLK(st.st_mode)) {
 			#ifdef BLKDISCARD
-				// We have to send a sync request here
+				// We have to send a sync request here to use ioctl
 				uint64_t range[] = { offset, tl };
 				printf("d: sending BLKDISCARD o: %lu l: %lu\n", range[0], range[1]);
 				int ret = ioctl(cmd->dev->fd, BLKDISCARD, &range);
 				if (ret) {
 					printf("e: BLKDISCARD got code %d %s\n", ret, strerror(-ret));
+					cmd_error_sense(cmd, HARDWARE_ERROR,
+						ASC_INTERNAL_TGT_FAILURE);
 					return ret;
 				}
 			#endif
 			} else {
-				return -1;
+				printf("DISCARD FAIL\n");
+				return -2;
 			}
 		}
 
@@ -253,7 +245,6 @@ static int queue_unmap(struct bs_io_uring_info *info, struct scsi_cmd *cmd) {
 		tmpbuf += 16;
 	}
 
-	io_uring_submit(&info->ring);
 	return 0;
 }
 
@@ -263,6 +254,10 @@ static int bs_io_uring_cmd_submit(struct scsi_cmd *cmd)
 	struct bs_io_uring_info *info = BS_IO_URING_I(lu);
 	unsigned int scsi_op = (unsigned int)cmd->scb[0];
 	int ret;
+
+	while (info->npending >= info->iodepth) {
+		bs_io_uring_get_completions_helper(info);
+	}
 
 	switch (scsi_op) {
 	case WRITE_6:
@@ -296,9 +291,9 @@ static int bs_io_uring_cmd_submit(struct scsi_cmd *cmd)
 			cmd_error_sense(cmd, ILLEGAL_REQUEST,
 					ASC_INVALID_FIELD_IN_CDB);
 			ret = -1;
-			break;
+		} else {
+			ret = queue_unmap(info, cmd);
 		}
-		ret = queue_unmap(info, cmd);
 		break;
 	case WRITE_SAME:
 	case WRITE_SAME_16:
@@ -310,7 +305,12 @@ static int bs_io_uring_cmd_submit(struct scsi_cmd *cmd)
 		ret = 0;
 	}
 
-	return ret;
+	if (scsi_get_result(cmd) != SAM_STAT_GOOD) {
+		printf("e: io error %p %x %d, %m\n",
+			cmd, cmd->scb[0], ret);
+	}
+
+	return 0;
 }
 
 static void bs_io_uring_get_completions(int fd, int events, void *data)
