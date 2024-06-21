@@ -1,5 +1,5 @@
 /*
- * AIO backing store
+ * io_uring backing store
  *
  * Copyright (C) 2024 Jonathan Frederick <doublej472@gmail.com>
  *
