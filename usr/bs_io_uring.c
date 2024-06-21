@@ -44,7 +44,7 @@
 #include "scsi.h"
 #include <linux/time_types.h>
 
-#define IO_URING_MAX_IODEPTH 1024
+#define IO_URING_MAX_IODEPTH 1024*16
 
 enum unmap_mode {
 	UNMAP_MODE_BLKDISCARD,
@@ -244,7 +244,7 @@ static int queue_unmap(struct bs_io_uring_info *info, struct scsi_cmd *cmd) {
 					#endif
 					break;
 				default:
-					printf("Ignoring discard request\n");
+					eprintf("Ignoring UNMAP request\n");
 					break;
 			}
 		}
