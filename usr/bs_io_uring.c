@@ -74,14 +74,16 @@ static void cmd_error_sense(struct scsi_cmd *cmd, uint8_t key, uint16_t asc)
 
 static void bs_io_uring_get_completions_helper(struct bs_io_uring_info *info) {
 	struct io_uring_cqe *cqe;
+	unsigned head;
+	unsigned i = 0;
 	/* read from eventfd returns 8-byte int, fails with the error EINVAL
 	   if the size of the supplied buffer is less than 8 bytes */
 	uint64_t evts_complete;
 
-	struct __kernel_timespec ts = {
-		.tv_nsec = 0,
-		.tv_sec = 0,
-	};
+	// struct __kernel_timespec ts = {
+	// 	.tv_nsec = 0,
+	// 	.tv_sec = 0,
+	// };
 
 retry_read:
 	int ret = read(info->evt_fd, &evts_complete, sizeof(evts_complete));
@@ -99,16 +101,7 @@ retry_read:
 		}
 	}
 
-	while (true) {
-		int ret = io_uring_wait_cqe_timeout(&info->ring, &cqe, &ts);
-		if (ret == -ETIME) {
-			// We really do have nothing to read here, so bail out
-			return;
-		} else if (unlikely(ret < 0)) {
-            eprintf("error waiting for completion: %s\n", strerror(-ret));
-			break;
-        }
-
+	io_uring_for_each_cqe(&info->ring, head, cqe) {
 		struct scsi_cmd* cmd = (struct scsi_cmd*) io_uring_cqe_get_data(cqe);
 		if (cmd != NULL) {
 			int result = SAM_STAT_GOOD;
@@ -121,9 +114,11 @@ retry_read:
 			target_cmd_io_done(cmd, result);
 		}
 
-		io_uring_cqe_seen(&info->ring, cqe);
 		info->npending--;
+		i++;
 	}
+
+	io_uring_cq_advance(&info->ring, i);
 }
 
 static int queue_read(struct bs_io_uring_info *info, struct scsi_cmd *cmd) {
