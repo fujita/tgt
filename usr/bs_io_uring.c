@@ -93,8 +93,7 @@ retry_read:
 				goto retry_read;
 			case EAGAIN:
 				// EAGAIN in non-blocking evt_fd means nothing is available
-				// Still we want to continue in case some accounting error came up
-				break;
+				return;
 			default:
 				eprintf("failed to read IO_URING completions, %m\n");
 				return;
