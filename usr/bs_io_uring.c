@@ -339,7 +339,7 @@ static int bs_io_uring_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *s
 
 	memset(&params, 0, sizeof(params));
 	params.flags |= IORING_SETUP_SQPOLL;
-    params.sq_thread_idle = 5000;
+    params.sq_thread_idle = 1000;
 
 	eprintf("create io_uring context for tgt:%d lun:%"PRId64 ", max iodepth:%d\n",
 		info->lu->tgt->tid, info->lu->lun, info->iodepth);
