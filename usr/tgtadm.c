@@ -321,7 +321,7 @@ static int ipc_mgmt_req(struct tgtadm_req *req, struct concat_buf *b)
 	req->len = sizeof(*req) + b->size;
 
 	err = ipc_mgmt_connect(&fd);
-	if (err < 0) {
+	if (err != 0) {
 		eprintf("can't connect to tgt daemon, %m\n");
 		goto out;
 	}
