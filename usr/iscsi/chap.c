@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/random.h>
 
 #include "iscsid.h"
 #include "tgtd.h"
@@ -359,22 +360,19 @@ static int chap_initiator_auth_create_challenge(struct iscsi_connection *conn)
 	sprintf(text, "%u", (unsigned char)conn->auth.chap.id);
 	text_key_add(conn, "CHAP_I", text);
 
-	/*
-	 * FIXME: does a random challenge length provide any benefits security-
-	 * wise, or should we rather always use the max. allowed length of
-	 * 1024 for the (unencoded) challenge?
-	 */
-	conn->auth.chap.challenge_size = (rand() % (CHAP_CHALLENGE_MAX / 2)) + CHAP_CHALLENGE_MAX / 2;
+	conn->auth.chap.challenge_size = CHAP_CHALLENGE_MAX;
 
 	conn->auth.chap.challenge = malloc(conn->auth.chap.challenge_size);
 	if (!conn->auth.chap.challenge)
+		return CHAP_TARGET_ERROR;
+
+	if (getrandom(conn->auth.chap.challenge, conn->auth.chap.challenge_size, 0) != conn->auth.chap.challenge_size)
 		return CHAP_TARGET_ERROR;
 
 	p = text;
 	strcpy(p, "0x");
 	p += 2;
 	for (i = 0; i < conn->auth.chap.challenge_size; i++) {
-		conn->auth.chap.challenge[i] = rand();
 		sprintf(p, "%.2hhx", conn->auth.chap.challenge[i]);
 		p += 2;
 	}
