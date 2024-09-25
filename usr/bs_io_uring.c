@@ -82,8 +82,7 @@ static void bs_io_uring_get_completions_helper(struct bs_io_uring_info *info)
 	uint64_t evts_complete;
 
 	while (1) {
-		int ret = read(info->evt_fd, &evts_complete,
-			       sizeof(evts_complete));
+		int ret = read(info->evt_fd, &evts_complete, sizeof(evts_complete));
 		if (ret < 0) {
 			switch (errno) {
 			case EINTR:
@@ -101,13 +100,11 @@ static void bs_io_uring_get_completions_helper(struct bs_io_uring_info *info)
 
 	io_uring_for_each_cqe(&info->ring, head, cqe)
 	{
-		struct scsi_cmd *cmd =
-			(struct scsi_cmd *)io_uring_cqe_get_data(cqe);
+		struct scsi_cmd *cmd = (struct scsi_cmd *)io_uring_cqe_get_data(cqe);
 		if (cmd != NULL) {
 			int result = SAM_STAT_GOOD;
 			if (unlikely(cqe->res < 0)) {
-				eprintf("error in async operation: %s\n",
-					strerror(-cqe->res));
+				eprintf("error in async operation: %s\n", strerror(-cqe->res));
 				sense_data_build(cmd, MEDIUM_ERROR, 0);
 				result = SAM_STAT_CHECK_CONDITION;
 			}
@@ -132,8 +129,7 @@ static int queue_read(struct bs_io_uring_info *info, struct scsi_cmd *cmd)
 
 	io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 	io_uring_sqe_set_data(sqe, cmd);
-	io_uring_prep_read(sqe, 0, scsi_get_in_buffer(cmd),
-			   scsi_get_in_length(cmd), cmd->offset);
+	io_uring_prep_read(sqe, 0, scsi_get_in_buffer(cmd), scsi_get_in_length(cmd), cmd->offset);
 	set_cmd_async(cmd);
 
 	info->npending++;
@@ -151,8 +147,7 @@ static int queue_write(struct bs_io_uring_info *info, struct scsi_cmd *cmd)
 
 	io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
 	io_uring_sqe_set_data(sqe, cmd);
-	io_uring_prep_write(sqe, 0, scsi_get_out_buffer(cmd),
-			    scsi_get_out_length(cmd), cmd->offset);
+	io_uring_prep_write(sqe, 0, scsi_get_out_buffer(cmd), scsi_get_out_length(cmd), cmd->offset);
 	set_cmd_async(cmd);
 
 	info->npending++;
@@ -204,8 +199,7 @@ static int queue_unmap(struct bs_io_uring_info *info, struct scsi_cmd *cmd)
 
 		if (offset + tl > cmd->dev->size) {
 			eprintf("UNMAP beyond EOF\n");
-			cmd_error_sense(cmd, ILLEGAL_REQUEST,
-					ASC_LBA_OUT_OF_RANGE);
+			cmd_error_sense(cmd, ILLEGAL_REQUEST, ASC_LBA_OUT_OF_RANGE);
 			return 0;
 		}
 
@@ -216,8 +210,7 @@ static int queue_unmap(struct bs_io_uring_info *info, struct scsi_cmd *cmd)
 			case UNMAP_MODE_FALLOCATE:
 #ifdef FALLOC_FL_PUNCH_HOLE
 				while (info->npending >= info->iodepth) {
-					bs_io_uring_get_completions_helper(
-						info);
+					bs_io_uring_get_completions_helper(info);
 				}
 				struct io_uring_sqe *sqe;
 				sqe = io_uring_get_sqe(&info->ring);
@@ -231,13 +224,8 @@ static int queue_unmap(struct bs_io_uring_info *info, struct scsi_cmd *cmd)
 					io_uring_sqe_set_data(sqe, NULL);
 					sqe->flags |= IOSQE_IO_LINK;
 				}
-				dprintf("sending fallocate o: %lu l %u\n",
-					offset, tl);
-				io_uring_prep_fallocate(
-					sqe, 0,
-					FALLOC_FL_PUNCH_HOLE |
-						FALLOC_FL_KEEP_SIZE,
-					offset, tl);
+				dprintf("sending fallocate o: %lu l %u\n", offset, tl);
+				io_uring_prep_fallocate(sqe, 0, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, offset, tl);
 				io_uring_submit(&info->ring);
 				info->npending++;
 				set_cmd_async(cmd);
@@ -247,16 +235,11 @@ static int queue_unmap(struct bs_io_uring_info *info, struct scsi_cmd *cmd)
 #ifdef BLKDISCARD
 				// We have to send a sync request here to use ioctl
 				uint64_t range[] = { offset, tl };
-				dprintf("sending BLKDISCARD o: %lu l: %lu\n",
-					range[0], range[1]);
-				int ret =
-					ioctl(cmd->dev->fd, BLKDISCARD, &range);
+				dprintf("sending BLKDISCARD o: %lu l: %lu\n", range[0], range[1]);
+				int ret = ioctl(cmd->dev->fd, BLKDISCARD, &range);
 				if (ret) {
-					eprintf("BLKDISCARD got code %d %s\n",
-						ret, strerror(-ret));
-					cmd_error_sense(
-						cmd, HARDWARE_ERROR,
-						ASC_INTERNAL_TGT_FAILURE);
+					eprintf("BLKDISCARD got code %d %s\n", ret, strerror(-ret));
+					cmd_error_sense(cmd, HARDWARE_ERROR, ASC_INTERNAL_TGT_FAILURE);
 					return ret;
 				}
 #endif
@@ -307,8 +290,7 @@ static int bs_io_uring_cmd_submit(struct scsi_cmd *cmd)
 	case SYNCHRONIZE_CACHE:
 	case SYNCHRONIZE_CACHE_16:
 		if (cmd->scb[1] & 0x2) {
-			cmd_error_sense(cmd, ILLEGAL_REQUEST,
-					ASC_INVALID_FIELD_IN_CDB);
+			cmd_error_sense(cmd, ILLEGAL_REQUEST, ASC_INVALID_FIELD_IN_CDB);
 			ret = -1;
 		} else {
 			ret = queue_sync(info, cmd);
@@ -316,8 +298,7 @@ static int bs_io_uring_cmd_submit(struct scsi_cmd *cmd)
 		break;
 	case UNMAP:
 		if (!cmd->dev->attrs.thinprovisioning) {
-			cmd_error_sense(cmd, ILLEGAL_REQUEST,
-					ASC_INVALID_FIELD_IN_CDB);
+			cmd_error_sense(cmd, ILLEGAL_REQUEST, ASC_INVALID_FIELD_IN_CDB);
 			ret = -1;
 		} else {
 			ret = queue_unmap(info, cmd);
@@ -346,8 +327,7 @@ static void bs_io_uring_get_completions(int fd, int events, void *data)
 	bs_io_uring_get_completions_helper(info);
 }
 
-static int bs_io_uring_open(struct scsi_lu *lu, char *path, int *fd,
-			    uint64_t *size)
+static int bs_io_uring_open(struct scsi_lu *lu, char *path, int *fd, uint64_t *size)
 {
 	struct bs_io_uring_info *info = BS_IO_URING_I(lu);
 	struct io_uring_params params;
@@ -358,9 +338,8 @@ static int bs_io_uring_open(struct scsi_lu *lu, char *path, int *fd,
 	params.flags |= IORING_SETUP_SQPOLL;
 	params.sq_thread_idle = 1000;
 
-	eprintf("create io_uring context for tgt:%d lun:%" PRId64
-		", max iodepth:%d\n",
-		info->lu->tgt->tid, info->lu->lun, info->iodepth);
+	eprintf("create io_uring context for tgt:%d lun:%" PRId64 ", max iodepth:%d\n", info->lu->tgt->tid,
+		info->lu->lun, info->iodepth);
 
 	ret = io_uring_queue_init_params(info->iodepth, &info->ring, &params);
 	if (ret) {
@@ -370,39 +349,32 @@ static int bs_io_uring_open(struct scsi_lu *lu, char *path, int *fd,
 
 	int afd = eventfd(0, O_NONBLOCK);
 	if (afd < 0) {
-		eprintf("failed to create eventfd for tgt:%d lun:%" PRId64
-			", %m\n",
-			info->lu->tgt->tid, info->lu->lun);
+		eprintf("failed to create eventfd for tgt:%d lun:%" PRId64 ", %m\n", info->lu->tgt->tid, info->lu->lun);
 		ret = afd;
 		goto close_ctx;
 	}
-	dprintf("eventfd:%d for tgt:%d lun:%" PRId64 "\n", afd,
-		info->lu->tgt->tid, info->lu->lun);
+	dprintf("eventfd:%d for tgt:%d lun:%" PRId64 "\n", afd, info->lu->tgt->tid, info->lu->lun);
 
 	ret = tgt_event_add(afd, EPOLLIN, bs_io_uring_get_completions, info);
 	if (ret)
 		goto close_eventfd;
 	info->evt_fd = afd;
 
-	eprintf("open %s, RW for tgt:%d lun:%" PRId64 "\n", path,
-		info->lu->tgt->tid, info->lu->lun);
+	eprintf("open %s, RW for tgt:%d lun:%" PRId64 "\n", path, info->lu->tgt->tid, info->lu->lun);
 	*fd = backed_file_open(path, O_RDWR, size, &blksize);
 	/* If we get access denied, try opening the file in readonly mode */
 	if (*fd == -1 && (errno == EACCES || errno == EROFS)) {
-		eprintf("open %s, READONLY for tgt:%d lun:%" PRId64 "\n", path,
-			info->lu->tgt->tid, info->lu->lun);
+		eprintf("open %s, READONLY for tgt:%d lun:%" PRId64 "\n", path, info->lu->tgt->tid, info->lu->lun);
 		*fd = backed_file_open(path, O_RDONLY, size, &blksize);
 		lu->attrs.readonly = 1;
 	}
 	if (*fd < 0) {
-		eprintf("failed to open %s, for tgt:%d lun:%" PRId64 ", %m\n",
-			path, info->lu->tgt->tid, info->lu->lun);
+		eprintf("failed to open %s, for tgt:%d lun:%" PRId64 ", %m\n", path, info->lu->tgt->tid, info->lu->lun);
 		ret = *fd;
 		goto remove_tgt_evt;
 	}
 
-	eprintf("%s opened successfully for tgt:%d lun:%" PRId64 "\n", path,
-		info->lu->tgt->tid, info->lu->lun);
+	eprintf("%s opened successfully for tgt:%d lun:%" PRId64 "\n", path, info->lu->tgt->tid, info->lu->lun);
 
 	struct stat st;
 	if (fstat(*fd, &st) < 0) {
