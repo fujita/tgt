@@ -80,24 +80,21 @@ static void bs_io_uring_get_completions_helper(struct bs_io_uring_info *info) {
 	   if the size of the supplied buffer is less than 8 bytes */
 	uint64_t evts_complete;
 
-	// struct __kernel_timespec ts = {
-	// 	.tv_nsec = 0,
-	// 	.tv_sec = 0,
-	// };
-
-retry_read:
-	int ret = read(info->evt_fd, &evts_complete, sizeof(evts_complete));
-	if (ret < 0) {
-		switch (errno) {
-			case EINTR:
-				goto retry_read;
-			case EAGAIN:
-				// EAGAIN in non-blocking evt_fd means nothing is available
-				return;
-			default:
-				eprintf("failed to read IO_URING completions, %m\n");
-				return;
+	while (1) {
+		int ret = read(info->evt_fd, &evts_complete, sizeof(evts_complete));
+		if (ret < 0) {
+			switch (errno) {
+				case EINTR:
+					continue;
+				case EAGAIN:
+					// EAGAIN in non-blocking evt_fd means nothing is available
+					return;
+				default:
+					eprintf("failed to read IO_URING completions, %m\n");
+					return;
+			}
 		}
+		break;
 	}
 
 	io_uring_for_each_cqe(&info->ring, head, cqe) {
@@ -226,6 +223,7 @@ static int queue_unmap(struct bs_io_uring_info *info, struct scsi_cmd *cmd) {
 						io_uring_prep_fallocate(sqe, 0, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, offset, tl);
 						io_uring_submit(&info->ring);
 						info->npending++;
+						set_cmd_async(cmd);
 					#endif
 					break;
 				case UNMAP_MODE_BLKDISCARD:
@@ -253,9 +251,6 @@ static int queue_unmap(struct bs_io_uring_info *info, struct scsi_cmd *cmd) {
 		num_discards -= 1;
 	}
 
-	if (info->unmap_mode == UNMAP_MODE_FALLOCATE) {
-		set_cmd_async(cmd);
-	}
 	return 0;
 }
 
