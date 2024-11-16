@@ -334,7 +334,7 @@ static int resp_var_read(struct scsi_cmd *cmd, uint8_t *buf, uint32_t length,
 					     info, sizeof(info));
 
 		if (length > h->blk_sz)
-			scsi_set_in_resid_by_actual(cmd, length - h->blk_sz);
+			scsi_set_in_resid_by_actual(cmd, h->blk_sz);
 		else
 			scsi_set_in_resid_by_actual(cmd, 0);
 
