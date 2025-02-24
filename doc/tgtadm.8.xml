@@ -106,12 +106,13 @@ Possible device-types are:
       </varlistentry>
       <screen format="linespecific">
 Possible backend types are:
-    rdwr    : Use normal file I/O. This is the default for disk devices
-    aio     : Use Asynchronous I/O
-    rbd     : Use Ceph's distributed-storage RADOS Block Device
+    rdwr     : Use normal file I/O. This is the default for disk devices
+    aio      : Use Asynchronous I/O
+    io_uring : Use io_uring I/O
+    rbd      : Use Ceph's distributed-storage RADOS Block Device
 
-    sg      : Special backend type for passthrough devices
-    ssc     : Special backend type for tape emulation
+    sg       : Special backend type for passthrough devices
+    ssc      : Special backend type for tape emulation
       </screen>
 
       <varlistentry><term><option>--lld &lt;driver&gt; --op new --mode target --tid &lt;id&gt; --targetname &lt;name&gt;</option></term>
