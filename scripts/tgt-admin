@@ -442,6 +442,8 @@ sub add_params {
 		return("tgtadm -C $control_port --lld $driver --op update --mode logicalunit --tid $next_tid --lun=$lun --params $param='$param_value'");
 	}
 	if ($param eq "params") {
+		$param_value =~ s/\${tid}/$next_tid/g;
+		$param_value =~ s/\${lun}/$lun/g;
 		return("tgtadm -C $control_port --lld $driver --op update --mode logicalunit --tid $next_tid --lun=$lun --params '$param_value'");
 
 	}
@@ -489,7 +491,7 @@ sub add_backing_direct {
 	}
 
 	if ($can_alloc == 1 &&
-	   ($bstype =~ "glfs" || $bstype =~ "rbd" || (-e $backing_store && ! -d $backing_store))) {
+	   ($bstype =~ "glfs" || $bstype =~ "rbd" || $backing_store =~ "^NONE:" || (-e $backing_store && ! -d $backing_store))) {
 		my @exec_commands;
 		my $device_type;
 		my $bs_type;
@@ -733,7 +735,7 @@ sub add_backing_direct {
 		if (length $bsopts) { $bsopts = "--bsopts '$bsopts'" };
 		if (length $bsoflags) { $bsoflags = "--bsoflags '$bsoflags'" };
 		if (length $block_size) { $block_size = "--blocksize '$block_size'" };
-		$backing_store = "-b '$backing_store'"
+		if ($backing_store =~ "^NONE:") { $backing_store = "" } else { $backing_store = "-b '$backing_store'" }
 		execute("tgtadm -C $control_port --lld $driver --op new --mode logicalunit --tid $next_tid --lun $lun $backing_store $device_type $bs_type $bsopts $bsoflags $block_size");
 
 		# Commands should be executed in order
