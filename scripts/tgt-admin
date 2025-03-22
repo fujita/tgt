@@ -423,6 +423,7 @@ sub add_params {
 		}
 	}
 
+	$param_value =~ s/'/\\'/g;
 	if ($param eq "scsi_id" ||
 	    $param eq "scsi_sn" ||
 	    $param eq "vendor_id" ||
@@ -438,10 +439,10 @@ sub add_params {
 	    $param eq "optimal_xfer_gran" ||
 	    $param eq "optimal_xfer_len" ||
 	    $param eq "readonly") {
-		return("tgtadm -C $control_port --lld $driver --op update --mode logicalunit --tid $next_tid --lun=$lun --params $param=\"$param_value\"");
+		return("tgtadm -C $control_port --lld $driver --op update --mode logicalunit --tid $next_tid --lun=$lun --params $param='$param_value'");
 	}
 	if ($param eq "params") {
-		return("tgtadm -C $control_port --lld $driver --op update --mode logicalunit --tid $next_tid --lun=$lun --params \"$param_value\"");
+		return("tgtadm -C $control_port --lld $driver --op update --mode logicalunit --tid $next_tid --lun=$lun --params '$param_value'");
 
 	}
 }
@@ -720,12 +721,20 @@ sub add_backing_direct {
 			exit 1;
 		}
 		# Execute commands for a given LUN
-		if (length $device_type) { $device_type = "--device-type $device_type" };
-		if (length $bs_type) { $bs_type = "--bstype $bs_type" };
-		if (length $bsopts) { $bsopts = "--bsopts $bsopts" };
-		if (length $bsoflags) { $bsoflags = "--bsoflags $bsoflags" };
-		if (length $block_size) { $block_size = "--blocksize $block_size" };
-		execute("tgtadm -C $control_port --lld $driver --op new --mode logicalunit --tid $next_tid --lun $lun -b \"$backing_store\" $device_type $bs_type $bsopts $bsoflags $block_size");
+		# Escape any single quotes
+		$device_type =~ s/'/\\'/g;
+		$bs_type =~ s/'/\\'/g;
+		$bsopts =~ s/'/\\'/g;
+		$bsoflags =~ s/'/\\'/g;
+		$block_size =~ s/'/\\'/g;
+		$backing_store =~ s/'/\\'/g;
+		if (length $device_type) { $device_type = "--device-type '$device_type'" };
+		if (length $bs_type) { $bs_type = "--bstype '$bs_type'" };
+		if (length $bsopts) { $bsopts = "--bsopts '$bsopts'" };
+		if (length $bsoflags) { $bsoflags = "--bsoflags '$bsoflags'" };
+		if (length $block_size) { $block_size = "--blocksize '$block_size'" };
+		$backing_store = "-b '$backing_store'"
+		execute("tgtadm -C $control_port --lld $driver --op new --mode logicalunit --tid $next_tid --lun $lun $backing_store $device_type $bs_type $bsopts $bsoflags $block_size");
 
 		# Commands should be executed in order
 		my @execute_last;
