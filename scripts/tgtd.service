@@ -3,29 +3,26 @@ Description=iSCSI target framework daemon
 Documentation=man:tgtd(8)
 After=network.target
 
-# On systems without virtual consoles, don't start any getty. Note
-# that serial gettys are covered by serial-getty@.service, not this
-# unit.
 ConditionPathExists=/etc/tgt/targets.conf
 
 [Service]
-Type=forking
+Type=notify
 Environment=TGTD_CONFIG=/etc/tgt/targets.conf
 
-ExecStart=/usr/sbin/tgtd
-ExecStartPost=/usr/sbin/tgtadm --op update --mode sys --name State -v offline
-ExecStartPost=/usr/sbin/tgtadm --op update --mode sys --name State -v ready
-ExecStartPost=/usr/sbin/tgt-admin -e -c ${TGTD_CONFIG}
+ExecStart=/usr/sbin/tgtd --foreground
+ExecStartPost=/usr/sbin/tgtadm --op update --mode sys --name State --value offline
+ExecStartPost=/usr/sbin/tgtadm --op update --mode sys --name State --value ready
+ExecStartPost=/usr/sbin/tgt-admin --verbose --execute --conf ${TGTD_CONFIG}
 
-ExecReload=/usr/sbin/tgt-admin --update ALL -f -c ${TGTD_CONFIG}
+ExecReload=/usr/sbin/tgt-admin --verbose --update ALL --force --conf ${TGTD_CONFIG}
 
-ExecStop=/usr/sbin/tgtadm --op update --mode sys --name State -v offline
-ExecStop=/usr/sbin/tgt-admin --offline ALL
-ExecStop=/usr/sbin/tgt-admin --update ALL -c /dev/null -f
+ExecStop=/usr/sbin/tgtadm --op update --mode sys --name State --value offline
+ExecStop=/usr/sbin/tgt-admin --verbose --offline ALL
+ExecStop=/usr/sbin/tgt-admin --verbose --update ALL --force --conf /dev/null
 ExecStop=/usr/sbin/tgtadm  --op delete --mode system
+ExecStop=/usr/sbin/kill -9 $MAINPID
 
-# Exit code: 107 tgtd not running
-
+# ExecStop exit code: 107 tgtd not running
 
 [Install]
 WantedBy=multi-user.target
