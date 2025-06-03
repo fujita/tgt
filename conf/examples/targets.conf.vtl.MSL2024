@@ -3,10 +3,13 @@
 # In this case, tapes are stored in the directory /root/tapes
 # size is in MB (1 GB in this case)
 # using the command "tgtimg --op=new --device-type=tape --barcode="A00000001" --size=10240 --type=data --file=A00000001"
+# N.B. despite the parameter name, tapes added with barcode=xxx must have a
+# filename of xxx regardless of their barcode when created.
 #
 # The tapes can be added after startup with
 # "tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 4 --params element_type=2,address=1000,barcode=A0000001,sides=1"
-# for slot 0 (is nr 1000)
+# for slot 1 (is nr 1000)
+# mtx -f $changer load 1 0
 #
 # Please note that an MSL-2024 has no IMPORT/EXPORT elements (type 3)
 
@@ -16,12 +19,7 @@ default-driver iscsi
 
 <target iqn.2008-09.com.example:server.tape>
     allow-in-use yes
-#
-# We need a backing store, although the tape drive will be empty,
-# so we create a dummy tape "notape" in directory /root/tapes
-# with the command "tgtimg --op=new --device-type=tape --barcode="" --size=1 --type=clean --file=notape"
-#
-    <backing-store /root/tapes/notape>
+    <backing-store NONE:0>
         lun 1
         device-type tape
         removable 1

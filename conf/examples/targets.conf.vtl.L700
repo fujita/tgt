@@ -1,13 +1,17 @@
 # Virtual tape library example for a STK L700 tape library
 #
 # In this case, tapes are stored in the directory /root/tapes
-# size is in MB (1 GB in this case)
-# using the command "tgtimg --op=new --device-type=tape --barcode="A00000001" --size=10240 --type=data --file=A00000001"
+# size is in MB (1 GB in this case) and created # using the command
+# "tgtimg --op=new --device-type=tape --barcode="A00000001" --size=1024 --type=data --file=A00000001"
+# N.B. despite the parameter name, tapes added with barcode=xxx must have a
+# filename of xxx regardless of their barcode when created.
 #
-# The tapes can be added after startup with
-# "tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 4 --params element_type=2,address=1000,barcode=A0000001,sides=1"
-# for slot 0 (is nr 1000)
+# In this example, slots 1-3 (1000-1002) are prepopulated. The tapes must be created as above first.
 #
+# Additional tapes can be added after startup with
+# "tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 4 --params element_type=2,address=1003,barcode=A0000004,sides=1"
+# for slot 4 (is nr 1003)
+# mtx -f $changer load 4 0
 
 include /etc/tgt/temp/*.conf
 
@@ -15,16 +19,7 @@ default-driver iscsi
 
 <target iqn.2008-09.com.example:server.tape>
     allow-in-use yes
-#
-# For every drive We need a backing store, although the tape drive will be empty,
-# so we create a dummy tape "notape" in directory /root/tapes
-# with the command "tgtimg --op=new --device-type=tape --barcode="" --size=1 --type=clean --file=notape"
-# and create symbolic links for every drive (limitation of tgt)
-# link -s /root/tapes/notape /root/tapes/notape1
-# link -s /root/tapes/notape /root/tapes/notape2
-# link -s /root/tapes/notape /root/tapes/notape2
-#
-    <backing-store /root/tapes/notape1>
+    <backing-store NONE:0>
         lun 1
         device-type tape
         removable 1
@@ -34,7 +29,7 @@ default-driver iscsi
         scsi_sn "HUM1A00001"
         scsi_id "HP LTO3 ULTRIUM"
     </backing-store>
-    <backing-store /root/tapes/notape2>
+    <backing-store NONE:1>
         lun 2
         device-type tape
         removable 1
@@ -44,7 +39,7 @@ default-driver iscsi
         scsi_sn "HUM1A00002"
         scsi_id "HP LTO3 ULTRIUM"
     </backing-store>
-    <backing-store /root/tapes/notape3>
+    <backing-store NONE:2>
         lun 3
         device-type tape
         removable 1
@@ -54,6 +49,10 @@ default-driver iscsi
         scsi_sn "HUM1A00003"
         scsi_id "HP LTO3 ULTRIUM"
     </backing-store>
+#
+# For the tape changer we need also a backing store, this can be a file containing zeros, like this:
+# "dd if=/dev/zero of=$HOME/smc bs=1k count=1"
+#
     <backing-store /root/smc>
         lun 4
         device-type changer
@@ -81,12 +80,17 @@ default-driver iscsi
         params element_type=1,start_address=1,quantity=1,media_home=/root/tapes
         # Type 2: Storage Elements (tape slots)
         params element_type=2,start_address=1000,quantity=216,media_home=/root/tapes
+        # Start with some tapes loaded.
+        params element_type=2,address=1000,barcode=A00000001,media_home=/root/tapes
+        params element_type=2,address=1001,barcode=A00000002,media_home=/root/tapes
+        params element_type=2,address=1002,barcode=A00000003,media_home=/root/tapes
         # Type 3: Import/Export Elements (CAP)
         params element_type=3,start_address=10,quantity=20,media_home=/root/tapes
         # Type 4: Add Data Transfer devices (drives)
         params element_type=4,start_address=500,quantity=3,media_home=/root/tapes
         params element_type=4,address=500,tid=1,lun=1
-        params element_type=4,address=500,tid=1,lun=2
-        params element_type=4,address=500,tid=1,lun=3
+        params element_type=4,address=501,tid=1,lun=2
+        params element_type=4,address=502,tid=1,lun=3
+
     </backing-store>
 </target>
