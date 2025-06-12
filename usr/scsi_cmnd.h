@@ -15,6 +15,7 @@ struct scsi_data_buffer {
 	uint64_t buffer;
 	uint32_t length;
 	uint32_t transfer_len;
+	uint32_t sequence_len;
 	int32_t resid;
 };
 
@@ -83,6 +84,7 @@ static inline type scsi_get_##dir##_##field(struct scsi_cmd *scmd)		\
 
 scsi_data_buffer_accessor(length, uint32_t, ,);
 scsi_data_buffer_accessor(transfer_len, uint32_t, ,);
+scsi_data_buffer_accessor(sequence_len, uint32_t, , );
 scsi_data_buffer_accessor(resid, int32_t, ,);
 scsi_data_buffer_accessor(buffer, void *, (unsigned long), (void *)(unsigned long));
 

@@ -1108,7 +1108,7 @@ static int iscsi_data_rsp_build(struct iscsi_task *task)
 {
 	struct iscsi_connection *conn = task->conn;
 	struct iscsi_data_rsp *rsp = (struct iscsi_data_rsp *) &conn->rsp.bhs;
-	int datalen, maxdatalen;
+	uint32_t datalen, maxdatalen;
 	int result = scsi_get_result(&task->scmd);
 
 	memset(rsp, 0, sizeof(*rsp));
@@ -1123,7 +1123,7 @@ static int iscsi_data_rsp_build(struct iscsi_task *task)
 
 	maxdatalen = conn->tp->rdma ?
 		conn->session_param[ISCSI_PARAM_MAX_BURST].val :
-		conn->session_param[ISCSI_PARAM_MAX_XMIT_DLENGTH].val;
+		min_t(uint32_t, conn->session_param[ISCSI_PARAM_MAX_XMIT_DLENGTH].val, conn->session_param[ISCSI_PARAM_MAX_BURST].val - scsi_get_in_sequence_len(&task->scmd));
 
 	dprintf("%d %d %d %" PRIu32 "%x\n", datalen,
 		scsi_get_in_transfer_len(&task->scmd), task->offset, maxdatalen,
@@ -1141,8 +1141,18 @@ static int iscsi_data_rsp_build(struct iscsi_task *task)
 			rsp->statsn = cpu_to_be32(conn->stat_sn++);
 			iscsi_set_data_rsp_residual(rsp, &task->scmd);
 		}
-	} else
+	}
+	else
+	{
 		datalen = maxdatalen;
+		scsi_set_in_sequence_len(&task->scmd, scsi_get_in_sequence_len(&task->scmd) + datalen);
+		if (scsi_get_in_sequence_len(&task->scmd) == conn->session_param[ISCSI_PARAM_MAX_BURST].val)
+		{
+			scsi_set_in_sequence_len(&task->scmd, 0);
+			rsp->flags = ISCSI_FLAG_CMD_FINAL;
+		}
+		rsp->statsn = cpu_to_be32(ISCSI_RESERVED_TAG);
+	}
 
 	rsp->exp_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn);
 	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn +
