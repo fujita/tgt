@@ -88,9 +88,9 @@ default-driver iscsi
         params element_type=3,start_address=10,quantity=20,media_home=/root/tapes
         # Type 4: Add Data Transfer devices (drives)
         params element_type=4,start_address=500,quantity=3,media_home=/root/tapes
-        params element_type=4,address=500,tid=1,lun=1
-        params element_type=4,address=501,tid=1,lun=2
-        params element_type=4,address=502,tid=1,lun=3
+        params element_type=4,address=500,tid=${tid},lun=1
+        params element_type=4,address=501,tid=${tid},lun=2
+        params element_type=4,address=502,tid=${tid},lun=3
 
     </backing-store>
 </target>

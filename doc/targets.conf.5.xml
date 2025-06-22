@@ -380,6 +380,11 @@
 	  <para>
 	    Pass additional parameters to tgtadm.
 	  </para>
+	  <para>
+	    Note that '${tid}' and '${lun}' can be used verbatim to refer to the
+	    tid and lun that are being configured. See targets.conf.vtl.L700 for
+	    an example.
+	  </para>
 	</listitem>
       </varlistentry>
 
