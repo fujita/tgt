@@ -110,7 +110,7 @@ static void bs_glfs_request(struct scsi_cmd *cmd)
 			break;
 		}
 
-		ret = glfs_pread(gfd, tmpbuf, length, offset, lu->bsoflags);
+		ret = glfs_pread(gfd, tmpbuf, length, offset, lu->bsoflags, NULL);
 
 		if (ret != length) {
 			set_medium_error(&result, &key, &asc);
@@ -147,7 +147,7 @@ static void bs_glfs_request(struct scsi_cmd *cmd)
 			break;
 		}
 
-		ret = glfs_pread(gfd, tmpbuf, length, offset, SEEK_SET);
+		ret = glfs_pread(gfd, tmpbuf, length, offset, SEEK_SET, NULL);
 
 		if (ret != length) {
 			set_medium_error(&result, &key, &asc);
@@ -190,7 +190,7 @@ static void bs_glfs_request(struct scsi_cmd *cmd)
 			key = ILLEGAL_REQUEST;
 			asc = ASC_INVALID_FIELD_IN_CDB;
 		} else {
-			glfs_fdatasync(gfd);
+			glfs_fdatasync(gfd, NULL, NULL);
 		}
 		break;
 	case WRITE_VERIFY:
@@ -204,7 +204,7 @@ static void bs_glfs_request(struct scsi_cmd *cmd)
 		length = scsi_get_out_length(cmd);
 		write_buf = scsi_get_out_buffer(cmd);
 write:
-		ret = glfs_pwrite(gfd, write_buf, length, offset, lu->bsoflags);
+		ret = glfs_pwrite(gfd, write_buf, length, offset, lu->bsoflags, NULL, NULL);
 
 		if (ret == length) {
 			struct mode_pg *pg;
@@ -222,7 +222,7 @@ write:
 			}
 			if (((cmd->scb[0] != WRITE_6) && (cmd->scb[1] & 0x8)) ||
 			    !(pg->mode_data[0] & 0x04))
-				glfs_fdatasync(gfd);
+				glfs_fdatasync(gfd, NULL, NULL);
 		} else
 			set_medium_error(&result, &key, &asc);
 
@@ -258,7 +258,7 @@ write:
 			}
 
 			ret = glfs_pwrite(gfd, tmpbuf, blocksize,
-					offset, lu->bsoflags);
+					offset, lu->bsoflags, NULL, NULL);
 
 			if (ret != blocksize)
 				set_medium_error(&result, &key, &asc);
@@ -273,7 +273,7 @@ write:
 	case READ_16:
 		length = scsi_get_in_length(cmd);
 		ret = glfs_pread(gfd, scsi_get_in_buffer(cmd),
-				length, offset, SEEK_SET);
+				length, offset, SEEK_SET, NULL);
 
 		if (ret != length) {
 			eprintf("Error on read %x %x", ret, length);
@@ -299,7 +299,7 @@ verify:
 			break;
 		}
 
-		ret = glfs_pread(gfd, tmpbuf, length, offset, lu->bsoflags);
+		ret = glfs_pread(gfd, tmpbuf, length, offset, lu->bsoflags, NULL);
 
 		if (ret != length)
 			set_medium_error(&result, &key, &asc);
