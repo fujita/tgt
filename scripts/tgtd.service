@@ -25,7 +25,12 @@ ExecStop=/usr/sbin/tgt-admin --update ALL -c /dev/null -f
 ExecStop=/usr/sbin/tgtadm  --op delete --mode system
 
 # Exit code: 107 tgtd not running
-
+ProtectHostname=true
+ProtectClock=true
+PrivateTmp=true
+SystemCallArchitectures=native
+RestrictNamespaces=true
+ProtectHome=true
 
 [Install]
 WantedBy=multi-user.target
