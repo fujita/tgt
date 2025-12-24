@@ -146,7 +146,7 @@ static int add_element_descriptor(uint8_t *data, struct slot *s,
 	int i;	/* data[] index */
 
 	*(uint16_t *)(data) = __cpu_to_be16(s->slot_addr);
-	data[2] = s->status;
+	data[2] = s->status | 0x8;
 	data[3] = 0;	/* Reserved */
 	data[4] = (s->asc >> 8) & 0xff;	/* Additional Sense Code */
 	data[5] = s->asc & 0xff;	/* Additional Sense Code Qualifier */
