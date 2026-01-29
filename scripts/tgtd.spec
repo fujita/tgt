@@ -79,7 +79,7 @@ fi
 
 %files
 %defattr(-, root, root, -)
-%doc README doc/README.iscsi doc/README.iser doc/README.lu_configuration doc/README.mmc
+%doc doc/README.iscsi doc/README.iser doc/README.lu_configuration doc/README.mmc
 %{_sbindir}/tgtd
 %{_sbindir}/tgtadm
 %{_sbindir}/tgt-setup-lun
