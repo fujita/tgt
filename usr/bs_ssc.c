@@ -266,23 +266,23 @@ static int space_filemark(struct scsi_cmd *cmd, int32_t count)
 	return result;
 }
 
-static int space_blocks(struct scsi_cmd *cmd, int32_t count)
+static int space_blocks(struct scsi_cmd *cmd, int64_t count)
 {
 	struct ssc_info *ssc = dtype_priv(cmd->dev);
 	struct blk_header_info *h = &ssc->c_blk;
 
-	dprintf("*** space %d blocks, %" PRIu64 "\n", count, h->curr);
+	dprintf("*** space %" PRId64 " blocks, %" PRIu64 "\n", count, h->curr);
 
 	while (count != 0) {
 		if (count > 0) {
-			if (skip_next_header(cmd->dev)) {
-				sense_data_build(cmd, MEDIUM_ERROR,
-						ASC_MEDIUM_FORMAT_CORRUPT);
-				return SAM_STAT_CHECK_CONDITION;
-			}
 			if (h->blk_type == BLK_EOD) {
 				sense_data_build(cmd, NO_SENSE,
 						ASC_END_OF_DATA);
+				return SAM_STAT_CHECK_CONDITION;
+			}
+			if (skip_next_header(cmd->dev)) {
+				sense_data_build(cmd, MEDIUM_ERROR,
+						ASC_MEDIUM_FORMAT_CORRUPT);
 				return SAM_STAT_CHECK_CONDITION;
 			}
 			count--;
@@ -570,26 +570,90 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 	{
 		int service_action = cmd->scb[1] & 0x1f;
 		uint8_t *data = scsi_get_in_buffer(cmd);
-		int len = scsi_get_in_length(cmd);
+		length = scsi_get_in_length(cmd);
 
-		dprintf("Size of in_buffer = %d\n", len);
+		dprintf("Size of in_buffer = %u\n", length);
 		dprintf("Sizeof(buf): %zd\n", sizeof(buf));
 		dprintf("service action: 0x%02x\n", service_action);
 
+		// https://www.staff.uni-mainz.de/tacke/scsi/SCSI2-10.html
+		/* Byte  | Meaning
+		 * ------+-----------------------------------------+
+		 *   bit |  7  |  6  | 5 | 4 | 3 |  2  |  1  |  0  |
+		 * byte  |
+		 *  0    | BOP | EOP | RESERVED  | BPU | RESERVED  |
+		 *  1    | Partition number                        |
+		 *  2-3  | Reserved                                |
+		 *  4-7  | First block location                    |
+		 *  8-11 | Last block location                     |
+		 *  12   | Reserved                                |
+		 * 13-15 | Number of blocks in buffer              |
+		 * 16-19 | Number of bytes in buffer               |
+		 */
+		/* A block address type (BT) bit of one requests the target to
+		 * return its current first block location and last block
+		 * location as a device-specific value. A BT bit of zero
+		 * requests the target to return the first block location and
+		 * the last block location as an SCSI logical block address
+		 * (relative to a partition). */
+
+		/* Wrap at 2^32 blocks */
 		if (service_action == 0) {	/* Short form - block ID */
-			memset(data, 0, 20);
-			data[0] = 20;
+			/* used after mt-st -f tape stsetoptions scsi2logical */
+			const int response_size = 20;
+			if (length > response_size)
+				length = response_size;
+			memset(data, 0, length);
+			if (length >= 8)
+				put_unaligned_be32((uint32_t)h->blk_num-1, data+4);
+			if (length >= 12)
+				put_unaligned_be32((uint32_t)h->blk_num-1, data+8);
+			scsi_set_in_resid_by_actual(cmd, length);
 		} else if (service_action == 1) { /* Short form - vendor uniq */
-			memset(data, 0, 20);
-			data[0] = 20;
+			/* used after mt-st -f tape stclearoptions scsi2logical */
+			const int response_size = 20;
+			if (length > response_size)
+				length = response_size;
+			memset(data, 0, length);
+			if (length >= 8)
+				put_unaligned_be32((uint32_t)h->blk_num-1, data+4);
+			if (length >= 12)
+				put_unaligned_be32((uint32_t)h->blk_num-1, data+8);
+			scsi_set_in_resid_by_actual(cmd, length);
 		} else if (service_action == 6) { /* Long form */
-			memset(data, 0, 32);
-			data[0] = 32;
+			const int response_size = 32;
+			if (length > response_size)
+				length = response_size;
+			memset(data, 0, length);
+			scsi_set_in_resid_by_actual(cmd, length);
 		} else {
+			length = 0;
 			sense_data_build(cmd, ILLEGAL_REQUEST,
 						ASC_INVALID_FIELD_IN_CDB);
 			result = SAM_STAT_CHECK_CONDITION;
 		}
+		break;
+	}
+
+	case SEEK_10: {
+		/* LOCATE */
+		/* As we don't do anything different based on BT (service
+		 * action) in READ_POSITION, we don't do anything different
+		 * here either */
+		uint32_t address = get_unaligned_be32(cmd->scb+3);
+
+		dprintf("Target address %u\n", address);
+
+		if (resp_rewind(cmd->dev)) {
+			ssc_sense_data_build(cmd, MEDIUM_ERROR,
+					ASC_SEQUENTIAL_POSITION_ERR,
+					NULL, 0);
+			result = SAM_STAT_CHECK_CONDITION;
+			break;
+
+		}
+		result = space_blocks(cmd, address);
+
 		break;
 	}
 	default:
