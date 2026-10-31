@@ -1562,6 +1562,7 @@ static int iscsi_data_out_rx_start(struct iscsi_connection *conn)
 {
 	struct iscsi_task *task;
 	struct iscsi_data *req = (struct iscsi_data *) &conn->req.bhs;
+	uint32_t offset, dlength;
 
 	list_for_each_entry(task, &conn->session->cmd_list, c_hlist) {
 		if (task->tag == req->itt)
@@ -1575,7 +1576,22 @@ found:
 		task->r2t_count,
 		ntoh24(req->dlength), be32_to_cpu(req->offset));
 
-	conn->req.data = task->data + be32_to_cpu(req->offset);
+	/*
+	 * The data goes to task->data at the offset the initiator
+	 * chose. Make sure it stays inside the buffer allocated for
+	 * the command. task->len is 0 when the command has no data
+	 * buffer, so this also rejects Data-Out for such a command.
+	 */
+	offset = be32_to_cpu(req->offset);
+	dlength = ntoh24(req->dlength);
+	if (offset > task->len || dlength > task->len - offset) {
+		eprintf("data-out out of range: itt %x offset %u"
+			" dlength %u len %d\n",
+			req->itt, offset, dlength, task->len);
+		return -EINVAL;
+	}
+
+	conn->req.data = task->data + offset;
 
 	task->offset += ntoh24(req->dlength);
 	task->r2t_count -= ntoh24(req->dlength);
@@ -1659,6 +1675,7 @@ static int iscsi_scsi_cmd_rx_start(struct iscsi_connection *conn)
 		return -ENOMEM;
 
 	task->tag = req->itt;
+	task->len = max(imm_len, data_len);
 
 	if (ahs_len) {
 		task->ahs = (uint8_t *) task->extdata + sizeof(req->cdb);
