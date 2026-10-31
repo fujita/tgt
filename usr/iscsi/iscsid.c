@@ -1178,7 +1178,12 @@ static int iscsi_r2t_build(struct iscsi_task *task)
 	rsp->exp_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn);
 	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn +
 				     conn->session->max_queue_cmd);
-	rsp->ttt = (unsigned long) task;
+	/*
+	 * The TTT is opaque to the initiator and tgtd does not use it
+	 * to find the task on Data-Out. Do not put a heap pointer here,
+	 * it would leak the task address to the initiator.
+	 */
+	rsp->ttt = 0;
 	length = min_t(uint32_t, task->r2t_count,
 		       conn->session_param[ISCSI_PARAM_MAX_BURST].val);
 	rsp->data_length = cpu_to_be32(length);
