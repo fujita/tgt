@@ -1108,7 +1108,8 @@ static int iscsi_data_rsp_build(struct iscsi_task *task)
 {
 	struct iscsi_connection *conn = task->conn;
 	struct iscsi_data_rsp *rsp = (struct iscsi_data_rsp *) &conn->rsp.bhs;
-	int datalen, maxdatalen;
+	int max_burst = conn->session_param[ISCSI_PARAM_MAX_BURST].val;
+	int datalen, maxdatalen, room;
 	int result = scsi_get_result(&task->scmd);
 
 	memset(rsp, 0, sizeof(*rsp));
@@ -1121,9 +1122,18 @@ static int iscsi_data_rsp_build(struct iscsi_task *task)
 
 	datalen = scsi_get_in_transfer_len(&task->scmd) - task->offset;
 
-	maxdatalen = conn->tp->rdma ?
-		conn->session_param[ISCSI_PARAM_MAX_BURST].val :
-		conn->session_param[ISCSI_PARAM_MAX_XMIT_DLENGTH].val;
+	/*
+	 * RFC 7143 11.7.1: "the total of all the DataSegmentLength of all
+	 * PDUs in a sequence MUST NOT exceed MaxBurstLength". A sequence
+	 * ends with a PDU that has the F bit set, so end one at every
+	 * MaxBurstLength boundary of the transfer. room is what is left
+	 * in the current sequence.
+	 */
+	room = max_burst - task->offset % max_burst;
+
+	maxdatalen = conn->tp->rdma ? room :
+		min_t(int, conn->session_param[ISCSI_PARAM_MAX_XMIT_DLENGTH].val,
+		      room);
 
 	dprintf("%d %d %d %" PRIu32 "%x\n", datalen,
 		scsi_get_in_transfer_len(&task->scmd), task->offset, maxdatalen,
@@ -1141,8 +1151,11 @@ static int iscsi_data_rsp_build(struct iscsi_task *task)
 			rsp->statsn = cpu_to_be32(conn->stat_sn++);
 			iscsi_set_data_rsp_residual(rsp, &task->scmd);
 		}
-	} else
+	} else {
 		datalen = maxdatalen;
+		if (datalen == room)
+			rsp->flags = ISCSI_FLAG_CMD_FINAL;
+	}
 
 	rsp->exp_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn);
 	rsp->max_cmdsn = cpu_to_be32(conn->session->exp_cmd_sn +
