@@ -18,14 +18,14 @@ jobs:
   build_alpine:
     name: build on Alpine Linux
     runs-on: ubuntu-26.04
+    container: alpine:latest
     steps:
+      - name: install build dependencies
+        run: apk add --no-cache build-base linux-headers libaio-dev
       - name: checking out
         uses: actions/checkout@v7
         with:
           path: tgt
-      - name: Setup Alpine Linux
-        uses: jirutka/setup-alpine@v1
-
       - name: build
         working-directory: tgt
         run: |
