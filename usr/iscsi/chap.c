@@ -139,9 +139,12 @@ static void decode_base64_string(char *string, uint8_t *intnum, int int_len)
 		count += 4;
 		octets =
 		    (num[0] << 18) | (num[1] << 12) | (num[2] << 6) | num[3];
-		intnum[intptr] = (octets & 0xFF0000) >> 16;
-		intnum[intptr + 1] = (octets & 0x00FF00) >> 8;
-		intnum[intptr + 2] = octets & 0x0000FF;
+		if (intptr < int_len)
+			intnum[intptr] = (octets & 0xFF0000) >> 16;
+		if (intptr + 1 < int_len)
+			intnum[intptr + 1] = (octets & 0x00FF00) >> 8;
+		if (intptr + 2 < int_len)
+			intnum[intptr + 2] = octets & 0x0000FF;
 		intptr += 3;
 	}
 	num[0] = decode_base64_digit(string[count]);
@@ -153,16 +156,22 @@ static void decode_base64_string(char *string, uint8_t *intnum, int int_len)
 	if (num[2] == 64) {
 		if (num[3] != 64)
 			return;
-		intnum[intptr] = (num[0] << 2) | (num[1] >> 4);
+		if (intptr < int_len)
+			intnum[intptr] = (num[0] << 2) | (num[1] >> 4);
 	} else if (num[3] == 64) {
-		intnum[intptr] = (num[0] << 2) | (num[1] >> 4);
-		intnum[intptr + 1] = (num[1] << 4) | (num[2] >> 2);
+		if (intptr < int_len)
+			intnum[intptr] = (num[0] << 2) | (num[1] >> 4);
+		if (intptr + 1 < int_len)
+			intnum[intptr + 1] = (num[1] << 4) | (num[2] >> 2);
 	} else {
 		octets =
 		    (num[0] << 18) | (num[1] << 12) | (num[2] << 6) | num[3];
-		intnum[intptr] = (octets & 0xFF0000) >> 16;
-		intnum[intptr + 1] = (octets & 0x00FF00) >> 8;
-		intnum[intptr + 2] = octets & 0x0000FF;
+		if (intptr < int_len)
+			intnum[intptr] = (octets & 0xFF0000) >> 16;
+		if (intptr + 1 < int_len)
+			intnum[intptr + 1] = (octets & 0x00FF00) >> 8;
+		if (intptr + 2 < int_len)
+			intnum[intptr + 2] = octets & 0x0000FF;
 	}
 }
 
