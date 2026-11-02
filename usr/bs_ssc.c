@@ -598,30 +598,26 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 		 * (relative to a partition). */
 
 		/* Wrap at 2^32 blocks */
-		if (service_action == 0) {	/* Short form - block ID */
-			/* used after mt-st -f tape stsetoptions scsi2logical */
-			const int response_size = 20;
+		if (service_action == 0 || service_action == 1) {
+			/*
+			 * Short form. Service action 0 is block ID
+			 * (mt-st stsetoptions scsi2logical), 1 is vendor
+			 * specific (mt-st stclearoptions scsi2logical).
+			 * Both return the same value here.
+			 */
+			const uint32_t response_size = 20;
 			if (length > response_size)
 				length = response_size;
 			memset(data, 0, length);
 			if (length >= 8)
-				put_unaligned_be32((uint32_t)h->blk_num-1, data+4);
+				put_unaligned_be32((uint32_t)h->blk_num - 1,
+						   data + 4);
 			if (length >= 12)
-				put_unaligned_be32((uint32_t)h->blk_num-1, data+8);
-			scsi_set_in_resid_by_actual(cmd, length);
-		} else if (service_action == 1) { /* Short form - vendor uniq */
-			/* used after mt-st -f tape stclearoptions scsi2logical */
-			const int response_size = 20;
-			if (length > response_size)
-				length = response_size;
-			memset(data, 0, length);
-			if (length >= 8)
-				put_unaligned_be32((uint32_t)h->blk_num-1, data+4);
-			if (length >= 12)
-				put_unaligned_be32((uint32_t)h->blk_num-1, data+8);
+				put_unaligned_be32((uint32_t)h->blk_num - 1,
+						   data + 8);
 			scsi_set_in_resid_by_actual(cmd, length);
 		} else if (service_action == 6) { /* Long form */
-			const int response_size = 32;
+			const uint32_t response_size = 32;
 			if (length > response_size)
 				length = response_size;
 			memset(data, 0, length);
