@@ -622,24 +622,21 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 	}
 
 	case SEEK_10: {
-		/* LOCATE */
-		/* As we don't do anything different based on BT (service
-		 * action) in READ_POSITION, we don't do anything different
-		 * here either */
-		uint32_t address = get_unaligned_be32(cmd->scb+3);
+		/*
+		 * LOCATE. READ POSITION returns the same value for both
+		 * block address types, so the BT bit is ignored here too.
+		 */
+		uint32_t address = get_unaligned_be32(cmd->scb + 3);
 
 		dprintf("Target address %u\n", address);
 
 		if (resp_rewind(cmd->dev)) {
-			ssc_sense_data_build(cmd, MEDIUM_ERROR,
-					ASC_SEQUENTIAL_POSITION_ERR,
-					NULL, 0);
+			sense_data_build(cmd, MEDIUM_ERROR,
+					 ASC_SEQUENTIAL_POSITION_ERR);
 			result = SAM_STAT_CHECK_CONDITION;
 			break;
-
 		}
 		result = space_blocks(cmd, address);
-
 		break;
 	}
 	default:
