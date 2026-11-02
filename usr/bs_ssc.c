@@ -576,34 +576,24 @@ static void tape_rdwr_request(struct scsi_cmd *cmd)
 		dprintf("Sizeof(buf): %zd\n", sizeof(buf));
 		dprintf("service action: 0x%02x\n", service_action);
 
-		// https://www.staff.uni-mainz.de/tacke/scsi/SCSI2-10.html
-		/* Byte  | Meaning
-		 * ------+-----------------------------------------+
-		 *   bit |  7  |  6  | 5 | 4 | 3 |  2  |  1  |  0  |
-		 * byte  |
-		 *  0    | BOP | EOP | RESERVED  | BPU | RESERVED  |
-		 *  1    | Partition number                        |
-		 *  2-3  | Reserved                                |
-		 *  4-7  | First block location                    |
-		 *  8-11 | Last block location                     |
-		 *  12   | Reserved                                |
-		 * 13-15 | Number of blocks in buffer              |
-		 * 16-19 | Number of bytes in buffer               |
+		/*
+		 * SSC-3 READ POSITION. The short form reply is 20 bytes:
+		 * byte 0 holds the BOP, EOP and BPU flags, bytes 4-7 the
+		 * first block location and bytes 8-11 the last block
+		 * location. Nothing is buffered, so both locations are
+		 * the current block.
+		 *
+		 * On disk the BOT header is block 0 and the first data
+		 * block is block 1. The reply counts from the first data
+		 * block, so return blk_num - 1. The block number wraps at
+		 * 2^32.
 		 */
-		/* A block address type (BT) bit of one requests the target to
-		 * return its current first block location and last block
-		 * location as a device-specific value. A BT bit of zero
-		 * requests the target to return the first block location and
-		 * the last block location as an SCSI logical block address
-		 * (relative to a partition). */
-
-		/* Wrap at 2^32 blocks */
 		if (service_action == 0 || service_action == 1) {
 			/*
-			 * Short form. Service action 0 is block ID
-			 * (mt-st stsetoptions scsi2logical), 1 is vendor
-			 * specific (mt-st stclearoptions scsi2logical).
-			 * Both return the same value here.
+			 * Short form. Service action 0 asks for a logical
+			 * block address (mt-st stsetoptions scsi2logical),
+			 * 1 for a vendor specific one (mt-st stclearoptions
+			 * scsi2logical). Both are the same value here.
 			 */
 			const uint32_t response_size = 20;
 			if (length > response_size)
