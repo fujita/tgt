@@ -283,7 +283,6 @@ int lu_prevent_removal(struct scsi_lu *lu)
 
 int it_nexus_create(int tid, uint64_t itn_id, int host_no, char *info)
 {
-	int ret;
 	struct target *target;
 	struct it_nexus *itn;
 	struct scsi_lu *lu;
@@ -320,12 +319,6 @@ int it_nexus_create(int tid, uint64_t itn_id, int host_no, char *info)
 		itn_lu->lu = lu;
 		itn_lu->itn_id = itn_id;
 		INIT_LIST_HEAD(&itn_lu->pending_ua_sense_list);
-
-		ret = ua_sense_add(itn_lu, ASC_POWERON_RESET);
-		if (ret) {
-			free(itn_lu);
-			goto out;
-		}
 
 		list_add_tail(&itn_lu->lu_itl_info_siblings,
 			      &lu->lu_itl_info_list);
