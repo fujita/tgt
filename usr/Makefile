@@ -31,6 +31,11 @@ TGTD_OBJS += bs_aio.o
 LIBS += -laio
 endif
 
+ifneq ($(shell test -e /usr/include/sys/eventfd.h && test -e /usr/include/liburing.h && echo 1),)
+TGTD_OBJS += bs_io_uring.o
+LIBS += -luring
+endif
+
 ifneq ($(ISCSI_RDMA),)
 TGTD_OBJS += iscsi/iser.o iscsi/iser_text.o
 LIBS += -libverbs -lrdmacm

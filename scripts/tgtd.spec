@@ -8,7 +8,7 @@ License:        GPLv2
 URL:            http://stgt.sourceforge.net/
 Source0:        %{name}-%{version}-%{release}.tgz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
-BuildRequires:  pkgconfig libibverbs-devel librdmacm-devel libxslt libaio-devel
+BuildRequires:  pkgconfig libibverbs-devel librdmacm-devel libxslt libaio-devel liburing
 %if %{defined suse_version}
 BuildRequires:  docbook-xsl-stylesheets
 Requires: aaa_base
