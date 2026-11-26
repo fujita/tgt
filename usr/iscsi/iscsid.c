@@ -1339,7 +1339,7 @@ static int iscsi_target_cmd_queue(struct iscsi_task *task)
 					ahslen, extcdb_len);
 				return -EINVAL;
 			}
-			if (extcdb_len + sizeof(req->cdb) > 260) {
+			if (extcdb_len < 0 || extcdb_len + sizeof(req->cdb) > 260) {
 				eprintf("invalid extcdb len %d\n", extcdb_len);
 
 				return -EINVAL;
