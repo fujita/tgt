@@ -121,6 +121,7 @@ static int sbc_mode_sense(int host_no, struct scsi_cmd *cmd)
 	int ret;
 	uint8_t device_specific = 0x10; /* DPOFUA */
 	uint8_t mode6, *data;
+	int idx;
 
 	ret = spc_mode_sense(host_no, cmd);
 	if (ret != SAM_STAT_GOOD)
@@ -135,10 +136,9 @@ static int sbc_mode_sense(int host_no, struct scsi_cmd *cmd)
 	data = scsi_get_in_buffer(cmd);
 
 	mode6 = (cmd->scb[0] == 0x1a);
-	if (mode6)
-		data[2] = device_specific;
-	else
-		data[3] = device_specific;
+	idx = mode6 ? 2 : 3;
+	if (scsi_get_in_length(cmd) > idx)
+		data[idx] = device_specific;
 
 	return SAM_STAT_GOOD;
 }

@@ -53,7 +53,7 @@ static int ssc_mode_page_update(struct scsi_cmd *cmd, uint8_t *data,
 
 static int ssc_mode_sense(int host_no, struct scsi_cmd *cmd)
 {
-	int ret;
+	int ret, idx;
 	uint8_t *data, mode6;
 
 	ret = spc_mode_sense(host_no, cmd);
@@ -62,20 +62,16 @@ static int ssc_mode_sense(int host_no, struct scsi_cmd *cmd)
 
 	mode6 = (cmd->scb[0] == 0x1a);
 	data = scsi_get_in_buffer(cmd);
+	idx = mode6 ? 2 : 3;
+	if (scsi_get_in_length(cmd) <= idx)
+		return ret;
 
 	/* set write protect bit to 1 for readonly devices */
-	if (cmd->dev->attrs.readonly) {
-		if (mode6)
-			data[2] |= 0x80;
-		else
-			data[3] |= 0x80;
-	}
+	if (cmd->dev->attrs.readonly)
+		data[idx] |= 0x80;
 
 	/* set the device to report BUFFERED MODE for writes */
-	if (mode6)
-		data[2] |= 0x10;
-	else
-		data[3] |= 0x10;
+	data[idx] |= 0x10;
 
 
 	return ret;
